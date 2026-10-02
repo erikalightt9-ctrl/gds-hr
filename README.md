@@ -106,6 +106,10 @@ Reverse-geocoded addresses are optional. Set `HR_GEOCODING_URL` to an approved H
 
 Technical references: [browser location permissions and freshness options](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation/getCurrentPosition), [OpenStreetMap embedding](https://wiki.openstreetmap.org/wiki/Export), [TOTP specification](https://www.rfc-editor.org/rfc/rfc6238.html).
 
+## Reports & downloads
+
+Every list can be downloaded as an Excel workbook or a PDF from **Reports & downloads** or the Excel/PDF buttons on each list. Reports are defined in `src/reports.mjs`, each with the roles allowed to download it, matching on-screen access: personal details are Admin/HR only, government IDs Admin/HR/Payroll. Employees can download only their own attendance and leave (`my-` reports) plus their payslips. Posted payrolls also download as a PDF register. Every download is recorded in the audit trail. Files are generated without external services (`src/export.mjs`); PDFs use Helvetica with Latin-1 text, so letters such as ñ print correctly.
+
 ## Verification & code map
 
 ```powershell

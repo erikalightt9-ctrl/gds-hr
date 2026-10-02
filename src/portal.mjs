@@ -95,6 +95,7 @@ export function todayAttendance(store, employee, now = new Date()) {
   if (status === 'Awaiting time in' && state.holidays.some(h => h.date === day && h.kind !== 'ordinary')) status = 'Holiday';
   if (leave) status = 'On leave';
   else if (record?.status === 'official-business') status = 'Official business';
+  else if (record?.status === 'rest-day-swap') status = 'Rest-day swap';
   else if (record?.status === 'off') status = 'Off duty';
   else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
   else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late ? 'Late' : 'Present';
@@ -110,13 +111,47 @@ export function applyLeave(store, actor, input) {
     ready(employee, value.startDate); ready(employee, value.endDate);
     if (!type || !employee.leaveEligibility.includes(type.id)) throw new AppError('This leave type is not enabled for your employee profile. Contact HR.');
     validateAttachment(store, actor, value.documentId);
-    if (type.documentsRequired && !value.documentId) throw new AppError('Upload a supporting document first.');
     if (state.leaves.some(l => l.employeeId === employee.id && !['rejected', 'cancelled'].includes(l.status) && l.startDate <= value.endDate && l.endDate >= value.startDate)) throw new AppError('These dates overlap an existing leave request.');
     if (state.runs.some(r => r.start <= value.endDate && r.end >= value.startDate && r.rows.some(row => row.employeeId === employee.id))) throw new AppError('These dates belong to posted payroll.');
     const countedDates = leaveDates(employee, type, value.startDate, value.endDate);
     if (!countedDates.length) throw new AppError('Choose at least one eligible leave day.');
-    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, reason: value.reason, days: countedDates.length, countedDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending' };
+    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, reason: value.reason, days: countedDates.length, countedDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : type.documentsRequired ? 'required' : '', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' };
     state.leaves.push(leave); state.version++; store.write(state); store.log(actor, 'apply', 'leaves', leave.id, null, leave); return leave;
+  });
+}
+// Employee uploads proof (e.g. a medical certificate on return to work) for their own leave.
+export function attachLeaveProof(store, actor, id, input) {
+  const employee = ownEmployee(store, actor);
+  const value = z.object({ documentId: z.string().min(1).max(80) }).strict().parse(input);
+  validateAttachment(store, actor, value.documentId);
+  return store.transaction(() => {
+    const state = store.read(), leave = state.leaves.find(l => l.id === id && l.employeeId === employee.id);
+    if (!leave) throw new AppError('Leave request not found.', 404);
+    if (['cancelled', 'rejected'].includes(leave.status)) throw new AppError('This leave request is closed; proof is no longer needed.');
+    if (leave.proofStatus === 'verified') throw new AppError('HR has already confirmed the proof for this leave.');
+    const before = structuredClone(leave);
+    Object.assign(leave, { documentReference: value.documentId, proofStatus: 'submitted', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' });
+    state.version++; store.write(state); store.log(actor, 'attach-proof', 'leaves', id, before, leave);
+    store.notify(null, `${employee.id}: proof uploaded for leave ${leave.startDate} → ${leave.endDate}; awaiting HR review.`);
+    return leave;
+  });
+}
+// HR/Admin confirms or rejects uploaded proof; a rejection needs a reason the employee can act on.
+export function reviewLeaveProof(store, actor, id, input) {
+  permit(actor, ['admin', 'hr']);
+  const value = z.object({ decision: z.enum(['verified', 'rejected']), note: z.string().trim().max(2000).default('') }).strict().parse(input);
+  if (value.decision === 'rejected' && value.note.length < 3) throw new AppError('Give a reason so the employee knows what to upload instead.');
+  return store.transaction(() => {
+    const state = store.read(), leave = state.leaves.find(l => l.id === id);
+    if (!leave) throw new AppError('Leave request not found.', 404);
+    if (!leave.documentReference || !['submitted', 'verified', 'rejected'].includes(leave.proofStatus)) throw new AppError('No proof has been uploaded for this leave yet.');
+    const before = structuredClone(leave);
+    Object.assign(leave, { proofStatus: value.decision, proofNote: value.note, proofReviewedBy: actor.username, proofReviewedAt: new Date().toISOString() });
+    state.version++; store.write(state); store.log(actor, 'review-proof', 'leaves', id, before, leave);
+    store.notify(leave.employeeId, value.decision === 'verified'
+      ? `HR confirmed your proof for leave ${leave.startDate} → ${leave.endDate}.`
+      : `HR needs a new proof for leave ${leave.startDate} → ${leave.endDate}: ${value.note}`);
+    return leave;
   });
 }
 export function cancelLeave(store, actor, id) {
@@ -168,7 +203,7 @@ export function employeeDashboard(store, actor, now = new Date()) {
   const employment = profileOf(state, employee.id, 'employment'), leaves = state.leaves.filter(l => l.employeeId === employee.id);
   const balances = state.leaveTypes.filter(t => employee.leaveEligibility.includes(t.id)).map(type => {
     const balance = leaveBalance(state, employee, type, day), pending = leaves.filter(l => l.typeId === type.id && l.status === 'pending').reduce((sum, l) => sum + (l.countedDates || []).filter(d => d.startsWith(day.slice(0, 4))).length, 0);
-    return { typeId: type.id, name: type.name, documentsRequired: type.documentsRequired, ...balance, pending, remaining: Math.max(0, balance.available - pending) };
+    return { typeId: type.id, name: type.name, documentsRequired: type.documentsRequired, perOccasion: !type.balanceRequired, maxDays: type.entitledDays, ...balance, pending, remaining: Math.max(0, balance.available - pending) };
   });
   const documents = store.db.prepare('SELECT metadata FROM employee_documents WHERE employee_id=?').all(employee.id).map(d => JSON.parse(d.metadata)).filter(d => d.uploadedBy === actor.username && d.type === 'Leave Supporting');
   return { employee: { id: employee.id, name: employee.name, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: rows(store, 'clock_events', employee.id).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id).slice(-200), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), balances, leaves, documents,

@@ -10,8 +10,9 @@ import { addUser, login, session, checkLimit, changePassword, requestRecovery, i
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
+import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, locationAddress, earlierHistory } from './portal.mjs';
+import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, locationAddress, earlierHistory } from './portal.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
@@ -41,7 +42,7 @@ export function createApp({ store, origin, setupToken, demo = false }) {
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/culture.js': ['culture.js', 'text/javascript'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/culture.js': ['culture.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -111,6 +112,8 @@ export function createApp({ store, origin, setupToken, demo = false }) {
         if (pathname === '/api/me/leaves' && req.method === 'POST') { send(201, applyLeave(store, auth.user, await readBody(req))); return; }
         const cancellation = pathname.match(/^\/api\/me\/leaves\/([a-zA-Z0-9_-]+)\/cancel$/);
         if (cancellation && req.method === 'POST') { send(200, cancelLeave(store, auth.user, cancellation[1])); return; }
+        const proofUpload = pathname.match(/^\/api\/me\/leaves\/([a-zA-Z0-9_-]+)\/proof$/);
+        if (proofUpload && req.method === 'POST') { send(200, attachLeaveProof(store, auth.user, proofUpload[1], await readBody(req))); return; }
         if (pathname === '/api/me/explanations' && req.method === 'POST') { send(201, submitExplanation(store, auth.user, await readBody(req))); return; }
         if (pathname === '/api/me/documents' && req.method === 'POST') { checkLimit(store, `upload:${auth.user.id}`); send(201, uploadDocument(store, auth.user, auth.user.employeeId, await readBody(req, 7100000))); return; }
         const document = pathname.match(/^\/api\/me\/documents\/([a-f0-9-]+)\/content$/);
@@ -123,12 +126,22 @@ export function createApp({ store, origin, setupToken, demo = false }) {
         }
         throw new AppError('Not found.', 404);
       }
+      // Reports: each report checks the role itself; employees can only reach their own "my-" reports.
+      if (pathname === '/api/reports' && req.method === 'GET') { send(200, availableReports(auth.user)); return; }
+      const reportFile = pathname.match(/^\/api\/reports\/([a-z0-9-]+)\.(xlsx|pdf)$/);
+      if (reportFile && req.method === 'GET') {
+        const file = buildReport(store, auth.user, reportFile[1], reportFile[2]);
+        res.writeHead(200, { 'Content-Type': file.type, 'Content-Disposition': `attachment; filename="${file.filename}"` });
+        res.end(file.body); return;
+      }
       // Fail closed: employee sessions can never reach staff records, audits, exports or account management.
       if (auth.user.role === 'employee') throw new AppError('This area is restricted to authorized staff.', 403);
       if (pathname === '/api/live' && req.method === 'GET') { send(200, liveDashboard(store, auth.user)); return; }
       if (pathname === '/api/live/correct' && req.method === 'POST') { send(200, correctClock(store, auth.user, await readBody(req))); return; }
       const explanationReview = pathname.match(/^\/api\/explanations\/([a-f0-9-]+)\/review$/);
       if (explanationReview && req.method === 'POST') { send(200, reviewExplanation(store, auth.user, explanationReview[1], await readBody(req))); return; }
+      const proofReview = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/proof-review$/);
+      if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
       const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
@@ -180,12 +193,17 @@ export function createApp({ store, origin, setupToken, demo = false }) {
         permit(auth.user, ['admin', 'payroll']); send(200, postPayroll(store, auth.user, postSchema.parse(await readBody(req)))); return;
       }
       if (pathname.startsWith('/api/runs/') && req.method === 'GET') {
-        const id = pathname.split('/')[3].replace(/\.xlsx$/, ''), run = store.read().runs.find(r => r.id === id);
+        const id = pathname.split('/')[3].replace(/\.(xlsx|pdf)$/, ''), run = store.read().runs.find(r => r.id === id);
         if (!run) throw new AppError('Payroll not found.', 404);
         if (pathname.endsWith('.xlsx')) {
           store.log(auth.user, 'export', 'runs', run.id, null, { format: 'xlsx' });
           res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="payroll-${run.start}-${run.end}.xlsx"` });
           res.end(payrollWorkbook(run)); return;
+        }
+        if (pathname.endsWith('.pdf')) {
+          store.log(auth.user, 'export', 'runs', run.id, null, { format: 'pdf' });
+          res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="payroll-${run.start}-${run.end}.pdf"` });
+          res.end(payrollRunPdf(run)); return;
         }
         send(200, run); return;
       }

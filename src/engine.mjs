@@ -159,6 +159,7 @@ export function calculatePayroll(state, start, end, pay13th = false) {
       if (!record.approved) { blockers.push(`${prefix}: attendance on ${d} is not approved.`); continue; }
       if (record.status !== 'present') {
         if (record.status === 'official-business') { add(earnings, 'basic', 0, 'Approved official business; salary already included in cutoff basic', record, d); continue; }
+        if (record.status === 'rest-day-swap') { add(earnings, 'basic', 0, `Rest-day swap (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
         const holiday = kind.replace('-rest', '');
         if (['special', 'regular', 'double', 'other'].includes(holiday)) {
           const paidRate = (holiday === 'special' || holiday === 'other' || (e.coveredHoliday && record.holidayEligible)) ? r[`${holiday}Unworked`] : 0;
@@ -171,8 +172,9 @@ export function calculatePayroll(state, start, end, pay13th = false) {
       }
       daysPresent++;
       const normalHours = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
-      const minutes = attendanceMinutes(record);
       const startMinute = stamp(`${d}T${record.timeIn}`), scheduledMinute = stamp(`${d}T${record.scheduledIn}`);
+      // Company policy option: time before the scheduled start is not paid, so overtime only accrues after the scheduled end.
+      const minutes = attendanceProfile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduledMinute) : attendanceMinutes(record);
       const lateMinutes = rest ? 0 : Math.max(0, (startMinute - scheduledMinute) / 60000);
       const deductibleMinutes = record.exception ? 0 : Math.max(0, lateMinutes - graceMinutes - record.offsetMinutes);
       const deduction = r.deductLate ? round(deductibleMinutes / 60 * hourly) : 0;

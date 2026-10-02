@@ -67,6 +67,13 @@ export function saveRecord(store, actor, kind, input) {
       const type = state.leaveTypes.find(t => t.id === value.typeId);
       if (!type) throw new AppError('Leave type does not exist.');
       if (!type.approvalRequired && value.status === 'pending') value.status = 'approved';
+      const prior = state.leaves.find(l => l.id === value.id);
+      value.proofStatus = prior?.proofStatus ?? (type.documentsRequired && !value.documentReference.trim() ? 'required' : '');
+      for (const key of ['proofNote', 'proofReviewedBy', 'proofReviewedAt']) value[key] = prior?.[key] ?? '';
+      // HR typing a new reference (e.g. a paper certificate received in person) counts as HR confirming it.
+      if (prior && ['required', 'rejected'].includes(prior.proofStatus) && value.documentReference.trim() && value.documentReference !== prior.documentReference) {
+        Object.assign(value, { proofStatus: 'verified', proofNote: 'Recorded by HR', proofReviewedBy: actor.username, proofReviewedAt: new Date().toISOString() });
+      }
       if (value.startDate < employee.startDate || (employee.endDate && value.endDate > employee.endDate)) throw new AppError('Leave is outside employment dates.');
       const scheduled = leaveDates(employee, type, value.startDate, value.endDate);
       if (scheduled.length !== value.days) throw new AppError(`Leave covers ${scheduled.length} scheduled days under its ${type.dayBasis}-day policy. Enter that number; partial-day leave is not supported.`);
@@ -77,6 +84,7 @@ export function saveRecord(store, actor, kind, input) {
         const eligibleOn = new Date(`${employee.startDate}T00:00:00Z`);
         eligibleOn.setUTCMonth(eligibleOn.getUTCMonth() + type.minServiceMonths);
         if (value.startDate < eligibleOn.toISOString().slice(0, 10)) throw new AppError('The minimum service requirement for this leave type has not been met.');
+        if (['required', 'rejected'].includes(value.proofStatus)) throw new AppError('Proof (a supporting document such as a medical certificate) is still needed. Ask the employee to upload it, then confirm it before approving.');
         if (type.documentsRequired && !value.documentReference.trim()) throw new AppError('Supporting document reference is required.');
         const without = { ...state, leaves: state.leaves.filter(l => l.id !== value.id) };
         if (type.balanceRequired) {

@@ -4,16 +4,16 @@ const fields = {
   employment: ['position', 'employmentStatus', 'regularizationDate', 'employmentType', 'supervisor', 'workLocation', 'businessEmail', 'employeeStatus'],
   government: ['sss', 'philHealth', 'pagIbig', 'tin', 'otherId', 'expiry'],
   emergency: ['name', 'relationship', 'contact', 'alternateContact', 'address'],
-  attendance: ['scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'approvedLocation', 'latitude', 'longitude', 'radiusMeters', 'arrangement', 'policy'],
+  attendance: ['scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'paidFrom', 'approvedLocation', 'latitude', 'longitude', 'radiusMeters', 'arrangement', 'policy'],
   payroll: ['basis', 'dailyRate', 'hourlyRate', 'frequency', 'schedule', 'status'], bank: ['name', 'accountName', 'accountNumber'],
 };
-const choices = { sex: ['Female', 'Male', 'Other'], employmentStatus: ['Probationary', 'Regular', 'Project-Based', 'Contractual', 'Seasonal', 'Other'], employmentType: ['Full-Time', 'Part-Time', 'Other'], employeeStatus: ['Active', 'On Leave', 'Suspended', 'Resigned', 'Terminated', 'Inactive'], arrangement: ['Office', 'WFH', 'Hybrid'], frequency: ['monthly', 'semi-monthly'], basis: ['monthly', 'daily'], status: ['Active', 'Hold'] };
+const choices = { sex: ['Female', 'Male', 'Other'], employmentStatus: ['Probationary', 'Regular', 'Project-Based', 'Contractual', 'Seasonal', 'Other'], employmentType: ['Full-Time', 'Part-Time', 'Other'], employeeStatus: ['Active', 'On Leave', 'Suspended', 'Resigned', 'Terminated', 'Inactive'], arrangement: ['Office', 'WFH', 'Hybrid'], paidFrom: ['actual', 'schedule'], frequency: ['monthly', 'semi-monthly'], basis: ['monthly', 'daily'], status: ['Active', 'Hold'] };
 const numeric = ['hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'latitude', 'longitude', 'radiusMeters', 'dailyRate', 'hourlyRate'];
 const documentTypes = ['Photo', 'Employment Contract', 'Government ID', 'Resume/CV', 'Birth Certificate', 'Tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Company ID', 'Medical', 'Leave Supporting', 'Disciplinary', 'Other HR'];
 const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const dayFields = ['scheduleStart', 'scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'arrangement'];
 const describeDay = s => [s.scheduleStart && `${s.scheduleStart}–${s.scheduleEnd || '?'}`, s.hoursPerDay != null && `${s.hoursPerDay} h`, s.mealBreakMinutes != null && `${s.mealBreakMinutes} min meal`, s.arrangement].filter(Boolean).join(' · ');
-const title = key => ({ sss: 'SSS number', philHealth: 'PhilHealth number', pagIbig: 'Pag-IBIG number', tin: 'TIN number', hoursPerDay: 'Working hours / day', radiusMeters: 'Geofence radius (meters)', dailyRate: 'Daily rate override', hourlyRate: 'Hourly rate override', frequency: 'Payroll frequency', basis: 'Pay basis (blank = monthly)' })[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+const title = key => ({ sss: 'SSS number', philHealth: 'PhilHealth number', pagIbig: 'Pag-IBIG number', tin: 'TIN number', hoursPerDay: 'Working hours / day', paidFrom: 'Paid time starts at (actual time in / schedule)', radiusMeters: 'Geofence radius (meters)', dailyRate: 'Daily rate override', hourlyRate: 'Hourly rate override', frequency: 'Payroll frequency', basis: 'Pay basis (blank = monthly)' })[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
 
 export function createProfileView(ctx) {
   const { api, esc, money, table, shell, heading, toast, refresh, editMaster, openRun, today } = ctx;
