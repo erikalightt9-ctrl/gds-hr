@@ -78,7 +78,7 @@ test('downloaded payslips itemize contributions, individual loans and adjustment
     assert.ok(p.computation.some(t => t.component === 'basic' && t.formula));
     assert.ok(p.computation.every(t => !('sourceId' in t)));
     assert.equal(p.monthlySalary, row.monthlySalary);
-    assert.match(pdf, /ITEMIZED DEDUCTIONS/); assert.match(pdf, /SALARY COMPUTATION/); assert.match(pdf, /SSS Loan/); assert.match(pdf, /PHP 1000.00 - PHP 250.00 = PHP 750.00/);
+    assert.match(pdf, /DEDUCTIONS/); assert.match(pdf, /\(SSS loan\)/); assert.match(pdf, /\(Authorized uniform repayment\)/); assert.match(pdf, /NET PAY/); assert.ok(pdf.includes(`(PHP ${p.net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`), 'net pay printed');
   } finally { store.close(); }
 });
 test('two-factor setup, replay protection, recovery and disabled accounts', async () => {

@@ -23,6 +23,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, employee_id TEXT, created_at TEXT NOT NULL, message TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS recovery_requests (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL, resolved INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS password_resets (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS contribution_changes (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, effective_date TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS location_addresses (event_id TEXT PRIMARY KEY, address TEXT NOT NULL, fetched_at TEXT NOT NULL);
     `);
     const columns = new Set(this.db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
@@ -33,9 +34,10 @@ export class Store {
   read() {
     const state = JSON.parse(this.db.prepare('SELECT data FROM state WHERE id=1').get().data);
     state.employeeProfiles = this.db.prepare("SELECT * FROM employee_profiles WHERE section IN ('employment','attendance','payroll','leave','contributions')").all().map(r => ({ employeeId: r.employee_id, section: r.section, ...JSON.parse(r.data) }));
+    state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
     return state;
   }
-  write(state) { const copy = { ...state }; delete copy.employeeProfiles; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
+  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
   transaction(fn) {
     if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');

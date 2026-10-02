@@ -82,10 +82,11 @@ export const REPORTS = {
   },
   contributions: {
     title: 'Government contributions remittance', roles: ['admin', 'hr', 'payroll'], subtitle: () => 'Posted payroll - employee shares deducted, employer shares paid by the company',
-    headers: ['Cutoff', 'Employee ID', 'Name', 'SSS EE', 'SSS ER', 'SSS EC', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Total EE', 'Total ER', 'Total remittance'],
+    headers: ['Cutoff', 'Employee ID', 'Name', 'Monthly salary', 'SSS basis', 'PhilHealth basis', 'Pag-IBIG basis', 'SSS EE', 'SSS ER', 'SSS EC', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Total EE', 'Total ER', 'Total remittance'],
     rows: state => state.runs.filter(r => r.status === 'posted').sort((a, b) => b.start.localeCompare(a.start)).flatMap(run => run.rows.map(r => {
       const er = r.employer || {}, ee = r.deductions, totalEE = ee.SSS + ee.PhilHealth + ee['Pag-IBIG'], totalER = r.employerTotal || 0;
-      return [`${run.start} to ${run.end}`, r.employeeId, r.employeeName, money(ee.SSS), money(er.SSS || 0), money(er['SSS EC'] || 0), money(ee.PhilHealth), money(er.PhilHealth || 0), money(ee['Pag-IBIG']), money(er['Pag-IBIG'] || 0), money(totalEE), money(totalER), money(totalEE + totalER)];
+      const basis = name => money(r.contributionBasis?.[name] ?? r.monthlySalary ?? 0);
+      return [`${run.start} to ${run.end}`, r.employeeId, r.employeeName, money(r.monthlySalary ?? 0), basis('SSS'), basis('PhilHealth'), basis('Pag-IBIG'), money(ee.SSS), money(er.SSS || 0), money(er['SSS EC'] || 0), money(ee.PhilHealth), money(er.PhilHealth || 0), money(ee['Pag-IBIG']), money(er['Pag-IBIG'] || 0), money(totalEE), money(totalER), money(totalEE + totalER)];
     })),
   },
   holidays: {

@@ -587,3 +587,18 @@ dialog::backdrop { background: rgb(20 16 8 / .45); backdrop-filter: blur(6px); }
 @media (max-width: 520px) { .culture-cards { grid-template-columns: 1fr; } }
 @media (prefers-reduced-transparency: reduce) { .culture-card { background: #7d111d; } }
 @media (prefers-reduced-motion: reduce) { .culture-card, .culture-chevron { transition: none; } }
+
+/* ---------- Attendance upload from Excel ---------- */
+.import-counts { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 14px; }
+.import-count { display: grid; gap: 2px; min-width: 120px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf8; }
+.import-count strong { font-size: 20px; }
+.import-count span { font-size: 11px; color: var(--muted); }
+.import-count.warn { border-color: #e7a5ab; background: #fff3f3; }
+.import-count.warn strong { color: #a31927; }
+.import-assign { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 10px; }
+#ai-root .form-grid { margin-bottom: 18px; }
+
+/* ---------- Government contribution basis editor ---------- */
+.contribution-agency { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px 16px; margin: 0; }
+.contribution-agency legend { font-weight: 700; padding: 0 6px; }
+.computation-contrib { margin: 10px 0; }

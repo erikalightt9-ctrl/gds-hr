@@ -107,13 +107,19 @@ function bracketAmount(brackets, basis, label, blockers) {
 // Monthly employee, employer and EC amounts for one contribution, from the bracket or an employee override.
 const OVERRIDE_KEYS = { SSS: ['sssEmployee', 'sssEmployer', 'sssEc'], PhilHealth: ['philHealthEmployee', 'philHealthEmployer'], 'Pag-IBIG': ['pagIbigEmployee', 'pagIbigEmployer'] };
 const isSet = v => v !== null && v !== undefined;
-function contributionShares(name, brackets, basis, label, blockers, override = {}) {
+export function contributionShares(name, brackets, basis, label, blockers, override = {}) {
   const b = matchBracket(brackets, basis, label, blockers), excess = b ? Math.max(0, basis - b.excessOver) : 0;
   const table = b ? { employee: round(b.fixed + excess * b.rate), employer: round((b.employerFixed || 0) + excess * (b.employerRate || 0)), ec: round(b.ec || 0) } : { employee: 0, employer: 0, ec: 0 };
   const [eeKey, erKey, ecKey] = OVERRIDE_KEYS[name];
   const pick = (key, fallback) => (key && isSet(override[key]) ? override[key] : fallback);
   return { employee: pick(eeKey, table.employee), employer: pick(erKey, table.employer), ec: pick(ecKey, table.ec), overridden: [eeKey, erKey, ecKey].some(k => k && isSet(override[k])) };
 }
+// The approved per-employee contribution setting in force on a date: the latest effective date on or before it.
+export function activeContributionSetting(changes, employeeId, date) {
+  return (changes || []).filter(c => c.employeeId === employeeId && c.status === 'approved' && c.effectiveDate <= date)
+    .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.reviewedAt.localeCompare(a.reviewedAt))[0] || null;
+}
+const SETTING_SHARE_KEYS = { SSS: ['sssEmployee', 'sssEmployer', 'sssEc'], PhilHealth: ['philHealthEmployee', 'philHealthEmployer'], 'Pag-IBIG': ['pagIbigEmployee', 'pagIbigEmployer'] };
 export function calculatePayroll(state, start, end, pay13th = false, employeeIds = null) {
   const days = dates(start, end);
   if (start.slice(0, 7) !== end.slice(0, 7)) throw new Error('Payroll cutoffs must be within one calendar month.');
@@ -252,10 +258,16 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // Semi-monthly payroll takes half each cutoff by default, or the full monthly amount on one chosen cutoff.
     const contributionFactor = r.cutoff === 'monthly' ? 1 : r.contributionTiming === 'second' ? (start.endsWith('-16') ? 1 : 0) : r.contributionTiming === 'first' ? (start.endsWith('-01') ? 1 : 0) : factor;
     // Employee shares are deducted; employer shares (and SSS EC) are recorded separately and never reduce pay.
-    const employer = { SSS: 0, 'SSS EC': 0, PhilHealth: 0, 'Pag-IBIG': 0 }, override = contributionOverride || {};
+    // An approved contribution setting may change the basis per agency (never the salary) or fix a share.
+    const employer = { SSS: 0, 'SSS EC': 0, PhilHealth: 0, 'Pag-IBIG': 0 }, setting = activeContributionSetting(state.contributionChanges, e.id, start), contributionBasis = {};
     for (const name of ['SSS', 'PhilHealth', 'Pag-IBIG']) {
-      const s = contributionShares(name, r.contributions[name], e.monthlySalary, `${prefix} ${name}`, blockers, override);
-      const basis = s.overridden ? `Employee override (${override.reason || 'HR'})` : `Monthly salary ${e.monthlySalary} -> approved ${name} monthly bracket`;
+      const adjusted = setting?.agencies?.[name] || {}, [eeKey, erKey, ecKey] = SETTING_SHARE_KEYS[name];
+      const override = setting ? { [eeKey]: adjusted.employee, [erKey]: adjusted.employer, ...(ecKey ? { [ecKey]: adjusted.ec } : {}) } : contributionOverride || {};
+      const basisAmount = adjusted.basis ?? e.monthlySalary;
+      contributionBasis[name] = basisAmount;
+      const s = contributionShares(name, r.contributions[name], basisAmount, `${prefix} ${name}`, blockers, override);
+      const basisText = adjusted.basis !== null && adjusted.basis !== undefined ? `${name} contribution basis ${basisAmount} (salary ${e.monthlySalary}; approved change ${setting.id.slice(0, 8)}, ${setting.effectiveDate})` : `Monthly salary ${e.monthlySalary}`;
+      const basis = s.overridden ? `${basisText}; ${setting ? `share set by approved change (${setting.reason})` : `employee override (${override.reason || 'HR'})`}` : `${basisText} -> approved ${name} monthly bracket`;
       add(deductions, name, s.employee * contributionFactor, `${basis} x ${contributionFactor}${contributionFactor === 1 ? ' (full monthly amount this cutoff)' : contributionFactor === 0 ? ' (deducted on the other cutoff)' : ''}`, null, end);
       employer[name] = round(s.employer * contributionFactor);
       trace.push({ component: name, side: 'employer', amount: employer[name], formula: `${basis}: employer share ${s.employer} x ${contributionFactor}`, sourceKind: 'rules', sourceId: r.id, date: end });
@@ -274,7 +286,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

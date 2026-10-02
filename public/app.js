@@ -5,6 +5,8 @@ import { contributionsSection, renderCalculation } from './contributions.js';
 import { setupInstall, offerInstall } from './install.js';
 import { welcomeScene, welcomeCulture } from './welcome.js';
 import { createTimecard } from './timecard.js';
+import { createAttendanceImport } from './attendance-import.js';
+import { createContributionEditor } from './contribution-basis.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 const money = n => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(n || 0);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -19,8 +21,10 @@ let payrollEmployee = '';
 let computationContext = null; // the payroll computation being reviewed, reopened after an adjustment is saved // '' = all employees; otherwise the one Employee ID being calculated
 let employeeData = null, liveData = null, eventStream = null, liveTimer = null, liveUser = null, refreshTimer = null;
 const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
+const contributionEditor = createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog });
+const attendanceImport = createAttendanceImport({ api, esc, table, badge, toast, openDialog, dialog, refresh, render: () => render(), getState: () => state });
 const timecard = createTimecard({ api, esc, money, badge, table, getState: () => state, canEdit: kind => canEdit(kind), editButton, cutoffDefaults }); // canEdit is defined below; look it up when used
-const profiles = createProfileView({ api, esc, money, table, shell, heading, toast, refresh, today, isActive: () => page === 'profile', canEditMaster: () => canEdit('employees'), editMaster: id => edit('employees', id), openTimecard: id => { timecard.setEmployee(id); attendanceView = 'timecard'; page = 'attendance'; render(); }, openPayroll: async id => { payrollEmployee = id; const p = cutoffDefaults(); currentRun = await api('/payroll/preview', { start: p.start, end: p.end, pay13th: false, employeeIds: [id] }); page = 'payroll'; render(); }, openDirectory: () => { page = 'employees'; render(); }, openRun: async id => { currentRun = await api(`/runs/${id}`); page = 'payroll'; render(); } });
+const profiles = createProfileView({ api, esc, money, table, shell, heading, toast, refresh, today, openContributions: id => contributionEditor.open(id), isActive: () => page === 'profile', canEditMaster: () => canEdit('employees'), editMaster: id => edit('employees', id), openTimecard: id => { timecard.setEmployee(id); attendanceView = 'timecard'; page = 'attendance'; render(); }, openPayroll: async id => { payrollEmployee = id; const p = cutoffDefaults(); currentRun = await api('/payroll/preview', { start: p.start, end: p.end, pay13th: false, employeeIds: [id] }); page = 'payroll'; render(); }, openDirectory: () => { page = 'employees'; render(); }, openRun: async id => { currentRun = await api(`/runs/${id}`); page = 'payroll'; render(); } });
 const names = { basic: 'Basic salary', regularOT: 'Regular OT', restDay: 'Rest day pay', restOT: 'Rest day OT', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday OT', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Regular / double holiday OT', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday OT', thirteenth: '13th month paid', absence: 'Unpaid leave / absence', loans: 'Loan deductions', tax: 'Withholding tax', other: 'Other authorized deductions' };
 Object.assign(names, { SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' });
 const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'] })[kind]?.includes(auth.user.role);
@@ -91,7 +95,7 @@ function employeesPage() {
 }
 function attendancePage() {
   const views = `<div class="tabs"><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily records · all employees</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Employee timecard · check against pay</button></div>`;
-  const top = heading('Attendance', 'Record actual work and approved exceptions. Night hours are calculated automatically.', addButton('attendance', 'Record attendance')) + views;
+  const top = heading('Attendance', 'Record actual work and approved exceptions. Night hours are calculated automatically.', (canEdit('attendance') ? '<button data-attendance-import>⇪ Upload from Excel</button>' : '') + addButton('attendance', 'Record attendance')) + views;
   if (attendanceView === 'timecard') return top + timecard.panel(state);
   const list = filtered(state.attendance).sort((a, b) => b.date.localeCompare(a.date));
   return top + `<section class="panel"><div class="panel-head"><h2>Daily records</h2>${downloads('attendance')}<span class="legend">Times use Asia/Manila · unpaid breaks are excluded</span></div>${searchToolbar()}${table(['Employee', 'Date', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], list.map(a => [employee(a.employeeId), a.date, a.scheduledIn, a.status === 'present' ? `${a.timeIn} → ${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '—', badge(a.status, 'neutral'), `${a.offsetMinutes} min${a.exception ? '<br><small>Approved exception</small>' : ''}`, badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('attendance', a.id)]))}</section>`;
@@ -222,6 +226,7 @@ function computationTools(r) {
   return `<section class="computation-tools"><div class="computation-slip">${slip}</div>
     <h3>Manual adjustments this cutoff</h3>
     ${table(['Date', 'Type', 'Amount', 'Reason', 'Approved', ''], list.map(a => [a.date, kinds[a.kind] || esc(a.kind), `${a.kind === 'otherDeduction' ? '−' : '+'}${money(a.amount)}`, esc(a.reason), a.approved ? 'Yes' : badge('Needs approval', 'pending'), editable ? editButton('adjustments', a.id) : '']), 'No manual adjustments in this cutoff.')}
+    <p class="computation-contrib">${['admin', 'hr', 'payroll'].includes(auth.user.role) ? `<button class="small" data-computation-contrib="${esc(r.employeeId)}">Review SSS / PhilHealth / Pag-IBIG basis</button>` : ''}${r.contributionChangeId ? ' <span class="legend">An approved contribution adjustment applies to this cutoff.</span>' : ''}</p>
     ${editable ? `<button class="small" data-computation-add="${esc(r.employeeId)}">＋ Add adjustment</button>` : run.id ? '<p class="legend">Posted payroll is locked; record corrections as an adjustment in an open cutoff.</p>' : ''}
   </section>`;
 }
@@ -449,6 +454,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.nav) { page = b.dataset.nav; filter = ''; render(); }
     if (b.dataset.profile) { page = 'profile'; await profiles.open(b.dataset.profile, 'personal'); }
     if (b.dataset.tab) { subtab = b.dataset.tab; filter = ''; render(); }
+    if (b.hasAttribute('data-attendance-import')) { attendanceImport.open(); return; }
     if (b.dataset.attendanceView) { attendanceView = b.dataset.attendanceView; render(); }
     if (b.dataset.add) edit(b.dataset.add);
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
@@ -456,6 +462,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.salary) await showSalary(b.dataset.salary, b.dataset.component);
     if (b.dataset.payrollEmployee) await showSalary(b.dataset.payrollEmployee);
     if (b.dataset.payslipPreview) await previewPayslip(b.dataset.payslipPreview);
+    if (b.dataset.computationContrib) { const id = b.dataset.computationContrib; await contributionEditor.open(id, { onChanged: computationContext ? () => reopenComputation() : () => showSalary(id) }); return; }
     if (b.dataset.computationAdd) edit('adjustments', null, { employeeId: b.dataset.computationAdd, date: currentRun.end, approved: true });
     if (b.hasAttribute('data-account')) await account();
     if (b.hasAttribute('data-signout')) await signOut();

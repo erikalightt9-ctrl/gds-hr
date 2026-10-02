@@ -7,6 +7,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { Store } from './store.mjs';
 import { mailerFromEnv } from './mailer.mjs';
+import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
+import { contributionReview, submitContributionChange, reviewContributionChange } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles } from './service.mjs';
 import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, configureMfa } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
@@ -14,7 +16,7 @@ import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, locationAddress, earlierHistory } from './portal.mjs';
+import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory } from './portal.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
@@ -44,7 +46,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -151,6 +153,19 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;
       }
+      const contributionRoute = pathname.match(/^\/api\/employees\/([^/]+)\/contributions$/);
+      if (contributionRoute) {
+        const id = decodeURIComponent(contributionRoute[1]);
+        if (req.method === 'GET') { send(200, contributionReview(store, auth.user, id)); return; }
+        if (req.method === 'POST') { send(201, submitContributionChange(store, auth.user, id, await readBody(req))); return; }
+      }
+      const contributionDecision = pathname.match(/^\/api\/contribution-changes\/([a-f0-9-]+)\/review$/);
+      if (contributionDecision && req.method === 'POST') { send(200, reviewContributionChange(store, auth.user, contributionDecision[1], await readBody(req))); return; }
+      const attendanceImport = pathname.match(/^\/api\/attendance-import\/(inspect|preview|commit)$/);
+      if (attendanceImport && req.method === 'POST') {
+        const body = await readBody(req, 7100000), step = attendanceImport[1];
+        send(200, step === 'inspect' ? inspectImport(store, auth.user, body) : step === 'preview' ? previewImport(store, auth.user, body) : commitImport(store, auth.user, body)); return;
+      }
       if (pathname === '/api/recovery/requests' && req.method === 'GET') { permit(auth.user, ['admin']); send(200, store.db.prepare('SELECT r.id,r.user_id AS userId,r.created_at AS createdAt,u.username,u.employee_id AS employeeId FROM recovery_requests r JOIN users u ON u.id=r.user_id WHERE resolved=0 ORDER BY r.created_at DESC').all()); return; }
       if (pathname === '/api/state' && req.method === 'GET') {
         const state = store.read();
@@ -198,7 +213,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         if (!row) throw new AppError('This employee is not included in payroll for that cutoff.', 404);
         store.log(auth.user, 'preview-payslip', 'payslip', 'preview', null, { employeeId: row.employeeId, start: p.start, end: p.end });
         res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="draft-payslip-${row.employeeId}-${p.start}-${p.end}.pdf"` });
-        res.end(payslipPdf(payslipFromRow({ ...run, id: 'preview', status: 'preview' }, row), { draft: true })); return;
+        res.end(payslipPdf(payslipFromRow({ ...run, id: 'preview', status: 'preview' }, row, { designation: designationOf(store, row.employeeId) }), { draft: true })); return;
       }
       const staffSlip = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/payslips\/([A-Za-z0-9_-]+)\.pdf$/);
       if (staffSlip && req.method === 'GET') {
