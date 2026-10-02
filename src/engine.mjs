@@ -244,17 +244,19 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const thirteenthPaid = round(annualRows.reduce((s, row) => s + row.earnings.thirteenth, 0));
     const thirteenthBalance = Math.max(0, round(thirteenthAccrued - thirteenthPaid));
     if (pay13th) add(earnings, 'thirteenth', thirteenthBalance, `${annualBasic} applicable annual basic ÷ 12 − ${thirteenthPaid} already paid`, null, end);
+    // Semi-monthly payroll takes half each cutoff by default, or the full monthly amount on one chosen cutoff.
+    const contributionFactor = r.cutoff === 'monthly' ? 1 : r.contributionTiming === 'second' ? (start.endsWith('-16') ? 1 : 0) : r.contributionTiming === 'first' ? (start.endsWith('-01') ? 1 : 0) : factor;
     // Employee shares are deducted; employer shares (and SSS EC) are recorded separately and never reduce pay.
     const employer = { SSS: 0, 'SSS EC': 0, PhilHealth: 0, 'Pag-IBIG': 0 }, override = contributionOverride || {};
     for (const name of ['SSS', 'PhilHealth', 'Pag-IBIG']) {
       const s = contributionShares(name, r.contributions[name], e.monthlySalary, `${prefix} ${name}`, blockers, override);
       const basis = s.overridden ? `Employee override (${override.reason || 'HR'})` : `Monthly salary ${e.monthlySalary} -> approved ${name} monthly bracket`;
-      add(deductions, name, s.employee * factor, `${basis} x ${factor}`, null, end);
-      employer[name] = round(s.employer * factor);
-      trace.push({ component: name, side: 'employer', amount: employer[name], formula: `${basis}: employer share ${s.employer} x ${factor}`, sourceKind: 'rules', sourceId: r.id, date: end });
+      add(deductions, name, s.employee * contributionFactor, `${basis} x ${contributionFactor}${contributionFactor === 1 ? ' (full monthly amount this cutoff)' : contributionFactor === 0 ? ' (deducted on the other cutoff)' : ''}`, null, end);
+      employer[name] = round(s.employer * contributionFactor);
+      trace.push({ component: name, side: 'employer', amount: employer[name], formula: `${basis}: employer share ${s.employer} x ${contributionFactor}`, sourceKind: 'rules', sourceId: r.id, date: end });
       if (name === 'SSS') {
-        employer['SSS EC'] = round(s.ec * factor);
-        trace.push({ component: 'SSS EC', side: 'employer', amount: employer['SSS EC'], formula: `${basis}: Employees' Compensation ${s.ec} x ${factor}`, sourceKind: 'rules', sourceId: r.id, date: end });
+        employer['SSS EC'] = round(s.ec * contributionFactor);
+        trace.push({ component: 'SSS EC', side: 'employer', amount: employer['SSS EC'], formula: `${basis}: Employees' Compensation ${s.ec} x ${contributionFactor}`, sourceKind: 'rules', sourceId: r.id, date: end });
       }
     }
     const employerTotal = round(Object.values(employer).reduce((s, n) => s + n, 0));
@@ -267,7 +269,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

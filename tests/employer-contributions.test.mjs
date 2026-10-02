@@ -67,3 +67,19 @@ test('HR can edit rates; rules used by posted payroll stay locked, unused approv
     assert.equal(store.read().runs[0].rows[0].employerTotal, 1990, 'posted payroll keeps its employer amounts');
   } finally { store.close(); }
 });
+
+test('contribution timing: full monthly amount on the second cutoff, nothing on the first', () => {
+  const second = withTables(completeState()); second.rules[0].contributionTiming = 'second';
+  const first = calculatePayroll(second, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(first.deductions.SSS + first.deductions.PhilHealth + first.deductions['Pag-IBIG'], 0);
+  assert.equal(first.employerTotal, 0);
+  const septAttendance = second.attendance.map(a => ({ ...a, id: `late-${a.date}`, date: a.date.replace('2026-09-0', '2026-09-2').replace('2026-09-1', '2026-09-2') }));
+  second.attendance = septAttendance;
+  const late = calculatePayroll(second, '2026-09-16', '2026-09-30').rows[0];
+  assert.equal(late.deductions['Pag-IBIG'], 200, 'full monthly Pag-IBIG');
+  assert.equal(late.deductions.PhilHealth, 750, '30,000 x 5% / 2');
+  assert.deepEqual(late.employer, { SSS: 3000, 'SSS EC': 30, PhilHealth: 750, 'Pag-IBIG': 200 });
+  assert.equal(late.contributionFactor, 1);
+  const split = withTables(completeState());
+  assert.equal(calculatePayroll(split, '2026-09-01', '2026-09-15').rows[0].deductions['Pag-IBIG'], 100, 'default stays split');
+});
