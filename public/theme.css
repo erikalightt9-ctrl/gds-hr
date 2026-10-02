@@ -437,3 +437,206 @@ dialog::backdrop { background: rgb(20 16 8 / .45); backdrop-filter: blur(6px); }
   background: var(--glass-gold); border: 1px solid var(--glass-edge); box-shadow: var(--glass-highlight); font-weight: 600;
 }
 .export-link + .export-link { margin-left: 8px; }
+.profile-payroll-actions{display:flex;justify-content:flex-end;margin:0 0 12px}
+
+/* ---------- Sign-in welcome: headline, mascot handshake, culture summary ---------- */
+.welcome-login {
+  display: grid; min-height: 100vh; position: relative;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: "head form" "body form";
+}
+.welcome-login::before {               /* warm espresso stage behind the headline and scene */
+  content: ""; grid-column: 1; grid-row: 1 / 3; z-index: 0;
+  background:
+    radial-gradient(720px 420px at 30% 55%, rgb(217 184 92 / .24), transparent 65%),
+    radial-gradient(620px 420px at 85% 95%, rgb(196 40 58 / .26), transparent 70%),
+    linear-gradient(160deg, #22160e 0%, #120c08 100%);
+  border-right: 1px solid rgb(217 184 92 / .3);
+}
+.welcome-head, .welcome-body { position: relative; z-index: 1; color: #fff; }
+.welcome-head { grid-area: head; padding: 40px clamp(24px, 4vw, 64px) 8px; }
+.welcome-head .brand { display: flex; align-items: center; gap: 18px; font-weight: 700; letter-spacing: .04em; margin-bottom: 32px; }
+.welcome-head .brand-logo { width: 126px; height: auto; background: #fff; border-radius: 10px; padding: 6px; box-shadow: 0 8px 24px -10px rgb(0 0 0 / .6); }
+.welcome-head .eyebrow { color: var(--gold-300); font-size: 12px; font-weight: 700; letter-spacing: .26em; text-transform: uppercase; }
+.welcome-head h1 { margin: 10px 0 12px; max-width: 18ch; font: 700 clamp(30px, 3.6vw, 50px)/1.08 Georgia, "Times New Roman", serif; letter-spacing: -.01em; }
+.welcome-head p { margin: 0; max-width: 46ch; color: rgb(255 255 255 / .78); font-size: 15px; line-height: 1.6; }
+.welcome-login .login-form { grid-area: form; position: relative; z-index: 1; }
+.welcome-body {
+  grid-area: body; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: center;
+  gap: clamp(16px, 2.5vw, 36px); padding: 12px clamp(24px, 4vw, 64px) 40px;
+}
+.welcome-scene { margin: 0; }
+.welcome-scene img { display: block; width: 100%; height: auto; filter: drop-shadow(0 18px 30px rgb(0 0 0 / .4)); }
+.welcome-motto { margin: 0 0 14px; color: var(--gold-300); font: italic 600 clamp(17px, 1.5vw, 21px)/1.3 Georgia, "Times New Roman", serif; }
+.welcome-culture ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.welcome-culture li {
+  display: grid; gap: 2px; padding: 10px 14px; border-radius: 12px;
+  background: rgb(255 255 255 / .06); border: 1px solid rgb(217 184 92 / .25);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.welcome-culture strong { color: var(--gold-200); font-size: 14px; }
+.welcome-culture span { color: rgb(255 255 255 / .74); font-size: 12.5px; line-height: 1.45; }
+
+/* Handshake artwork: rises into view, a gentle two-pump handshake bob, a slight welcoming nod, then a quiet idle float. */
+@media (prefers-reduced-motion: no-preference) {
+  .welcome-handshake { transform-origin: 50% 100%; animation: welcome-arrive .9s cubic-bezier(.2, .8, .2, 1) both, welcome-shake 2.4s ease-in-out 1s, welcome-idle 5s ease-in-out 3.6s infinite; /* later steps only apply while running, so they never cancel the rise-in */ }
+}
+@keyframes welcome-arrive { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes welcome-shake {
+  0% { transform: none; }
+  14% { transform: translateY(5px); }
+  28% { transform: translateY(-3px); }
+  42% { transform: translateY(4px); }
+  56% { transform: translateY(0); }
+  72% { transform: rotate(-1.4deg); }
+  86% { transform: rotate(.6deg); }
+  100% { transform: none; }
+}
+@keyframes welcome-idle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+@media (max-width: 1180px) {
+  .welcome-body { grid-template-columns: 1fr; }
+  .welcome-scene { max-width: 520px; }
+  .welcome-culture ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {   /* phones and tablets: headline, then sign-in, then the welcome scene and culture */
+  .welcome-login { display: grid; grid-template-columns: 1fr; grid-template-rows: auto auto auto; grid-template-areas: "head" "form" "body"; }
+  .welcome-login::before { display: none; }
+  .welcome-head, .welcome-body { background: radial-gradient(520px 300px at 30% 40%, rgb(217 184 92 / .2), transparent 70%), linear-gradient(160deg, #22160e, #120c08); }
+  .welcome-head { padding: 24px 20px 26px; }
+  .welcome-head .brand { margin-bottom: 18px; }
+  .welcome-head .brand-logo { width: 96px; }
+  .welcome-head h1 { font-size: clamp(26px, 7vw, 34px); }
+  .welcome-body { padding: 26px 20px 34px; }
+  .welcome-scene { max-width: 420px; margin: 0 auto; }
+}
+@media (max-width: 520px) { .welcome-culture ul { grid-template-columns: 1fr; } }
+/* Welcome refinements: brand on one line, compact culture rows that fit a laptop screen. */
+.welcome-head .brand { flex-direction: row; justify-content: flex-start; text-align: left; }
+.welcome-head h1 { font-size: clamp(28px, 3.1vw, 44px); }
+.welcome-body { align-items: center; }
+.welcome-culture li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 8px 12px; }
+.welcome-culture strong { font-size: 13.5px; }
+.welcome-culture span { font-size: 12.5px; }
+
+/* Sign-in greeting in Dancing Script (SIL OFL 1.1, self-hosted: see fonts/OFL.txt). */
+@font-face {
+  font-family: "Dancing Script";
+  src: url("/fonts/dancing-script-700.woff2") format("woff2");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+.welcome-login .login-form h2 {
+  font-family: "Dancing Script", "Brush Script MT", cursive;
+  font-weight: 700; font-size: clamp(40px, 4vw, 54px); line-height: 1.05; letter-spacing: 0;
+  color: var(--red-600); margin: 6px 0 10px;
+}
+
+/* ======================================================================
+   Sign-in: red and gold liquid glass. Every box floats on a slow-moving
+   field of molten gold light over deep GDS red.
+   ====================================================================== */
+.welcome-login {
+  isolation: isolate; overflow: hidden;
+  background:
+    radial-gradient(900px 600px at 12% 8%, rgb(255 214 120 / .30), transparent 60%),
+    radial-gradient(800px 700px at 95% 100%, rgb(255 190 90 / .22), transparent 60%),
+    linear-gradient(140deg, #3d070d 0%, #7d111d 32%, #a51b2a 55%, #6a0e18 78%, #2c0509 100%);
+}
+/* Liquid light: two blurred gold/red pools drifting behind the glass. */
+.welcome-login::before, .welcome-login::after {
+  content: ""; position: absolute; z-index: 0; pointer-events: none; border-radius: 50%;
+  grid-column: auto; grid-row: auto; border: 0; filter: blur(60px);
+}
+.welcome-login::before {
+  width: 62vmax; height: 62vmax; left: -14vmax; top: 18vh;
+  background: radial-gradient(circle at 40% 40%, rgb(255 210 110 / .55), rgb(217 160 60 / .22) 45%, transparent 70%);
+}
+.welcome-login::after {
+  width: 54vmax; height: 54vmax; right: -12vmax; top: -16vh;
+  background: radial-gradient(circle at 55% 55%, rgb(255 120 110 / .40), rgb(200 40 60 / .18) 45%, transparent 70%);
+}
+.welcome-head, .welcome-body, .welcome-login .login-form { background: none !important; }
+.welcome-head h1 { color: #fff; text-shadow: 0 2px 18px rgb(60 0 8 / .45); }
+.welcome-head p { color: rgb(255 244 228 / .88); }
+.welcome-head .eyebrow, .welcome-motto { color: #f7d985; }
+
+/* Shared glass recipe: frosted, gold-edged, lit from above, casting a soft shadow below. */
+.welcome-head .brand,
+.welcome-culture li,
+.welcome-login .login-form form {
+  position: relative;
+  -webkit-backdrop-filter: blur(22px) saturate(170%); backdrop-filter: blur(22px) saturate(170%);
+  border: 1px solid rgb(247 217 133 / .55);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / .55),          /* top highlight */
+    inset 0 -1px 0 rgb(247 217 133 / .25),         /* gold rim */
+    0 24px 50px -18px rgb(30 0 4 / .65),           /* floating shadow */
+    0 0 0 1px rgb(255 255 255 / .06);
+}
+.welcome-head .brand::before,
+.welcome-culture li::before,
+.welcome-login .login-form form::before {     /* liquid sheen across the top */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(160deg, rgb(255 255 255 / .38) 0%, rgb(255 255 255 / .08) 30%, transparent 48%);
+}
+
+/* Brand chip */
+.welcome-head .brand {
+  display: inline-flex; padding: 10px 18px 10px 10px; border-radius: 18px;
+  background: linear-gradient(135deg, rgb(255 255 255 / .20), rgb(255 220 150 / .10));
+  color: #fff;
+}
+.welcome-head .brand-logo { box-shadow: 0 6px 16px -6px rgb(0 0 0 / .45); }
+
+/* Culture tiles: translucent red-gold glass */
+.welcome-culture li {
+  border-radius: 16px; padding: 12px 14px;
+  background: linear-gradient(135deg, rgb(255 236 190 / .22) 0%, rgb(255 200 120 / .10) 45%, rgb(160 20 35 / .18) 100%);
+}
+.welcome-culture strong { color: #ffe7a6; }
+.welcome-culture span { color: rgb(255 246 232 / .9); }
+
+/* Sign-in card: light gold glass so the form stays easy to read */
+.welcome-login .login-form { padding: 32px clamp(18px, 3vw, 48px); }
+.welcome-login .login-form form {
+  width: min(440px, 100%); padding: 34px 32px 28px; border-radius: 28px;
+  background: linear-gradient(145deg, rgb(255 252 244 / .86) 0%, rgb(255 238 200 / .72) 55%, rgb(255 228 190 / .66) 100%);
+  color: var(--ink);
+}
+.welcome-login .login-form input {
+  background: rgb(255 255 255 / .78); border-color: rgb(194 154 62 / .45);
+  box-shadow: inset 0 1px 2px rgb(60 30 5 / .08), 0 1px 0 rgb(255 255 255 / .6);
+}
+.welcome-login .login-form .auth-brand { color: var(--gold-700); }
+
+/* Floating: each box drifts gently, out of step with its neighbours. */
+@media (prefers-reduced-motion: no-preference) {
+  .welcome-login::before { animation: liquid-drift-a 22s ease-in-out infinite alternate; }
+  .welcome-login::after { animation: liquid-drift-b 26s ease-in-out infinite alternate; }
+  .welcome-login .login-form form { animation: glass-float 7s ease-in-out infinite; }
+  .welcome-head .brand { animation: glass-float 8s ease-in-out -2s infinite; }
+  .welcome-culture li { animation: glass-float 6.5s ease-in-out infinite; }
+  .welcome-culture li:nth-child(2) { animation-delay: -1.1s; }
+  .welcome-culture li:nth-child(3) { animation-delay: -2.2s; }
+  .welcome-culture li:nth-child(4) { animation-delay: -3.3s; }
+  .welcome-culture li:nth-child(5) { animation-delay: -4.4s; }
+  .welcome-culture li:nth-child(6) { animation-delay: -5.5s; }
+}
+@keyframes glass-float {
+  0%, 100% { transform: translateY(0); box-shadow: inset 0 1px 0 rgb(255 255 255 / .55), inset 0 -1px 0 rgb(247 217 133 / .25), 0 24px 50px -18px rgb(30 0 4 / .65), 0 0 0 1px rgb(255 255 255 / .06); }
+  50% { transform: translateY(-7px); box-shadow: inset 0 1px 0 rgb(255 255 255 / .55), inset 0 -1px 0 rgb(247 217 133 / .25), 0 34px 60px -20px rgb(30 0 4 / .55), 0 0 0 1px rgb(255 255 255 / .06); }
+}
+@keyframes liquid-drift-a { from { transform: translate(0, 0) scale(1); } to { transform: translate(14vmax, -8vmax) scale(1.15); } }
+@keyframes liquid-drift-b { from { transform: translate(0, 0) scale(1.05); } to { transform: translate(-12vmax, 10vmax) scale(.92); } }
+
+@media (prefers-reduced-transparency: reduce) {
+  .welcome-culture li { background: #7d111d; }
+  .welcome-login .login-form form { background: #fff8ea; }
+  .welcome-head .brand { background: #6a0e18; }
+}
+@media (max-width: 900px) {
+  .welcome-login .login-form { padding: 6px 16px 22px; }
+  .welcome-login .login-form form { padding: 26px 20px 22px; border-radius: 22px; }
+  .welcome-login::before { display: block; top: 40vh; }   /* the earlier phone rule hid the old split panel */
+}

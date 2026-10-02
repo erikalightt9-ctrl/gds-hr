@@ -26,18 +26,23 @@ function showBanner(message, action) {
   document.body.append(banner);
 }
 
+let deferredPrompt = null, signedIn = false;
 export function setupInstall() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(error => console.warn('GDS HR offline support unavailable:', error.message));
   }
+  window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); deferredPrompt = event; if (signedIn) offerInstall(); });
+}
+// Called once someone is signed in, so the prompt never covers the sign-in form.
+export function offerInstall() {
+  signedIn = true;
   if (installed() || recentlyDismissed()) return;
-  window.addEventListener('beforeinstallprompt', event => {
-    event.preventDefault();
+  if (deferredPrompt) {
+    const prompt = deferredPrompt;
     showBanner('Open attendance, leave and payslips from your home screen.', async () => {
-      event.prompt();
-      const choice = await event.userChoice;
+      prompt.prompt(); deferredPrompt = null;
+      const choice = await prompt.userChoice;
       if (choice.outcome !== 'accepted') rememberDismissal();
     });
-  });
-  if (isIos()) showBanner('Tap the Share button <span aria-hidden="true">⬆︎</span>, then <b>Add to Home Screen</b>.', null);
+  } else if (isIos()) showBanner('Tap the Share button <span aria-hidden="true">⬆︎</span>, then <b>Add to Home Screen</b>.', null);
 }

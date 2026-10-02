@@ -101,7 +101,7 @@ function bracketAmount(brackets, basis, label, blockers) {
   const b = matches[0];
   return round(b.fixed + Math.max(0, basis - b.excessOver) * b.rate);
 }
-export function calculatePayroll(state, start, end, pay13th = false) {
+export function calculatePayroll(state, start, end, pay13th = false, employeeIds = null) {
   const days = dates(start, end);
   if (start.slice(0, 7) !== end.slice(0, 7)) throw new Error('Payroll cutoffs must be within one calendar month.');
   const blockers = [], rules = ruleOn(state, start);
@@ -115,7 +115,8 @@ export function calculatePayroll(state, start, end, pay13th = false) {
   const validCutoff = r.cutoff === 'monthly' ? start.endsWith('-01') && end === monthEnd : (start.endsWith('-01') && end.endsWith('-15')) || (start.endsWith('-16') && end === monthEnd);
   if (!validCutoff) blockers.push(`Dates do not match the ${r.cutoff} payroll cutoff.`);
   const factor = r.cutoff === 'monthly' ? 1 : 0.5;
-  const rows = state.employees.filter(e => !e.draft && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start)).map(e => {
+  const chosen = employeeIds?.length ? new Set(employeeIds) : null;
+  const rows = state.employees.filter(e => (!chosen || chosen.has(e.id)) && !e.draft && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start)).map(e => {
     const prefix = `${e.id} ${e.name}`;
     const payrollProfile = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'payroll');
     const attendanceProfile = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'attendance');
@@ -245,6 +246,6 @@ export function calculatePayroll(state, start, end, pay13th = false) {
     return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
-  const result = { start, end, pay13th, ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)) } };
+  const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)) } };
   return { ...result, fingerprint: createHash('sha256').update(JSON.stringify({ state, result })).digest('hex') };
 }

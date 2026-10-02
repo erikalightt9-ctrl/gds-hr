@@ -42,7 +42,7 @@ export function createApp({ store, origin, setupToken, demo = false }) {
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/culture.js': ['culture.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/culture.js': ['culture.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -187,7 +187,7 @@ export function createApp({ store, origin, setupToken, demo = false }) {
         if (req.method === 'DELETE') { deleteRecord(store, auth.user, kind, url.searchParams.get('id')); send(200, { ok: true }); return; }
       }
       if (pathname === '/api/payroll/preview' && req.method === 'POST') {
-        const p = previewSchema.parse(await readBody(req)); send(200, preview(store, p.start, p.end, p.pay13th)); return;
+        const p = previewSchema.parse(await readBody(req)); send(200, preview(store, p.start, p.end, p.pay13th, p.employeeIds)); return;
       }
       if (pathname === '/api/payroll/post' && req.method === 'POST') {
         permit(auth.user, ['admin', 'payroll']); send(200, postPayroll(store, auth.user, postSchema.parse(await readBody(req)))); return;
