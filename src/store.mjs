@@ -34,6 +34,7 @@ export class Store {
   read() {
     const state = JSON.parse(this.db.prepare('SELECT data FROM state WHERE id=1').get().data);
     state.employeeProfiles = this.db.prepare("SELECT * FROM employee_profiles WHERE section IN ('employment','attendance','payroll','leave','contributions')").all().map(r => ({ employeeId: r.employee_id, section: r.section, ...JSON.parse(r.data) }));
+    state.deductions ??= [];   // added after launch; older databases start with none
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
     return state;
   }

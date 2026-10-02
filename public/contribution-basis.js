@@ -1,7 +1,7 @@
 // Per-employee SSS / PhilHealth / Pag-IBIG review: contribution basis per agency (kept apart from the salary),
-// optional fixed shares, a required reason, approval by an administrator, and the full change history.
+// optional fixed shares, a required reason and the full change history. HR and Admin changes apply on save.
 const AGENCIES = ['SSS', 'PhilHealth', 'Pag-IBIG'];
-const STATUS = { pending: ['Awaiting approval', 'pending'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'] };
+const STATUS = { pending: ['Awaiting approval', 'pending'], approved: ['Applied', ''], rejected: ['Rejected', 'rejected'], removed: ['Removed', 'neutral'] };
 
 export function createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog }) {
   let data = null, employeeId = '', done = null;
@@ -22,14 +22,12 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
     return list.map(v => `<option value="${v}" ${v === current ? 'selected' : ''}>${v}${v === current ? ' (current cutoff)' : ''}</option>`).join('');
   };
   function agencyFields(name) {
-    const a = data.active?.agencies?.[name] || {}, g = data.grounds[name], salary = data.employee.monthlySalary || 0;
-    const options = [['', 'Same as actual salary — no ground needed'], ...Object.entries(g.lower).map(([k, v]) => [k, `Lower: ${v}`]), ...Object.entries(g.higher).map(([k, v]) => [k, `Higher: ${v}`])];
+    const a = data.active?.agencies?.[name] || {}, salary = data.employee.monthlySalary || 0;
     return `<fieldset class="contribution-agency"><legend>${name}</legend>
       <label class="field">Contribution basis (monthly)<input type="number" min="0" step="0.01" name="${name}.basis" value="${amount(a.basis)}" placeholder="${salary}" data-cb-basis="${name}"><small data-cb-hint="${name}">Blank uses the actual salary, ${money(salary)}.</small></label>
-      <label class="field">Permitted ground for a different basis<select name="${name}.ground">${options.map(([k, v]) => `<option value="${k}" ${a.ground === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select><small>${esc(g.rule)}</small></label>
-      <label class="field">Employee share (monthly, optional)<input type="number" min="0" step="0.01" name="${name}.employee" value="${amount(a.employee)}" placeholder="From the rules table"></label>
-      <label class="field">Employer share (monthly, optional)<input type="number" min="0" step="0.01" name="${name}.employer" value="${amount(a.employer)}" placeholder="From the rules table"></label>
-      ${name === 'SSS' ? `<label class="field">Employees' Compensation (EC, optional)<input type="number" min="0" step="0.01" name="SSS.ec" value="${amount(a.ec)}" placeholder="From the rules table"></label>` : ''}
+      <label class="field">Employee share (monthly)<input type="number" min="0" step="0.01" name="${name}.employee" value="${amount(a.employee)}" placeholder="From the rates table"><small>Blank = calculated. 0 = no deduction.</small></label>
+      <label class="field">Employer share (monthly)<input type="number" min="0" step="0.01" name="${name}.employer" value="${amount(a.employer)}" placeholder="From the rates table"></label>
+      ${name === 'SSS' ? `<label class="field">Employees' Compensation (EC)<input type="number" min="0" step="0.01" name="SSS.ec" value="${amount(a.ec)}" placeholder="From the rates table"></label>` : ''}
     </fieldset>`;
   }
   function draw() {
@@ -42,18 +40,18 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
       `<span class="wrap">${AGENCIES.filter(n => JSON.stringify(ch.before[n]) !== JSON.stringify(ch.after[n])).map(n => `${n}: basis ${money(ch.before[n].basis)} → ${money(ch.after[n].basis)}, EE ${money(ch.before[n].employee)} → ${money(ch.after[n].employee)}, ER ${money(ch.before[n].employer)} → ${money(ch.after[n].employer)}`).join('<br>') || 'No amount change'}</span>`,
       `<span class="wrap">${esc(ch.reason)}</span>`,
       badge(...STATUS[ch.status]) + (ch.reviewedBy ? `<small>${esc(ch.reviewedBy)} · ${esc(ch.reviewedAt.slice(0, 16).replace('T', ' '))}${ch.reviewNote ? ` · ${esc(ch.reviewNote)}` : ''}</small>` : ''),
-      ch.status === 'pending' && d.canApprove ? `<button class="small primary" data-cb-review="approve" data-id="${esc(ch.id)}">Approve</button> <button class="small" data-cb-review="reject" data-id="${esc(ch.id)}">Reject</button>` : '']), 'No adjustments yet. This employee uses the actual salary and the approved rules table.');
+      !d.canApprove ? '' : ch.status === 'pending' ? `<button class="small primary" data-cb-review="approve" data-id="${esc(ch.id)}">Apply</button> <button class="small" data-cb-review="reject" data-id="${esc(ch.id)}">Reject</button>` : ch.status === 'approved' ? `<button class="small" data-cb-review="remove" data-id="${esc(ch.id)}">Remove</button>` : '']), 'No adjustments yet. This employee uses the actual salary and the Rules & rates table.');
     openDialog(`Government contributions · ${e.name}`, `<div class="dialog-body" id="cb-root">
       <p class="sub">${esc(e.id)} · Actual monthly salary <strong>${money(e.monthlySalary || 0)}</strong> (not changed here) · Rules version ${esc(d.ruleId || '—')} · as of ${d.asOf}</p>
       <h3>In force now</h3>${summary}
       ${d.canSubmit ? `<hr><h3>Adjust the contribution computation</h3>
-      <p class="legend">Set a basis only when the agency's rules allow it, and choose the ground that applies. A basis lower than the salary is refused without a permitted ground; declaring a lower salary is not one. Every change keeps the previous amounts, your name and the date. ${d.canApprove ? 'As an administrator your change applies once saved.' : 'An administrator must approve the change before payroll uses it.'} Payroll still needs its usual review and posting.</p>
+      <p class="legend">Set any basis or monthly amount the company decides; leave a box blank to use the salary and the Rules &amp; rates table. The salary record is not changed. Your change applies from the chosen cutoff as soon as you save, and the previous amounts, your name and the date are kept below. Payroll still has its usual review before posting.</p>
       <form id="cb-form"><div class="form-grid">
         <label class="field">Applies from cutoff<select name="effectiveDate">${cutoffStarts()}</select><small>Posted payroll is never changed.</small></label>
         <div></div>
         ${AGENCIES.map(agencyFields).join('')}
         <label class="field full">Reason and supporting record<textarea name="reason" required minlength="10" maxlength="2000" placeholder="e.g. Sept 2026 DTR: 6 unpaid absence days; compensation actually paid ₱20,000 (payroll register ref.)"></textarea></label>
-      </div><button class="primary">${d.canApprove ? 'Save and apply' : 'Submit for approval'}</button></form>` : ''}
+      </div><button class="primary">Save and apply</button></form>` : ''}
       <hr><h3>Change history</h3>${history}</div>`, `<div class="dialog-foot">${done ? '<button data-cb-back>Back to payroll computation</button>' : ''}<button data-close>Close</button></div>`);
     dialog.querySelector('#cb-form')?.addEventListener('submit', submit);
     dialog.querySelector('#cb-root').addEventListener('input', hint);
@@ -63,23 +61,23 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
   function hint(event) {
     const name = event.target.dataset.cbBasis; if (!name) return;
     const salary = data.employee.monthlySalary || 0, v = event.target.value === '' ? null : Number(event.target.value);
-    dialog.querySelector(`[data-cb-hint="${name}"]`).textContent = v === null || v === salary ? `Blank uses the actual salary, ${money(salary)}.` : v < salary ? `Lower than the actual salary by ${money(salary - v)}: choose a permitted ground below.` : `Higher than the actual salary by ${money(v - salary)}${Object.keys(data.grounds[name].higher).length ? ': choose a permitted ground below.' : `: not permitted for ${name}.`}`;
+    dialog.querySelector(`[data-cb-hint="${name}"]`).textContent = v === null || v === salary ? `Blank uses the actual salary, ${money(salary)}.` : `${v < salary ? 'Lower' : 'Higher'} than the actual salary by ${money(Math.abs(salary - v))}. The salary record stays ${money(salary)}.`;
   }
   async function submit(event) {
     event.preventDefault();
     const form = new FormData(event.target), num = key => (form.get(key) === '' ? null : Number(form.get(key)));
-    const agencies = Object.fromEntries(AGENCIES.map(n => [n, { basis: num(`${n}.basis`), ground: form.get(`${n}.ground`) || '', employee: num(`${n}.employee`), employer: num(`${n}.employer`), ec: n === 'SSS' ? num('SSS.ec') : null }]));
+    const agencies = Object.fromEntries(AGENCIES.map(n => [n, { basis: num(`${n}.basis`), employee: num(`${n}.employee`), employer: num(`${n}.employer`), ec: n === 'SSS' ? num('SSS.ec') : null }]));
     try {
       const change = await api(`/employees/${encodeURIComponent(employeeId)}/contributions`, { effectiveDate: form.get('effectiveDate'), reason: form.get('reason'), agencies });
-      toast(change.status === 'approved' ? 'Contribution change applied. Payroll previews and payslips now use it.' : 'Submitted for administrator approval.');
+      toast(change.status === 'approved' ? 'Saved and applied. Payroll previews and payslips now use it.' : 'Saved.');
       await after();
     } catch (error) { toast(error.message); }
   }
   async function review(event) {
     const button = event.target.closest('[data-cb-review]'); if (!button) return;
-    const decision = button.dataset.cbReview, note = decision === 'reject' ? window.prompt('Reason for rejecting this change:') : window.prompt('Approval note (optional):', '');
+    const decision = button.dataset.cbReview, note = window.prompt(decision === 'approve' ? 'Note (optional):' : `Reason for ${decision === 'remove' ? 'removing' : 'rejecting'} this change:`, '');
     if (note === null) return;
-    try { await api(`/contribution-changes/${button.dataset.id}/review`, { decision, note }); toast(decision === 'approve' ? 'Change approved. Payroll previews and payslips now use it.' : 'Change rejected.'); await after(); }
+    try { await api(`/contribution-changes/${button.dataset.id}/review`, { decision, note }); toast({ approve: 'Change applied.', reject: 'Change rejected.', remove: 'Change removed. Payroll goes back to the previous setting.' }[decision]); await after(); }
     catch (error) { toast(error.message); }
   }
   async function after() {

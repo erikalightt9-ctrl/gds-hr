@@ -80,6 +80,11 @@ export const REPORTS = {
       });
     },
   },
+  deductions: {
+    title: 'Company deductions', roles: STAFF,
+    headers: ['Employee ID', 'Name', 'Deduction', 'Amount', 'When', 'Start', 'Until', 'Status', 'Notes'],
+    rows: state => { const name = nameOf(state), when = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' }; return (state.deductions || []).map(d => [d.employeeId, name(d.employeeId), d.name, money(d.amount), when[d.schedule], d.startDate, d.endDate, d.active ? 'Active' : 'Paused', d.notes]); },
+  },
   contributions: {
     title: 'Government contributions remittance', roles: ['admin', 'hr', 'payroll'], subtitle: () => 'Posted payroll - employee shares deducted, employer shares paid by the company',
     headers: ['Cutoff', 'Employee ID', 'Name', 'Monthly salary', 'SSS basis', 'PhilHealth basis', 'Pag-IBIG basis', 'SSS EE', 'SSS ER', 'SSS EC', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Total EE', 'Total ER', 'Total remittance'],

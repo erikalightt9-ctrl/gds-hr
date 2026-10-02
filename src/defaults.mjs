@@ -20,7 +20,7 @@ export const leaveNames = [
 ];
 export function initialState() {
   return {
-    version: 1, employees: [], attendance: [], leaves: [], holidays: [], loans: [], adjustments: [], runs: [],
+    version: 1, employees: [], attendance: [], leaves: [], holidays: [], loans: [], adjustments: [], deductions: [], runs: [],
     rules: [structuredClone(defaultRules)],
     leaveTypes: leaveNames.map(([id, name]) => ({
       id, name, paid: id !== 'unpaid', category: ['sil', 'maternity', 'paternity', 'solo-parent'].includes(id) ? 'statutory' : 'company',

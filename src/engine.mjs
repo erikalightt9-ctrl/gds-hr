@@ -114,6 +114,14 @@ export function contributionShares(name, brackets, basis, label, blockers, overr
   const pick = (key, fallback) => (key && isSet(override[key]) ? override[key] : fallback);
   return { employee: pick(eeKey, table.employee), employer: pick(erKey, table.employer), ec: pick(ecKey, table.ec), overridden: [eeKey, erKey, ecKey].some(k => k && isSet(override[k])) };
 }
+// Whether a company deduction applies to the cutoff [start, end].
+export function deductionApplies(d, start, end) {
+  if (d.schedule === 'once') return d.startDate >= start && d.startDate <= end;
+  if (d.startDate > end || (d.endDate && d.endDate < start)) return false;
+  if (d.schedule === 'first-cutoff') return start.endsWith('-01');
+  if (d.schedule === 'second-cutoff') return start.endsWith('-16') || (start.endsWith('-01') && end.slice(8) >= '28');
+  return true;
+}
 // The approved per-employee contribution setting in force on a date: the latest effective date on or before it.
 export function activeContributionSetting(changes, employeeId, date) {
   return (changes || []).filter(c => c.employeeId === employeeId && c.status === 'approved' && c.effectiveDate <= date)
@@ -161,7 +169,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const add = (side, component, amount, formula, source, date, quantity = null, multiplier = null) => {
       const rounded = round(amount);
       side[component] = round(side[component] + rounded);
-      trace.push({ component, side: side === earnings ? 'earnings' : 'deductions', amount: rounded, formula, sourceId: source?.id || r.id, sourceKind: source?.timeIn !== undefined ? 'attendance' : source?.typeId ? 'leaves' : source?.kind ? 'adjustments' : 'rules', date, quantity, multiplier });
+      trace.push({ component, side: side === earnings ? 'earnings' : 'deductions', amount: rounded, formula, sourceId: source?.id || r.id, sourceKind: source?.sourceKind || (source?.timeIn !== undefined ? 'attendance' : source?.typeId ? 'leaves' : source?.kind ? 'adjustments' : 'rules'), date, quantity, multiplier });
     };
     trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid ? `${daily} × ${scheduled.length} scheduled workdays (daily-paid)` : `${e.monthlySalary} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
     for (const d of employed) {
@@ -238,6 +246,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const deduction = a.kind === 'otherDeduction';
       add(deduction ? deductions : earnings, deduction ? 'other' : a.kind, a.amount, a.reason, a, a.date);
       if (!deduction && a.includedIn13th) additionalBasic += a.amount;
+    }
+    // Company deductions: each appears on the payslip under its own name.
+    for (const d of (state.deductions || []).filter(d => d.employeeId === e.id && d.active && deductionApplies(d, start, end))) {
+      add(deductions, 'other', d.amount, d.name, { id: d.id, sourceKind: 'deductions' }, end);
     }
     for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && l.balance > 0 && l.startDate <= end && l.endDate >= start)) {
       if (!loan.remainingTerms) { blockers.push(`${prefix}: loan ${loan.reference} has a balance but no remaining terms.`); continue; }

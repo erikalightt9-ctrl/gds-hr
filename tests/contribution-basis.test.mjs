@@ -21,34 +21,32 @@ function fixture() {
 }
 const change = agencies => ({ effectiveDate: '2026-09-01', reason: 'September DTR: 6 unpaid absence days, compensation actually paid 20,000.', agencies });
 
-test('a lower basis needs a permitted ground; declaring a lower salary is refused, and the salary record never changes', () => {
+test('HR sets any basis or amount with a reason; it applies on save, keeps history and can be removed; salary unchanged', () => {
   const store = fixture();
   try {
-    assert.throws(() => submitContributionChange(store, hr, 'EMP-001', change({ SSS: { basis: 20000 } })), /permitted ground/);
-    assert.throws(() => submitContributionChange(store, hr, 'EMP-001', change({ PhilHealth: { basis: 40000, ground: 'basic-salary' } })), /not permitted/);
     assert.throws(() => submitContributionChange(store, hr, 'EMP-001', { ...change({}), reason: 'lower' }), /at least 10/);
     assert.throws(() => submitContributionChange(store, hr, 'EMP-001', { ...change({}), effectiveDate: '2026-09-05' }), /cutoff start/);
     assert.throws(() => submitContributionChange(store, viewer, 'EMP-001', change({})), /permission/i);
-    const pending = submitContributionChange(store, hr, 'EMP-001', change({ SSS: { basis: 20000, ground: 'actual-compensation' } }));
-    assert.equal(pending.status, 'pending');
-    assert.equal(pending.before.SSS.employee, 1750); assert.equal(pending.after.SSS.employee, 1000);
-    assert.equal(pending.requestedBy, 'hr1');
+    assert.throws(() => submitContributionChange(store, { username: 'p', role: 'payroll' }, 'EMP-001', change({})), /permission/i);
+    const applied = submitContributionChange(store, hr, 'EMP-001', change({ SSS: { basis: 20000 }, PhilHealth: { basis: 40000 } }));
+    assert.equal(applied.status, 'approved');
+    assert.equal(applied.before.SSS.employee, 1750); assert.equal(applied.after.SSS.employee, 1000); assert.equal(applied.after.PhilHealth.employee, 2000);
+    assert.equal(applied.requestedBy, 'hr1');
     assert.equal(store.read().employees[0].monthlySalary, 35000, 'actual salary unchanged');
-    // Pending changes do not reach payroll.
-    assert.equal(preview(store, '2026-09-16', '2026-09-30', false, ['EMP-001']).rows[0]?.deductions.SSS ?? 1750, 1750);
-    assert.throws(() => reviewContributionChange(store, hr, pending.id, { decision: 'approve' }), /permission/i);
-    assert.throws(() => reviewContributionChange(store, admin, pending.id, { decision: 'reject' }), /reason/);
-    reviewContributionChange(store, admin, pending.id, { decision: 'approve', note: 'Checked against DTR.' });
+    assert.equal(preview(store, '2026-09-16', '2026-09-30', false, ['EMP-001']).rows[0].deductions.SSS, 1000);
+    assert.throws(() => reviewContributionChange(store, hr, applied.id, { decision: 'remove' }), /reason/);
+    reviewContributionChange(store, hr, applied.id, { decision: 'remove', note: 'Back to standard rates.' });
+    assert.equal(preview(store, '2026-09-16', '2026-09-30', false, ['EMP-001']).rows[0].deductions.SSS, 1750, 'removed change no longer applies');
     const review = contributionReview(store, hr, 'EMP-001');
-    assert.equal(review.changes[0].reviewedBy, 'admin');
-    assert.ok(store.db.prepare("SELECT 1 FROM audit WHERE action='approve-contribution-change'").get());
+    assert.equal(review.changes[0].status, 'removed'); assert.equal(review.changes[0].reviewedBy, 'hr1');
+    assert.ok(store.db.prepare("SELECT 1 FROM audit WHERE action='remove-contribution-change'").get());
   } finally { store.close(); }
 });
 
 test('an approved basis flows into payroll, the payslip and the remittance report', () => {
   const store = fixture();
   try {
-    submitContributionChange(store, admin, 'EMP-001', change({ SSS: { basis: 20000, ground: 'actual-compensation' }, 'Pag-IBIG': { employee: 200, employer: 200 } }));
+    submitContributionChange(store, admin, 'EMP-001', change({ SSS: { basis: 20000 }, 'Pag-IBIG': { employee: 200, employer: 200 } }));
     const run = preview(store, '2026-09-16', '2026-09-30', false, ['EMP-001']), row = run.rows[0];
     assert.equal(row.monthlySalary, 35000);
     assert.equal(row.contributionBasis.SSS, 20000);
