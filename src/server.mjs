@@ -41,7 +41,7 @@ export function createApp({ store, origin, setupToken, demo = false }) {
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/culture.js': ['culture.js', 'text/javascript'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));

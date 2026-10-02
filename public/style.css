@@ -28,3 +28,6 @@
 .photo-upload:focus-within{outline:2px solid var(--brand);outline-offset:2px}
 .photo-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
 .photo-upload{position:relative}
+.topbar button[data-signout]{margin-left:10px}
+.employee-top-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.employee-top>.employee-top-actions{flex-direction:row;gap:8px}
