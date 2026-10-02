@@ -1,6 +1,11 @@
-// One-page payslip in the GDS template layout: company name, title and period; employee information; particulars with
+// One-page payslip in the GDS template layout: logo, title and period; employee information; particulars with
 // days / hours; gross; deductions; a highlighted net pay; then received-by and prepared-by lines.
-// Dependency-free PDF (Helvetica, A4 portrait). The company name heads the page; no logo artwork.
+// Dependency-free PDF (Helvetica, A4 portrait). The logo is a JPEG embedded as-is (DCTDecode).
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const LOGO_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/payslip-logo.jpg');
 const W = 595, H = 842, LEFT = 40, RIGHT = 555, WIDTH = RIGHT - LEFT;
 const COLOR = { ink: '0.13 0.13 0.13', muted: '0.42 0.42 0.42', line: '0.78 0.74 0.68', red: '0.71 0.12 0.17', redText: '0.80 0.18 0.20', gold: '0.85 0.72 0.36', goldTint: '0.99 0.95 0.84', band: '0.97 0.96 0.94', net: '1 0.90 0.45', white: '1 1 1' };
 
@@ -15,6 +20,23 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const longDate = iso => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${MONTHS[m - 1]} ${d}, ${y}`; };
 const period = (start, end) => start.slice(0, 7) === end.slice(0, 7) ? `${MONTHS[Number(start.slice(5, 7)) - 1]} ${Number(start.slice(8))}-${Number(end.slice(8))}, ${start.slice(0, 4)}` : `${longDate(start)} - ${longDate(end)}`;
 
+function jpegInfo(buffer) {
+  for (let i = 2; i < buffer.length - 9;) {
+    if (buffer[i] !== 0xff) return null;
+    const marker = buffer[i + 1], length = buffer.readUInt16BE(i + 2);
+    if (marker >= 0xc0 && marker <= 0xc2) return { height: buffer.readUInt16BE(i + 5), width: buffer.readUInt16BE(i + 7), components: buffer[i + 9] };
+    i += 2 + length;
+  }
+  return null;
+}
+let cachedLogo;
+function logo() {
+  if (cachedLogo !== undefined) return cachedLogo;
+  const data = existsSync(LOGO_FILE) ? readFileSync(LOGO_FILE) : null, info = data && jpegInfo(data);
+  cachedLogo = info ? { data, ...info } : null;
+  return cachedLogo;
+}
+
 class Page {
   constructor() { this.ops = []; }
   fill(color, x, y, w, h) { this.ops.push(`${color} rg ${x} ${y} ${w} ${h} re f`); }
@@ -24,6 +46,7 @@ class Page {
     const str = clean(s), w = textWidth(str, size, bold), at = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
     this.ops.push(`BT ${color} rg /${italic ? 'F3' : bold ? 'F2' : 'F1'} ${size} Tf ${at.toFixed(2)} ${y.toFixed(2)} Td (${pdfString(str)}) Tj ET`);
   }
+  image(x, y, w, h) { this.ops.push(`q ${w} 0 0 ${h} ${x} ${y} cm /Logo Do Q`); }
 }
 
 // Hours for each pay component, from the per-day work breakdown.
@@ -41,11 +64,12 @@ const hrs = h => (h ? `${Math.round(h * 100) / 100}` : '');
 
 export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } = {}) {
   const p = new Page(), e = slip.earnings || {}, d = slip.deductions || {}, hours = hoursByComponent(slip.workBreakdown);
+  const image = logo();
   let y = H - 40;
-  // Header: company name, title, period and release date.
+  // Header: the 菲龍集團 GDS Capital logo, title, period and release date.
   p.stroke(LEFT, 40, WIDTH, H - 80, COLOR.gold);
-  // Company name as the heading (no logo artwork on the payslip).
-  p.text('GDS CAPITAL INC.', W / 2, y - 30, { size: 20, bold: true, color: COLOR.red, align: 'center' }); y -= 44;
+  if (image) { const h = 64, w = Math.min(300, h * image.width / image.height); p.image((W - w) / 2, y - h - 8, w, h); y -= h + 22; }
+  else { p.text('GDS CAPITAL', W / 2, y - 40, { size: 22, bold: true, color: COLOR.red, align: 'center' }); y -= 60; }
   p.text('PAYSLIP', W / 2, y - 14, { size: 20, bold: true, align: 'center' }); y -= 24;
   p.line(W / 2 - 60, y, W / 2 + 60, y, COLOR.gold, 1.2); y -= 18;
   p.text('Period covered:', RIGHT - 190, y, { size: 9.5, bold: true }); p.text(period(slip.start, slip.end), RIGHT - 12, y, { align: 'right' }); y -= 15;
@@ -120,13 +144,18 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   // Assemble the PDF.
   const stream = p.ops.join('\n'), objects = [];
   objects.push('<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> /Contents 4 0 R >>`);
+  objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >>${image ? ' /XObject << /Logo 8 0 R >>' : ''} >> /Contents 4 0 R >>`);
   objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
   objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>');
   const parts = [Buffer.from('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n', 'latin1')], offsets = [];
   let size = parts[0].length;
   const push = buf => { parts.push(buf); size += buf.length; };
   objects.forEach((o, i) => { offsets.push(size); push(Buffer.from(`${i + 1} 0 obj\n${o}\nendobj\n`, 'latin1')); });
+  if (image) {
+    offsets.push(size);
+    push(Buffer.from(`8 0 obj\n<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /${image.components === 1 ? 'DeviceGray' : image.components === 4 ? 'DeviceCMYK' : 'DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.data.length} >>\nstream\n`, 'latin1'));
+    push(image.data); push(Buffer.from('\nendstream\nendobj\n', 'latin1'));
+  }
   const xref = size, count = offsets.length + 1;
   push(Buffer.from(`xref\n0 ${count}\n0000000000 65535 f \n${offsets.map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`, 'latin1'));
   return Buffer.concat(parts);
