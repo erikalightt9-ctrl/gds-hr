@@ -8,7 +8,9 @@ const number = z.number().finite().min(0).max(1e9);
 const money = number.refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 0.00001, 'Use at most two decimal places');
 const id = z.string().trim().regex(/^[A-Za-z0-9_-]{1,80}$/);
 const flag = z.boolean();
-const bracket = z.object({ from: number, to: number.nullable(), fixed: money, rate: z.number().min(0).max(1), excessOver: number }).strict();
+// Contribution bracket: employee share = fixed + rate x max(0, salary - excessOver); employer share = employerFixed + employerRate x the same
+// excess, plus ec (SSS Employees' Compensation, employer only). Employer fields default to 0 so tax and legacy brackets still parse.
+const bracket = z.object({ from: number, to: number.nullable(), fixed: money, rate: z.number().min(0).max(1), excessOver: number, employerFixed: money.default(0), employerRate: z.number().min(0).max(1).default(0), ec: money.default(0) }).strict();
 // Proof (e.g. a medical certificate) for leave types that require documents. Server-owned: set when an
 // employee files or uploads, and by HR's review; HR record saves keep the stored values.
 export const proofStatuses = ['', 'required', 'submitted', 'verified', 'rejected'];

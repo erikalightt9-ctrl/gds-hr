@@ -20,12 +20,14 @@ export const profileSchemas = {
   attendance: z.object({ scheduleEnd: time, hoursPerDay: number(1, 16), mealBreakMinutes: number(0, 240), graceMinutes: number(0, 120), approvedLocation: text, latitude: number(-90, 90), longitude: number(-180, 180), radiusMeters: number(1, 100000), arrangement: choice(arrangements), paidFrom: choice(['actual', 'schedule']), policy: text, daySchedules: z.array(daySchedule).max(7).default([]) }).strict().refine(v => (v.latitude === null) === (v.longitude === null), 'Enter both GPS coordinates.').refine(v => new Set(v.daySchedules.map(s => s.day)).size === v.daySchedules.length, 'Duplicate day schedule.'),
   payroll: z.object({ basis: choice(['monthly', 'daily']), dailyRate: number(0.01, 1e9), hourlyRate: number(0.01, 1e9), frequency: choice(['monthly', 'semi-monthly']), schedule: text, status: z.enum(['Active', 'Hold']).default('Active') }).strict(),
   bank: z.object({ name: text, accountName: text, accountNumber: text }).strict(),
+  // Monthly overrides of the calculated government shares for one employee; blank uses the rules table.
+  contributions: z.object({ sssEmployee: number(0, 1e6), sssEmployer: number(0, 1e6), sssEc: number(0, 1e6), philHealthEmployee: number(0, 1e6), philHealthEmployer: number(0, 1e6), pagIbigEmployee: number(0, 1e6), pagIbigEmployer: number(0, 1e6), reason: text }).strict().refine(v => Object.entries(v).every(([k, x]) => k === 'reason' || x === null) || v.reason.length >= 3, 'Give a reason for overriding contributions.'),
   leave: z.object({ entitlements: z.array(z.object({ typeId: z.string().min(1).max(80), annualDays: z.number().min(0).max(366), effectiveYear: z.number().int().min(2000).max(2200) }).strict()).max(200), remarks: text }).strict().refine(v => new Set(v.entitlements.map(e => `${e.typeId}:${e.effectiveYear}`)).size === v.entitlements.length, 'Duplicate leave type and year.'),
 };
 const hr = ['admin', 'hr'], finance = ['admin', 'hr', 'payroll'];
-const privateRead = { personal: hr, government: finance, emergency: hr, bank: finance };
+const privateRead = { personal: hr, government: finance, emergency: hr, bank: finance, contributions: finance };
 export function canReadSection(actor, section) { return !privateRead[section] || privateRead[section].includes(actor.role); }
-export function canWriteSection(actor, section) { return (['payroll', 'bank'].includes(section) ? ['admin', 'payroll'] : hr).includes(actor.role); }
+export function canWriteSection(actor, section) { return (section === 'contributions' ? finance : ['payroll', 'bank'].includes(section) ? ['admin', 'payroll'] : hr).includes(actor.role); }
 function findEmployee(store, id) { const e = store.read().employees.find(e => e.id === id); if (!e) throw new AppError('Employee not found.', 404); return e; }
 function personalName(employee) {
   const parts = employee.name.split(',');

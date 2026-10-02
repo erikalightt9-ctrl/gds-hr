@@ -4,7 +4,7 @@ import { calculatePayroll, attendanceMinutes, leaveDates, isRest, leaveBalance }
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }
-export const entityRoles = { employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], leaveTypes: ['admin'], holidays: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll'], rules: ['admin'] };
+export const entityRoles = { employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], leaveTypes: ['admin'], holidays: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll'], rules: ['admin', 'hr'] };
 function overlaps(a, b, c, d) { return a <= d && b >= c; }
 function affectedPeriod(kind, value) {
   if (['attendance', 'holidays', 'adjustments'].includes(kind)) return [value.date, value.date];
@@ -103,7 +103,8 @@ export function saveRecord(store, actor, kind, input) {
     if (kind === 'loans' && previous && state.runs.some(r => r.rows.some(row => row.loanDeductions.some(l => l.loanId === value.id)))) throw new AppError('A loan used in posted payroll is immutable. Record a separately authorized adjustment or new loan.');
     if (kind === 'loans' && state.loans.some(l => l.id !== value.id && l.employeeId === value.employeeId && l.reference === value.reference)) throw new AppError('Duplicate employee loan reference.');
     if (kind === 'rules') {
-      if (previous?.approvedBy) throw new AppError('Approved rules are immutable. Create a new version with a future effective date.');
+      // Approved rates can be corrected until a posted payroll uses them; after that the version is locked for audit integrity.
+      if (previous && state.runs.some(run => run.status === 'posted' && run.ruleId === previous.id)) throw new AppError('This rules version is used by posted payroll and is locked. Create a new version with a later effective date.');
       if (state.rules.some(r => r.id !== value.id && r.approvedBy && r.effectiveDate === value.effectiveDate)) throw new AppError('An approved rules version already uses that effective date.');
       Object.entries(value.contributions).forEach(([name, brackets]) => validateBrackets(brackets, name));
       validateBrackets(value.taxBrackets, 'Tax');

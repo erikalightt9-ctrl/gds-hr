@@ -32,7 +32,7 @@ export class Store {
   }
   read() {
     const state = JSON.parse(this.db.prepare('SELECT data FROM state WHERE id=1').get().data);
-    state.employeeProfiles = this.db.prepare("SELECT * FROM employee_profiles WHERE section IN ('employment','attendance','payroll','leave')").all().map(r => ({ employeeId: r.employee_id, section: r.section, ...JSON.parse(r.data) }));
+    state.employeeProfiles = this.db.prepare("SELECT * FROM employee_profiles WHERE section IN ('employment','attendance','payroll','leave','contributions')").all().map(r => ({ employeeId: r.employee_id, section: r.section, ...JSON.parse(r.data) }));
     return state;
   }
   write(state) { const copy = { ...state }; delete copy.employeeProfiles; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }

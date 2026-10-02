@@ -30,7 +30,7 @@ export const MANDATES = [
   },
   {
     key: 'Pag-IBIG', name: 'Pag-IBIG (HDMF)', basis: 'Monthly compensation up to the Maximum Fund Salary',
-    rate: 'Employee 1% (₱1,500 and below) or 2%; employer 2%', employee: '1% / 2%', employer: '2%',
+    rate: 'Employee 1% (₱1,500 and below) or 2%; employer 2% (GDS applies the ₱200 + ₱200 cap)', employee: '1% / 2% (₱200 cap)', employer: '2% (₱200 cap)',
     floor: 'None', ceiling: 'Maximum Fund Salary ₱10,000', maxEmployee: 200,
     law: 'RA 9679 (HDMF Law of 2009); HDMF Circular 460',
     source: 'https://talinohr.com/blog/pagibig-contribution-guide-2026',
@@ -49,6 +49,13 @@ export function bracketShare(brackets, salary) {
   return round(b.fixed + Math.max(0, salary - b.excessOver) * b.rate);
 }
 
+// Employer share from the rules table: employerFixed + employerRate x max(0, salary - excessOver) + ec.
+export function bracketEmployerShare(brackets, salary) {
+  const match = brackets.filter(b => salary >= b.from && (b.to === null || salary < b.to));
+  if (match.length !== 1) return null;
+  const b = match[0];
+  return round((b.employerFixed || 0) + Math.max(0, salary - b.excessOver) * (b.employerRate || 0) + (b.ec || 0));
+}
 const percent = rate => `${round(rate * 100)}%`;
 function computation(b) {
   if (!b.rate) return peso.format(b.fixed);
@@ -57,15 +64,23 @@ function computation(b) {
 }
 const range = b => b.to === null ? `${peso.format(b.from)} and above` : `${peso.format(b.from)} – ${peso.format(round(b.to - 0.01))}`;
 
+function employerComputation(b) {
+  const parts = [];
+  if (b.employerRate) parts.push(`${percent(b.employerRate)} x (salary${b.excessOver ? ` - ${peso.format(b.excessOver)}` : ''})`);
+  if (b.employerFixed || !b.employerRate) parts.push(peso.format(b.employerFixed || 0));
+  if (b.ec) parts.push(`EC ${peso.format(b.ec)}`);
+  return parts.join(' + ') || peso.format(0);
+}
 function bracketTable(mandate, brackets, { table, badge }) {
   if (!brackets.length) return '<p class="panel-body legend">No brackets entered in this rules version.</p>';
   const rows = brackets.slice().sort((a, b) => a.from - b.from).map(b => {
-    const probe = b.from, payroll = bracketShare(brackets, probe), mandated = mandate.shares(probe);
-    const matches = payroll !== null && Math.abs(payroll - round(mandated.employee)) < 0.01;
-    const employer = b.rate ? `${mandate.employer.split(' ')[0]} × ${mandate.key === 'SSS' ? 'MSC' : 'salary'}` : peso.format(round(mandated.employer));
-    return [range(b), ...(mandate.key === 'SSS' ? [peso.format(mandated.base)] : []), computation(b), employer, badge(matches ? 'Matches mandate' : 'Check value', matches ? '' : 'pending')];
+    // Probe inside the bracket; an open-ended bracket starting at 0 (e.g. a flat Pag-IBIG amount) is probed at a typical salary.
+    const probe = b.to === null ? Math.max(b.from, 50000) : b.from, mandated = mandate.shares(probe);
+    const ee = bracketShare(brackets, probe), er = bracketEmployerShare(brackets, probe);
+    const matches = ee !== null && er !== null && Math.abs(ee - round(mandated.employee)) < 0.01 && Math.abs(er - round(mandated.employer)) < 0.01;
+    return [range(b), ...(mandate.key === 'SSS' ? [peso.format(mandated.base)] : []), computation(b), employerComputation(b), badge(matches ? 'Matches mandate' : 'Differs from mandate', matches ? '' : 'pending')];
   });
-  const head = ['Monthly salary', ...(mandate.key === 'SSS' ? ['MSC'] : []), 'Employee share (payroll deducts)', 'Employer share', 'Mandate check'];
+  const head = ['Monthly salary', ...(mandate.key === 'SSS' ? ['MSC'] : []), 'Employee share (deducted)', 'Employer share (not deducted)', 'Mandate check'];
   return `<div class="scroll-table">${table(head, rows)}</div>`;
 }
 
@@ -87,8 +102,8 @@ export function renderCalculation(rule, salary, { table }) {
   if (!(salary >= 0)) return '';
   const factor = rule.cutoff === 'monthly' ? 1 : 0.5;
   const rows = MANDATES.map(m => {
-    const employee = bracketShare(rule.contributions[m.key], salary), employer = round(m.shares(salary).employer);
-    return [m.name, employee === null ? 'No matching bracket' : peso.format(employee), employee === null ? '—' : peso.format(round(employee * factor)), peso.format(employer), employee === null ? '—' : peso.format(round(employee + employer))];
+    const employee = bracketShare(rule.contributions[m.key], salary), employer = bracketEmployerShare(rule.contributions[m.key], salary) ?? 0;
+    return [m.name, employee === null ? 'No matching bracket' : peso.format(employee), employee === null ? '—' : peso.format(round(employee * factor)), peso.format(employer), peso.format(round(employer * factor)), employee === null ? '—' : peso.format(round(employee + employer))];
   });
-  return table(['Contribution', 'Employee / month', `Employee / cutoff (× ${factor})`, 'Employer / month', 'Total remittance'], rows);
+  return table(['Contribution', 'Employee / month', `Employee / cutoff (× ${factor})`, 'Employer / month', `Employer / cutoff (× ${factor})`, 'Total remittance / month'], rows);
 }

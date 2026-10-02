@@ -69,7 +69,8 @@ test('validation protects employee references, unique dates, breaks and immutabl
   assert.throws(() => saveRecord(db, admin, 'attendance', { ...a, id: 'duplicate' }), /already exists/);
   assert.throws(() => saveRecord(db, admin, 'attendance', { ...a, employeeId: 'missing' }), /does not exist/);
   assert.throws(() => saveRecord(db, admin, 'attendance', { ...a, breaks: [{ start: `${a.date}T07:00`, end: `${a.date}T08:00` }] }), /Breaks/);
-  assert.throws(() => saveRecord(db, admin, 'rules', s.rules[0]), /immutable/);
+  // Approved rules stay correctable until posted payroll uses them (locking is covered in employer-contributions.test.mjs).
+  assert.doesNotThrow(() => saveRecord(db, admin, 'rules', s.rules[0]));
   assert.throws(() => saveRecord(db, admin, 'rules', { ...s.rules[0], id: 'duplicate' }), /effective date/);
   assert.throws(() => saveRecord(db, admin, 'loans', { ...s.loans[0], id: 'duplicate' }), /Duplicate/);
   assert.throws(() => deleteRecord(db, admin, 'employees', s.employees[0].id), /cannot be deleted/);

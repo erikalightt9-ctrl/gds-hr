@@ -95,11 +95,24 @@ export function leaveBalance(state, employee, type, asOf) {
 export function ruleOn(state, date) {
   return state.rules.filter(r => r.effectiveDate <= date && r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
 }
-function bracketAmount(brackets, basis, label, blockers) {
+function matchBracket(brackets, basis, label, blockers) {
   const matches = brackets.filter(b => basis >= b.from && (b.to === null || basis < b.to));
-  if (matches.length !== 1) { blockers.push(`${label}: configure exactly one applicable bracket for basis ${round(basis)}.`); return 0; }
-  const b = matches[0];
-  return round(b.fixed + Math.max(0, basis - b.excessOver) * b.rate);
+  if (matches.length !== 1) { blockers.push(`${label}: configure exactly one applicable bracket for basis ${round(basis)}.`); return null; }
+  return matches[0];
+}
+function bracketAmount(brackets, basis, label, blockers) {
+  const b = matchBracket(brackets, basis, label, blockers);
+  return b ? round(b.fixed + Math.max(0, basis - b.excessOver) * b.rate) : 0;
+}
+// Monthly employee, employer and EC amounts for one contribution, from the bracket or an employee override.
+const OVERRIDE_KEYS = { SSS: ['sssEmployee', 'sssEmployer', 'sssEc'], PhilHealth: ['philHealthEmployee', 'philHealthEmployer'], 'Pag-IBIG': ['pagIbigEmployee', 'pagIbigEmployer'] };
+const isSet = v => v !== null && v !== undefined;
+function contributionShares(name, brackets, basis, label, blockers, override = {}) {
+  const b = matchBracket(brackets, basis, label, blockers), excess = b ? Math.max(0, basis - b.excessOver) : 0;
+  const table = b ? { employee: round(b.fixed + excess * b.rate), employer: round((b.employerFixed || 0) + excess * (b.employerRate || 0)), ec: round(b.ec || 0) } : { employee: 0, employer: 0, ec: 0 };
+  const [eeKey, erKey, ecKey] = OVERRIDE_KEYS[name];
+  const pick = (key, fallback) => (key && isSet(override[key]) ? override[key] : fallback);
+  return { employee: pick(eeKey, table.employee), employer: pick(erKey, table.employer), ec: pick(ecKey, table.ec), overridden: [eeKey, erKey, ecKey].some(k => k && isSet(override[k])) };
 }
 export function calculatePayroll(state, start, end, pay13th = false, employeeIds = null) {
   const days = dates(start, end);
@@ -119,6 +132,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
   const rows = state.employees.filter(e => (!chosen || chosen.has(e.id)) && !e.draft && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start)).map(e => {
     const prefix = `${e.id} ${e.name}`;
     const payrollProfile = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'payroll');
+    const contributionOverride = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'contributions');
     const attendanceProfile = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'attendance');
     const graceMinutes = attendanceProfile?.graceMinutes ?? r.graceMinutes;
     if (payrollProfile?.status === 'Hold') blockers.push(`${prefix}: payroll is on hold. Release the hold before posting.`);
@@ -230,10 +244,20 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const thirteenthPaid = round(annualRows.reduce((s, row) => s + row.earnings.thirteenth, 0));
     const thirteenthBalance = Math.max(0, round(thirteenthAccrued - thirteenthPaid));
     if (pay13th) add(earnings, 'thirteenth', thirteenthBalance, `${annualBasic} applicable annual basic ÷ 12 − ${thirteenthPaid} already paid`, null, end);
+    // Employee shares are deducted; employer shares (and SSS EC) are recorded separately and never reduce pay.
+    const employer = { SSS: 0, 'SSS EC': 0, PhilHealth: 0, 'Pag-IBIG': 0 }, override = contributionOverride || {};
     for (const name of ['SSS', 'PhilHealth', 'Pag-IBIG']) {
-      const amount = bracketAmount(r.contributions[name], e.monthlySalary, `${prefix} ${name}`, blockers) * factor;
-      add(deductions, name, amount, `Monthly salary ${e.monthlySalary} → approved ${name} monthly bracket × ${factor}`, null, end);
+      const s = contributionShares(name, r.contributions[name], e.monthlySalary, `${prefix} ${name}`, blockers, override);
+      const basis = s.overridden ? `Employee override (${override.reason || 'HR'})` : `Monthly salary ${e.monthlySalary} -> approved ${name} monthly bracket`;
+      add(deductions, name, s.employee * factor, `${basis} x ${factor}`, null, end);
+      employer[name] = round(s.employer * factor);
+      trace.push({ component: name, side: 'employer', amount: employer[name], formula: `${basis}: employer share ${s.employer} x ${factor}`, sourceKind: 'rules', sourceId: r.id, date: end });
+      if (name === 'SSS') {
+        employer['SSS EC'] = round(s.ec * factor);
+        trace.push({ component: 'SSS EC', side: 'employer', amount: employer['SSS EC'], formula: `${basis}: Employees' Compensation ${s.ec} x ${factor}`, sourceKind: 'rules', sourceId: r.id, date: end });
+      }
     }
+    const employerTotal = round(Object.values(employer).reduce((s, n) => s + n, 0));
     const gross = round(Object.values(earnings).reduce((s, n) => s + n, 0));
     const contributionTotal = deductions.SSS + deductions.PhilHealth + deductions['Pag-IBIG'];
     // Tax brackets use this cutoff's taxable earnings. Configure the table for the selected cutoff.
@@ -243,9 +267,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
-  const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)) } };
+  const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };
   return { ...result, fingerprint: createHash('sha256').update(JSON.stringify({ state, result })).digest('hex') };
 }
