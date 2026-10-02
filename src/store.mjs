@@ -26,7 +26,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS location_addresses (event_id TEXT PRIMARY KEY, address TEXT NOT NULL, fetched_at TEXT NOT NULL);
     `);
     const columns = new Set(this.db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
-    for (const [name, definition] of [['employee_id', 'TEXT'], ['disabled', 'INTEGER NOT NULL DEFAULT 0'], ['mfa_secret', 'TEXT'], ['mfa_pending', 'TEXT'], ['mfa_last_step', 'INTEGER']]) if (!columns.has(name)) this.db.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+    for (const [name, definition] of [['employee_id', 'TEXT'], ['disabled', 'INTEGER NOT NULL DEFAULT 0'], ['mfa_secret', 'TEXT'], ['mfa_pending', 'TEXT'], ['mfa_last_step', 'INTEGER'], ['email', 'TEXT']]) if (!columns.has(name)) this.db.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS user_employee ON users(employee_id) WHERE employee_id IS NOT NULL');
     this.db.prepare('INSERT OR IGNORE INTO state(id,data) VALUES(1,?)').run(JSON.stringify(initialState()));
   }

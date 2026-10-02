@@ -4,7 +4,7 @@ import { calculatePayroll, attendanceMinutes, leaveDates, isRest, leaveBalance }
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }
-export const entityRoles = { employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], leaveTypes: ['admin'], holidays: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll'], rules: ['admin', 'hr'] };
+export const entityRoles = { employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], leaveTypes: ['admin'], holidays: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'], rules: ['admin', 'hr'] };
 function overlaps(a, b, c, d) { return a <= d && b >= c; }
 function affectedPeriod(kind, value) {
   if (['attendance', 'holidays', 'adjustments'].includes(kind)) return [value.date, value.date];

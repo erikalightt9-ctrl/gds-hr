@@ -1,18 +1,20 @@
 import http from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { Store } from './store.mjs';
+import { mailerFromEnv } from './mailer.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles } from './service.mjs';
-import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, redeemPasswordReset, setDisabled, configureMfa } from './auth.mjs';
+import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, configureMfa } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, locationAddress, earlierHistory } from './portal.mjs';
+import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, locationAddress, earlierHistory } from './portal.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
@@ -27,7 +29,7 @@ async function readBody(req, maximum = 256000) {
   try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new AppError('Invalid JSON.'); }
 }
 function constantEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && timingSafeEqual(x, y); }
-export function createApp({ store, origin, setupToken, demo = false }) {
+export function createApp({ store, origin, setupToken, demo = false, mailer = null }) {
   const secure = origin.startsWith('https:');
   return http.createServer(async (req, res) => {
     const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
@@ -70,7 +72,7 @@ export function createApp({ store, origin, setupToken, demo = false }) {
       }
       if (pathname === '/api/recovery/request' && req.method === 'POST') {
         checkLimit(store, `recovery:${client}`); const body = z.object({ identifier: z.string().trim().min(1).max(80) }).strict().parse(await readBody(req));
-        send(200, requestRecovery(store, body.identifier)); return;
+        send(200, { message: requestRecovery(store, body.identifier, { mailer, origin }).message }); return;
       }
       if (pathname === '/api/recovery/reset' && req.method === 'POST') {
         checkLimit(store, `reset:${client}`); const body = z.object({ token: z.string().max(64), password: z.string().min(12).max(200) }).strict().parse(await readBody(req));
@@ -142,10 +144,11 @@ export function createApp({ store, origin, setupToken, demo = false }) {
       if (explanationReview && req.method === 'POST') { send(200, reviewExplanation(store, auth.user, explanationReview[1], await readBody(req))); return; }
       const proofReview = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/proof-review$/);
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
-      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access)$/);
+      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
         if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); send(200, issuePasswordReset(store, auth.user, userAction[1], v.resetMfa)); }
+        else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;
       }
       if (pathname === '/api/recovery/requests' && req.method === 'GET') { permit(auth.user, ['admin']); send(200, store.db.prepare('SELECT r.id,r.user_id AS userId,r.created_at AS createdAt,u.username,u.employee_id AS employeeId FROM recovery_requests r JOIN users u ON u.id=r.user_id WHERE resolved=0 ORDER BY r.created_at DESC').all()); return; }
@@ -176,7 +179,7 @@ export function createApp({ store, origin, setupToken, demo = false }) {
       }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
-        if (req.method === 'GET') { send(200, store.db.prepare('SELECT id, username, role, employee_id AS employeeId, disabled, mfa_secret IS NOT NULL AS mfaEnabled FROM users ORDER BY username').all()); return; }
+        if (req.method === 'GET') { send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, employeeId: u.employee_id, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
         if (req.method === 'POST') { send(201, { user: await addUser(store, await readBody(req), auth.user) }); return; }
       }
       if (pathname.startsWith('/api/records/')) {
@@ -185,6 +188,23 @@ export function createApp({ store, origin, setupToken, demo = false }) {
         permit(auth.user, entityRoles[kind]);
         if (req.method === 'POST') { send(200, saveRecord(store, auth.user, kind, await readBody(req))); return; }
         if (req.method === 'DELETE') { deleteRecord(store, auth.user, kind, url.searchParams.get('id')); send(200, { ok: true }); return; }
+      }
+      // Draft payslip for one employee's current (unposted) computation: same builder as the final payslip.
+      if (pathname === '/api/payroll/payslip-preview' && req.method === 'POST') {
+        permit(auth.user, ['admin', 'hr', 'payroll']);
+        const p = previewSchema.parse(await readBody(req));
+        if (p.employeeIds?.length !== 1) throw new AppError('Choose one employee to preview a payslip.');
+        const run = preview(store, p.start, p.end, p.pay13th, p.employeeIds), row = run.rows[0];
+        if (!row) throw new AppError('This employee is not included in payroll for that cutoff.', 404);
+        store.log(auth.user, 'preview-payslip', 'payslip', 'preview', null, { employeeId: row.employeeId, start: p.start, end: p.end });
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="draft-payslip-${row.employeeId}-${p.start}-${p.end}.pdf"` });
+        res.end(payslipPdf(payslipFromRow({ ...run, id: 'preview', status: 'preview' }, row), { draft: true })); return;
+      }
+      const staffSlip = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/payslips\/([A-Za-z0-9_-]+)\.pdf$/);
+      if (staffSlip && req.method === 'GET') {
+        const slip = staffPayslip(store, auth.user, staffSlip[1], staffSlip[2]);
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="payslip-${slip.employeeId}-${slip.start}-${slip.end}.pdf"` });
+        res.end(payslipPdf(slip)); return;
       }
       if (pathname === '/api/payroll/preview' && req.method === 'POST') {
         const p = previewSchema.parse(await readBody(req)); send(200, preview(store, p.start, p.end, p.pay13th, p.employeeIds)); return;
@@ -219,6 +239,8 @@ export function createApp({ store, origin, setupToken, demo = false }) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  const envFile = path.join(directory, '../.env');   // private settings such as SMTP; git-ignored
+  if (existsSync(envFile)) process.loadEnvFile(envFile);
   const host = process.env.HR_HOST || '127.0.0.1', port = Number(process.env.HR_PORT || 3400);
   const origin = process.env.HR_ORIGIN || `http://127.0.0.1:${port}`;
   if (!['127.0.0.1', '::1', 'localhost'].includes(host) && !origin.startsWith('https://')) throw new Error('Remote hosting requires an HTTPS HR_ORIGIN and TLS reverse proxy.');
@@ -226,10 +248,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   await mkdir(data, { recursive: true });
   const store = new Store(path.join(data, 'hr.sqlite'));
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
-  const app = createApp({ store, origin, setupToken });
+  const mailer = mailerFromEnv();
+  const app = createApp({ store, origin, setupToken, mailer });
   app.requestTimeout = 15000; app.headersTimeout = 10000;
   app.listen(port, host, () => {
     console.log(`GDS CAPITAL INC. HR is running at ${origin}`);
+    console.log(mailer ? `Password reset emails are sent from ${mailer.from}.` : 'Password reset email is not configured (set HR_SMTP_* in hr/.env); recovery goes to HR.');
     if (!store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n) console.log(`One-time setup code: ${setupToken}\nOpen the app to create your administrator account.`);
   });
   const close = () => { app.closeAllConnections(); app.close(() => { store.close(); process.exit(0); }); };

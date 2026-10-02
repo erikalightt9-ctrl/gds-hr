@@ -15,14 +15,15 @@ let auth, state, balances = [], page = 'overview', currentRun = null, filter = '
 let annualYear = today().slice(0, 4);
 let employeeStatusFilter = 'All Employees';
 let attendanceView = 'records'; // 'records' (all employees) or 'timecard' (one employee beside pay)
-let payrollEmployee = ''; // '' = all employees; otherwise the one Employee ID being calculated
+let payrollEmployee = '';
+let computationContext = null; // the payroll computation being reviewed, reopened after an adjustment is saved // '' = all employees; otherwise the one Employee ID being calculated
 let employeeData = null, liveData = null, eventStream = null, liveTimer = null, liveUser = null, refreshTimer = null;
 const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
 const timecard = createTimecard({ api, esc, money, badge, table, getState: () => state, canEdit: kind => canEdit(kind), editButton, cutoffDefaults }); // canEdit is defined below; look it up when used
 const profiles = createProfileView({ api, esc, money, table, shell, heading, toast, refresh, today, isActive: () => page === 'profile', canEditMaster: () => canEdit('employees'), editMaster: id => edit('employees', id), openTimecard: id => { timecard.setEmployee(id); attendanceView = 'timecard'; page = 'attendance'; render(); }, openPayroll: async id => { payrollEmployee = id; const p = cutoffDefaults(); currentRun = await api('/payroll/preview', { start: p.start, end: p.end, pay13th: false, employeeIds: [id] }); page = 'payroll'; render(); }, openDirectory: () => { page = 'employees'; render(); }, openRun: async id => { currentRun = await api(`/runs/${id}`); page = 'payroll'; render(); } });
 const names = { basic: 'Basic salary', regularOT: 'Regular OT', restDay: 'Rest day pay', restOT: 'Rest day OT', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday OT', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Regular / double holiday OT', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday OT', thirteenth: '13th month paid', absence: 'Unpaid leave / absence', loans: 'Loan deductions', tax: 'Withholding tax', other: 'Other authorized deductions' };
 Object.assign(names, { SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' });
-const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll'] })[kind]?.includes(auth.user.role);
+const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'] })[kind]?.includes(auth.user.role);
 async function api(path, body, method = body ? 'POST' : 'GET') {
   const res = await fetch(`/api${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth?.csrf || '' }, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json();
@@ -127,9 +128,9 @@ function payrollPage() {
   let html = heading('Payroll', 'From hours worked to take-home pay. Every amount has a story.', `${addButton('adjustments', 'Additional pay / deduction')}<button data-copy ${!run ? 'disabled' : ''}>Copy table</button>${run?.id ? `<a class="export-link" href="/api/runs/${run.id}.xlsx" download>Download Excel ↗</a><a class="export-link" href="/api/runs/${run.id}.pdf" download>Download PDF ↗</a>` : ''}`);
   html += `<div class="cards">${card('Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${card('Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${card('Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${card('Employees', run?.rows.length || 0, 'In this payroll cutoff')}${card('Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel"><div class="panel-head"><div><h2>Payroll computation</h2><p>Click a salary to inspect its calculation and source records.</p></div>${badge(run?.status === 'posted' ? 'Posted' : 'Draft preview', run?.status === 'posted' ? '' : 'pending')}</div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee"><option value="">All employees</option>${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)} (${esc(e.id)})</option>`).join('')}</select></label><label>13th month payout<select name="pay13th"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Calculate payroll</button></form>`;
   if (run?.employeeIds?.length) html += `<div class="notice" role="status">Showing payroll for <strong>${run.employeeIds.map(id => esc(state.employees.find(e => e.id === id)?.name || id)).join(', ')}</strong> only. ${run.id ? 'This posting covers only this employee.' : 'Posting will cover only this employee; others can be posted separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
-  const headers = ['Employee', 'Monthly salary', 'Working days', 'Days credited', 'Leave / notes', 'Overtime', 'Additional', '13th month', 'Special holiday', 'Regular holiday', 'Gross', 'Deductions', 'Net salary', 'Employer share (not deducted)', 'Loan balance', 'Loan date', 'Loan terms'];
+  const headers = ['Employee', 'Monthly salary', 'Working days', 'Days credited', 'Leave / notes', 'Overtime', 'Adjustment', '13th month', 'Special holiday', 'Regular holiday', 'Gross', 'Deductions', 'Net salary', 'Loan balance', 'Loan date', 'Loan terms'];
   const cell = (row, amount, component = '') => `<button class="money-link" data-salary="${esc(row.employeeId)}" data-component="${esc(component)}">${money(amount)}</button>`;
-  html += table(headers, (run?.rows || []).map(r => [employee(r.employeeId), money(r.monthlySalary), r.workingDays, `${r.creditedDays ?? r.daysPresent}${r.lateDaysLost ? `<small>${r.daysPresent} present − ${r.lateDaysLost} late</small>` : ''}`, `<span class="wrap" title="${esc(r.leaveNotes.join('; '))}">${r.leaveDays} days${r.leaveNotes.length ? `<br><small>${esc(r.leaveNotes[0])}</small>` : ''}</span>`, cell(r, r.earnings.regularOT + r.earnings.restOT + r.earnings.specialOT + r.earnings.regularHolidayOT + r.earnings.otherOT), cell(r, r.earnings.additional + r.earnings.allowance), cell(r, r.earnings.thirteenth, 'thirteenth'), cell(r, r.earnings.specialHoliday, 'specialHoliday'), cell(r, r.earnings.regularHoliday, 'regularHoliday'), cell(r, r.gross), cell(r, r.totalDeductions), cell(r, r.net), `${money(r.employerTotal ?? 0)}${r.employer ? `<small>SSS ${money(r.employer.SSS)} · EC ${money(r.employer['SSS EC'])}<br>PhilHealth ${money(r.employer.PhilHealth)} · Pag-IBIG ${money(r.employer['Pag-IBIG'])}</small>` : ''}`, money(r.loanBalance), r.loanDeductions.map(l => esc(l.startDate)).join('<br>') || '—', r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('<br>') || '—']), 'Choose a cutoff and calculate payroll to see the computation.') + `<div class="panel-foot"><span>PHP · Applicable Statutory / Company Payroll Rate</span><span>${run?.rows.length || 0} employees</span></div></section>`;
+  html += table(headers, (run?.rows || []).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, money(r.monthlySalary), r.workingDays, `${r.creditedDays ?? r.daysPresent}${r.lateDaysLost ? `<small>${r.daysPresent} present − ${r.lateDaysLost} late</small>` : ''}`, `<span class="wrap" title="${esc(r.leaveNotes.join('; '))}">${r.leaveDays} days${r.leaveNotes.length ? `<br><small>${esc(r.leaveNotes[0])}</small>` : ''}</span>`, cell(r, r.earnings.regularOT + r.earnings.restOT + r.earnings.specialOT + r.earnings.regularHolidayOT + r.earnings.otherOT), cell(r, r.earnings.additional + r.earnings.allowance), cell(r, r.earnings.thirteenth, 'thirteenth'), cell(r, r.earnings.specialHoliday, 'specialHoliday'), cell(r, r.earnings.regularHoliday, 'regularHoliday'), cell(r, r.gross), cell(r, r.totalDeductions), cell(r, r.net), money(r.loanBalance), r.loanDeductions.map(l => esc(l.startDate)).join('<br>') || '—', r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('<br>') || '—']), 'Choose a cutoff and calculate payroll to see the computation.') + `<div class="panel-foot"><span>PHP · Applicable Statutory / Company Payroll Rate</span><span>${run?.rows.length || 0} employees</span></div></section>`;
   if (run?.blockers.length) html += `<div class="notice"><strong>${run.blockers.length} item${run.blockers.length === 1 ? '' : 's'} to resolve before posting</strong><ul>${run.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul></div>`;
   if (run && !run.id && ['admin', 'payroll'].includes(auth.user.role)) html += `<div class="actions"><button class="primary" data-post ${run.blockers.length ? 'disabled' : ''}>Review & post payroll</button><span class="legend">Posting locks this cutoff and applies scheduled loan deductions.</span></div><br>`;
   html += `<section class="panel"><div class="panel-head"><h2>Posted payroll history</h2>${downloads('payroll-runs')}</div>${table(['Cutoff', 'Gross', 'Deductions', 'Net', 'Posted by', ''], state.runs.slice().reverse().map(r => [`${r.start} → ${r.end}`, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), esc(r.postedBy), `<button class="small" data-run="${r.id}">Open payroll</button>`]))}</section><section class="panel"><div class="panel-head"><h2>Additional pay & authorized deductions</h2>${downloads('adjustments')}</div>${table(['Employee', 'Date', 'Component', 'Amount', 'Approval', ''], state.adjustments.map(a => [employee(a.employeeId), a.date, esc(label(a.kind)), money(a.amount), badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('adjustments', a.id)]))}</section>`;
@@ -210,6 +211,35 @@ function showObject(title, value) {
   const renderValue = v => typeof v === 'object' && v !== null ? `<dl class="details-grid">${Object.entries(v).map(([k, x]) => `<div><dt>${esc(names[k] || label(k))}</dt><dd>${renderValue(x)}</dd></div>`).join('')}</dl>` : esc(String(v ?? '—'));
   openDialog(title, `<div class="dialog-body">${renderValue(value)}</div>`);
 }
+// Manual adjustments for the cutoff plus the payslip, on the employee's computation screen.
+function computationTools(r) {
+  const run = currentRun, list = state.adjustments.filter(a => a.employeeId === r.employeeId && a.date >= run.start && a.date <= run.end);
+  const kinds = { additional: 'Additional pay', allowance: 'Allowance', otherDeduction: 'Deduction' };
+  const editable = !run.id && canEdit('adjustments');
+  const slip = run.id
+    ? `<a class="button primary" href="/api/runs/${esc(run.id)}/payslips/${esc(r.employeeId)}.pdf" target="_blank" rel="noopener">Open posted payslip (PDF)</a>`
+    : `<button class="primary" data-payslip-preview="${esc(r.employeeId)}">Preview payslip (PDF)</button><span class="legend">Draft built from this computation. Changes below appear in the next preview.</span>`;
+  return `<section class="computation-tools"><div class="computation-slip">${slip}</div>
+    <h3>Manual adjustments this cutoff</h3>
+    ${table(['Date', 'Type', 'Amount', 'Reason', 'Approved', ''], list.map(a => [a.date, kinds[a.kind] || esc(a.kind), `${a.kind === 'otherDeduction' ? '−' : '+'}${money(a.amount)}`, esc(a.reason), a.approved ? 'Yes' : badge('Needs approval', 'pending'), editable ? editButton('adjustments', a.id) : '']), 'No manual adjustments in this cutoff.')}
+    ${editable ? `<button class="small" data-computation-add="${esc(r.employeeId)}">＋ Add adjustment</button>` : run.id ? '<p class="legend">Posted payroll is locked; record corrections as an adjustment in an open cutoff.</p>' : ''}
+  </section>`;
+}
+// Recompute the reviewed employee's payroll after an adjustment changes, then reopen their computation.
+async function reopenComputation() {
+  const c = computationContext; if (!c) return false;
+  currentRun = await api('/payroll/preview', { start: c.start, end: c.end, pay13th: c.pay13th, ...(c.employeeIds ? { employeeIds: c.employeeIds } : {}) });
+  page = 'payroll'; render(); await showSalary(c.employeeId); return true;
+}
+async function previewPayslip(employeeId) {
+  const c = computationContext, tab = window.open('', '_blank');
+  try {
+    const response = await fetch('/api/payroll/payslip-preview', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrf }, body: JSON.stringify({ start: c.start, end: c.end, pay13th: c.pay13th, employeeIds: [employeeId] }) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Payslip preview failed.');
+    const url = URL.createObjectURL(await response.blob());
+    if (tab) tab.location = url; else window.location.assign(url);
+  } catch (error) { tab?.close(); toast(error.message); }
+}
 // e.g. " · ₱200.00 monthly, full amount this cutoff" so cutoff figures are never mistaken for the monthly rate.
 function contributionNote(key, value, r) {
   if (!['SSS', 'SSS EC', 'PhilHealth', 'Pag-IBIG'].includes(key) || r.contributionFactor === undefined) return '';
@@ -219,11 +249,12 @@ function contributionNote(key, value, r) {
 }
 async function showSalary(id, component = '') {
   if (!currentRun) return;
+  if (!currentRun.id) computationContext = { employeeId: id, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
   const r = currentRun.rows.find(r => r.employeeId === id);
   const parts = Object.entries(r.earnings).map(([key, value]) => [names[key] || label(key), value, 'earnings']).concat(Object.entries(r.deductions).map(([key, value]) => [(names[key] || label(key)) + contributionNote(key, value, r), value, 'deductions'])).concat(Object.entries(r.employer || {}).map(([key, value]) => [key + contributionNote(key, value, r), value, 'employer · not deducted']));
   const traces = component ? r.trace.filter(t => t.component === component) : r.trace;
   const sourceRows = table(['Date', 'Work classification', 'Hours', 'Day × OT × night', 'Combined rate'], (r.workBreakdown || []).map(w => [w.date, `${esc(w.classification)}${w.overtime ? ' · OT' : ''}${w.night ? ' · NSD' : ''}`, w.hours, `${w.dayMultiplier} × ${w.otMultiplier} × ${w.nightMultiplier}`, `${Math.round(w.combinedMultiplier * 10000) / 100}%`])) + '<p class="legend">Combined rates describe total applicable hourly pay. Earnings add only amounts beyond the salary already credited, plus the night differential.</p><h3>Source calculations</h3>' + table(['Date', 'Component', 'Calculation', 'Amount', 'Source'], traces.map((t, i) => [t.date, esc(names[t.component] || label(t.component)) + (t.side === 'employer' ? ' <small>employer · not deducted</small>' : ''), `<span class="formula">${esc(t.formula)}</span>`, money(t.amount), `<button class="small" data-source-index="${i}">View record</button>`]));
-  openDialog(`${r.employeeId} · ${r.employeeName}`, `<div class="dialog-body"><p class="sub">${currentRun.start} — ${currentRun.end} · Rules version ${esc(currentRun.ruleId)}</p><br><div class="cards">${card('Gross earnings', money(r.gross), `${r.daysPresent} days present`)}${card('Deductions', money(r.totalDeductions), `${r.leaveDays} leave days`)}${card('Net salary', money(r.net), 'Earnings less deductions', true)}${card('13th month accrued', money(r.thirteenthAccrued), 'Running annual entitlement')}${card('Employer contributions', money(r.employerTotal ?? 0), 'Paid by GDS · not deducted')}</div><h3>Earnings & deductions</h3>${table(['Component', 'Amount', 'Type'], parts.filter(([, amount]) => amount !== 0).map(([name, amount, side]) => [esc(name), money(amount), badge(side, 'neutral')]))}<br><h3>${component ? esc(names[component] || label(component)) : 'Calculation'} audit</h3>${sourceRows}<br><h3>Lateness and offsets</h3><p class="legend">Late time covered by an approved offset or exception does not reduce pay. The rest lowers the days credited (${r.creditedDays ?? r.daysPresent} of ${r.daysPresent} days present); it is not a separate deduction.</p>${table(['Date', 'Scheduled', 'Actual', 'Late', 'Approved offset', 'Exception', 'Not offset', 'Days lost', 'Basic reduced by'], r.late.filter(l => l.lateMinutes > 0).map(l => [l.date, l.scheduledTime, l.actualTime, `${l.lateMinutes} min`, `${l.approvedOffset} min`, l.validExplanation ? esc(l.explanation) : 'No', `${l.deductibleMinutes} min`, l.dayFraction ?? '—', money(l.deduction)]), 'No late occurrences in this cutoff.')}</div>`);
+  openDialog(`${r.employeeId} · ${r.employeeName}`, `<div class="dialog-body"><p class="sub">${currentRun.start} — ${currentRun.end} · Rules version ${esc(currentRun.ruleId)} · ${currentRun.id ? 'Posted' : 'Draft preview, not yet posted'}</p>${computationTools(r)}<br><div class="cards">${card('Gross earnings', money(r.gross), `${r.daysPresent} days present`)}${card('Deductions', money(r.totalDeductions), `${r.leaveDays} leave days`)}${card('Net salary', money(r.net), 'Earnings less deductions', true)}${card('13th month accrued', money(r.thirteenthAccrued), 'Running annual entitlement')}${card('Employer contributions', money(r.employerTotal ?? 0), 'Paid by GDS · not deducted')}</div><h3>Earnings & deductions</h3>${table(['Component', 'Amount', 'Type'], parts.filter(([, amount]) => amount !== 0).map(([name, amount, side]) => [esc(name), money(amount), badge(side, 'neutral')]))}<br><h3>${component ? esc(names[component] || label(component)) : 'Calculation'} audit</h3>${sourceRows}<br><h3>Lateness and offsets</h3><p class="legend">Late time covered by an approved offset or exception does not reduce pay. The rest lowers the days credited (${r.creditedDays ?? r.daysPresent} of ${r.daysPresent} days present); it is not a separate deduction.</p>${table(['Date', 'Scheduled', 'Actual', 'Late', 'Approved offset', 'Exception', 'Not offset', 'Days lost', 'Basic reduced by'], r.late.filter(l => l.lateMinutes > 0).map(l => [l.date, l.scheduledTime, l.actualTime, `${l.lateMinutes} min`, `${l.approvedOffset} min`, l.validExplanation ? esc(l.explanation) : 'No', `${l.deductibleMinutes} min`, l.dayFraction ?? '—', money(l.deduction)]), 'No late occurrences in this cutoff.')}</div>`);
   dialog.querySelectorAll('[data-source-index]').forEach(b => b.onclick = async () => {
     const t = traces[Number(b.dataset.sourceIndex)];
     let sources = state;
@@ -374,14 +405,16 @@ function edit(kind, id, preset = {}) {
         else value = f.type === 'number' ? (kind === 'employees' && f.key === 'monthlySalary' && input.value === '' ? null : Number(input.value)) : input.value;
         assignAt(values, f.key, value);
       }
-      await api(`/records/${kind}`, values); await refresh(); currentRun = null; dialog.close(); render(); toast('Record saved.');
+      await api(`/records/${kind}`, values); await refresh(); dialog.close();
+      if (kind === 'adjustments' && computationContext && await reopenComputation()) { toast('Adjustment saved. Payroll recalculated.'); return; }
+      currentRun = null; render(); toast('Record saved.');
     } catch (error) { reportError(error); button.disabled = false; }
   };
   const deleteButton = form.querySelector('#delete-record');
   if (deleteButton) deleteButton.onclick = async () => {
     if (deleteButton.dataset.confirm !== 'yes') { deleteButton.dataset.confirm = 'yes'; deleteButton.textContent = 'Confirm deletion'; return; }
     deleteButton.disabled = true;
-    try { await api(`/records/${kind}?id=${encodeURIComponent(id)}`, null, 'DELETE'); await refresh(); currentRun = null; dialog.close(); render(); toast('Record removed; audit history retained.'); } catch (e) { reportError(e); deleteButton.disabled = false; }
+    try { await api(`/records/${kind}?id=${encodeURIComponent(id)}`, null, 'DELETE'); await refresh(); if (kind === 'adjustments' && computationContext) { dialog.close(); await reopenComputation(); toast('Adjustment removed. Payroll recalculated.'); return; } currentRun = null; dialog.close(); render(); toast('Record removed; audit history retained.'); } catch (e) { reportError(e); deleteButton.disabled = false; }
   };
 }
 function renderLogin() {
@@ -395,6 +428,8 @@ function renderLogin() {
       auth = await api('/login', { username: data.username, password: data.password, otp: data.otp || '' }); await refresh(); render();
     } catch (e) { const error = document.querySelector('#login-error'); error.textContent = e.message; error.classList.remove('hidden'); button.disabled = false; }
   };
+  const resetLink = /^#reset=([a-f0-9]{64})$/.exec(location.hash);
+  if (resetLink) { history.replaceState(null, '', location.pathname); portal.recovery(resetLink[1]); }
 }
 async function account() {
   const users = auth.user.role === 'admin' ? await api('/users') : [];
@@ -419,6 +454,9 @@ document.addEventListener('click', async event => {
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
     if (b.dataset.run) { currentRun = await api(`/runs/${b.dataset.run}`); page = 'payroll'; render(); }
     if (b.dataset.salary) await showSalary(b.dataset.salary, b.dataset.component);
+    if (b.dataset.payrollEmployee) await showSalary(b.dataset.payrollEmployee);
+    if (b.dataset.payslipPreview) await previewPayslip(b.dataset.payslipPreview);
+    if (b.dataset.computationAdd) edit('adjustments', null, { employeeId: b.dataset.computationAdd, date: currentRun.end, approved: true });
     if (b.hasAttribute('data-account')) await account();
     if (b.hasAttribute('data-signout')) await signOut();
     if (b.dataset.proofReview) {
@@ -429,7 +467,7 @@ document.addEventListener('click', async event => {
       await refresh(); render(); toast(decision === 'verified' ? 'Proof confirmed. You can now approve the leave.' : 'The employee was asked for a new proof.');
     }
     if (b.hasAttribute('data-copy') && currentRun) {
-      const rows = [['Employee ID', 'Employee Name', 'Monthly Salary', 'Working Days', 'Days Present', 'Days Credited', 'Late Minutes Not Offset', 'Leave Days / Notes', 'Overtime', 'Additional', '13th Month Pay', 'Special Holiday', 'Regular Holiday', 'Gross', 'Deductions', 'Net Salary', 'Loan Balance', 'Loan Date', 'Loan Terms'], ...currentRun.rows.map(r => [r.employeeId, r.employeeName, r.monthlySalary, r.workingDays, r.daysPresent, r.creditedDays ?? r.daysPresent, r.lateMinutesUnoffset ?? 0, `${r.leaveDays}: ${r.leaveNotes.join('; ')}`, r.earnings.regularOT + r.earnings.restOT + r.earnings.specialOT + r.earnings.regularHolidayOT + r.earnings.otherOT, r.earnings.additional + r.earnings.allowance, r.earnings.thirteenth, r.earnings.specialHoliday, r.earnings.regularHoliday, r.gross, r.totalDeductions, r.net, r.loanBalance, r.loanDeductions.map(l => l.startDate).join('; '), r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('; ')])];
+      const rows = [['Employee ID', 'Employee Name', 'Monthly Salary', 'Working Days', 'Days Present', 'Days Credited', 'Late Minutes Not Offset', 'Leave Days / Notes', 'Overtime', 'Adjustment', '13th Month Pay', 'Special Holiday', 'Regular Holiday', 'Gross', 'Deductions', 'Net Salary', 'Loan Balance', 'Loan Date', 'Loan Terms'], ...currentRun.rows.map(r => [r.employeeId, r.employeeName, r.monthlySalary, r.workingDays, r.daysPresent, r.creditedDays ?? r.daysPresent, r.lateMinutesUnoffset ?? 0, `${r.leaveDays}: ${r.leaveNotes.join('; ')}`, r.earnings.regularOT + r.earnings.restOT + r.earnings.specialOT + r.earnings.regularHolidayOT + r.earnings.otherOT, r.earnings.additional + r.earnings.allowance, r.earnings.thirteenth, r.earnings.specialHoliday, r.earnings.regularHoliday, r.gross, r.totalDeductions, r.net, r.loanBalance, r.loanDeductions.map(l => l.startDate).join('; '), r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('; ')])];
       // Prefix formula-like strings when copying into spreadsheet applications.
       const safe = v => typeof v === 'string' ? (/^[=+@\-\t\r]/.test(v) ? `'${v}` : v).replace(/[\t\r\n]/g, ' ') : v;
       await navigator.clipboard.writeText(rows.map(row => row.map(safe).join('\t')).join('\n')); toast('Payroll summary copied with employee IDs.');
@@ -448,7 +486,7 @@ document.addEventListener('click', async event => {
 document.addEventListener('submit', async event => {
   if (event.target.id !== 'cutoff-form') return;
   event.preventDefault(); const form = event.target, button = form.querySelector('button'); button.disabled = true;
-  payrollEmployee = form.elements.employee.value;
+  payrollEmployee = form.elements.employee.value; computationContext = null;
   try { currentRun = await api('/payroll/preview', { start: form.elements.start.value, end: form.elements.end.value, pay13th: form.elements.pay13th.value === 'true', ...(payrollEmployee ? { employeeIds: [payrollEmployee] } : {}) }); render(); }
   catch (e) { toast(e.message); button.disabled = false; }
 });

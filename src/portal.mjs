@@ -254,9 +254,8 @@ export async function locationAddress(store, actor, eventId, provider = process.
     return { address, fetchedAt };
   } catch { return { address: null, message: 'Address lookup is currently unavailable; the recorded coordinates remain unchanged.' }; }
 }
-export function ownPayslip(store, actor, runId) {
-  const employee = ownEmployee(store, actor), run = store.read().runs.find(r => r.id === runId && r.status === 'posted'), row = run?.rows.find(r => r.employeeId === employee.id);
-  if (!row) throw new AppError('Payslip not found.', 404);
+// One payslip builder for the employee portal, staff review and the draft preview, so they always agree.
+export function payslipFromRow(run, row) {
   const loans = (row.loanDeductions || []).map(l => ({ type: l.type || run.sources?.loans?.find(source => source.id === l.loanId)?.type || 'Loan', reference: l.reference || '', amount: l.amount, previousBalance: l.previousBalance, remainingBalance: l.remainingBalance }));
   // Use the posted employee row only; never recompute historical payslips from current rates.
   const computation = (row.trace || []).map(({ component, side, amount, formula, date }) => ({ component, side, amount, formula, date }));
@@ -269,13 +268,26 @@ export function ownPayslip(store, actor, runId) {
   const loanRemainder = residual(row.deductions.loans || 0, loans), otherRemainder = residual(row.deductions.other || 0, otherItems);
   if (loanRemainder) deductionItems.push({ label: 'Other loan deductions (detail unavailable)', amount: loanRemainder });
   if (otherRemainder || !otherItems.length) deductionItems.push({ label: 'Other authorized deductions', amount: otherRemainder });
-  store.log(actor, 'view-payslip', 'payslip', run.id, null, { employeeId: employee.id });
-  return { id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: employee.id, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
+  return { draft: run.status !== 'posted', id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
 }
-export function payslipPdf(payslip) {
+export function ownPayslip(store, actor, runId) {
+  const employee = ownEmployee(store, actor), run = store.read().runs.find(r => r.id === runId && r.status === 'posted'), row = run?.rows.find(r => r.employeeId === employee.id);
+  if (!row) throw new AppError('Payslip not found.', 404);
+  store.log(actor, 'view-payslip', 'payslip', run.id, null, { employeeId: employee.id });
+  return payslipFromRow(run, row);
+}
+// Admin/HR/Payroll review of any employee's posted payslip.
+export function staffPayslip(store, actor, runId, employeeId) {
+  permit(actor, ['admin', 'hr', 'payroll']);
+  const run = store.read().runs.find(r => r.id === runId && r.status === 'posted'), row = run?.rows.find(r => r.employeeId === employeeId);
+  if (!row) throw new AppError('Payslip not found.', 404);
+  store.log(actor, 'view-payslip', 'payslip', run.id, null, { employeeId });
+  return payslipFromRow(run, row);
+}
+export function payslipPdf(payslip, { draft = payslip.draft } = {}) {
   const labels = { nsd: 'Night shift differential', absence: 'Unpaid leave / absence', tax: 'Withholding tax', other: 'Other authorized deductions', thirteenth: '13th month pay', PhilHealth: 'PhilHealth' };
   const cash = n => `PHP ${Number(n || 0).toFixed(2)}`, pretty = s => labels[s] || s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
-  const lines = ['GDS CAPITAL INC. - EMPLOYEE PAYSLIP', `${payslip.employeeName} (${payslip.employeeId})`, `Period: ${payslip.start} to ${payslip.end}`, `Monthly salary: ${cash(payslip.monthlySalary)} | Daily rate: ${cash(payslip.dailyRate)}`, `Hourly rate: ${cash(payslip.hourlyRate)} | Scheduled days: ${payslip.workingDays ?? 'Unavailable'}`, `Days present: ${payslip.daysPresent ?? 'Unavailable'} | Days credited after late: ${payslip.creditedDays ?? payslip.daysPresent ?? 'Unavailable'} | Leave days: ${payslip.leaveDays ?? 'Unavailable'}`, '', 'EARNINGS', ...Object.entries(payslip.earnings).map(([k, v]) => `${pretty(k)}: ${cash(v)}`), '', 'ITEMIZED DEDUCTIONS', ...payslip.deductionItems.map(item => `${pretty(item.label)}: ${cash(item.amount)}`), '', `Gross salary (sum of earnings): ${cash(payslip.gross)}`, `Total deductions (sum of deduction items): ${cash(payslip.totalDeductions)}`, `NET SALARY: ${cash(payslip.gross)} - ${cash(payslip.totalDeductions)} = ${cash(payslip.net)}`, '', ...(payslip.employer ? ['EMPLOYER CONTRIBUTIONS (paid by GDS CAPITAL INC., not deducted from your pay)', ...Object.entries(payslip.employer).map(([k, v]) => `${k}: ${cash(v)}`), `Total employer contributions: ${cash(payslip.employerTotal)}`, ''] : []), 'LOAN BALANCES (deductions already included above)', ...payslip.loans.map(l => `${l.type}${l.reference ? ` (${l.reference})` : ''}: ${l.previousBalance == null ? 'Unavailable' : cash(l.previousBalance)} - ${cash(l.amount)} = ${l.remainingBalance == null ? 'Unavailable' : cash(l.remainingBalance)}`), '', 'SALARY COMPUTATION - POSTED PAYROLL', ...payslip.computation.flatMap(t => [`${t.date || ''} | ${t.side === 'employer' ? 'employer (not deducted)' : t.side} | ${pretty(t.component)}: ${cash(t.amount)}`, `  ${t.formula}`])];
+  const lines = [draft ? 'GDS CAPITAL INC. - DRAFT PAYSLIP (PREVIEW - NOT POSTED, FOR REVIEW ONLY)' : 'GDS CAPITAL INC. - EMPLOYEE PAYSLIP', `${payslip.employeeName} (${payslip.employeeId})`, `Period: ${payslip.start} to ${payslip.end}`, `Monthly salary: ${cash(payslip.monthlySalary)} | Daily rate: ${cash(payslip.dailyRate)}`, `Hourly rate: ${cash(payslip.hourlyRate)} | Scheduled days: ${payslip.workingDays ?? 'Unavailable'}`, `Days present: ${payslip.daysPresent ?? 'Unavailable'} | Days credited after late: ${payslip.creditedDays ?? payslip.daysPresent ?? 'Unavailable'} | Leave days: ${payslip.leaveDays ?? 'Unavailable'}`, '', 'EARNINGS', ...Object.entries(payslip.earnings).map(([k, v]) => `${pretty(k)}: ${cash(v)}`), '', 'ITEMIZED DEDUCTIONS', ...payslip.deductionItems.map(item => `${pretty(item.label)}: ${cash(item.amount)}`), '', `Gross salary (sum of earnings): ${cash(payslip.gross)}`, `Total deductions (sum of deduction items): ${cash(payslip.totalDeductions)}`, `NET SALARY: ${cash(payslip.gross)} - ${cash(payslip.totalDeductions)} = ${cash(payslip.net)}`, '', ...(payslip.employer ? ['EMPLOYER CONTRIBUTIONS (paid by GDS CAPITAL INC., not deducted from your pay)', ...Object.entries(payslip.employer).map(([k, v]) => `${k}: ${cash(v)}`), `Total employer contributions: ${cash(payslip.employerTotal)}`, ''] : []), 'LOAN BALANCES (deductions already included above)', ...payslip.loans.map(l => `${l.type}${l.reference ? ` (${l.reference})` : ''}: ${l.previousBalance == null ? 'Unavailable' : cash(l.previousBalance)} - ${cash(l.amount)} = ${l.remainingBalance == null ? 'Unavailable' : cash(l.remainingBalance)}`), '', 'SALARY COMPUTATION - POSTED PAYROLL', ...payslip.computation.flatMap(t => [`${t.date || ''} | ${t.side === 'employer' ? 'employer (not deducted)' : t.side} | ${pretty(t.component)}: ${cash(t.amount)}`, `  ${t.formula}`])];
   const escaped = text => text.replaceAll('×', 'x').replaceAll('÷', '/').replaceAll('−', '-').replaceAll('→', '->').replace(/[^\x20-\x7e]/g, '?').replace(/[\\()]/g, '\\$&');
   const wrapped = lines.flatMap(line => line.match(/.{1,90}/g) || ['']);
   const pages = []; for (let i = 0; i < wrapped.length; i += 48) pages.push(wrapped.slice(i, i + 48));
@@ -283,7 +295,7 @@ export function payslipPdf(payslip) {
   const pageIds = [];
   pages.forEach((page, index) => {
     const pageId = objects.length + 1; pageIds.push(pageId);
-    const stream = `0.70 0.12 0.17 rg 35 790 525 28 re f 1 1 1 rg BT /F1 12 Tf 45 800 Td (GDS CAPITAL INC. - PAYSLIP) Tj ET 0.12 0.12 0.12 rg BT /F1 10 Tf 40 765 Td 14 TL ${page.map((line, i) => `${i ? 'T* ' : ''}(${escaped(line)}) Tj`).join('\n')} ET 0.82 0.67 0.29 RG 35 55 m 560 55 l S BT /F1 9 Tf 40 40 Td (Employee ${escaped(payslip.employeeId)} | Page ${index + 1} of ${pages.length}) Tj ET`;
+    const stream = `0.70 0.12 0.17 rg 35 790 525 28 re f 1 1 1 rg BT /F1 12 Tf 45 800 Td (GDS CAPITAL INC. - ${draft ? 'DRAFT PAYSLIP - NOT POSTED' : 'PAYSLIP'}) Tj ET 0.12 0.12 0.12 rg BT /F1 10 Tf 40 765 Td 14 TL ${page.map((line, i) => `${i ? 'T* ' : ''}(${escaped(line)}) Tj`).join('\n')} ET 0.82 0.67 0.29 RG 35 55 m 560 55 l S BT /F1 9 Tf 40 40 Td (Employee ${escaped(payslip.employeeId)} | Page ${index + 1} of ${pages.length}) Tj ET`;
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageId + 1} 0 R >>`, `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
   });
   objects[1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>`;

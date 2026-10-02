@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual, cre
 import { promisify } from 'node:util';
 import { userSchema } from './schema.mjs';
 import { AppError, permit } from './service.mjs';
+import { isEmailAddress } from './mailer.mjs';
 const scrypt = promisify(scryptCallback);
 const hashToken = token => createHash('sha256').update(token).digest('hex');
 export async function passwordHash(password, salt = randomBytes(16).toString('hex')) {
@@ -71,15 +72,78 @@ export async function changePassword(store, user, currentPassword, newPassword) 
   });
 }
 
-export function requestRecovery(store, identifier) {
-  const user = store.db.prepare('SELECT id FROM users WHERE username=? OR employee_id=?').get(identifier, identifier);
-  if (user && !store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(user.id)) {
-    store.transaction(() => {
-      store.db.prepare('INSERT INTO recovery_requests(id,user_id,created_at) VALUES(?,?,?)').run(randomUUID(), user.id, new Date().toISOString());
-      store.log({ username: 'recovery-request' }, 'request-recovery', 'users', user.id, null, null);
-    });
+export const EMAIL_RESET_MINUTES = 30;
+const EMAIL_RESEND_MINUTES = 2;
+const RECOVERY_MESSAGE = `If the account exists, a password reset link has been sent to its registered email. The link expires in ${EMAIL_RESET_MINUTES} minutes. If no email arrives, contact HR to verify your identity and receive a reset code.`;
+const profileEmails = (store, employeeId) => {
+  if (!employeeId) return [];
+  const rows = store.db.prepare("SELECT section,data FROM employee_profiles WHERE employee_id=? AND section IN ('employment','personal')").all(employeeId);
+  const data = Object.fromEntries(rows.map(r => [r.section, JSON.parse(r.data)]));
+  return [data.employment?.businessEmail, data.personal?.personalEmail].map(v => (v || '').trim()).filter(isEmailAddress);
+};
+// The registered email: set on the account by an administrator, otherwise the employee profile's business, then personal email.
+export function registeredEmail(store, user) {
+  return isEmailAddress(user.email) ? user.email : profileEmails(store, user.employee_id)[0] || null;
+}
+function findRecoveryAccount(store, identifier) {
+  const direct = store.db.prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE OR employee_id=? COLLATE NOCASE OR email=? COLLATE NOCASE').get(identifier, identifier, identifier);
+  if (direct || !isEmailAddress(identifier)) return direct;
+  const wanted = identifier.toLowerCase();
+  return store.db.prepare('SELECT * FROM users WHERE employee_id IS NOT NULL').all().find(u => profileEmails(store, u.employee_id).some(e => e.toLowerCase() === wanted)) || null;
+}
+// Forgot password: emails a one-time reset link to the registered address, or queues an HR request when no email can be sent.
+// The reply is identical either way so it never reveals whether an account or address exists.
+// `delivery` lets callers (tests) wait for the email; the HTTP route does not, so timing reveals nothing either.
+export function requestRecovery(store, identifier, { mailer = null, origin = '' } = {}) {
+  const user = findRecoveryAccount(store, identifier.trim());
+  let delivery = Promise.resolve(false);
+  if (user && !user.disabled) {
+    const email = mailer ? registeredEmail(store, user) : null;
+    if (email) {
+      const recent = store.db.prepare('SELECT expires FROM password_resets WHERE user_id=?').get(user.id);
+      if (!recent || recent.expires < Date.now() + (EMAIL_RESET_MINUTES - EMAIL_RESEND_MINUTES) * 60000) {
+        const token = randomBytes(32).toString('hex'), expires = Date.now() + EMAIL_RESET_MINUTES * 60000;
+        store.transaction(() => {
+          store.db.prepare('DELETE FROM password_resets WHERE user_id=?').run(user.id);
+          store.db.prepare('INSERT INTO password_resets VALUES(?,?,?)').run(hashToken(token), user.id, expires);
+          store.log({ username: 'recovery-request' }, 'email-reset-link', 'users', user.id, null, { sentTo: maskEmail(email), expires });
+        });
+        delivery = mailer.send({ to: email, subject: 'GDS HR password reset', text: resetEmail(user.username, `${origin}/#reset=${token}`) })
+          .then(() => true, error => { console.error('Password reset email failed:', error.message); return false; });
+      }
+    } else if (!store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(user.id)) {
+      store.transaction(() => {
+        store.db.prepare('INSERT INTO recovery_requests(id,user_id,created_at) VALUES(?,?,?)').run(randomUUID(), user.id, new Date().toISOString());
+        store.log({ username: 'recovery-request' }, 'request-recovery', 'users', user.id, null, null);
+      });
+    }
   }
-  return { message: 'If the account exists, your administrator has received the request. Contact HR to verify your identity and receive a reset code.' };
+  return { message: RECOVERY_MESSAGE, delivery };
+}
+export const maskEmail = email => email.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(Math.min(rest.length, 6))}${domain}`);
+const resetEmail = (username, link) => `Hello,
+
+We received a request to reset the password for your GDS CAPITAL INC. HR account (${username}).
+
+Open this link to choose a new password. It works once and expires in ${EMAIL_RESET_MINUTES} minutes:
+${link}
+
+If you did not ask for this, ignore this email; your password stays the same. For help, contact HR.
+
+GDS CAPITAL INC. Human Resources`;
+// Administrators record the email each account's reset links go to (blank clears it and falls back to the employee profile).
+export function setUserEmail(store, actor, userId, email) {
+  permit(actor, ['admin']);
+  const value = (email || '').trim();
+  if (value && !isEmailAddress(value)) throw new AppError('Enter a valid email address.');
+  const user = store.db.prepare('SELECT id,email FROM users WHERE id=?').get(userId);
+  if (!user) throw new AppError('User not found.', 404);
+  if (value && store.db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE AND id<>?').get(value, userId)) throw new AppError('Another account already uses this email.');
+  store.transaction(() => {
+    store.db.prepare('UPDATE users SET email=? WHERE id=?').run(value || null, userId);
+    store.log(actor, 'set-account-email', 'users', userId, { email: user.email || null }, { email: value || null });
+  });
+  return { email: value || null };
 }
 export function issuePasswordReset(store, actor, userId, resetMfa = false) {
   permit(actor, ['admin']);
