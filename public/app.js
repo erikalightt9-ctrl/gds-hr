@@ -4,6 +4,7 @@ import { createPortal } from './portal.js';
 import { contributionsSection, renderCalculation } from './contributions.js';
 import { setupInstall, offerInstall } from './install.js';
 import { welcomeScene, welcomeCulture } from './welcome.js';
+import { createTimecard } from './timecard.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 const money = n => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(n || 0);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -13,10 +14,12 @@ const uid = () => crypto.randomUUID();
 let auth, state, balances = [], page = 'overview', currentRun = null, filter = '', subtab = 'requests';
 let annualYear = today().slice(0, 4);
 let employeeStatusFilter = 'All Employees';
+let attendanceView = 'records'; // 'records' (all employees) or 'timecard' (one employee beside pay)
 let payrollEmployee = ''; // '' = all employees; otherwise the one Employee ID being calculated
 let employeeData = null, liveData = null, eventStream = null, liveTimer = null, liveUser = null, refreshTimer = null;
 const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
-const profiles = createProfileView({ api, esc, money, table, shell, heading, toast, refresh, today, isActive: () => page === 'profile', canEditMaster: () => canEdit('employees'), editMaster: id => edit('employees', id), openPayroll: async id => { payrollEmployee = id; const p = cutoffDefaults(); currentRun = await api('/payroll/preview', { start: p.start, end: p.end, pay13th: false, employeeIds: [id] }); page = 'payroll'; render(); }, openDirectory: () => { page = 'employees'; render(); }, openRun: async id => { currentRun = await api(`/runs/${id}`); page = 'payroll'; render(); } });
+const timecard = createTimecard({ api, esc, money, badge, table, getState: () => state, canEdit: kind => canEdit(kind), editButton, cutoffDefaults }); // canEdit is defined below; look it up when used
+const profiles = createProfileView({ api, esc, money, table, shell, heading, toast, refresh, today, isActive: () => page === 'profile', canEditMaster: () => canEdit('employees'), editMaster: id => edit('employees', id), openTimecard: id => { timecard.setEmployee(id); attendanceView = 'timecard'; page = 'attendance'; render(); }, openPayroll: async id => { payrollEmployee = id; const p = cutoffDefaults(); currentRun = await api('/payroll/preview', { start: p.start, end: p.end, pay13th: false, employeeIds: [id] }); page = 'payroll'; render(); }, openDirectory: () => { page = 'employees'; render(); }, openRun: async id => { currentRun = await api(`/runs/${id}`); page = 'payroll'; render(); } });
 const names = { basic: 'Basic salary', regularOT: 'Regular OT', restDay: 'Rest day pay', restOT: 'Rest day OT', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday OT', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Regular / double holiday OT', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday OT', thirteenth: '13th month paid', absence: 'Unpaid leave / absence', loans: 'Loan deductions', tax: 'Withholding tax', other: 'Other authorized deductions' };
 Object.assign(names, { SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' });
 const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll'] })[kind]?.includes(auth.user.role);
@@ -86,8 +89,11 @@ function employeesPage() {
   return heading('Your people', 'Open an employee to view their complete, connected profile.', addButton('employees', 'Add employee')) + `${state.employees.some(e => e.draft) ? '<div class="notice">Draft profiles are excluded from payroll until salary, joining date, department, schedule, and benefit coverage are completed.</div>' : ''}<section class="panel"><div class="panel-head"><h2>Employee directory</h2>${downloads('employees')}${badge(`${list.length} employees`, 'neutral')}</div>${searchToolbar(`<label class="field">Employee filter<select id="employee-status-filter">${statuses.map(s => `<option ${s === employeeStatusFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></label>`)}${table(['Employee', 'Position', 'Monthly salary', 'Joined', 'Status', ''], list.map(e => [`<button class="employee-link" data-profile="${esc(e.id)}">${employee(e.id)}</button>`, esc(e.profile.position || 'Position required'), e.monthlySalary === null ? 'Not set' : money(e.monthlySalary), e.startDate || 'Not set', badge(e.draft ? 'Draft · needs details' : e.profile.employeeStatus || (e.active ? 'Active' : 'Inactive'), e.draft ? 'pending' : '') + `<small>${esc(e.profile.employmentStatus || '')}</small>`, `<button class="small" data-profile="${esc(e.id)}">Open profile</button>`]))}</section>`;
 }
 function attendancePage() {
+  const views = `<div class="tabs"><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily records · all employees</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Employee timecard · check against pay</button></div>`;
+  const top = heading('Attendance', 'Record actual work and approved exceptions. Night hours are calculated automatically.', addButton('attendance', 'Record attendance')) + views;
+  if (attendanceView === 'timecard') return top + timecard.panel(state);
   const list = filtered(state.attendance).sort((a, b) => b.date.localeCompare(a.date));
-  return heading('Attendance', 'Record actual work and approved exceptions. Night hours are calculated automatically.', addButton('attendance', 'Record attendance')) + `<section class="panel"><div class="panel-head"><h2>Daily records</h2>${downloads('attendance')}<span class="legend">Times use Asia/Manila · unpaid breaks are excluded</span></div>${searchToolbar()}${table(['Employee', 'Date', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], list.map(a => [employee(a.employeeId), a.date, a.scheduledIn, a.status === 'present' ? `${a.timeIn} → ${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '—', badge(a.status, 'neutral'), `${a.offsetMinutes} min${a.exception ? '<br><small>Approved exception</small>' : ''}`, badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('attendance', a.id)]))}</section>`;
+  return top + `<section class="panel"><div class="panel-head"><h2>Daily records</h2>${downloads('attendance')}<span class="legend">Times use Asia/Manila · unpaid breaks are excluded</span></div>${searchToolbar()}${table(['Employee', 'Date', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], list.map(a => [employee(a.employeeId), a.date, a.scheduledIn, a.status === 'present' ? `${a.timeIn} → ${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '—', badge(a.status, 'neutral'), `${a.offsetMinutes} min${a.exception ? '<br><small>Approved exception</small>' : ''}`, badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('attendance', a.id)]))}</section>`;
 }
 // Proof (e.g. a medical certificate) uploaded by the employee: HR opens it, then confirms or asks for a new one.
 const proofBadges = { required: ['Waiting for employee', 'pending'], submitted: ['Ready to review', 'pending'], verified: ['Confirmed', ''], rejected: ['New proof requested', 'rejected'] };
@@ -178,6 +184,12 @@ function render() {
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   shell(views[page]());
+  if (page === 'attendance' && attendanceView === 'timecard') {
+    timecard.bind((employeeId, date) => edit('attendance', null, newAttendanceFor(employeeId, date)), async (employeeId, start, end) => {
+      payrollEmployee = employeeId; currentRun = await api('/payroll/preview', { start, end, pay13th: false, employeeIds: [employeeId] }); page = 'payroll'; render();
+    });
+    timecard.fill();
+  }
   if (page === 'overview') {
     if (liveData) { const live = document.createElement('div'); live.innerHTML = portal.live(liveData); document.querySelector('.content').append(live); }
     const section = document.createElement('section'); section.className = 'panel';
@@ -239,6 +251,12 @@ function definitions(kind) {
   fields.rules.push(section('Calendar review & benefit taxation'), field('calendarReviewedYears', 'Holiday calendar years reviewed', 'yearlist', null, 'Comma-separated years, for example 2026, 2027. Add the applicable proclamations in the holiday calendar before confirming a year.'), field('thirteenthTaxExemption', 'Annual tax exemption allocated to 13th-month pay (PHP)', 'number', null, 'Configure the approved exemption after accounting for other benefits using the same exemption. Taxable excess is included automatically.'));
   return fields[kind];
 }
+// A new attendance record for a missing day, prefilled with the employee's schedule and a 1-hour lunch.
+function newAttendanceFor(employeeId, date) {
+  const e = state.employees.find(x => x.id === employeeId), start = e?.scheduleStart || '09:00';
+  const [h, m] = start.split(':').map(Number), end = `${String(Math.min(23, h + 9)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  return { employeeId, date, scheduledIn: start, timeIn: start, timeOut: end, breaks: [{ start: `${date}T12:00`, end: `${date}T13:00` }], approved: false, explanation: '' };
+}
 function defaults(kind) {
   const d = today(), id = uid(), employeeId = state.employees[0]?.id || '';
   const base = {
@@ -281,8 +299,8 @@ function formField(f, values, existing) {
   else control = `<input name="${f.key}" id="${id}" type="${type.replace('optional-', '')}" value="${esc(value)}" ${type === 'number' ? 'min="0" step="any"' : ''} ${type.startsWith('optional') ? '' : 'required'} ${existing && f.key === 'id' ? 'readonly' : ''}>`;
   return `<label class="field ${type.includes('textarea') || type === 'multi' ? 'full' : ''}" for="${id}">${f.title}${control}${f.hint ? `<small>${f.hint}</small>` : ''}</label>`;
 }
-function edit(kind, id) {
-  const existing = state[kind].find(x => x.id === id), values = structuredClone(existing || defaults(kind));
+function edit(kind, id, preset = {}) {
+  const existing = state[kind].find(x => x.id === id), values = structuredClone(existing || { ...defaults(kind), ...preset });
   const fields = definitions(kind), locked = kind === 'rules' && existing?.approvedBy;
   if (kind === 'attendance' && existing) fields.push(field('correctionReason', 'Correction / approval reason', 'textarea', null, 'Required. Original attendance, your changes, reason and approver remain in the audit history.'));
   openDialog(`${existing ? 'Review' : 'New'} ${kind === 'leaveTypes' ? 'leave policy' : kind === 'rules' ? 'payroll rules version' : label(kind).replace(/s$/, '')}`, `<form id="record-form"><div class="dialog-body"><div id="form-error" class="form-error hidden" role="alert"></div>${locked ? '<div class="notice">Approved rules cannot be edited. Close this dialog and create a new rules version.</div>' : ''}<div class="form-grid">${fields.map(f => formField(f, values, !!existing)).join('')}</div></div><div class="dialog-foot">${existing && ['leaves', 'holidays', 'adjustments'].includes(kind) ? '<button type="button" class="danger" id="delete-record">Delete record</button>' : ''}<button type="button" data-close>Cancel</button><button type="submit" class="primary" ${locked ? 'disabled' : ''}>Save ${kind === 'rules' ? 'version' : 'record'}</button></div></form>`);
@@ -371,6 +389,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.nav) { page = b.dataset.nav; filter = ''; render(); }
     if (b.dataset.profile) { page = 'profile'; await profiles.open(b.dataset.profile, 'personal'); }
     if (b.dataset.tab) { subtab = b.dataset.tab; filter = ''; render(); }
+    if (b.dataset.attendanceView) { attendanceView = b.dataset.attendanceView; render(); }
     if (b.dataset.add) edit(b.dataset.add);
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
     if (b.dataset.run) { currentRun = await api(`/runs/${b.dataset.run}`); page = 'payroll'; render(); }
