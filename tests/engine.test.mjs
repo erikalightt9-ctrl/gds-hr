@@ -22,12 +22,14 @@ test('NSD crosses midnight and excludes timed breaks', () => {
   assert.equal(nightMinutes('2026-09-01T22:00', '2026-09-02T02:00', []), 240);
   assert.equal(nightMinutes('2026-09-01T21:00', '2026-09-02T07:00', [{ start: '2026-09-02T01:00', end: '2026-09-02T02:00' }]), 420);
 });
-test('ordinary OT and late deduction are independently traced', () => {
+test('ordinary OT and lateness are independently traced; late time reduces credited days, not a deduction line', () => {
   const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })];
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15');
   const row = p.rows[0];
   assert.equal(row.earnings.regularOT, 426.14);
-  assert.equal(row.deductions.late, 42.61);
+  assert.equal(row.deductions.late, undefined, 'no separate late deduction');
+  assert.equal(row.earnings.basic, 15000 - 42.61, '15 min of a 480-min day = 0.03125 day x 1,363.64 daily');
+  assert.equal(row.creditedDays, 0.9688, 'credited days are kept to 4 decimals');
   assert.ok(p.blockers.some(x => x.includes('Missing attendance')));
   assert.equal(row.late[0].deductibleMinutes, 15);
   assert.equal(row.late[0].sourceId, '2026-09-01');
@@ -35,7 +37,9 @@ test('ordinary OT and late deduction are independently traced', () => {
 test('approved exception and offset protect covered late time', () => {
   for (const extra of [{ exception: true }, { offsetMinutes: 15 }]) {
     const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:15', ...extra })];
-    assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].deductions.late, 0);
+    const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+    assert.equal(row.earnings.basic, 15000, 'covered late time does not reduce pay');
+    assert.equal(row.creditedDays, 1);
   }
 });
 test('rest-day night work adds only differential, with no double-counting', () => {

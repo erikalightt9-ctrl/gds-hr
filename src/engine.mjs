@@ -148,9 +148,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const scheduled = employed.filter(d => !isRest(e, d));
     const baseline = dailyPaid ? round(daily * scheduled.length) : round(e.monthlySalary * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
     const earnings = { basic: baseline, regularOT: 0, restDay: 0, restOT: 0, nsd: 0, specialHoliday: 0, specialOT: 0, regularHoliday: 0, regularHolidayOT: 0, otherHoliday: 0, otherOT: 0, allowance: 0, additional: 0, thirteenth: 0 };
-    const deductions = { late: 0, undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, other: 0 };
+    const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, other: 0 };
     const trace = [], late = [], leaveNotes = [], loanDeductions = [], workBreakdown = [];
     let holidayBase = 0, excludedLeave = 0, additionalBasic = 0, daysPresent = 0, leaveDays = 0;
+    let lateDaysLost = 0, lateReduction = 0, lateMinutesUnoffset = 0;   // late time lowers credited days, never a separate deduction
     const add = (side, component, amount, formula, source, date, quantity = null, multiplier = null) => {
       const rounded = round(amount);
       side[component] = round(side[component] + rounded);
@@ -192,9 +193,13 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const minutes = attendanceProfile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduledMinute) : attendanceMinutes(record);
       const lateMinutes = rest ? 0 : Math.max(0, (startMinute - scheduledMinute) / 60000);
       const deductibleMinutes = record.exception ? 0 : Math.max(0, lateMinutes - graceMinutes - record.offsetMinutes);
-      const deduction = r.deductLate ? round(deductibleMinutes / 60 * hourly) : 0;
-      late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, deduction, sourceId: record.id });
-      if (deduction) add(deductions, 'late', deduction, `${deductibleMinutes} minutes ÷ 60 × ${hourly}`, record, d);
+      // Unoffset late time is converted to a fraction of the scheduled day and taken off the days credited for pay.
+      const dayMinutes = normalHours * 60, lostDay = r.deductLate ? deductibleMinutes / dayMinutes : 0, deduction = round(lostDay * daily);
+      late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
+      if (deduction) {
+        lateDaysLost += lostDay; lateReduction += deduction; lateMinutesUnoffset += deductibleMinutes;
+        add(earnings, 'basic', -deduction, `Late ${deductibleMinutes} min not offset ÷ ${dayMinutes} min day = ${Math.round(lostDay * 10000) / 10000} day × ${daily} (days credited reduced)`, record, d);
+      }
       const under = rest || record.exception ? 0 : Math.max(0, normalHours * 60 - minutes.length - lateMinutes);
       if (r.deductUndertime && under) add(deductions, 'undertime', under / 60 * hourly, `${under} minutes ÷ 60 × ${hourly}`, record, d);
       const groups = new Map();
@@ -237,7 +242,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       deductions.loans = round(deductions.loans + amount);
       trace.push({ component: 'loans', side: 'deductions', amount, formula: `min(${loan.balance} balance, ${loan.perPayroll} per payroll, ${loan.monthlyAmortization - alreadyDeducted} monthly amount remaining)`, sourceKind: 'loans', sourceId: loan.id, date: end });
     }
-    const applicableBasic = round(Math.max(0, baseline - deductions.absence - deductions.late - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic));
+    const applicableBasic = round(Math.max(0, baseline - deductions.absence - lateReduction - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic));
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));
     const annualBasic = round(annualRows.reduce((s, row) => s + row.applicableBasic, 0) + applicableBasic);
     const thirteenthAccrued = e.covered13th ? round(annualBasic / 12) : 0;
@@ -264,12 +269,12 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const contributionTotal = deductions.SSS + deductions.PhilHealth + deductions['Pag-IBIG'];
     // Tax brackets use this cutoff's taxable earnings. Configure the table for the selected cutoff.
     const taxableThirteenth = Math.max(0, thirteenthPaid + earnings.thirteenth - r.thirteenthTaxExemption) - Math.max(0, thirteenthPaid - r.thirteenthTaxExemption);
-    const taxBasis = Math.max(0, gross - earnings.thirteenth + taxableThirteenth - deductions.absence - deductions.late - deductions.undertime - contributionTotal);
+    const taxBasis = Math.max(0, gross - earnings.thirteenth + taxableThirteenth - deductions.absence - deductions.undertime - contributionTotal);
     add(deductions, 'tax', bracketAmount(r.taxBrackets, taxBasis, `${prefix} withholding tax`, blockers), `Taxable cutoff earnings ${round(taxBasis)} → approved ${r.cutoff} bracket; includes ${round(taxableThirteenth)} taxable 13th-month excess over configured annual exemption ${r.thirteenthTaxExemption}`, null, end);
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

@@ -43,8 +43,10 @@ export function createTimecard(ctx) {
       const work = (row?.workBreakdown || []).filter(w => w.date === date);
       const late = (row?.late || []).find(l => l.date === date);
       const amount = (side, components) => round(trace.filter(t => t.side === side && components(t.component)).reduce((s, t) => s + t.amount, 0));
-      const deducted = amount('deductions', c => ['late', 'undertime', 'absence'].includes(c));
-      const earned = amount('earnings', () => true);   // overtime, premiums, night differential and any extra paid regular time
+      // Late time is a reduction of credited days (a negative basic entry), counted with undertime and absence.
+      const lateCut = round(-trace.filter(t => t.side === 'earnings' && t.amount < 0).reduce((s, t) => s + t.amount, 0));
+      const deducted = round(amount('deductions', c => ['undertime', 'absence'].includes(c)) + lateCut);
+      const earned = round(trace.filter(t => t.side === 'earnings' && t.amount > 0).reduce((s, t) => s + t.amount, 0));   // overtime, premiums, night differential
       const undertime = trace.find(t => t.component === 'undertime');
       const blocker = run.blockers.find(b => b.startsWith(`${employee.id} `) && b.includes(date));
       let status, tone = 'neutral';
@@ -63,7 +65,7 @@ export function createTimecard(ctx) {
           record?.status === 'present' ? `${esc(record.timeIn)} → ${esc(record.timeOut)}${record.endNextDay ? ' (+1)' : ''}<small>Scheduled ${esc(record.scheduledIn)}</small>` : '—',
           breaks ? `${breaks} min` : '—',
           work.length ? `${round(work.filter(w => !w.overtime).reduce((s, w) => s + w.hours, 0))} h` : '—',
-          late?.lateMinutes ? `${late.lateMinutes} min${late.deduction ? `<small>−${money(late.deduction)}</small>` : ''}` : '—',
+          late?.lateMinutes ? `${late.lateMinutes} min${late.approvedOffset ? ` · ${late.approvedOffset} offset` : ''}${late.deduction ? `<small>−${late.dayFraction} day · −${money(late.deduction)}</small>` : '<small>Covered, no pay change</small>'}${late.deductibleMinutes && record && canEdit('attendance') ? `<button class="small" data-timecard-offset="${esc(record.id)}" data-minutes="${late.deductibleMinutes}">Apply offset</button>` : ''}` : '—',
           undertime ? `${undertime.formula.split(' ')[0]} min<small>−${money(undertime.amount)}</small>` : '—',
           work.some(w => w.overtime) ? `${round(work.filter(w => w.overtime).reduce((s, w) => s + w.hours, 0))} h${work.some(w => w.night) ? '<small>incl. night</small>' : ''}` : '—',
           deducted || earned ? `${earned ? `<span class="pay-plus">+${money(earned)}</span>` : ''}${deducted ? `<span class="pay-minus">−${money(deducted)}</span>` : ''}` : '<span class="legend">No change</span>',
@@ -80,9 +82,9 @@ export function createTimecard(ctx) {
     const missing = dayRows.filter(r => r.missing).length;
     const card = (title, value, foot, alert) => `<div class="card ${alert ? 'featured' : ''}"><div class="card-label">${esc(title)}</div><div class="card-value">${value}</div><div class="card-foot">${foot}</div></div>`;
     return `<div class="cards timecard-cards">
-      ${card('Days present', row?.daysPresent ?? 0, `of ${row?.workingDays ?? 0} scheduled days`)}
+      ${card('Days credited', row?.creditedDays ?? row?.daysPresent ?? 0, `${row?.daysPresent ?? 0} present of ${row?.workingDays ?? 0} scheduled${row?.lateDaysLost ? ` − ${row.lateDaysLost} day late` : ''}`)}
       ${card('Missing records', missing, missing ? 'Add them before posting payroll' : 'Every scheduled day is accounted for', missing > 0)}
-      ${card('Late · Undertime · Absence', `−${money(sum('late', 'deductions') + sum('undertime', 'deductions') + sum('absence', 'deductions'))}`, `Late ${money(sum('late', 'deductions'))} · Undertime ${money(sum('undertime', 'deductions'))} · Absence ${money(sum('absence', 'deductions'))}`)}
+      ${card('Late not offset', `${row?.lateMinutesUnoffset ?? 0} min`, `Lowers days credited · −${money(row?.lateReduction ?? 0)} basic · Undertime ${money(sum('undertime', 'deductions'))} · Absence ${money(sum('absence', 'deductions'))}`)}
       ${card('Overtime', `${otHours} h`, `+${money((row?.earnings.regularOT || 0) + (row?.earnings.restOT || 0) + (row?.earnings.specialOT || 0) + (row?.earnings.regularHolidayOT || 0) + (row?.earnings.otherOT || 0) + (row?.earnings.nsd || 0))} incl. night differential`)}
     </div>
     <div class="timecard-totals">${row ? `Basic ${money(row.earnings.basic)} · Gross <strong>${money(row.gross)}</strong> · Deductions ${money(row.totalDeductions)} · <strong>Net ${money(row.net)}</strong>` : 'Not included in payroll for this period.'}
@@ -100,18 +102,19 @@ export function createTimecard(ctx) {
       const other = run.blockers.filter(b => !dayRows.some(r => r.blocker === b));
       body.innerHTML = summary(row, dayRows)
         + (other.length ? `<div class="notice">${other.map(esc).join('<br>')}</div>` : '')
-        + `<div class="scroll-table timecard-table">${table(['Day', 'Status', 'In → out', 'Unpaid breaks', 'Regular hours', 'Late', 'Undertime', 'Overtime', 'Pay effect', 'Approval', ''], dayRows.map(r => r.cells))}</div>`
+        + `<div class="scroll-table timecard-table">${table(['Day', 'Status', 'In → out', 'Unpaid breaks', 'Regular hours', 'Late (offset / days lost)', 'Undertime', 'Overtime', 'Pay effect', 'Approval', ''], dayRows.map(r => r.cells))}</div>`
         + `<p class="legend">Rates: ${row ? `${money(row.dailyRate)} daily · ${money(row.hourlyRate)} hourly` : '—'}. Corrections require a reason; the original record, the change and who made it stay in the audit trail, and the employee is notified.</p>`;
     } catch (error) { body.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
-  function bind(onAdd, onPayroll) {
+  function bind(onAdd, onPayroll, onOffset) {
     const form = document.querySelector('#timecard-form');
     if (form) form.onsubmit = event => { event.preventDefault(); Object.assign(view, { employeeId: form.elements.employeeId.value, start: form.elements.start.value, end: form.elements.end.value }); fill(); };
     const body = document.querySelector('#timecard-body');
     if (body) body.onclick = event => {
       const add = event.target.closest('[data-timecard-add]'); if (add) onAdd(view.employeeId, add.dataset.timecardAdd);
       if (event.target.closest('[data-timecard-payroll]')) onPayroll(view.employeeId, view.start, view.end);
+      const offset = event.target.closest('[data-timecard-offset]'); if (offset) onOffset(offset.dataset.timecardOffset, Number(offset.dataset.minutes));
     };
   }
 

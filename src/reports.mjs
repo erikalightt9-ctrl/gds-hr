@@ -130,10 +130,10 @@ export function buildReport(store, actor, key, format) {
 
 // One posted payroll run as a PDF register (the Excel version already exists).
 export function payrollRunPdf(run) {
-  const headers = ['Employee ID', 'Name', 'Basic', 'OT & premiums', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Late/UT/Absence', 'Loans', 'Other', 'Total deductions', 'Net', 'Employer share*'];
+  const headers = ['Employee ID', 'Name', 'Days credited', 'Basic', 'OT & premiums', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime/Absence', 'Loans', 'Other', 'Total deductions', 'Net', 'Employer share*'];
   const premiums = e => Object.entries(e).filter(([k]) => !['basic', 'thirteenth', 'additional', 'allowance'].includes(k)).reduce((s, [, v]) => s + v, 0);
-  const rows = run.rows.map(r => [r.employeeId, r.employeeName, money(r.earnings.basic), money(premiums(r.earnings)), money(r.gross), money(r.deductions.SSS), money(r.deductions.PhilHealth), money(r.deductions['Pag-IBIG']), money(r.deductions.tax), money(r.deductions.late + r.deductions.undertime + r.deductions.absence), money(r.deductions.loans), money(r.deductions.other), money(r.totalDeductions), money(r.net), money(r.employerTotal ?? 0)]);
-  rows.push(['', 'TOTAL', '', '', money(run.totals.gross), '', '', '', '', '', '', '', money(run.totals.deductions), money(run.totals.net), money(run.totals.employer ?? 0)]);
-  rows.push(['', '* Employer SSS, EC, PhilHealth and Pag-IBIG: paid by the company, not deducted from pay.', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+  const rows = run.rows.map(r => [r.employeeId, r.employeeName, r.creditedDays ?? r.daysPresent, money(r.earnings.basic), money(premiums(r.earnings)), money(r.gross), money(r.deductions.SSS), money(r.deductions.PhilHealth), money(r.deductions['Pag-IBIG']), money(r.deductions.tax), money(r.deductions.undertime + r.deductions.absence), money(r.deductions.loans), money(r.deductions.other), money(r.totalDeductions), money(r.net), money(r.employerTotal ?? 0)]);
+  rows.push(['', 'TOTAL', '', '', '', money(run.totals.gross), '', '', '', '', '', '', '', money(run.totals.deductions), money(run.totals.net), money(run.totals.employer ?? 0)]);
+  rows.push(['', '* Employer SSS, EC, PhilHealth and Pag-IBIG: paid by the company, not deducted from pay.', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
   return tablePdf({ title: `Payroll register ${run.start} to ${run.end}`, subtitle: `${run.status === 'posted' ? `Posted by ${run.postedBy || ''}` : 'Preview'} - ${run.rows.length} employees`, headers, rows });
 }
