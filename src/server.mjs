@@ -12,7 +12,7 @@ import { savePayrollInput, deletePayrollInput } from './payroll-inputs.mjs';
 import { publicBranding } from './hr201.mjs';
 import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
-import { contributionReview, submitContributionChange, reviewContributionChange } from './contribution-basis.mjs';
+import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles } from './service.mjs';
 import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, configureMfa } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
@@ -165,6 +165,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;
       }
+      const contributionCalc = pathname.match(/^\/api\/employees\/([^/]+)\/contributions\/calculate$/);
+      if (contributionCalc && req.method === 'POST') { send(200, calculateContributions(store, auth.user, decodeURIComponent(contributionCalc[1]), await readBody(req))); return; }
       const contributionRoute = pathname.match(/^\/api\/employees\/([^/]+)\/contributions$/);
       if (contributionRoute) {
         const id = decodeURIComponent(contributionRoute[1]);

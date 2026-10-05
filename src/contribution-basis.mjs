@@ -39,6 +39,40 @@ function normalise(salary, input = {}) {
   return agency.basis === salary ? { ...agency, basis: null } : agency;
 }
 
+// ---------- Live calculation for the contribution form ----------
+// Uses the approved Rules & rates version in force for the contribution month — the same tables payroll uses —
+// and reports what was matched. Never guesses: a missing table or bracket is returned as an error.
+const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
+export function calculateAgency(rule, name, basis) {
+  if (!rule) return { name, error: 'No approved Rules & rates version is in force for this month. Approve one in Rules & rates first.' };
+  const brackets = rule.contributions?.[name] || [];
+  if (!brackets.length) return { name, error: `The ${name} contribution table is not configured in Rules & rates (${rule.id}).` };
+  if (typeof basis !== 'number' || !Number.isFinite(basis) || basis < 0) return { name, error: 'Enter a monthly contribution basis of ₱0.00 or more.' };
+  const sorted = [...brackets].sort((a, b) => a.from - b.from), matches = sorted.filter(b => basis >= b.from && (b.to === null || basis < b.to));
+  if (matches.length !== 1) return { name, error: `The ${name} table in ${rule.id} has ${matches.length ? 'overlapping' : 'no'} brackets for ₱${basis.toFixed(2)}. Fix the table in Rules & rates.` };
+  const b = matches[0], index = sorted.indexOf(b), excess = Math.max(0, basis - b.excessOver);
+  const employee = r2(b.fixed + excess * b.rate), employer = r2((b.employerFixed || 0) + excess * (b.employerRate || 0)), ec = name === 'SSS' ? r2(b.ec || 0) : 0;
+  const reference = { ruleId: rule.id, effectiveDate: rule.effectiveDate, bracket: { from: b.from, to: b.to }, employeeRate: b.rate, employerRate: b.employerRate || 0 };
+  if (name === 'SSS') {
+    // SSS compensation ranges are ±₱250 around the Monthly Salary Credit (first range: up to MSC + 250; last: MSC − 250 and over).
+    if (sorted.length > 1) reference.msc = b.to === null ? b.from + 250 : index === 0 ? b.to - 250 : r2((b.from + b.to) / 2);
+  }
+  if (name === 'PhilHealth') {
+    const floor = sorted.length > 1 ? sorted[0].to : null, ceiling = sorted.length > 1 ? sorted.at(-1).from : null;
+    reference.appliedBasis = b.rate || b.employerRate || floor === null ? basis : index === 0 ? floor : ceiling;
+    reference.floor = floor; reference.ceiling = ceiling;
+  }
+  return { name, basis, employee, employer, ec, total: r2(employee + employer + ec), reference };
+}
+export function calculateContributions(store, actor, employeeId, input) {
+  permit(actor, STAFF);
+  const v = z.object({ effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), bases: z.record(z.string(), z.number().min(0).max(1e8)) }).strict().refine(x => Object.keys(x.bases).every(k => AGENCIES.includes(k)), 'Unknown agency.').parse(input);
+  const state = store.read();
+  findEmployee(state, employeeId);
+  const rule = ruleOn(state, v.effectiveDate) || null;
+  return { effectiveDate: v.effectiveDate, ruleId: rule?.id || null, results: Object.fromEntries(Object.entries(v.bases).map(([name, basis]) => [name, calculateAgency(rule, name, basis)])) };
+}
+
 export function contributionReview(store, actor, employeeId) {
   permit(actor, STAFF);
   const state = store.read(), employee = findEmployee(state, employeeId), today = new Date().toISOString().slice(0, 10);
@@ -61,8 +95,9 @@ export function submitContributionChange(store, actor, employeeId, input) {
     const before = sharesFor(rule, employee, activeSetting(state.contributionChanges, employeeId, value.effectiveDate));
     const after = sharesFor(rule, employee, { agencies });
     const now = new Date().toISOString();
+    const reference = Object.fromEntries(AGENCIES.map(name => [name, calculateAgency(rule, name, agencies[name].basis ?? salary).reference || null]));
     const change = {
-      id: randomUUID(), employeeId, effectiveDate: value.effectiveDate, agencies, reason: value.reason, monthlySalary: salary, ruleId: rule?.id || null, before, after,
+      id: randomUUID(), employeeId, effectiveDate: value.effectiveDate, agencies, reason: value.reason, monthlySalary: salary, ruleId: rule?.id || null, before, after, reference,
       requestedBy: actor.username, requestedAt: now,
       // HR and Admin changes apply as soon as they are saved; payroll still has its own review before posting.
       status: 'approved', reviewedBy: actor.username, reviewedAt: now, reviewNote: 'Applied on save.',

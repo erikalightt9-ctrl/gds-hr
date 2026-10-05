@@ -62,3 +62,24 @@ test('an approved basis flows into payroll, the payslip and the remittance repor
     assert.deepEqual(line.slice(3, 7).map(v => String(v).replace(/[^\d.]/g, '')), ['35000', '20000', '35000', '35000']);
   } finally { store.close(); }
 });
+
+test('the contribution form calculator reads the approved tables exactly and never guesses', async () => {
+  const { calculateAgency } = await import('../src/contribution-basis.mjs');
+  const sss = [{ from: 0, to: 5250, fixed: 250, rate: 0, excessOver: 0, employerFixed: 500, employerRate: 0, ec: 10 }, { from: 14750, to: 15250, fixed: 750, rate: 0, excessOver: 0, employerFixed: 1500, employerRate: 0, ec: 30 }, { from: 34750, to: null, fixed: 1750, rate: 0, excessOver: 0, employerFixed: 3500, employerRate: 0, ec: 30 }];
+  const ph = [{ from: 0, to: 10000, fixed: 250, rate: 0, excessOver: 0, employerFixed: 250, employerRate: 0, ec: 0 }, { from: 10000, to: 100000, fixed: 0, rate: 0.025, excessOver: 0, employerFixed: 0, employerRate: 0.025, ec: 0 }, { from: 100000, to: null, fixed: 2500, rate: 0, excessOver: 0, employerFixed: 2500, employerRate: 0, ec: 0 }];
+  const hdmf = [{ from: 0, to: null, fixed: 200, rate: 0, excessOver: 0, employerFixed: 200, employerRate: 0, ec: 0 }];
+  const rule = { id: 'r-test', effectiveDate: '2026-01-01', contributions: { SSS: sss, PhilHealth: ph, 'Pag-IBIG': hdmf } };
+  const s = calculateAgency(rule, 'SSS', 15000);
+  assert.deepEqual([s.employee, s.employer, s.ec, s.total, s.reference.msc], [750, 1500, 30, 2280, 15000]);
+  assert.equal(calculateAgency(rule, 'SSS', 4000).reference.msc, 5000);
+  assert.equal(calculateAgency(rule, 'SSS', 60000).reference.msc, 35000);
+  const p = calculateAgency(rule, 'PhilHealth', 35000);
+  assert.deepEqual([p.employee, p.employer, p.reference.appliedBasis], [875, 875, 35000]);
+  assert.equal(calculateAgency(rule, 'PhilHealth', 8000).reference.appliedBasis, 10000);
+  assert.equal(calculateAgency(rule, 'PhilHealth', 150000).employee, 2500);
+  const h = calculateAgency(rule, 'Pag-IBIG', 35000);
+  assert.deepEqual([h.employee, h.employer], [200, 200]);
+  assert.match(calculateAgency(null, 'SSS', 15000).error, /No approved Rules/);
+  assert.match(calculateAgency({ ...rule, contributions: { ...rule.contributions, SSS: [] } }, 'SSS', 15000).error, /not configured/);
+  assert.match(calculateAgency({ ...rule, contributions: { ...rule.contributions, SSS: [sss[0]] } }, 'SSS', 15000).error, /no brackets/);
+});
