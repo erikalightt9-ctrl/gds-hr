@@ -54,7 +54,7 @@ export function employeeChecklist(store, actor, employeeId) {
   const list = checklistFor(store, actor, employee);
   // Managers and management see progress only, never the files.
   if (!HR_TEAM.includes(actor.role) && actor.role !== 'employee') return { ...list, items: list.items.map(i => ({ ...i, current: null, versions: [] })) };
-  if (actor.role === 'employee') return { ...list, items: list.items.filter(i => !i.restricted).map(i => ({ ...i, versions: i.versions.filter(v => v.uploadedBy === actor.username) })) };
+  if (actor.role === 'employee') return { ...list, items: list.items.filter(i => !i.restricted && (i.requirement.providedBy || 'employee') === 'employee').map(i => ({ ...i, versions: i.versions.filter(v => v.uploadedBy === actor.username) })) };
   return list;
 }
 

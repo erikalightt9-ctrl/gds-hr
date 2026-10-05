@@ -45,7 +45,7 @@ export function createAdmin(ctx) {
   const lines = list => esc(list.join('\n'));
   function reqRow(r, i) {
     return `<tr data-row="${i}"><td><input data-k="name" value="${esc(r.name)}" maxlength="200" aria-label="Requirement name"></td><td><input data-k="category" value="${esc(r.category)}" maxlength="80" aria-label="Category"></td>
-      <td><input type="checkbox" data-k="required" ${r.required ? 'checked' : ''} aria-label="Required"></td><td><input type="checkbox" data-k="expires" ${r.expires ? 'checked' : ''} aria-label="Has expiry"></td><td><input type="checkbox" data-k="restricted" ${r.restricted ? 'checked' : ''} aria-label="Restricted"></td>
+      <td><input type="checkbox" data-k="required" ${r.required ? 'checked' : ''} aria-label="Required"></td><td><input type="checkbox" data-k="expires" ${r.expires ? 'checked' : ''} aria-label="Has expiry"></td><td><select data-k="providedBy" aria-label="Provided by"><option value="employee"${r.providedBy !== 'company' ? ' selected' : ''}>Employee</option><option value="company"${r.providedBy === 'company' ? ' selected' : ''}>Company / HR</option></select></td><td><input type="checkbox" data-k="restricted" ${r.restricted ? 'checked' : ''} aria-label="Restricted"></td>
       <td><input type="number" min="0" max="365" data-k="dueDays" value="${r.dueDays ?? ''}" aria-label="Due days after hire" class="narrow"></td><td><input data-k="departments" value="${esc(r.departments.join(', '))}" placeholder="All" aria-label="Departments"></td><td><input data-k="classifications" value="${esc(r.classifications.join(', '))}" placeholder="All" aria-label="Classifications"></td>
       <td><button type="button" class="small danger" data-del="${i}">Remove</button></td></tr>`;
   }
@@ -67,8 +67,8 @@ export function createAdmin(ctx) {
         <label class="field">Digits<input type="number" name="idFormat.digits" min="3" max="8" value="${s.idFormat.digits}"></label>
         <label class="field check"><input type="checkbox" name="idFormat.includeYear" ${s.idFormat.includeYear ? 'checked' : ''}> Include year hired</label></div></section>
       <section class="panel"><div class="panel-head"><h2>201 document requirements</h2><button type="button" class="small" data-add-req>＋ Add requirement</button></div>
-        <div class="scroll-table"><table class="settings-table"><thead><tr><th>Requirement</th><th>Category</th><th>Required</th><th>Expires</th><th>Restricted</th><th>Due (days after hire)</th><th>Only for departments</th><th>Only for classifications</th><th></th></tr></thead><tbody id="req-rows">${s.documentRequirements.map(reqRow).join('')}</tbody></table></div>
-        <p class="panel-body legend">Restricted documents (e.g. medical or disciplinary) are visible only to HR Managers and Administrators. Leave departments / classifications blank to apply to everyone.</p></section>
+        <div class="scroll-table"><table class="settings-table"><thead><tr><th>Requirement</th><th>Category</th><th>Required</th><th>Expires</th><th>Provided by</th><th>Restricted</th><th>Due (days after hire)</th><th>Only for departments</th><th>Only for classifications</th><th></th></tr></thead><tbody id="req-rows">${s.documentRequirements.map(reqRow).join('')}</tbody></table></div>
+        <p class="panel-body legend">Restricted documents (e.g. medical or disciplinary) are visible only to HR Managers and Administrators. Leave departments / classifications blank to apply to everyone. Requirements provided by the Company / HR (such as the contract) are not shown in employee accounts.</p></section>
       <section class="panel"><div class="panel-head"><h2>Uploads, reminders and fields</h2></div><div class="panel-body form-grid three">
         <label class="field">Photo size limit (MB)<input type="number" step="0.5" min="0.5" max="10" name="uploads.photoMB" value="${s.uploads.photoMB}"></label>
         <label class="field">Document size limit (MB)<input type="number" min="1" max="20" name="uploads.documentMB" value="${s.uploads.documentMB}"></label>
@@ -87,7 +87,7 @@ export function createAdmin(ctx) {
     const form = document.querySelector('#settings-form');
     form.addEventListener('click', event => {
       const b = event.target.closest('button'); if (!b) return;
-      if (b.hasAttribute('data-add-req')) { collectReqs(); settings.documentRequirements.push({ id: '', name: '', category: 'Other', required: true, expires: false, restricted: false, dueDays: null, departments: [], classifications: [] }); drawSettings(); }
+      if (b.hasAttribute('data-add-req')) { collectReqs(); settings.documentRequirements.push({ id: '', name: '', category: 'Other', required: true, expires: false, restricted: false, providedBy: 'employee', dueDays: null, departments: [], classifications: [] }); drawSettings(); }
       if (b.dataset.del) { collectReqs(); settings.documentRequirements.splice(Number(b.dataset.del), 1); drawSettings(); }
       if (b.hasAttribute('data-accounts')) ctx.openAccounts();
     });
@@ -116,7 +116,7 @@ export function createAdmin(ctx) {
       const name = v('name').value.trim();
       let id = old.id || slug(name); while (taken.has(id)) id = `${id}-2`; taken.add(id);
       const split = s => s.split(',').map(x => x.trim()).filter(Boolean);
-      return { id, name, category: v('category').value.trim() || 'Other', required: v('required').checked, expires: v('expires').checked, restricted: v('restricted').checked, dueDays: v('dueDays').value === '' ? null : Number(v('dueDays').value), departments: split(v('departments').value), classifications: split(v('classifications').value) };
+      return { id, name, category: v('category').value.trim() || 'Other', required: v('required').checked, expires: v('expires').checked, restricted: v('restricted').checked, providedBy: v('providedBy').value === 'company' ? 'company' : 'employee', dueDays: v('dueDays').value === '' ? null : Number(v('dueDays').value), departments: split(v('departments').value), classifications: split(v('classifications').value) };
     });
   }
   return { datasheets, settingsPage };

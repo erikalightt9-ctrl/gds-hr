@@ -6,6 +6,8 @@ import { saveProfile, localToday } from './profiles.mjs';
 import { HR_MANAGERS, HR_TEAM, DIRECTORY, DASHBOARD, SENSITIVE_IDS } from './roles.mjs';
 
 // ---------- Settings ----------
+// Documents the company prepares and files itself; employees are not asked to upload them.
+export const COMPANY_DOCUMENTS = ['contract', 'job-description', 'onboarding', 'evaluation', 'training-cert', 'separation'];
 export const DEFAULT_REQUIREMENTS = [
   ['resume', 'Résumé / CV', 'Application documents', true, false, false],
   ['application-form', 'Application form', 'Application documents', true, false, false],
@@ -22,10 +24,10 @@ export const DEFAULT_REQUIREMENTS = [
   ['evaluation', 'Performance evaluation', 'Performance', false, false, false],
   ['training-cert', 'Training certificates', 'Training', false, false, false],
   ['separation', 'Separation documents (clearance, COE)', 'Separation', false, false, false],
-].map(([id, name, category, required, expires, restricted]) => ({ id, name, category, required, expires, restricted, departments: [], classifications: [], dueDays: { resume: 0, 'application-form': 0, contract: 7, 'job-description': 7, onboarding: 14, 'valid-id': 14, nbi: 30, tin: 30, sss: 30, philhealth: 30, pagibig: 30 }[id] ?? null }));
+].map(([id, name, category, required, expires, restricted]) => ({ id, name, category, required, expires, restricted, providedBy: COMPANY_DOCUMENTS.includes(id) ? 'company' : 'employee', departments: [], classifications: [], dueDays: { resume: 0, 'application-form': 0, contract: 7, 'job-description': 7, onboarding: 14, 'valid-id': 14, nbi: 30, tin: 30, sss: 30, philhealth: 30, pagibig: 30 }[id] ?? null }));
 
 const text = (max = 200) => z.string().trim().max(max);
-const requirementSchema = z.object({ id: z.string().regex(/^[a-z0-9-]{1,60}$/), name: text().min(1), category: text(80).min(1), required: z.boolean(), expires: z.boolean(), restricted: z.boolean(), departments: z.array(text(120)).max(100), classifications: z.array(text(60)).max(30), dueDays: z.number().int().min(0).max(365).nullable().default(null) }).strict();
+const requirementSchema = z.object({ id: z.string().regex(/^[a-z0-9-]{1,60}$/), name: text().min(1), category: text(80).min(1), required: z.boolean(), expires: z.boolean(), restricted: z.boolean(), providedBy: z.enum(['employee', 'company']).default('employee'), departments: z.array(text(120)).max(100), classifications: z.array(text(60)).max(30), dueDays: z.number().int().min(0).max(365).nullable().default(null) }).strict();
 export const settingsSchema = z.object({
   company: z.object({ name: text(120).min(1), systemTitle: text(120).min(1), theme: z.enum(['forest', 'gds']) }).strict(),
   departments: z.array(text(120).min(1)).max(200),
@@ -63,6 +65,8 @@ export function readSettings(store) {
     return { ...base, positions: [...new Set(positions)].sort() };
   }
   const saved = JSON.parse(row.data);
+  // Settings saved before "provided by" existed: company-issued documents default to the company.
+  if (saved.documentRequirements) saved.documentRequirements = saved.documentRequirements.map(r => ({ ...r, providedBy: r.providedBy || (COMPANY_DOCUMENTS.includes(r.id) ? 'company' : 'employee') }));
   return { ...base, ...saved, company: { ...base.company, ...saved.company }, reminders: { ...base.reminders, ...saved.reminders } };
 }
 export function saveSettings(store, actor, input) {

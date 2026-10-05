@@ -377,3 +377,27 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .account-table td:first-child small { display: block; margin-top: 2px; }
 .account-actions { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; }
 .account-actions .small { white-space: nowrap; }
+
+/* ---------- Employee portal header menu ---------- */
+.employee-menu { position: relative; margin-left: auto; }
+.employee-top .menu-toggle { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: #fff; border: 1px solid rgb(217 184 92 / .7); border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: 14px; }
+.employee-top .menu-toggle span { font-size: 18px; line-height: 1; }
+.employee-menu-list { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; min-width: 230px; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: #fff; border: 1px solid #e6d7ae; border-radius: 12px; box-shadow: 0 18px 40px -16px rgb(0 0 0 / .45); }
+.employee-menu-list.hidden { display: none; }
+.employee-menu-list .menu-user { display: flex; flex-direction: column; padding: 8px 10px 10px; border-bottom: 1px solid #f0e6cc; margin-bottom: 4px; color: #171717; font-weight: 700; font-size: 13px; }
+.employee-menu-list .menu-user small { color: #777; font-weight: 500; margin-top: 2px; }
+.employee-menu-list button { text-align: left; width: 100%; border: 0; background: transparent; color: #171717; padding: 11px 10px; border-radius: 8px; font-size: 14px; }
+.employee-menu-list button:hover, .employee-menu-list button:focus-visible { background: #fff5dc; }
+.employee-menu-list .menu-signout { background: #141414; color: #fff; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; text-align: center; margin-top: 4px; }
+.employee-menu-list .menu-signout:hover { background: #000; }
+@media (max-width: 760px) {
+  .employee-top { gap: 12px; }
+  .employee-top .portal-logo { height: 40px; width: 62px; }
+  .employee-top > div:not(.employee-menu) strong { font-size: 13px; line-height: 1.25; }
+  .employee-top .eyebrow { font-size: 10px; letter-spacing: .12em; }
+  .employee-top .menu-toggle { padding: 9px 12px; font-size: 13px; }
+}
+
+.comply-list { margin: 8px 0 6px; padding-left: 22px; }
+.comply-list li { margin: 3px 0; font-weight: 600; }
+.comply-list small { font-weight: 500; }

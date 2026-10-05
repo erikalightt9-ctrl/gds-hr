@@ -200,6 +200,9 @@ test('a requirement the employee uploads from their account lands in the HR reco
     const me = { username: 'lia', role: 'employee', employeeId: id };
     const missing = list => list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status)).map(i => i.requirement.id);
     assert.ok(missing(employeeChecklist(store, me, id)).includes('nbi'), 'the employee sees what is not yet complied');
+    const mine = employeeChecklist(store, me, id).items.map(i => i.requirement.id);
+    assert.ok(!mine.includes('contract') && !mine.includes('job-description'), 'company-provided documents are not on the employee list');
+    assert.ok(employeeChecklist(store, hr, id).items.some(i => i.requirement.id === 'contract'), 'HR still tracks them');
     upload201(store, me, id, { requirementId: 'nbi', name: 'nbi.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2030-01-01' });
     assert.ok(!missing(employeeChecklist(store, me, id)).includes('nbi'), 'uploading lifts the signal');
     const hrView = employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'nbi');
