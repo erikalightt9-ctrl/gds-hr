@@ -232,3 +232,17 @@ dialog.wide-dialog { width: min(980px, calc(100vw - 24px)); }
 .profile-card td { font-size: 14px; color: #1d1a14; }
 .profile-card th { font-size: 11.5px; }
 .profile-card + .legend, .hr-tab-body > .legend { font-size: 13px; }
+
+/* 201 checklist: every category table shares the same column widths so the columns line up. */
+.checklist-panel .scroll-table { overflow-x: auto; }
+.checklist-panel table { table-layout: fixed; min-width: 980px; white-space: normal; }
+.checklist-panel th, .checklist-panel td { padding: 12px 14px; vertical-align: middle; overflow-wrap: anywhere; }
+.checklist-panel th:nth-child(1), .checklist-panel td:nth-child(1) { width: 25%; }
+.checklist-panel th:nth-child(2), .checklist-panel td:nth-child(2) { width: 14%; }
+.checklist-panel th:nth-child(3), .checklist-panel td:nth-child(3) { width: 13%; }
+.checklist-panel th:nth-child(4), .checklist-panel td:nth-child(4) { width: 17%; }
+.checklist-panel th:nth-child(5), .checklist-panel td:nth-child(5) { width: 11%; }
+.checklist-panel th:nth-child(6), .checklist-panel td:nth-child(6) { width: 20%; }
+.checklist-panel td:nth-child(2) .badge { margin-right: 4px; }
+.checklist-panel .row-actions { flex-wrap: wrap; }
+.checklist-panel .hr-group-title { margin: 22px 18px 8px; }

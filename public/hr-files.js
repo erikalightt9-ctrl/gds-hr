@@ -213,7 +213,7 @@ export function createFiles(ctx) {
   function documentsTab(record, checklist) {
     const manage = can().manage && !record.archived, approve = can().approve;
     const groups = [...new Set(checklist.items.map(i => i.requirement.category))];
-    return `<section class="panel"><div class="panel-head"><div><h2>Digital 201 checklist</h2><p>Completion counts only current, verified, required documents.</p></div>${progress(checklist.percent, `${checklist.completeCount}/${checklist.requiredCount} verified`)}</div>
+    return `<section class="panel checklist-panel"><div class="panel-head"><div><h2>Digital 201 checklist</h2><p>Completion counts only current, verified, required documents.</p></div>${progress(checklist.percent, `${checklist.completeCount}/${checklist.requiredCount} verified`)}</div>
       ${groups.map(g => `<h3 class="hr-group-title">${esc(g)}</h3>${table(['Requirement', 'Status', 'Due / expiry', 'Current file', 'Reviewed', 'Actions'], checklist.items.filter(i => i.requirement.category === g).map(i => {
         const c = i.current;
         return [`${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}${i.restricted ? ' <small>🔒 restricted</small>' : ''}`,
