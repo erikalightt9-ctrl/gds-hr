@@ -144,6 +144,22 @@ export function deleteRecord(store, actor, kind, id) {
     store.write(state); store.log(actor, 'delete', kind, id, value, null);
   });
 }
+// HR decision on an employee's leave request. Approval re-runs every leave check (eligibility, balance, overlap,
+// posted payroll) through saveRecord; balances are derived from approved leave, so the employee's and HR's views
+// always show the same figure and nothing is deducted twice. Cancelling approved leave restores the credits.
+export function reviewLeave(store, actor, id, input) {
+  permit(actor, ['admin', 'hr']);
+  const decision = ['approve', 'reject', 'cancel'].includes(input?.decision) ? input.decision : null, remarks = String(input?.remarks ?? '').trim();
+  if (!decision) throw new AppError('Choose approve, reject or cancel.');
+  if (remarks.length > 1000) throw new AppError('Keep remarks under 1,000 characters.');
+  if (decision !== 'approve' && remarks.length < 3) throw new AppError(decision === 'reject' ? 'Give the employee a reason for the rejection.' : 'Give a reason for cancelling the approved leave.');
+  const leave = store.read().leaves.find(l => l.id === id);
+  if (!leave) throw new AppError('Leave request not found.', 404);
+  if (decision !== 'cancel' && leave.status !== 'pending') throw new AppError(`This request is already ${leave.status}.`);
+  if (decision === 'cancel' && leave.status !== 'approved') throw new AppError('Only approved leave can be cancelled here.');
+  const status = { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }[decision];
+  return saveRecord(store, actor, 'leaves', { ...leave, status, hrRemarks: remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(decision === 'approve' ? { eligibilityVerified: true } : {}) });
+}
 export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll(store.read(), start, end, pay13th, employeeIds);
 export function postPayroll(store, actor, request) {
   permit(actor, ['admin', 'payroll']);

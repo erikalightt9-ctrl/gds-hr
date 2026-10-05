@@ -13,7 +13,7 @@ import { publicBranding } from './hr201.mjs';
 import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
-import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles } from './service.mjs';
+import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave } from './service.mjs';
 import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, configureMfa } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
@@ -156,6 +156,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/live/correct' && req.method === 'POST') { send(200, correctClock(store, auth.user, await readBody(req))); return; }
       const explanationReview = pathname.match(/^\/api\/explanations\/([a-f0-9-]+)\/review$/);
       if (explanationReview && req.method === 'POST') { send(200, reviewExplanation(store, auth.user, explanationReview[1], await readBody(req))); return; }
+      const leaveDecision = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/decision$/);
+      if (leaveDecision && req.method === 'POST') { send(200, reviewLeave(store, auth.user, leaveDecision[1], await readBody(req))); return; }
       const proofReview = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/proof-review$/);
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
       const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email)$/);

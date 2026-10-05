@@ -60,6 +60,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   if (pathname === '/api/hr/notifications' && method === 'GET') {
     permit(actor, DASHBOARD);
     const items = [];
+    if (['admin', 'hr'].includes(actor.role)) { const leaves = store.read().leaves.filter(l => l.status === 'pending').length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave' }); }
     if (HR_TEAM.includes(actor.role)) {
       const docs = documentSummary(store, actor), sheets = pendingSheets(store);
       if (sheets) items.push({ text: `${sheets} data sheet${sheets === 1 ? '' : 's'} awaiting review`, nav: 'datasheets' });

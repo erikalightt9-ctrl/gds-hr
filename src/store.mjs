@@ -62,7 +62,7 @@ export class Store {
   notify(employeeId, message) { this.db.prepare('INSERT INTO notifications VALUES(?,?,?,?)').run(randomUUID(), employeeId, new Date().toISOString(), message); }
   log(actor, action, kind, id, before, after) {
     this.db.prepare('INSERT INTO audit VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), new Date().toISOString(), actor.username, action, kind, id, before == null ? null : JSON.stringify(before), after == null ? null : JSON.stringify(after));
-    if (kind === 'leaves' && after?.employeeId) { this.notify(after.employeeId, `Leave request ${after.startDate} to ${after.endDate}: ${after.status}.`); this.notify(null, `${after.employeeId}: leave request ${after.status}.`); }
+    if (kind === 'leaves' && after?.employeeId) { this.notify(after.employeeId, `Leave request ${after.startDate} to ${after.endDate}: ${after.status}${after.hrRemarks ? ` — HR remarks: ${after.hrRemarks}` : ''}.`); this.notify(null, `${after.employeeId}: leave request ${after.status}.`); }
     if (kind === 'runs' && action === 'post') for (const row of after?.rows || []) this.notify(row.employeeId, `Your payslip for ${after.start} to ${after.end} is available.`);
     this.changed = true; if (!this.inTransaction) this.emitChange();
   }
