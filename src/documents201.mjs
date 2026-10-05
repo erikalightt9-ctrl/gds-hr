@@ -91,6 +91,7 @@ export function upload201(store, actor, employeeId, input) {
     };
     store.db.prepare('INSERT INTO employee_documents VALUES(?,?,?,?)').run(meta.id, employeeId, JSON.stringify(meta), bytes);
     store.db.prepare('DELETE FROM requirement_overrides WHERE employee_id=? AND requirement_id=?').run(employeeId, req.id);
+    if (self) store.notify(null, `${employee.name} uploaded “${req.name}” from their account. Waiting for HR review.`);
     store.log(actor, previous ? 'replace' : 'upload', `document:${TYPE}`, employeeId, previous ? { id: previous.id, version: previous.version } : null, { id: meta.id, requirement: req.name, version: meta.version, reason: v.replaceReason });
     return meta;
   });

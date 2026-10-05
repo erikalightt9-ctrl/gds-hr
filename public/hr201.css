@@ -362,3 +362,11 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .email-cell > span { overflow-wrap: anywhere; }
 .email-cell .small, .row-actions .small { white-space: nowrap; }
 .reset-mfa { display: flex; align-items: center; gap: 8px; margin: 6px 0 12px; font-weight: 600; }
+
+/* ---------- Employee 201 compliance signal ---------- */
+.compliance-alert { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 16px; padding: 16px 20px; border-radius: 14px; border: 1px solid #e3a1a8; border-left: 5px solid #c4283a; background: #fff3f4; color: #5a1018; }
+.compliance-alert strong { display: block; font-size: 15px; margin-bottom: 4px; }
+.compliance-alert p { margin: 2px 0; }
+.compliance-alert .primary { white-space: nowrap; }
+.nav-flag { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: #c4283a; color: #fff; font-size: 11.5px; font-weight: 800; }
+@media (max-width: 720px) { .compliance-alert { flex-direction: column; align-items: flex-start; } }

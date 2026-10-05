@@ -192,3 +192,19 @@ test('employees see their own profile in the shared layout data, never anyone el
     assert.throws(() => employeeForm(store, ana, b), /only open your own/);
   } finally { store.close(); }
 });
+
+test('a requirement the employee uploads from their account lands in the HR record and notifies HR', () => {
+  const store = fresh();
+  try {
+    const id = createEmployee(store, hr, form('Lia', 'Demo')).created.id;
+    const me = { username: 'lia', role: 'employee', employeeId: id };
+    const missing = list => list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status)).map(i => i.requirement.id);
+    assert.ok(missing(employeeChecklist(store, me, id)).includes('nbi'), 'the employee sees what is not yet complied');
+    upload201(store, me, id, { requirementId: 'nbi', name: 'nbi.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2030-01-01' });
+    assert.ok(!missing(employeeChecklist(store, me, id)).includes('nbi'), 'uploading lifts the signal');
+    const hrView = employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'nbi');
+    assert.equal(hrView.status, 'Submitted'); assert.equal(hrView.current.uploadedBy, 'lia');
+    assert.ok(documentSummary(store, hr).pendingReview >= 1, 'HR bell counts it for review');
+    assert.match(store.db.prepare('SELECT message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 1').get().message, /uploaded “NBI clearance”/);
+  } finally { store.close(); }
+});

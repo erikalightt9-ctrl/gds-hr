@@ -73,6 +73,7 @@ export function createPortal(ctx) {
     clearInterval(clockTimer); updateClock(); clockTimer = setInterval(updateClock, 1000);
     if (isHr) ctx.portalHr.fill(tab, app.querySelector('#portal-hr'));
     if (tab === 'dashboard') ctx.portalHr?.celebrations(app.querySelector('.employee-main'));
+    ctx.portalHr?.compliance(app, tab === 'dashboard');
     app.querySelectorAll('form').forEach(form => { form.oninput = () => { dirty = true; }; form.onchange = () => { dirty = true; }; form.onsubmit = submitForm; });
     async function submitForm(event) {
       event.preventDefault(); const form = event.target, b = form.querySelector('button'); b.disabled = true;

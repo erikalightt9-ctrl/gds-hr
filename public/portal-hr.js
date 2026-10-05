@@ -109,9 +109,27 @@ export function createPortalHr({ api, esc, table, toast }) {
     form.onsubmit = event => { event.preventDefault(); if (window.confirm('Submit your data sheet to HR for review?')) save(true); };
   }
 
+  // Required items the employee still has to upload (missing, rejected or expired). Uploading lifts the signal;
+  // a file HR rejects, or one that expires, raises it again.
+  const toComply = list => list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status));
+  const STATUS_TEXT = { Missing: 'Not complied — upload required', Rejected: 'Rejected — upload again', Expired: 'Expired — upload a renewed copy', Submitted: 'Submitted — waiting for HR review', 'Under Review': 'Under HR review', Verified: 'Complied', 'Not Applicable': 'Not applicable' };
+  async function compliance(app, onDashboard) {
+    try {
+      const list = await api('/hr/me/documents'), due = toComply(list);
+      const tabButton = app.querySelector('[data-portal-tab="files201"]');
+      if (tabButton && due.length && !tabButton.querySelector('.nav-flag')) tabButton.insertAdjacentHTML('beforeend', `<span class="nav-flag" aria-label="${due.length} requirement${due.length === 1 ? '' : 's'} to upload">${due.length}</span>`);
+      const main = app.querySelector('.employee-main');
+      if (!onDashboard || !due.length || !main || main.querySelector('.compliance-alert')) return;
+      const box = document.createElement('section'); box.className = 'compliance-alert'; box.setAttribute('role', 'alert');
+      box.innerHTML = `<div><strong>⚠️ Not complied: ${due.length} 201 file requirement${due.length === 1 ? '' : 's'} to upload</strong><p>${due.map(i => `${esc(i.requirement.name)} <small>(${esc(STATUS_TEXT[i.status])})</small>`).join(' · ')}</p><p class="legend">Upload ${due.length === 1 ? 'it' : 'them'} in My 201 documents. This notice is lifted once every required file is uploaded.</p></div><button class="primary" data-portal-tab="files201">Upload now</button>`;
+      const anchor = main.querySelector('.employee-welcome');
+      if (anchor) anchor.after(box); else main.prepend(box);
+    } catch { /* the checklist is optional on the dashboard */ }
+  }
   function documents(box, list) {
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>My 201 documents</h2><p>Upload what HR asked for. HR checks each file before it counts as complete.</p></div><span class="legend">${list.completeCount} of ${list.requiredCount} required documents verified</span></div>
-      ${table(['Requirement', 'Status', 'Due / expiry', 'Your upload', ''], list.items.map(i => [`${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}`, `${badge(i.status, DOC_BADGE[i.status])}${i.current?.reviewNote && i.status === 'Rejected' ? `<small>${esc(i.current.reviewNote)}</small>` : ''}`, i.current?.expiryDate ? `Expires ${fmtDate(i.current.expiryDate)}` : i.due ? `Due ${fmtDate(i.due)}` : '—', i.versions[0] ? `<a href="/api/hr/me/documents/${i.versions[0].id}/content" target="_blank" rel="noopener">${esc(i.versions[0].name)}</a>` : '—',
+    const due = toComply(list);
+    box.innerHTML = `${due.length ? `<div class="compliance-alert" role="alert"><div><strong>⚠️ ${due.length} required document${due.length === 1 ? ' is' : 's are'} not yet complied</strong><p class="legend">Upload ${due.length === 1 ? 'it' : 'each one'} below. The notice is lifted as soon as the file is uploaded; HR then reviews it.</p></div></div>` : `<div class="notice success">All required documents are uploaded${list.completeCount < list.requiredCount ? '; HR is reviewing the rest' : ' and verified'}.</div>`}<section class="panel"><div class="panel-head"><div><h2>My 201 documents</h2><p>Upload what HR asked for. HR checks each file before it counts as complete.</p></div><span class="legend">${list.completeCount} of ${list.requiredCount} required documents verified</span></div>
+      ${table(['Requirement', 'Status', 'Due / expiry', 'Your upload', ''], list.items.map(i => [`${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}`, `${badge(STATUS_TEXT[i.status] || i.status, DOC_BADGE[i.status])}${i.current?.reviewNote && i.status === 'Rejected' ? `<small>${esc(i.current.reviewNote)}</small>` : ''}`, i.current?.expiryDate ? `Expires ${fmtDate(i.current.expiryDate)}` : i.due ? `Due ${fmtDate(i.due)}` : '—', i.versions[0] ? `<a href="/api/hr/me/documents/${i.versions[0].id}/content" target="_blank" rel="noopener">${esc(i.versions[0].name)}</a>` : '—',
         ['Missing', 'Rejected', 'Expired'].includes(i.status) ? `<label class="small-file">Upload<input type="file" data-up="${esc(i.requirement.id)}" accept="application/pdf,image/png,image/jpeg" hidden></label>` : '']), 'No documents are required right now.')}
       <p class="panel-body legend">PDF, JPG or PNG. Sensitive documents (such as medical records) are handled directly by HR.</p></section>`;
     box.onchange = async event => {
@@ -132,5 +150,5 @@ export function createPortalHr({ api, esc, table, toast }) {
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
 }
