@@ -81,8 +81,8 @@ export function createFiles(ctx) {
     if (b.dataset.restore) { try { await api(`/hr/employees/${encodeURIComponent(b.dataset.restore)}/restore`, {}); toast('Employee restored.'); await directory(); } catch (e) { toast(e.message); } }
   }
   function addEmployee() { openEmployeeForm({ ...ctx, context: ctx.context() }, { title: 'Add employee', values: { employment: { dateHired: ctx.today(), status: 'Active' } }, onSaved: id => openProfile(id) }); }
-  async function editEmployee(id, after) {
-    try { const data = await api(`/hr/employees/${encodeURIComponent(id)}`); openEmployeeForm({ ...ctx, context: ctx.context() }, { id, title: `Edit ${data.name}`, values: data.form, onSaved: () => after() }); } catch (e) { toast(e.message); }
+  async function editEmployee(id, after, only = null, label = '') {
+    try { const data = await api(`/hr/employees/${encodeURIComponent(id)}`); openEmployeeForm({ ...ctx, context: ctx.context() }, { id, title: `Edit ${label ? `${label} · ` : ''}${data.name}`, values: data.form, only, onSaved: () => after() }); } catch (e) { toast(e.message); }
   }
   function archive(id) {
     const person = people.find(p => p.id === id);
@@ -111,7 +111,7 @@ export function createFiles(ctx) {
       <div class="actions"><button class="small" data-back>← All employees</button>${record.canEdit && !record.archived ? '<button class="small primary" data-edit-self>Edit record</button>' : ''}${legacy ? `<button class="small" data-legacy-profile="${esc(id)}">Attendance, leave &amp; pay →</button>` : ''}</div></section>`;
     const infoCard = (icon, label, value) => `<div class="info-card"><span class="info-icon" aria-hidden="true">${icon}</span><span><small>${esc(label)}</small><strong>${esc(value || '—')}</strong></span></div>`;
     const info = `<div class="info-cards">${infoCard('📅', 'Years of service', serviceLength(f.employment.dateHired, today))}${infoCard('💼', 'Employment type', f.employment.employmentType || 'Not set')}${infoCard('📈', 'Job level', f.employment.jobLevel || 'Not set')}${infoCard('🗓️', 'Date hired', fmtDate(f.employment.dateHired))}</div>`;
-    const tabBar = `<section class="panel profile-tabs-panel"><div class="tabs hr-tabs profile-tab-grid" role="tablist">${tabs.map(([key, text, icon]) => `<button role="tab" aria-selected="${key === tab}" class="${key === tab ? 'active' : ''}" data-tab-select="${key}"><span aria-hidden="true">${icon}</span> ${text}</button>`).join('')}</div><div class="hr-tab-body">${tabBody(record, checklist, extra, extras)}</div></section>`;
+    const tabBar = `<section class="panel profile-tabs-panel"><div class="tabs hr-tabs profile-tab-grid" role="tablist">${tabs.map(([key, text, icon]) => `<button role="tab" aria-selected="${key === tab}" class="${key === tab ? 'active' : ''}" data-tab-select="${key}"><span aria-hidden="true">${icon}</span> ${text}</button>`).join('')}</div><div class="hr-tab-body">${safeBody(record, checklist, extra, extras)}</div></section>`;
     shell(header + info + tabBar);
     const root = document.querySelector('.content');
     root.querySelector('[data-photo]')?.addEventListener('error', event => event.target.remove());
@@ -121,8 +121,12 @@ export function createFiles(ctx) {
   const dl = rows => `<dl class="details-grid hr-details">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v === '' || v === undefined || v === null ? '<span class="muted">—</span>' : esc(v)}</dd></div>`).join('')}</dl>`;
   const block = (icon, title, body, action = '') => `<div class="profile-block"><h3 class="profile-block-title"><span aria-hidden="true">${icon}</span> ${esc(title)}${action}</h3>${body}</div>`;
   const editBtn = (section, canEdit) => (canEdit ? ` <button class="small" data-edit-section="${section}">Edit</button>` : '');
+  const formBtn = (part, canEdit) => (canEdit ? ` <button class="small" data-edit-part="${part}">Edit</button>` : '');
   function personalRows(f) { return [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ...(f.personal.bloodType ? [['Blood type', f.personal.bloodType]] : []), ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]; }
   function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Department', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
+  function safeBody(...args) {
+    try { return tabBody(...args); } catch (error) { return `<div class="notice">This tab could not be shown: ${esc(error.message)}. Reload the page (Ctrl+F5) and try again.</div>`; }
+  }
   function tabBody(record, checklist, extra, extras) {
     const f = record.form, edit = extras.canEdit && !record.archived;
     if (tab === 'overview') {
@@ -130,37 +134,37 @@ export function createFiles(ctx) {
       const stat = (icon, label, value, sub, percent = null) => `<div class="overview-stat"><span><span aria-hidden="true">${icon}</span> ${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small>${percent === null ? '' : `<span class="hr-progress full"><span class="hr-progress-bar w${Math.round(percent / 5) * 5}"></span></span>`}</div>`;
       const outstanding = checklist.items.filter(i => i.requirement.required && !['Verified', 'Not Applicable'].includes(i.status));
       return `<div class="overview-stats">${stat('✅', 'Requirements', `${checklist.completeCount} / ${checklist.requiredCount}`, 'Complete', checklist.percent)}${stat('📁', 'Documents', docs, 'Total files')}${stat('🏅', 'Trainings', `${trainingsDone} / ${extra.trainings.length}`, 'Complete', extra.trainings.length ? Math.round(trainingsDone / extra.trainings.length * 100) : 0)}${stat('📝', 'Memos', extra.memos.length, `${acked} acknowledged`)}</div>
-        ${block('👤', 'Personal information', dl(personalRows(f)))}
-        ${block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]))}
-        ${block('💼', 'Employment information', dl(employmentRows(record)))}
+        ${block('👤', 'Personal information', dl(personalRows(f)), formBtn('personal', edit))}
+        ${block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]), formBtn('emergency', edit))}
+        ${block('💼', 'Employment information', dl(employmentRows(record)), formBtn('employment', edit))}
         ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
-    if (tab === 'personal') return block('👤', 'Personal information', dl(personalRows(f))) + block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]));
-    if (tab === 'employment') return block('💼', 'Employment information', dl(employmentRows(record))) + '<p class="legend">Active / inactive status and employment classification are separate. Probation and review dates are reminders only; the system never changes status by itself.</p>';
+    if (tab === 'personal') return block('👤', 'Personal information', dl(personalRows(f)), formBtn('personal', edit)) + block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]), formBtn('emergency', edit));
+    if (tab === 'employment') return block('💼', 'Employment information', dl(employmentRows(record)), formBtn('employment', edit)) + '<p class="legend">Active / inactive status and employment classification are separate. Probation and review dates are reminders only; the system never changes status by itself.</p>';
     if (tab === 'compensation') {
       const c = extras.compensation, daily = c.basis === 'daily';
-      return block('💰', 'Pay', dl([['Pay basis', daily ? 'Daily-paid' : 'Monthly'], [daily ? 'Daily rate' : 'Monthly salary', ctx.money(daily ? c.dailyRate : c.monthlySalary)], ...(daily ? [['Monthly equivalent', ctx.money(c.monthlySalary)]] : [['Daily rate', c.dailyRate === null ? 'From company divisor' : ctx.money(c.dailyRate)]]), ['Payroll frequency', c.frequency || 'Company default'], ['Payroll status', c.status]]))
-        + block('✔️', 'Pay coverage', dl([['Overtime', c.coveredOT ? 'Covered' : 'Not covered'], ['Night differential', c.coveredNSD ? 'Covered' : 'Not covered'], ['Holiday pay', c.coveredHoliday ? 'Covered' : 'Not covered'], ['13th month pay', c.covered13th ? 'Covered' : 'Not covered']]))
-        + block('➖', 'Active company deductions', table(['Deduction', 'Amount', 'When'], c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule)]), 'No active company deductions.'))
+      return block('💰', 'Pay', dl([['Pay basis', daily ? 'Daily-paid' : 'Monthly'], [daily ? 'Daily rate' : 'Monthly salary', ctx.money(daily ? c.dailyRate : c.monthlySalary)], ...(daily ? [['Monthly equivalent', ctx.money(c.monthlySalary)]] : [['Daily rate', c.dailyRate === null ? 'From company divisor' : ctx.money(c.dailyRate)]]), ['Payroll frequency', c.frequency || 'Company default'], ['Payroll status', c.status]]), extras.canEditPay ? ' <button class="small" data-edit-pay>Edit pay</button>' : '')
+        + block('✔️', 'Pay coverage', dl([['Overtime', c.coveredOT ? 'Covered' : 'Not covered'], ['Night differential', c.coveredNSD ? 'Covered' : 'Not covered'], ['Holiday pay', c.coveredHoliday ? 'Covered' : 'Not covered'], ['13th month pay', c.covered13th ? 'Covered' : 'Not covered']]), extras.canEditPay ? ' <button class="small" data-edit-pay>Edit coverage</button>' : '')
+        + block('➖', 'Active company deductions', table(['Deduction', 'Amount', 'When'], c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule)]), 'No active company deductions.'), ctx.legacy() ? ' <button class="small" data-go-deductions>Manage deductions</button>' : '')
         + (ctx.legacy() ? `<p class="legend">Salary, schedule and contributions are edited under <button class="link-button" data-legacy-profile="${esc(record.id)}">Attendance, leave &amp; pay</button>.</p>` : '');
     }
-    if (tab === 'government') return block('🪪', 'Government IDs', dl([['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]])) + `<p class="legend">${record.sensitiveIds ? 'Shown in full to authorised roles only. Edit them with Edit record.' : 'Masked for your role.'}</p>`;
+    if (tab === 'government') return block('🪪', 'Government IDs', dl([['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]), formBtn('government', edit && record.sensitiveIds && ctx.context().can.approve)) + `<p class="legend">${record.sensitiveIds ? 'Shown in full to authorised roles only. HR Managers and Administrators can edit them.' : 'Masked for your role.'}</p>`;
     if (tab === 'family') {
       const fam = extras.family;
       return block('💑', 'Spouse', dl([['Name', fam.spouse.name], ['Occupation', fam.spouse.occupation], ['Contact', fam.spouse.contact]]), editBtn('family', edit))
-        + block('👪', 'Parents', dl([["Father's name", fam.father.name], ["Father's occupation", fam.father.occupation], ["Mother's maiden name", fam.mother.name], ["Mother's occupation", fam.mother.occupation]]))
-        + block('🧒', 'Children', table(['Name', 'Date of birth'], fam.children.map(c => [esc(c.name), c.birthDate ? fmtDate(c.birthDate) : '—']), 'No children recorded.'));
+        + block('👪', 'Parents', dl([["Father's name", fam.father.name], ["Father's occupation", fam.father.occupation], ["Mother's maiden name", fam.mother.name], ["Mother's occupation", fam.mother.occupation]]), editBtn('family', edit))
+        + block('🧒', 'Children', table(['Name', 'Date of birth'], fam.children.map(c => [esc(c.name), c.birthDate ? fmtDate(c.birthDate) : '—']), 'No children recorded.'), editBtn('family', edit));
     }
     if (tab === 'education') return block('🎓', 'Education', table(['Level', 'School', 'Course / strand', 'Years', 'Honors'], extras.education.entries.map(x => [esc(x.level), esc(x.school), esc(x.course || '—'), esc([x.yearFrom, x.yearTo].filter(Boolean).join('–') || '—'), esc(x.honors || '—')]), 'No education recorded.'), editBtn('education', edit));
     if (tab === 'history') return block('🕘', 'Previous employment', table(['Company', 'Position', 'From', 'To', 'Reason for leaving'], extras.history.entries.map(x => [esc(x.company), esc(x.position || '—'), x.from ? fmtDate(x.from) : '—', x.to ? fmtDate(x.to) : '—', esc(x.reason || '—')]), 'No previous employment recorded.'), editBtn('history', edit))
-      + block('🏢', 'With GDS', dl([['Date hired', fmtDate(f.employment.dateHired)], ['Current position', f.employment.position], ['Department', f.employment.department], ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]));
+      + block('🏢', 'With GDS', dl([['Date hired', fmtDate(f.employment.dateHired)], ['Current position', f.employment.position], ['Department', f.employment.department], ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]), formBtn('employment', edit));
     if (tab === 'requirements') return documentsTab(record, checklist);
     if (tab === 'documents') {
       const files = checklist.items.flatMap(i => i.versions.map(v => ({ ...v, current: i.current?.id === v.id })));
       return block('📁', 'All 201 files', table(['File', 'Requirement', 'Version', 'Uploaded', 'Review', ''], files.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(v => [`<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, esc(v.requirementName || ''), `v${v.version}${v.current ? ' <small>current</small>' : ' <small>earlier</small>'}`, `${fmtDateTime(v.uploadedAt)}<small>${esc(v.uploadedBy)}</small>`, badge(v.reviewStatus, DOC_BADGE[v.reviewStatus]), `<a class="small download-link" href="/api/hr/documents/${v.id}/content?download=1">Download</a>`]), 'No files uploaded yet. Upload them from the Requirements tab.'));
     }
-    if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'));
-    if (tab === 'trainings') return block('🏅', 'Training records', table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(x => [esc(x.title), fmtDate(x.date), x.required ? 'Required' : 'Optional', esc(x.registration), esc(x.attendance), x.completion === 'completed' ? badge('Completed') : esc(x.completion)]), 'No trainings assigned.'));
+    if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'), edit ? ' <button class="small" data-go-memos>Send a memo</button>' : '');
+    if (tab === 'trainings') return block('🏅', 'Training records', table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(x => [esc(x.title), fmtDate(x.date), x.required ? 'Required' : 'Optional', esc(x.registration), esc(x.attendance), x.completion === 'completed' ? badge('Completed') : esc(x.completion)]), 'No trainings assigned.'), edit ? ' <button class="small" data-go-trainings>Assign a training</button>' : '');
     return block('↺', 'Activity history', table(['When', 'Who', 'Action', 'Area'], extra.activity.map(a => [fmtDateTime(a.at), esc(a.actor), esc(a.action), esc(a.area)]), record.canEdit ? 'No recorded activity yet.' : 'Activity history is available to HR.')) + '<p class="legend">Changes are listed without their values; sensitive details stay in the restricted audit trail.</p>';
   }
   // Repeating-row editors for family, education and previous employment.
@@ -224,6 +228,14 @@ export function createFiles(ctx) {
       if (b.hasAttribute('data-edit-self')) { editEmployee(id, drawProfile); return; }
       if (b.dataset.legacyProfile) { ctx.openLegacyProfile(b.dataset.legacyProfile); return; }
       if (b.dataset.editSection) { sectionDialog(b.dataset.editSection, extras); return; }
+      if (b.dataset.editPart) {
+        const parts = { personal: [['Personal information', 'Contact information'], 'personal information'], emergency: [['Emergency contact'], 'emergency contact'], employment: [['Employment information'], 'employment'], government: [['Government identifiers (restricted)'], 'government IDs'] }[b.dataset.editPart];
+        editEmployee(id, drawProfile, parts[0], parts[1]); return;
+      }
+      if (b.hasAttribute('data-edit-pay')) { ctx.editPay(id); return; }
+      if (b.hasAttribute('data-go-deductions')) { ctx.go({ page: 'deductions' }); return; }
+      if (b.hasAttribute('data-go-memos')) { ctx.go({ page: 'memos' }); return; }
+      if (b.hasAttribute('data-go-trainings')) { ctx.go({ page: 'trainings' }); return; }
       if (b.dataset.upload) uploadDialog(checklist.items.find(i => i.requirement.id === b.dataset.upload));
       if (b.dataset.review) reviewDialog(b.dataset.review, b.dataset.req);
       if (b.dataset.versions) versionsDialog(checklist.items.find(i => i.requirement.id === b.dataset.versions));

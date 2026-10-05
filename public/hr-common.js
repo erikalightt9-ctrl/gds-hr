@@ -27,7 +27,7 @@ const SECTIONS = ctx => [
   ...(ctx.can.sensitiveIds ? [['Government identifiers (restricted)', [['government.tin', 'TIN'], ['government.sss', 'SSS number'], ['government.philHealth', 'PhilHealth number'], ['government.pagIbig', 'Pag-IBIG MID']]]] : []),
 ];
 const get = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj) ?? '';
-export function employeeFormHtml(ctx, esc, values = {}, { isNew = true } = {}) {
+export function employeeFormHtml(ctx, esc, values = {}, { isNew = true, only = null } = {}) {
   const lists = [];
   const control = ([path, title, type = 'text', opt = {}]) => {
     const id = `ef-${path.replace('.', '-')}`, v = get(values, path), req = opt.required ? 'required' : '', star = opt.required ? ' <span class="req">*</span>' : '';
@@ -40,8 +40,8 @@ export function employeeFormHtml(ctx, esc, values = {}, { isNew = true } = {}) {
   };
   return `<form id="employee-form" novalidate><div class="dialog-body">
     <div id="ef-errors" class="form-error hidden" role="alert"></div>
-    ${isNew ? `<div class="photo-row"><span class="hr-avatar" id="ef-photo-preview">?</span><label class="button-like">Upload photo<input type="file" id="ef-photo" accept="image/png,image/jpeg" hidden></label><small>JPG or PNG, up to ${ctx.uploads.photoMB} MB.</small></div>` : ''}
-    ${SECTIONS(ctx).map(([title, fields]) => `<fieldset class="form-section-box"><legend>${esc(title)}</legend><div class="form-grid">${fields.map(control).join('')}</div></fieldset>`).join('')}
+    ${isNew && !only ? `<div class="photo-row"><span class="hr-avatar" id="ef-photo-preview">?</span><label class="button-like">Upload photo<input type="file" id="ef-photo" accept="image/png,image/jpeg" hidden></label><small>JPG or PNG, up to ${ctx.uploads.photoMB} MB.</small></div>` : ''}
+    ${SECTIONS(ctx).map(([title, fields]) => `<fieldset class="form-section-box ${only && !only.includes(title) ? 'hidden' : ''}"><legend>${esc(title)}</legend><div class="form-grid">${fields.map(control).join('')}</div></fieldset>`).join('')}
     ${lists.join('')}
     <div id="ef-duplicates"></div>
   </div><div class="dialog-foot"><button type="button" data-ef-cancel>Cancel</button><button class="primary" type="submit">Save employee</button></div></form>`;
@@ -68,8 +68,8 @@ function clientErrors(v) {
   return errors;
 }
 // Opens the form; resolves after a successful save with the saved employee id.
-export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context }, { id = null, values = {}, title = 'Add employee', onSaved }) {
-  openDialog(title, employeeFormHtml(context, esc, values, { isNew: !id }));
+export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context }, { id = null, values = {}, title = 'Add employee', onSaved, only = null }) {
+  openDialog(title, employeeFormHtml(context, esc, values, { isNew: !id, only }));
   dialog.classList.add('wide-dialog');
   const form = dialog.querySelector('#employee-form');
   let dirty = false, photo = null;
@@ -92,7 +92,7 @@ export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context 
   const save = async (confirmDuplicate = false) => {
     const value = collect(form), errors = clientErrors(value), box = form.querySelector('#ef-errors');
     form.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
-    if (errors.length) { box.textContent = errors.join(' '); box.classList.remove('hidden'); form.querySelectorAll('[required]').forEach(el => { if (!el.value.trim()) el.setAttribute('aria-invalid', 'true'); }); box.scrollIntoView({ block: 'nearest' }); return; }
+    if (errors.length) { box.textContent = errors.join(' '); box.classList.remove('hidden'); form.querySelectorAll('[required]').forEach(el => { if (!el.value.trim()) { el.setAttribute('aria-invalid', 'true'); el.closest('fieldset')?.classList.remove('hidden'); } }); box.scrollIntoView({ block: 'nearest' }); return; }
     box.classList.add('hidden');
     const submit = form.querySelector('[type=submit]'); submit.disabled = true; submit.textContent = 'Saving…';
     try {

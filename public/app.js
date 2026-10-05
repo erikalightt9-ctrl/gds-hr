@@ -138,6 +138,7 @@ const hrCtx = {
   setPage: p => { page = p; }, refresh: () => refresh(), daysAgo: n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10),
   go: nav => goTo(nav), quick: kind => (kind === 'employee' ? files.addEmployee() : kind === 'memo' ? memos.create() : trainings.create()),
   openLegacyProfile: async id => { page = 'profile'; await profiles.open(id, 'personal'); },
+  editPay: id => edit('employees', id),
   reloadContext: async () => { hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme); },
   openAccounts: () => account(),
 };
