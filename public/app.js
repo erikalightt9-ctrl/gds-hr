@@ -78,7 +78,7 @@ function table(headers, rows, empty = 'No records yet. Add your first record to 
   return `<div class="scroll-table"><table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map(r => `<tr>${r.map(c => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}" class="empty"><strong>Nothing here yet</strong>${esc(empty)}</td></tr>`}</tbody></table></div>`;
 }
 function card(title, value, foot, featured = false) { return `<div class="card ${featured ? 'featured' : ''}"><div class="card-label">${title}<span class="tiny-icon">↗</span></div><div class="card-value number">${value}</div><div class="card-foot">${foot}</div></div>`; }
-function heading(title, subtitle, actions = '') { return `<div class="page-heading"><div><div class="eyebrow">People operations</div><h1>${title}</h1><p class="sub">${subtitle}</p></div><div class="actions">${actions}</div></div>`; }
+function heading(title, subtitle, actions = '') { const parent = auth?.user && groupOf(page); return `<div class="page-heading"><div><div class="eyebrow">${parent ? `<nav aria-label="Breadcrumb" class="breadcrumb">${esc(parent.label)} › <span aria-current="page">${esc(navGroups().flatMap(g => g[1]).find(n => n[0] === page)?.[1] || '')}</span></nav>` : 'People operations'}</div><h1>${title}</h1><p class="sub">${subtitle}</p></div><div class="actions">${actions}</div></div>`; }
 function editButton(kind, id) { return canEdit(kind) ? `<button class="small" data-edit="${kind}" data-id="${esc(id)}">Review / edit</button>` : ''; }
 function addButton(kind, text = 'Add record') { return canEdit(kind) ? `<button class="primary" data-add="${kind}">＋ ${text}</button>` : ''; }
 function searchToolbar(extra = '') { return `<div class="toolbar">${extra}<label class="search">Search records<input type="search" id="search" value="${esc(filter)}" placeholder="Employee name, ID, or keyword…"></label></div>`; }
@@ -95,31 +95,45 @@ Object.assign(navigationIcons, {
   trainings: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/>',
 });
+// Sidebar sections. A section with `group` is one expandable parent menu; its pages keep their own screens and routes.
+const PAY_GROUP = { id: 'payroll-attendance', label: 'Payroll & Attendance', icon: 'payroll' };
 function navGroups() {
   const role = auth.user.role, legacy = LEGACY.includes(role);
+  const payItems = legacy ? [...(['admin', 'hr'].includes(role) ? [['live', 'Live Attendance']] : []), ['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll'], ['loans', 'Employee Loans'], ['deductions', 'Deductions'], ['annual', '13th Month Pay'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
     ['', [['dashboard', 'Dashboard']]],
     ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ['trainings', 'Trainings']]],
-    ...(legacy ? [['Time & Pay', [...(['admin', 'hr'].includes(role) ? [['live', 'Live attendance']] : []), ['attendance', 'Attendance'], ['leave', 'Leave management'], ['payroll', 'Payroll'], ['loans', 'Employee loans'], ['deductions', 'Deductions'], ['annual', '13th month pay'], ['holidays', 'Holiday calendar'], ['rules', 'Rules & rates']]]] : []),
+    ...(payItems.length ? [['', payItems, PAY_GROUP]] : []),   // hidden entirely when the role may open none of them
     ['Administration', [['reports', 'Reports'], ...(legacy ? [['audit', 'Audit trail']] : []), ...(role === 'admin' ? [['settings', 'Settings']] : [])]],
   ];
 }
+const groupOf = id => navGroups().find(g => g[2] && g[1].some(([key]) => key === id))?.[2] || null;
+let payGroupOpen = (() => { try { return localStorage.getItem('hr-nav-pay') === 'open'; } catch { return false; } })();
+let mobileDrawer = false;
 const PAGE_TITLES = { employee201: 'Employee 201 File', profile: 'Attendance, leave & pay' };
 let sidebarCollapsed = (() => { try { return localStorage.getItem('hr-sidebar') === 'collapsed'; } catch { return false; } })();
 function applyTheme(theme) { document.documentElement.dataset.theme = theme === 'forest' ? 'forest' : 'gds'; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'forest' ? '#0f3a26' : '#161616'); }
 function shell(content) {
   if (auth.demo) content = '<div class="notice">Preview workspace · Payroll settings and figures are sample data. Changes here do not update the live HR database.</div>' + content;
   const groups = navGroups(), title = groups.flatMap(g => g[1]).find(n => n[0] === page)?.[1] || PAGE_TITLES[page] || '';
+  const parent = groupOf(page), crumb = parent ? `${parent.label} › ${title}` : title;
+  if (parent) payGroupOpen = true;   // a module opened by link, refresh or back/forward shows its menu
   const company = hrContext?.company || { name: 'GDS CAPITAL INC.', systemTitle: 'HR 201 File & Employee Management System' };
   const icon = id => `<span class="symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">${navigationIcons[id] || ''}</svg></span>`;
-  app.innerHTML = `<div class="shell ${sidebarCollapsed ? 'collapsed' : ''}"><aside class="sidebar" aria-label="Main menu"><div class="brand"><img class="brand-logo" src="${brandLogo}" alt="${esc(company.name)} logo" width="661" height="245"><span>${esc(company.name)}</span></div>
-    <nav class="nav" aria-label="HR navigation">${groups.map(([label, items]) => `${label ? `<div class="nav-label">${esc(label)}</div>` : ''}${items.map(([id, name]) => `<button data-nav="${id}" class="${page === id || (id === 'files' && page === 'employee201') ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''} title="${esc(name)}">${icon(id)}<span class="nav-text">${esc(name)}</span></button>`).join('')}`).join('')}</nav>
+  app.innerHTML = `<div class="shell ${sidebarCollapsed ? 'collapsed' : ''} ${mobileDrawer ? 'drawer-open' : ''}"><div class="drawer-backdrop" data-close-drawer aria-hidden="true"></div><aside class="sidebar" id="main-menu" aria-label="Main menu"><div class="brand"><img class="brand-logo" src="${brandLogo}" alt="${esc(company.name)} logo" width="661" height="245"><span>${esc(company.name)}</span></div>
+    <nav class="nav" aria-label="HR navigation">${groups.map(([label, items, group]) => {
+      const item = ([id, name], sub = false) => `<button data-nav="${id}" class="${sub ? 'nav-child ' : ''}${page === id || (id === 'files' && page === 'employee201') ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''} title="${esc(name)}">${icon(id)}<span class="nav-text">${esc(name)}</span></button>`;
+      if (!group) return `${label ? `<div class="nav-label">${esc(label)}</div>` : ''}${items.map(i => item(i)).join('')}`;
+      const childActive = items.some(([id]) => id === page);
+      return `<div class="nav-group ${payGroupOpen ? 'open' : ''}"><button class="nav-parent ${childActive ? 'has-active' : ''}" data-nav-group="${group.id}" aria-expanded="${payGroupOpen}" aria-controls="nav-${group.id}" title="${esc(group.label)}">${icon(group.icon)}<span class="nav-text">${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true"></span></button><div class="nav-sub" id="nav-${group.id}" role="group" aria-label="${esc(group.label)}"><div class="nav-sub-inner">${items.map(i => item(i, true)).join('')}</div></div></div>`;
+    }).join('')}</nav>
     <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button></div></aside>
-    <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><span><strong>${esc(company.systemTitle)}</strong><small>${esc(title)}</small></span></span>
+    <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong><small>${esc(crumb)}</small></span></span>
       <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span><span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
       <span class="avatar" aria-hidden="true">${esc(initials(auth.user.username))}</span><span class="user-meta"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span><button class="small" data-signout>Sign out</button></span></header>
     <div class="content">${content}</div></main></div>`;
   loadBell();
+  syncRoute();
 }
 let bellItems = [];
 async function loadBell() {
@@ -142,6 +156,29 @@ const hrCtx = {
   reloadContext: async () => { hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme); },
   openAccounts: () => account(),
 };
+let routing = false;
+function routeFor() { return page === 'employee201' && files.currentId() ? `#/employee201/${encodeURIComponent(files.currentId())}` : `#/${page}`; }
+function syncRoute() {
+  if (routing || !auth?.user || auth.user.role === 'employee') return;
+  const target = routeFor();
+  if (location.hash !== target) history[location.hash.startsWith('#/') ? 'pushState' : 'replaceState'](null, '', target);
+}
+function readRoute() {
+  const m = /^#\/([a-z0-9-]+)(?:\/(.+))?$/.exec(location.hash);
+  return m ? { page: m[1], id: m[2] ? decodeURIComponent(m[2]) : null } : null;
+}
+async function applyRoute() {
+  const route = readRoute(); if (!route || !auth?.user || auth.user.role === 'employee') return;
+  routing = true;
+  try {
+    dialog.open && dialog.close(); mobileDrawer = false;
+    if (route.page === 'employee201' && route.id) await files.openProfile(route.id);
+    else { page = route.page === 'profile' ? 'files' : route.page; render(); }
+  } finally { routing = false; }
+}
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.querySelector('.shell.drawer-open')) { mobileDrawer = false; document.querySelector('.shell').classList.remove('drawer-open'); document.querySelector('[data-open-drawer]')?.focus(); } });
+document.addEventListener('click', event => { if (event.target.closest('[data-close-drawer]')) { mobileDrawer = false; document.querySelector('.shell')?.classList.remove('drawer-open'); } });
+window.addEventListener('popstate', () => { applyRoute().catch(e => toast(e.message)); });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   page = nav.page;
@@ -590,6 +627,11 @@ document.addEventListener('click', async event => {
   const b = event.target.closest('button'); if (!b) return;
   try {
     if (b.hasAttribute('data-recovery')) { portal.recovery(); return; }
+    if (b.dataset.navGroup) {
+      payGroupOpen = !payGroupOpen; try { localStorage.setItem('hr-nav-pay', payGroupOpen ? 'open' : 'closed'); } catch { /* preference only */ }
+      b.closest('.nav-group').classList.toggle('open', payGroupOpen); b.setAttribute('aria-expanded', String(payGroupOpen)); return;
+    }
+    if (b.hasAttribute('data-open-drawer')) { mobileDrawer = !document.querySelector('.shell').classList.contains('drawer-open'); document.querySelector('.shell').classList.toggle('drawer-open', mobileDrawer); b.setAttribute('aria-expanded', String(mobileDrawer)); if (mobileDrawer) document.querySelector('.sidebar .nav button')?.focus(); return; }
     if (b.hasAttribute('data-toggle-sidebar')) { sidebarCollapsed = !sidebarCollapsed; try { localStorage.setItem('hr-sidebar', sidebarCollapsed ? 'collapsed' : 'open'); } catch { /* preference only */ } document.querySelector('.shell')?.classList.toggle('collapsed', sidebarCollapsed); b.setAttribute('aria-expanded', String(!sidebarCollapsed)); return; }
     if (b.hasAttribute('data-bell')) {
       const menu = document.querySelector('[data-bell-menu]');
@@ -599,7 +641,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; await goTo({ page: item.nav, docs: item.filter }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
-    if (b.dataset.nav) { page = b.dataset.nav; filter = ''; render(); }
+    if (b.dataset.nav) { page = b.dataset.nav; filter = ''; mobileDrawer = false; render(); }
     if (b.dataset.profile) { page = 'profile'; await profiles.open(b.dataset.profile, 'personal'); }
     if (b.dataset.tab) { subtab = b.dataset.tab; filter = ''; render(); }
     if (b.hasAttribute('data-attendance-import')) { attendanceImport.open(); return; }
@@ -651,7 +693,7 @@ document.addEventListener('input', event => {
   if (event.target.id !== 'search') return;
   const position = event.target.selectionStart; filter = event.target.value; render(); const node = document.querySelector('#search'); node.focus(); node.setSelectionRange(position, position);
 });
-try { auth = await api('/session'); if (auth.user) await refresh(); render(); }
+try { auth = await api('/session'); if (auth.user) await refresh(); if (auth.user && readRoute()) await applyRoute(); else render(); }
 catch (e) { app.innerHTML = `<div class="loading"><h1>Unable to connect</h1><p>${esc(e.message)}</p><p>Check that the HR service is running, then reload this page.</p></div>`; }
 document.addEventListener('input', event => {
   if (!event.target.matches('[data-contribution-salary]')) return;

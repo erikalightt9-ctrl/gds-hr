@@ -176,3 +176,41 @@ dialog.wide-dialog { width: min(980px, calc(100vw - 24px)); }
 @media (max-width: 720px) { .profile-block .details-grid { grid-template-columns: 1fr; } .hr-tab-body { padding: 14px; } }
 .edit-rows input, .edit-rows select { width: 100%; min-width: 90px; padding: 7px 8px; font-size: 12.5px; }
 .edit-rows td { padding: 6px; }
+
+/* ---------- Payroll & Attendance parent menu ---------- */
+.nav-group { display: grid; gap: 2px; margin-top: 14px; }
+.nav-parent { position: relative; }
+.nav .nav-parent { font-weight: 600; }
+.nav-parent .nav-text { flex: 1; text-align: left; }
+.nav-chevron { width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .2s ease; margin-right: 4px; flex-shrink: 0; }
+.nav-group.open .nav-chevron { transform: rotate(45deg); }
+.nav-parent.has-active { background: rgb(255 255 255 / .06); box-shadow: inset 3px 0 0 var(--gold-400, #d9b85c); }
+.nav-sub { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
+.nav-group.open .nav-sub { grid-template-rows: 1fr; }
+.nav-sub-inner { overflow: hidden; display: grid; gap: 2px; padding-left: 14px; margin-left: 12px; border-left: 1px solid rgb(255 255 255 / .14); }
+.nav-group:not(.open) .nav-sub-inner { visibility: hidden; }
+.nav .nav-child { font-size: 12.5px; padding: 9px 10px; white-space: normal; line-height: 1.25; }
+.nav button:focus-visible { outline: 2px solid var(--gold-300, #ebcf86); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .nav-sub, .nav-chevron { transition: none; } }
+.shell.collapsed .nav-chevron { display: none; }
+.shell.collapsed .nav-sub-inner { padding-left: 0; margin-left: 0; border-left: 0; }
+.shell.collapsed .nav-group { margin-top: 8px; }
+.breadcrumb { display: inline; font: inherit; letter-spacing: inherit; }
+.breadcrumb span { color: var(--ink, #1d1a14); }
+
+/* ---------- Mobile: slide-out drawer ---------- */
+.drawer-toggle, .drawer-backdrop { display: none; }
+@media (max-width: 720px) {
+  .shell, .shell.collapsed { display: block; }
+  .sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 40; width: min(300px, 86vw); height: 100vh; padding: 18px 14px; transform: translateX(-102%); transition: transform .22s ease; overflow-y: auto; }
+  .shell.drawer-open .sidebar { transform: none; box-shadow: 0 0 40px rgb(0 0 0 / .45); }
+  .shell.drawer-open .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / .45); }
+  .nav { display: flex; flex-direction: column; overflow: visible; }
+  .nav button { flex-shrink: 1; }
+  .nav-label, .sidebar-bottom { display: block; }
+  .shell.collapsed .nav-text, .shell.collapsed .nav-label, .shell.collapsed .brand span, .shell.collapsed .sidebar-bottom { display: revert; }
+  .shell.collapsed .nav-chevron { display: block; }
+  .drawer-toggle { display: inline-flex; }
+  [data-toggle-sidebar] { display: none !important; }
+  .topbar { position: sticky; top: 0; z-index: 30; }
+}

@@ -278,5 +278,5 @@ export function createFiles(ctx) {
     openDialog(`Versions: ${item.requirement.name}`, `<div class="dialog-body">${table(['Version', 'File', 'Uploaded', 'Status', 'Replacement reason'], item.versions.map(v => [`v${v.version}`, `<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, `${fmtDateTime(v.uploadedAt)}<small>${esc(v.uploadedBy)}</small>`, `${esc(v.reviewStatus)}${v.reviewNote ? `<small>${esc(v.reviewNote)}</small>` : ''}`, esc(v.replaceReason || '—')]))}</div>`, '<div class="dialog-foot"><button data-close>Close</button></div>');
   }
 
-  return { directory, openProfile, drawProfile, addEmployee, isProfile: () => !!profileId };
+  return { directory, openProfile, drawProfile, addEmployee, isProfile: () => !!profileId, currentId: () => profileId };
 }
