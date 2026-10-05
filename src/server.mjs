@@ -330,7 +330,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   await mkdir(data, { recursive: true });
   const store = new Store(path.join(data, 'hr.sqlite'));
   const migrated = runMigrations(store);
-  if (migrated.names || migrated.departments || migrated.leave) console.log(`One-time updates: ${migrated.names} name record(s) capitalized, ${migrated.departments} employee(s) moved to GDS Capital HQ, ${migrated.leave} leave policy change(s) (see the audit trail).`);
+  if (Object.values(migrated).some(Boolean)) console.log(`One-time updates applied: ${JSON.stringify(migrated)} (see the audit trail).`);
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });

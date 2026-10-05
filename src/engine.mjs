@@ -373,7 +373,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // Tax brackets use this cutoff's taxable earnings. Configure the table for the selected cutoff.
     const taxableThirteenth = Math.max(0, thirteenthPaid + earnings.thirteenth - r.thirteenthTaxExemption) - Math.max(0, thirteenthPaid - r.thirteenthTaxExemption);
     const taxBasis = Math.max(0, gross - earnings.thirteenth + taxableThirteenth - deductions.absence - deductions.undertime - contributionTotal);
-    add(deductions, 'tax', bracketAmount(r.taxBrackets, taxBasis, `${prefix} withholding tax`, blockers), `Taxable cutoff earnings ${round(taxBasis)} → approved ${r.cutoff} bracket; includes ${round(taxableThirteenth)} taxable 13th-month excess over configured annual exemption ${r.thirteenthTaxExemption}`, null, end);
+    // Employees marked exempt in their payroll profile have no withholding tax (a manual override can still set one).
+    if (payrollProfile?.withholdingTax === 'exempt') trace.push({ component: 'tax', side: 'deductions', amount: 0, formula: `Exempt from withholding tax (payroll setting); taxable cutoff earnings ${round(taxBasis)}`, sourceKind: 'employees', sourceId: e.id, date: end });
+    else add(deductions, 'tax', bracketAmount(r.taxBrackets, taxBasis, `${prefix} withholding tax`, blockers), `Taxable cutoff earnings ${round(taxBasis)} → approved ${r.cutoff} bracket; includes ${round(taxableThirteenth)} taxable 13th-month excess over configured annual exemption ${r.thirteenthTaxExemption}`, null, end);
     override('deductions', deductions, ['tax']);
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);

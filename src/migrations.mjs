@@ -59,6 +59,29 @@ function leavePolicy(store) {
     return changed;
   }));
 }
+// October 2026 instructions: no employee has withholding tax (each payroll profile is set to Exempt and can be
+// switched back per employee), and government contributions are deducted half on each cutoff again.
+function noWithholdingTax(store) {
+  return once(store, 'migration:withholding-exempt-2026-10', () => store.transaction(() => {
+    const system = { username: 'system (withholding tax)' }, state = store.read();
+    let changed = 0;
+    for (const e of state.employees) {
+      const row = store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='payroll'").get(e.id);
+      const before = row ? JSON.parse(row.data) : null;
+      if (before?.withholdingTax === 'exempt') continue;
+      const after = { ...(before || { basis: '', dailyRate: null, hourlyRate: null, frequency: '', schedule: '', status: 'Active' }), withholdingTax: 'exempt' };
+      store.db.prepare("INSERT INTO employee_profiles(employee_id,section,data) VALUES(?,'payroll',?) ON CONFLICT(employee_id,section) DO UPDATE SET data=excluded.data").run(e.id, JSON.stringify(after));
+      store.log(system, 'set-withholding-exempt', 'profile:payroll', e.id, before, after); changed++;
+    }
+    for (const rule of state.rules.filter(r => r.contributionTiming && r.contributionTiming !== 'split')) {
+      const before = structuredClone(rule); rule.contributionTiming = 'split';
+      store.log(system, 'restore-contribution-timing', 'rules', rule.id, { contributionTiming: before.contributionTiming }, { contributionTiming: 'split' }); changed++;
+    }
+    state.version++; store.write(state);
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:withholding-exempt-2026-10');
+    return changed;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store) };
+  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store) };
 }

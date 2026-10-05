@@ -6,9 +6,9 @@ const fields = {
   emergency: ['name', 'relationship', 'contact', 'alternateContact', 'address'],
   attendance: ['scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'paidFrom', 'approvedLocation', 'latitude', 'longitude', 'radiusMeters', 'arrangement', 'policy'],
   contributions: ['sssEmployee', 'sssEmployer', 'sssEc', 'philHealthEmployee', 'philHealthEmployer', 'pagIbigEmployee', 'pagIbigEmployer', 'reason'],
-  payroll: ['basis', 'dailyRate', 'hourlyRate', 'frequency', 'schedule', 'status'], bank: ['name', 'accountName', 'accountNumber'],
+  payroll: ['basis', 'dailyRate', 'hourlyRate', 'frequency', 'schedule', 'status', 'withholdingTax'], bank: ['name', 'accountName', 'accountNumber'],
 };
-const choices = { sex: ['Female', 'Male', 'Other'], employmentStatus: ['Probationary', 'Regular', 'Project-Based', 'Contractual', 'Seasonal', 'Other'], employmentType: ['Full-Time', 'Part-Time', 'Other'], employeeStatus: ['Active', 'On Leave', 'Suspended', 'Resigned', 'Terminated', 'Inactive'], arrangement: ['Office', 'WFH', 'Hybrid'], paidFrom: ['actual', 'schedule'], frequency: ['monthly', 'semi-monthly'], basis: ['monthly', 'daily'], status: ['Active', 'Hold'] };
+const choices = { withholdingTax: ['withhold', 'exempt'], sex: ['Female', 'Male', 'Other'], employmentStatus: ['Probationary', 'Regular', 'Project-Based', 'Contractual', 'Seasonal', 'Other'], employmentType: ['Full-Time', 'Part-Time', 'Other'], employeeStatus: ['Active', 'On Leave', 'Suspended', 'Resigned', 'Terminated', 'Inactive'], arrangement: ['Office', 'WFH', 'Hybrid'], paidFrom: ['actual', 'schedule'], frequency: ['monthly', 'semi-monthly'], basis: ['monthly', 'daily'], status: ['Active', 'Hold'] };
 const numeric = ['sssEmployee', 'sssEmployer', 'sssEc', 'philHealthEmployee', 'philHealthEmployer', 'pagIbigEmployee', 'pagIbigEmployer', 'hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'latitude', 'longitude', 'radiusMeters', 'dailyRate', 'hourlyRate'];
 const documentTypes = ['Photo', 'Employment Contract', 'Government ID', 'Resume/CV', 'Birth Certificate', 'Tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Company ID', 'Medical', 'Leave Supporting', 'Disciplinary', 'Other HR'];
 const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

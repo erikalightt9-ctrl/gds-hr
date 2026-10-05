@@ -229,7 +229,7 @@ export function profileExtras(store, actor, id) {
     family: hrView ? { spouse: { name: '', occupation: '', contact: '' }, father: { name: '', occupation: '' }, mother: { name: '', occupation: '' }, children: [], ...profileOf(store, id, 'family') } : null,
     education: hrView ? { entries: [], ...profileOf(store, id, 'education') } : null,
     history: hrView ? { entries: [], ...profileOf(store, id, 'history') } : null,
-    compensation: PAY_ROLES.includes(actor.role) ? { monthlySalary: e.monthlySalary, basis: pay.basis || 'monthly', dailyRate: pay.dailyRate ?? null, hourlyRate: pay.hourlyRate ?? null, frequency: pay.frequency || '', status: pay.status || 'Active', coveredOT: e.coveredOT, coveredNSD: e.coveredNSD, coveredHoliday: e.coveredHoliday, covered13th: e.covered13th, deductions: (store.read().deductions || []).filter(d => d.employeeId === id && d.active).map(d => ({ name: d.name, amount: d.amount, schedule: d.schedule })) } : null,
+    compensation: PAY_ROLES.includes(actor.role) ? { monthlySalary: e.monthlySalary, basis: pay.basis || 'monthly', dailyRate: pay.dailyRate ?? null, hourlyRate: pay.hourlyRate ?? null, frequency: pay.frequency || '', status: pay.status || 'Active', withholdingTax: pay.withholdingTax === 'exempt' ? 'exempt' : 'withhold', coveredOT: e.coveredOT, coveredNSD: e.coveredNSD, coveredHoliday: e.coveredHoliday, covered13th: e.covered13th, deductions: (store.read().deductions || []).filter(d => d.employeeId === id && d.active).map(d => ({ name: d.name, amount: d.amount, schedule: d.schedule })) } : null,
     canEdit: hrView, canEditPay: ['admin', 'hr'].includes(actor.role),
   };
 }

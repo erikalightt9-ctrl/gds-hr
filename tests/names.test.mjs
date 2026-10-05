@@ -60,3 +60,20 @@ test('leave policy: 7 days vacation leave + 5 days SIL for the named employees, 
     assert.equal(leaveBalance(st, emp('2026-0908'), type('sil'), '2026-10-05').available, 0, 'new hire: after 1 year');
   } finally { store.close(); }
 });
+
+test('employees exempt from withholding tax have none; contributions split across cutoffs again', async () => {
+  const { Store } = await import('../src/store.mjs');
+  const { completeState } = await import('./helpers.mjs');
+  const { runMigrations } = await import('../src/migrations.mjs');
+  const { calculatePayroll } = await import('../src/engine.mjs');
+  const store = new Store(':memory:');
+  try {
+    const s = completeState(); s.rules[0].taxBrackets = [{ from: 0, to: null, fixed: 0, rate: 0.1, excessOver: 0 }]; s.rules[0].contributionTiming = 'second'; store.write(s);
+    assert.ok(calculatePayroll(store.read(), '2026-09-01', '2026-09-15').rows[0].deductions.tax > 0);
+    runMigrations(store);
+    const st = store.read(), row = calculatePayroll(st, '2026-09-01', '2026-09-15').rows[0];
+    assert.equal(row.deductions.tax, 0); assert.match(row.trace.find(t => t.component === 'tax').formula, /Exempt/);
+    assert.equal(st.rules[0].contributionTiming, 'split');
+    assert.equal(row.contributionFactor, 0.5, 'half of the monthly contribution each cutoff');
+  } finally { store.close(); }
+});
