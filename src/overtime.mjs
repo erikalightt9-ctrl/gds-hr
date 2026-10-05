@@ -28,10 +28,22 @@ function put(store, value) {
   store.db.prepare('INSERT INTO overtime_requests(id,employee_id,date,status,data) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, data=excluded.data').run(value.id, value.employeeId, value.date, value.status, JSON.stringify(value));
 }
 
-const fileSchema = z.object({ date, hours: z.number().min(0.25).max(16), reason: z.string().trim().min(3, 'Say what the overtime work was for.').max(1000), employeeId: z.string().max(80).optional() }).strict();
+// Hours between an overtime start and end time; an end at or before the start means the next day.
+const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+export function hoursBetween(start, end) {
+  const toMin = t => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  let minutes = toMin(end) - toMin(start); if (minutes <= 0) minutes += 1440;
+  return round(minutes / 60);
+}
+const fileSchema = z.object({ date, startTime: time.optional(), endTime: time.optional(), hours: z.number().min(0.25).max(16).optional(), reason: z.string().trim().min(3, 'Say what the overtime work was for.').max(1000), employeeId: z.string().max(80).optional() }).strict();
 // Employees file their own overtime; HR may record it for an employee (approved at once, e.g. no portal account).
 export function fileOvertime(store, actor, input) {
-  const v = fileSchema.parse(input), self = actor.role === 'employee';
+  const parsed = fileSchema.parse(input), self = actor.role === 'employee';
+  if (!!parsed.startTime !== !!parsed.endTime) throw new AppError('Enter both the overtime start and end time.');
+  // Start and end given: hours are computed from them, never typed.
+  const v = parsed.startTime ? { ...parsed, hours: hoursBetween(parsed.startTime, parsed.endTime) } : parsed;
+  if (!v.hours) throw new AppError('Enter the overtime start and end time.');
+  if (v.hours < 0.25 || v.hours > 16) throw new AppError('Overtime must be between 15 minutes and 16 hours.');
   if (!self) permit(actor, HR);
   const employeeId = self ? actor.employeeId : v.employeeId;
   if (!employeeId) throw new AppError('Choose the employee.');
@@ -43,7 +55,7 @@ export function fileOvertime(store, actor, input) {
     if (posted(state, employeeId, v.date)) throw new AppError('Payroll for that date is already posted. Contact HR or Payroll.');
     if (rowsOf(store, 'WHERE employee_id=? AND date=?', employeeId, v.date).some(o => ['pending', 'approved'].includes(o.status))) throw new AppError('Overtime is already filed for that date. Cancel it first to file again.');
     const now = new Date().toISOString();
-    const value = { id: randomUUID(), employeeId, date: v.date, hours: v.hours, reason: v.reason, filedBy: actor.username, filedAt: now, status: self ? 'pending' : 'approved', approvedHours: self ? 0 : v.hours, decidedBy: self ? '' : actor.username, decidedAt: self ? '' : now, remarks: self ? '' : 'Recorded by HR' };
+    const value = { id: randomUUID(), employeeId, date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', hours: v.hours, reason: v.reason, filedBy: actor.username, filedAt: now, status: self ? 'pending' : 'approved', approvedHours: self ? 0 : v.hours, decidedBy: self ? '' : actor.username, decidedAt: self ? '' : now, remarks: self ? '' : 'Recorded by HR' };
     put(store, value);
     store.log(actor, 'file', 'overtime', employeeId, null, value);
     if (self) store.notify(null, `${employee.name} filed ${v.hours} h overtime for ${v.date}.`);

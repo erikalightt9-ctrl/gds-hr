@@ -73,3 +73,16 @@ test('an absence override flows into the posted 13th-month basic and final pay',
     assert.equal(fp.items.find(i => /13th/.test(i.label)).amount, Math.round(row.applicableBasic / 12 * 100) / 100);
   } finally { store.close(); }
 });
+
+test('overtime filed with start and end times computes the hours, including past midnight', async () => {
+  const { hoursBetween } = await import('../src/overtime.mjs');
+  assert.equal(hoursBetween('17:00', '19:30'), 2.5);
+  assert.equal(hoursBetween('22:00', '01:00'), 3, 'ends the next day');
+  const store = fixture(), worker = { username: 'employee1', role: 'employee', employeeId: 'EMP-001' };
+  try {
+    const o = fileOvertime(store, worker, { date: '2026-09-02', startTime: '17:00', endTime: '19:15', reason: 'Report deadline (demo)' });
+    assert.equal(o.hours, 2.25); assert.equal(o.startTime, '17:00');
+    assert.throws(() => fileOvertime(store, worker, { date: '2026-09-03', startTime: '17:00', reason: 'Missing end (demo)' }), /both/);
+    assert.throws(() => fileOvertime(store, worker, { date: '2026-09-04', startTime: '17:00', endTime: '17:05', reason: 'Too short (demo)' }), /15 minutes/);
+  } finally { store.close(); }
+});

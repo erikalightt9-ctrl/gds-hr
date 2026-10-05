@@ -427,3 +427,6 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
   .employee-top .employee-top-actions { gap: 6px; }
   .employee-top .account-button, .employee-top .signout-button { padding: 8px 10px; font-size: 11px; }
 }
+
+.ot-total strong { display: block; font-size: 22px; margin: 6px 0 2px; color: #a91d29; }
+.ot-total small { color: #777; }

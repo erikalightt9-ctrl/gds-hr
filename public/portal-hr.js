@@ -30,13 +30,25 @@ export function createPortalHr({ api, esc, table, toast }) {
     box.innerHTML = `<section class="panel"><div class="panel-head"><h2>File overtime</h2><span class="legend">Clocking out late is not overtime by itself. File the extra hours you actually worked; only approved hours are paid.</span></div>
       <form id="ot-file" class="panel-body form-grid">
         <label class="field">Date<input type="date" name="date" required></label>
-        <label class="field">Overtime hours<input type="number" name="hours" min="0.25" max="16" step="0.25" required></label>
+        <label class="field">Start of overtime<input type="time" name="startTime" required></label>
+        <label class="field">End of overtime<input type="time" name="endTime" required></label>
+        <div class="field ot-total">Total overtime<strong data-ot-hours>—</strong><small>Computed from start and end. An end time earlier than the start counts as the next day.</small></div>
         <label class="field full">Work done / reason<input name="reason" required minlength="3" maxlength="1000"></label>
         <div><button class="primary">Submit for approval</button></div></form>
-      ${table(['Date', 'Hours filed', 'Reason', 'Status', 'HR remarks', ''], list.map(o => [fmtDate(o.date), `${o.hours} h`, esc(o.reason), esc(STATUS[o.status] || o.status) + (o.status === 'approved' ? ` (${o.approvedHours} h)` : ''), esc(o.remarks || '—'), o.status === 'pending' ? `<button class="small" data-ot-cancel="${o.id}">Cancel</button>` : '']), 'No overtime filed yet.')}</section>`;
-    box.querySelector('#ot-file').onsubmit = async event => {
+      ${table(['Date', 'Time', 'Hours filed', 'Reason', 'Status', 'HR remarks', ''], list.map(o => [fmtDate(o.date), o.startTime ? `${esc(o.startTime)} – ${esc(o.endTime)}` : '—', `${o.hours} h`, esc(o.reason), esc(STATUS[o.status] || o.status) + (o.status === 'approved' ? ` (${o.approvedHours} h)` : ''), esc(o.remarks || '—'), o.status === 'pending' ? `<button class="small" data-ot-cancel="${o.id}">Cancel</button>` : '']), 'No overtime filed yet.')}</section>`;
+    const form = box.querySelector('#ot-file'), total = form.querySelector('[data-ot-hours]');
+    const compute = () => {
+      const s = form.elements.startTime.value, e = form.elements.endTime.value;
+      if (!s || !e) { total.textContent = '—'; return null; }
+      let minutes = (Number(e.slice(0, 2)) * 60 + Number(e.slice(3))) - (Number(s.slice(0, 2)) * 60 + Number(s.slice(3))); if (minutes <= 0) minutes += 1440;
+      const h = Math.round(minutes / 60 * 100) / 100, hh = Math.floor(minutes / 60), mm = minutes % 60;
+      total.textContent = `${h} h (${hh} h${mm ? ` ${mm} min` : ''})${minutes <= 0 || e <= s ? ' · ends next day' : ''}`;
+      return h;
+    };
+    form.addEventListener('input', compute);
+    form.onsubmit = async event => {
       event.preventDefault(); const f = new FormData(event.target);
-      try { await api('/hr/me/overtime', { date: f.get('date'), hours: Number(f.get('hours')), reason: f.get('reason') }); toast('Overtime sent to HR for approval.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
+      try { await api('/hr/me/overtime', { date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), reason: f.get('reason') }); toast('Overtime sent to HR for approval.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
     };
     box.onclick = async event => {
       const b = event.target.closest('[data-ot-cancel]'); if (!b) return;
