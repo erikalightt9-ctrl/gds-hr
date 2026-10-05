@@ -183,6 +183,22 @@ export function setDisabled(store, actor, id, disabled) {
     store.log(actor, disabled ? 'disable-account' : 'enable-account', 'users', id, null, { disabled });
   });
 }
+// Remove a login account (e.g. a demo or duplicate account). Employee records and the audit trail are untouched;
+// the deletion itself is audited. Admins cannot delete themselves or the last enabled administrator.
+export function deleteUser(store, actor, id, confirmUsername) {
+  permit(actor, ['admin']);
+  if (id === actor.id) throw new AppError('You cannot delete your own account.');
+  const user = store.db.prepare('SELECT * FROM users WHERE id=?').get(id);
+  if (!user) throw new AppError('User not found.', 404);
+  if (String(confirmUsername || '').toLowerCase() !== user.username.toLowerCase()) throw new AppError('Type the account username to confirm the deletion.');
+  if (user.role === 'admin' && !user.disabled && store.db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND disabled=0 AND id<>?").get(id).n === 0) throw new AppError('This is the last enabled administrator account.');
+  store.transaction(() => {
+    for (const table of ['sessions', 'password_resets', 'recovery_requests']) store.db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(id);
+    store.db.prepare('DELETE FROM users WHERE id=?').run(id);
+    store.log(actor, 'delete-account', 'users', id, { username: user.username, role: user.role, employeeId: user.employee_id || null }, null);
+  });
+  return { ok: true };
+}
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 function base32(bytes) { let bits = ''; for (const byte of bytes) bits += byte.toString(2).padStart(8, '0'); return bits.match(/.{1,5}/g).map(b => alphabet[parseInt(b.padEnd(5, '0'), 2)]).join(''); }
 export function totpCode(secret, now = Date.now()) {

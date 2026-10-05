@@ -356,3 +356,9 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .celebration h3 { margin: 0 0 6px; font-size: 15.5px; color: #1d1a14; }
 .celebration p { margin: 0; font-size: 13px; line-height: 1.55; color: #3b3220; }
 .hr-avatar.celebrant { width: 52px; height: 52px; font-size: 17px; border: 2px solid #f1d993; background: linear-gradient(145deg, #fff8e4, #f3dfa8); color: #7c5d18; }
+
+/* ---------- Account access & recovery table ---------- */
+.email-cell { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 300px; }
+.email-cell > span { overflow-wrap: anywhere; }
+.email-cell .small, .row-actions .small { white-space: nowrap; }
+.reset-mfa { display: flex; align-items: center; gap: 8px; margin: 6px 0 12px; font-weight: 600; }

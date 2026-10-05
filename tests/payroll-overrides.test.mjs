@@ -28,6 +28,8 @@ test('a manual override replaces a calculated amount, keeps the original, and ne
     const t = row.trace.find(x => x.sourceKind === 'payroll-overrides' && x.component === 'allowance');
     assert.match(t.formula, /Manual override by pay1/);
     assert.equal(run(store).rows[0].gross, row.gross, 'recalculating does not apply the override twice');
+    savePayrollInput(store, payroll, 'EMP-001', { ...base, overrides: [{ component: 'basic', amount: before.earnings.basic - 1000, reason: 'Unrecorded absence (demo)' }] });
+    assert.equal(run(store).rows[0].applicableBasic, Math.round((before.applicableBasic - 1000) * 100) / 100, '13th-month basic follows the override');
   } finally { store.close(); }
 });
 

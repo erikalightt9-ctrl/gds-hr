@@ -17,7 +17,7 @@ import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entit
 import { decideLoanApplication, loanDashboard } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOverview } from './thirteenth.mjs';
-import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, configureMfa } from './auth.mjs';
+import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -177,10 +177,11 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (leaveDecision && req.method === 'POST') { send(200, reviewLeave(store, auth.user, leaveDecision[1], await readBody(req))); return; }
       const proofReview = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/proof-review$/);
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
-      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email)$/);
+      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
         if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); send(200, issuePasswordReset(store, auth.user, userAction[1], v.resetMfa)); }
+        else if (userAction[2] === 'delete') { const v = z.object({ confirm: z.string().max(80) }).strict().parse(body); send(200, deleteUser(store, auth.user, userAction[1], v.confirm)); }
         else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;
       }

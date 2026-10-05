@@ -163,6 +163,7 @@ function roleAudit(store, actor) {
   return store.audit().filter(a => ['clock', 'explanations', 'attendance-correction'].includes(a.kind) ? hr.includes(actor.role) : a.kind.startsWith('profile:') ? canReadSection(actor, a.kind.slice(8)) : a.kind.startsWith('document:') ? canReadDocument(actor, a.kind.slice(9)) : true);
 }
 export function getProfile(store, actor, id) {
+  if (!['admin', 'hr', 'payroll', 'viewer'].includes(actor.role)) throw new AppError('This area is restricted to authorized staff.', 403);   // carries pay data
   const employee = findEmployee(store, id), state = store.read(), sections = {};
   for (const row of store.db.prepare('SELECT section,data FROM employee_profiles WHERE employee_id=?').all(id)) if (canReadSection(actor, row.section)) sections[row.section] = JSON.parse(row.data);
   if (canReadSection(actor, 'personal') && !sections.personal) sections.personal = personalName(employee);
