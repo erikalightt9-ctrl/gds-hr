@@ -152,6 +152,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.writeHead(200, { 'Content-Type': file.type, 'Content-Disposition': `attachment; filename="${file.filename}"` });
         res.end(file.body); return;
       }
+      if (pathname === '/api/audit' && req.method === 'GET' && auth.user.role === 'maker') { send(200, visibleAudit(store, auth.user)); return; }
       // Fail closed: employee sessions can never reach staff records, audits, exports or account management.
       if (!LEGACY_WORKSPACE.includes(auth.user.role)) throw new AppError('This area is restricted to authorized staff.', 403);
       if (pathname === '/api/live' && req.method === 'GET') { send(200, liveDashboard(store, auth.user)); return; }

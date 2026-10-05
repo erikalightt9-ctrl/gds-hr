@@ -159,9 +159,9 @@ function writeSections(store, actor, id, v, existing = {}) {
   saveProfile(store, actor, id, 'personal', { ...existing.personal, lastName: v.personal.lastName, firstName: v.personal.firstName, middleName: v.personal.middleName, suffix: v.personal.suffix, sex: v.personal.sex, birthDate: v.personal.birthDate, civilStatus: v.personal.civilStatus, nationality: v.personal.nationality, mobile: v.contact.mobile, personalEmail: v.contact.personalEmail, address: v.contact.currentAddress, preferredName: v.personal.preferredName, birthPlace: v.personal.birthPlace, bloodType: v.personal.bloodType, permanentAddress: v.contact.permanentAddress });
   saveProfile(store, actor, id, 'employment', { ...existing.employment, position: v.employment.position, employmentStatus: v.employment.classification, supervisor: v.employment.supervisor, workLocation: v.employment.workLocation, businessEmail: v.contact.workEmail, employeeStatus: v.employment.status, contractStart: v.employment.contractStart, contractEnd: v.employment.contractEnd, probationEnd: v.employment.probationEnd, reviewDate: v.employment.reviewDate, employmentType: v.employment.employmentType, jobLevel: v.employment.jobLevel });
   saveProfile(store, actor, id, 'emergency', { ...existing.emergency, name: v.emergency.name, relationship: v.emergency.relationship, contact: v.emergency.contact });
-  // Government numbers: only HR Managers and Admins write them, and masked values (••••) never overwrite stored ones.
+  // Government numbers: only HR Managers, Admins and Makers write them, and masked values (••••) never overwrite stored ones.
   const ids = Object.fromEntries(Object.entries(v.government).filter(([, x]) => x && !x.includes('•')));
-  if (HR_MANAGERS.includes(actor.role) && Object.keys(ids).length) saveProfile(store, actor, id, 'government', { ...existing.government, ...ids });
+  if ([...HR_MANAGERS, 'maker'].includes(actor.role) && Object.keys(ids).length) saveProfile(store, actor, id, 'government', { ...existing.government, ...ids });
 }
 export function createEmployee(store, actor, input) {
   permit(actor, HR_TEAM);

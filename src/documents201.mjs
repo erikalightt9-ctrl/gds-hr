@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
-import { localToday } from './profiles.mjs';
+import { localToday, isSalaryRequirement } from './profiles.mjs';
 import { readSettings, assertCanView, scopeEmployees } from './hr201.mjs';
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
 
@@ -13,7 +13,9 @@ const TYPE = '201 Document';
 const profileOf = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
 const addDays = (d, n) => new Date(Date.parse(d) + n * 86400000).toISOString().slice(0, 10);
 const docsOf = (store, employeeId) => store.db.prepare('SELECT metadata FROM employee_documents WHERE employee_id=?').all(employeeId).map(r => JSON.parse(r.metadata)).filter(m => m.type === TYPE);
-const canSeeRestricted = actor => HR_MANAGERS.includes(actor.role);
+// Restricted requirements are for HR Managers; Makers see every requirement except salary-bearing ones (the contract).
+const canSeeRestricted = (actor, req) => (actor.role === 'maker' ? !isSalaryRequirement(req) : HR_MANAGERS.includes(actor.role));
+const canSee = (actor, req) => (actor.role === 'maker' ? !isSalaryRequirement(req) : !req.restricted || canSeeRestricted(actor, req));
 
 export function applicableRequirements(settings, employee, job) {
   return settings.documentRequirements.filter(r => (!r.departments.length || r.departments.includes(employee.department)) && (!r.classifications.length || r.classifications.includes(job.employmentStatus || '')));
@@ -32,7 +34,7 @@ export function checklistFor(store, actor, employee, settings = readSettings(sto
     const na = overrides.get(req.id);
     const status = na ? 'Not Applicable' : statusOf(current, today);
     const due = req.dueDays !== null && req.dueDays !== undefined && employee.startDate ? addDays(employee.startDate, req.dueDays) : '';
-    const hidden = req.restricted && !canSeeRestricted(actor);
+    const hidden = !canSee(actor, req);
     return {
       requirement: req, status, due, overdue: status === 'Missing' && req.required && !!due && due < today,
       expiringSoon: status === 'Verified' && !!current?.expiryDate && current.expiryDate <= addDays(today, settings.reminders.expiryDays),
@@ -74,7 +76,7 @@ export function upload201(store, actor, employeeId, input) {
   if (!employee) throw new AppError('Employee not found.', 404);
   const req = settings.documentRequirements.find(r => r.id === v.requirementId);
   if (!req) throw new AppError('Unknown document requirement.');
-  if (req.restricted && !canSeeRestricted(actor)) throw new AppError('Only HR Managers can file restricted documents.', 403);
+  if (!canSee(actor, req)) throw new AppError(actor.role === 'maker' ? 'Salary-bearing documents are filed by HR Managers or Payroll.' : 'Only HR Managers can file restricted documents.', 403);
   if (!bytes.length || bytes.length > settings.uploads.documentMB * 1024 * 1024) throw new AppError(`Choose a file up to ${settings.uploads.documentMB} MB.`);
   if (!validFile(v.mime, bytes)) throw new AppError('The file content does not match a PDF, PNG or JPEG.');
   if (v.expiryDate && v.issueDate && v.expiryDate < v.issueDate) throw new AppError('Expiry date is before the issue date.');
@@ -104,7 +106,7 @@ export function reviewDocument(store, actor, docId, input) {
   return store.transaction(() => {
     const { meta } = docRow(store, docId);
     if (meta.type !== TYPE) throw new AppError('Only 201 documents are reviewed here.');
-    if (meta.restricted && !canSeeRestricted(actor)) throw new AppError('Only HR Managers can review restricted documents.', 403);
+    if (!canSee(actor, meta)) throw new AppError('Only HR Managers can review restricted documents.', 403);
     const latest = docsOf(store, meta.employeeId).filter(d => d.requirementId === meta.requirementId).sort((a, b) => b.version - a.version)[0];
     if (latest.id !== meta.id) throw new AppError('A newer version exists; review that one instead.');
     if (decision === 'Rejected' && note.length < 3) throw new AppError('Give a reason for rejecting the document.');
@@ -132,7 +134,7 @@ export function document201Content(store, actor, docId) {
   if (actor.role === 'employee') { if (meta.employeeId !== actor.employeeId || meta.uploadedBy !== actor.username || meta.restricted) throw new AppError('This document is restricted.', 403); }
   else {
     permit(actor, HR_TEAM); assertCanView(store, actor, meta.employeeId);
-    if (meta.restricted && !canSeeRestricted(actor)) throw new AppError('This document is restricted.', 403);
+    if (!canSee(actor, meta)) throw new AppError('This document is restricted.', 403);
   }
   store.log(actor, 'view-document', `document:${TYPE}`, meta.employeeId, null, { id: docId, requirement: meta.requirementName, version: meta.version });
   return { meta, content };

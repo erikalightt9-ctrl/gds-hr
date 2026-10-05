@@ -3,7 +3,7 @@
 import { AppError } from './service.mjs';
 import { REPORTS_201, brandingLine } from './reports201.mjs';
 import { leaveBalance, priorBasicFor } from './engine.mjs';
-import { canReadSection, localToday, visibleAudit } from './profiles.mjs';
+import { canReadSection, localToday, visibleAudit, auditChanges } from './profiles.mjs';
 import { tablePdf, workbook } from './export.mjs';
 
 const STAFF = ['admin', 'hr', 'payroll', 'viewer'];
@@ -101,9 +101,9 @@ export const REPORTS = {
     rows: state => state.holidays.slice().sort((a, b) => a.date.localeCompare(b.date)).map(h => [h.date, h.name, h.kind, h.basis]),
   },
   audit: {
-    title: 'Audit trail', roles: ['admin', 'hr', 'payroll', 'viewer'], subtitle: () => 'Latest 1,000 events visible to your role',
-    headers: ['Time', 'Actor', 'Action', 'Record type', 'Record ID'],
-    rows: (state, store, actor) => visibleAudit(store, actor).map(a => [new Date(a.at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }), a.actor, a.action, a.kind, a.recordId]),
+    title: 'Audit trail', roles: ['admin', 'hr', 'payroll', 'viewer', 'maker'], subtitle: () => 'Latest 1,000 events visible to your role',
+    headers: ['Time', 'User', 'Action', 'Record type', 'Affected record', 'Changes (previous → updated)'],
+    rows: (state, store, actor) => visibleAudit(store, actor).map(a => [new Date(a.at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }), a.actor, a.action, a.kind, a.recordId, auditChanges(a).map(c => `${c.field}: ${c.before} → ${c.after}`).join('; ')]),
   },
   // Employee self-service: only the signed-in employee's own records.
   'my-attendance': {

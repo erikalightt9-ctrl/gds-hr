@@ -6,7 +6,7 @@ import { memoSummary } from './memos.mjs';
 import { participationRows } from './trainings.mjs';
 import { localToday } from './profiles.mjs';
 
-const HR_TEAM = ['admin', 'hr', 'hr_staff'], VIEWERS = ['admin', 'hr', 'hr_staff', 'viewer', 'dept_manager'];
+const HR_TEAM = ['admin', 'hr', 'hr_staff', 'maker'], VIEWERS = ['admin', 'hr', 'hr_staff', 'maker', 'viewer', 'dept_manager'];
 const inRange = (d, f) => (!f.from || (d && d >= f.from)) && (!f.to || (d && d <= f.to));
 const byDept = (rows, f) => (f.department ? rows.filter(r => r.department === f.department) : rows);
 const people = (store, actor, f) => byDept(directory(store, actor).filter(p => !p.archived || f.status === 'Archived'), f).filter(p => !f.status || p.status === f.status);

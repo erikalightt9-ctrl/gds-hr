@@ -1,12 +1,12 @@
 // HTTP routes for the HR 201 modules (/api/hr/...). Every handler enforces its own permission on the server.
 import { AppError, permit } from './service.mjs';
-import { visibleAudit, uploadDocument } from './profiles.mjs';
+import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
 import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
-import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS } from './roles.mjs';
+import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './roles.mjs';
 import { celebrationsOn, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 
@@ -16,7 +16,7 @@ const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-D
 // Activity for one employee, without values (so sensitive identifiers never show in the general log).
 function activityFor(store, actor, id) {
   return visibleAudit(store, actor).filter(a => a.recordId === id || a.after?.employeeId === id || a.before?.employeeId === id).slice(0, 200)
-    .map(a => ({ at: a.at, actor: a.actor, action: a.action, area: a.kind.replace(/^profile:/, 'Profile · ').replace(/^document:/, 'Document · ') }));
+    .map(a => ({ at: a.at, actor: a.actor, action: a.action, area: a.kind.replace(/^profile:/, 'Profile · ').replace(/^document:/, 'Document · '), changes: auditChanges(a, 12) }));
 }
 function overviewExtras(store, actor) {
   const docs = HR_TEAM.includes(actor.role) ? documentSummary(store, actor) : null, memos = memoSummary(store, actor), trainings = trainingSummary(store, actor);
@@ -60,7 +60,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   if (pathname === '/api/hr/context' && method === 'GET') {
     permit(actor, DASHBOARD);
     const s = readSettings(store);
-    send(200, { roleLabel: ROLE_LABELS[actor.role], company: s.company, departments: s.departments, positions: s.positions, classifications: s.classifications, requirements: s.documentRequirements.map(r => ({ id: r.id, name: r.name, category: r.category, required: r.required, expires: r.expires, restricted: r.restricted })), optionalFields: s.optionalFields, uploads: s.uploads, can: { manage: HR_TEAM.includes(actor.role), approve: ['admin', 'hr'].includes(actor.role), settings: actor.role === 'admin', sensitiveIds: ['admin', 'hr', 'payroll'].includes(actor.role) } });
+    send(200, { roleLabel: ROLE_LABELS[actor.role], company: s.company, departments: s.departments, positions: s.positions, classifications: s.classifications, requirements: s.documentRequirements.map(r => ({ id: r.id, name: r.name, category: r.category, required: r.required, expires: r.expires, restricted: r.restricted })), optionalFields: s.optionalFields, uploads: s.uploads, can: { manage: HR_TEAM.includes(actor.role), approve: ['admin', 'hr'].includes(actor.role), settings: actor.role === 'admin', sensitiveIds: SENSITIVE_IDS.includes(actor.role) } });
     return true;
   }
   if (pathname === '/api/hr/settings' && method === 'GET') { permit(actor, ['admin']); send(200, readSettings(store)); return true; }

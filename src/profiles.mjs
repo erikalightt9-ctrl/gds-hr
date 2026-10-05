@@ -33,8 +33,8 @@ export const profileSchemas = {
   contributions: z.object({ sssEmployee: number(0, 1e6), sssEmployer: number(0, 1e6), sssEc: number(0, 1e6), philHealthEmployee: number(0, 1e6), philHealthEmployer: number(0, 1e6), pagIbigEmployee: number(0, 1e6), pagIbigEmployer: number(0, 1e6), reason: text }).strict().refine(v => Object.entries(v).every(([k, x]) => k === 'reason' || x === null) || v.reason.length >= 3, 'Give a reason for overriding contributions.'),
   leave: z.object({ entitlements: z.array(z.object({ typeId: z.string().min(1).max(80), annualDays: z.number().min(0).max(366), effectiveYear: z.number().int().min(2000).max(2200) }).strict()).max(200), remarks: text }).strict().refine(v => new Set(v.entitlements.map(e => `${e.typeId}:${e.effectiveYear}`)).size === v.entitlements.length, 'Duplicate leave type and year.'),
 };
-const hr = ['admin', 'hr'], hrTeam = ['admin', 'hr', 'hr_staff'], finance = ['admin', 'hr', 'payroll'];
-const privateRead = { family: hrTeam, education: hrTeam, history: hrTeam, personal: hrTeam, government: finance, emergency: hrTeam, bank: finance, contributions: finance, payroll: ['admin', 'hr', 'payroll', 'viewer'], leave: ['admin', 'hr', 'payroll', 'viewer'], attendance: ['admin', 'hr', 'hr_staff', 'payroll', 'viewer'] };
+const hr = ['admin', 'hr'], hrTeam = ['admin', 'hr', 'hr_staff', 'maker'], finance = ['admin', 'hr', 'payroll'];
+const privateRead = { family: hrTeam, education: hrTeam, history: hrTeam, personal: hrTeam, government: [...finance, 'maker'], emergency: hrTeam, bank: finance, contributions: finance, payroll: ['admin', 'hr', 'payroll', 'viewer'], leave: ['admin', 'hr', 'payroll', 'viewer', 'maker'], attendance: ['admin', 'hr', 'hr_staff', 'maker', 'payroll', 'viewer'] };
 export function canReadSection(actor, section) { return !privateRead[section] || privateRead[section].includes(actor.role); }
 export function canWriteSection(actor, section) { return (section === 'contributions' ? finance : ['payroll', 'bank'].includes(section) ? ['admin', 'payroll'] : ['personal', 'employment', 'emergency', 'family', 'education', 'history'].includes(section) ? hrTeam : hr).includes(actor.role); }
 function findEmployee(store, id) { const e = store.read().employees.find(e => e.id === id); if (!e) throw new AppError('Employee not found.', 404); return e; }
@@ -99,7 +99,14 @@ export function saveProfile(store, actor, id, section, input) {
 }
 export const documentTypes = ['Photo', 'Employment Contract', 'Government ID', 'Resume/CV', 'Birth Certificate', 'Tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Company ID', 'Medical', 'Leave Supporting', 'Disciplinary', 'Other HR'];
 // 201 checklist documents have their own access rules (documents201.mjs) and appear only there.
-function canReadDocument(actor, type) { if (type === '201 Document') return false; return type === 'Photo' || (['Medical', 'Disciplinary', 'Leave Supporting', 'Other HR', 'Birth Certificate', 'Resume/CV'].includes(type) ? hr : finance).includes(actor.role); }
+// Documents that state pay. Makers never open them, see them listed, or see them in the audit trail.
+export const SALARY_DOCUMENT_TYPES = ['Employment Contract', 'Tax'];
+export const isSalaryRequirement = req => !!req && (req.id === 'contract' || req.requirementId === 'contract' || /contract|compensation|payroll|salary|payslip|bir 2316/i.test(`${req.category || ''} ${req.name || req.requirementName || req.requirement || ''}`));
+function canReadDocument(actor, type) {
+  if (type === '201 Document') return false;
+  if (actor.role === 'maker') return !SALARY_DOCUMENT_TYPES.includes(type);
+  return type === 'Photo' || (['Medical', 'Disciplinary', 'Leave Supporting', 'Other HR', 'Birth Certificate', 'Resume/CV'].includes(type) ? hr : finance).includes(actor.role);
+}
 const uploadSchema = z.object({ type: z.enum(documentTypes), name: z.string().trim().min(1).max(180).refine(v => !/[\x00-\x1f\\/]/.test(v), 'Invalid filename'), mime: z.enum(['application/pdf', 'image/png', 'image/jpeg']), data: z.string().min(1).max(7000000).regex(/^[A-Za-z0-9+/]*={0,2}$/), expiry: optionalDate, remarks: text }).strict();
 export function uploadDocument(store, actor, id, input) {
   if (actor.role === 'employee') { if (id !== actor.employeeId || input.type !== 'Leave Supporting') throw new AppError('You may upload supporting documents only for yourself.', 403); }
@@ -133,7 +140,26 @@ export function updateDocument(store, actor, id, input) {
     store.log(actor, 'update', `document:${before.type}`, before.employeeId, before, after); return after;
   });
 }
+// Audit areas a Maker may read; anything about pay (payroll, loans, rates, contributions, bank, final pay) is
+// left out entirely, and salary fields are stripped from what remains (for example an employee master record).
+const MAKER_AUDIT = /^(profile:(personal|employment|emergency|family|education|history|government|attendance|leave)|document:.+|employees|leaves|holidays|leaveTypes|memos|trainings|datasheets|settings|report)$/;
+const PAY_FIELDS = new Set(['monthlySalary', 'dailyRate', 'hourlyRate', 'salary', 'basic', 'compensation', 'payroll', 'allowance', 'net', 'gross']);
+export function withoutPay(value) {
+  if (Array.isArray(value)) return value.map(withoutPay);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).filter(([k]) => !PAY_FIELDS.has(k)).map(([k, v]) => [k, withoutPay(v)]));
+}
 export function visibleAudit(store, actor) {
+  if (actor.role === 'maker') return roleAudit(store, actor).filter(a => MAKER_AUDIT.test(a.kind) && !isSalaryRequirement(a.after) && !isSalaryRequirement(a.before)).map(a => ({ ...a, before: withoutPay(a.before), after: withoutPay(a.after) }));
+  return roleAudit(store, actor);
+}
+// Field-by-field previous and updated values of one audit entry (nested values flattened as a.b).
+export function auditChanges(entry, limit = 40) {
+  const flat = (v, prefix = '', out = {}) => { if (v && typeof v === 'object' && !Array.isArray(v)) { for (const [k, x] of Object.entries(v)) flat(x, prefix ? `${prefix}.${k}` : k, out); } else if (prefix) out[prefix] = Array.isArray(v) ? JSON.stringify(v) : v; return out; };
+  const before = flat(entry.before ?? {}), after = flat(entry.after ?? {}), show = v => (v === undefined || v === null || v === '' ? '—' : String(v).slice(0, 200));
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(k => JSON.stringify(before[k]) !== JSON.stringify(after[k])).slice(0, limit).map(k => ({ field: k, before: show(before[k]), after: show(after[k]) }));
+}
+function roleAudit(store, actor) {
   return store.audit().filter(a => ['clock', 'explanations', 'attendance-correction'].includes(a.kind) ? hr.includes(actor.role) : a.kind.startsWith('profile:') ? canReadSection(actor, a.kind.slice(8)) : a.kind.startsWith('document:') ? canReadDocument(actor, a.kind.slice(9)) : true);
 }
 export function getProfile(store, actor, id) {

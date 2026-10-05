@@ -24,6 +24,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS recovery_requests (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL, resolved INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS password_resets (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS loan_applications (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be edited.'); END;
+      CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be deleted.'); END;
       CREATE TABLE IF NOT EXISTS prior_earnings (employee_id TEXT NOT NULL, month TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, month));
       CREATE TABLE IF NOT EXISTS final_pay (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS payroll_inputs (employee_id TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, start, end));
