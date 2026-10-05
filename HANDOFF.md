@@ -13,7 +13,7 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Preview SQLite: data/roster-preview.sqlite; live SQLite: data/hr.sqlite. They are separate.
 - Live application command: npm run dev (default port 3400); public site: HR_ORIGIN=https://hr.blkstone.site npm start with the gds-hr Cloudflare tunnel.
 - Checks: npm test; npm run lint.
-- Most recent full test run: 118 tests passing (Oct 2026).
+- Most recent full test run: 120 tests passing (Oct 2026).
 
 ## Current features and approved design
 - GDS CAPITAL INC. branding: red, gold, white, black.
@@ -43,3 +43,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Interface updates reach open tabs: GET /api/version (hash of public file mtimes); app.js checks every 60 s, shows a notice and reloads at the next page change when no dialog or form is being edited. Shared records and settings are always server-side (SQLite); browser storage holds only per-device preferences (sidebar collapsed, Payroll & Attendance menu open).
 - 13th month & final pay (src/thirteenth.mjs, public/thirteenth-ui.js; tests/thirteenth.test.mjs): basic salary for months before the system is encoded per employee per month (prior_earnings table); posted payroll months always win. Final pay itemizes unpaid salary, pro-rated 13th month, leave conversion, separation pay (authorised causes) and outstanding loans; saved computations are audited.
 - Maker role (tests/maker.test.mjs): every non-salary employee record (incl. government IDs and restricted non-salary documents) without pay: no compensation tab, payroll workspace, pay reports, salary-bearing documents (employment contract, tax) or salary values in the audit trail. The audit table has SQLite triggers that reject UPDATE and DELETE.
+- Payroll manual overrides (manual entry dialog → "Manual overrides of calculated amounts"): replace one computed earning/deduction per cutoff with a reason; trace labelled "Manual override" with original → revised. Optional separate overtime approval (Rules & rates → Overtime approval; attendance `overtimeStatus`): pending OT blocks posting, rejected OT is not paid. Tests: tests/payroll-overrides.test.mjs.

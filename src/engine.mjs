@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { date as dateSchema } from './schema.mjs';
 
+// Computed amounts an authorized user may override. Loans (balances), contributions (own approval flow) and the
+// 13th month (annual ledger) are not overridable here.
+export const OVERRIDE_EARNINGS = ['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance'];
+export const OVERRIDE_DEDUCTIONS = ['absence', 'undertime', 'other', 'tax'];
 export const round = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const dayMs = 86400000;
 export function dates(start, end) {
@@ -239,6 +243,12 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         const credit = !g.ot && !rest ? 1 : 0;
         // Exempt employees require an explicit approved additional-pay entry for OT.
         if (g.ot && !e.coveredOT) continue;
+        // Policy "separate": overtime is paid only once it is approved on its own; pending OT is flagged, rejected OT is not paid.
+        if (g.ot && r.overtimeApproval === 'separate' && (record.overtimeStatus || 'approved') !== 'approved') {
+          if (record.overtimeStatus === 'pending') blockers.push(`${prefix}: ${round(hours)} h overtime on ${g.date} is pending approval. Approve or reject it before posting.`);
+          trace.push({ component: component === 'basic' ? 'regularOT' : component, side: 'earnings', amount: 0, formula: `${round(hours)} h overtime ${record.overtimeStatus}: not paid`, sourceKind: 'attendance', sourceId: record.id, date: g.date, quantity: round(hours) });
+          continue;
+        }
         if (!g.ot && component !== 'basic' && !rest) holidayBase += g.c === 'rest' ? 0 : hours * hourly;
         const amount = hours * hourly * (fullRate - credit);
         workBreakdown.push({ date: g.date, classification: g.c, overtime: g.ot, night: g.night, hours: round(hours), dayMultiplier: mult, otMultiplier: g.ot ? overtime : 1, nightMultiplier: g.night && e.coveredNSD ? 1 + r.nsd : 1, combinedMultiplier: Math.round(fullRate * (g.night && e.coveredNSD ? 1 + r.nsd : 1) * 10000) / 10000, sourceId: record.id });
@@ -318,6 +328,18 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const thirteenthPaid = round(annualRows.reduce((s, row) => s + row.earnings.thirteenth, 0) + prior.thirteenthPaid);
     const thirteenthBalance = Math.max(0, round(thirteenthAccrued - thirteenthPaid));
     if (pay13th) add(earnings, 'thirteenth', thirteenthBalance, `${annualBasic} applicable annual basic${prior.basic ? ` (incl. ${prior.basic} encoded for ${prior.months.length} month${prior.months.length === 1 ? '' : 's'} before the system)` : ''} ÷ 12 − ${thirteenthPaid} already paid`, null, end);
+    // Manual overrides replace a computed amount; the original stays in the trace and on the row for review.
+    const overrides = [];
+    const override = (side, bucket, keys) => {
+      for (const o of (manual?.overrides || []).filter(x => keys.includes(x.component))) {
+        const original = round(bucket[o.component] || 0), delta = round(o.amount - original);
+        bucket[o.component] = round(o.amount);
+        trace.push({ component: o.component, side, amount: delta, formula: `Manual override by ${manual.updatedBy}: ${original} calculated → ${o.amount} (${o.reason})`, sourceKind: 'payroll-overrides', sourceId: `${e.id}:${start}:${o.component}`, date: end });
+        overrides.push({ component: o.component, side, original, revised: round(o.amount), reason: o.reason, by: manual.updatedBy, at: manual.updatedAt });
+      }
+    };
+    override('earnings', earnings, OVERRIDE_EARNINGS);
+    override('deductions', deductions, ['absence', 'undertime', 'other']);
     // Semi-monthly payroll takes half each cutoff by default, or the full monthly amount on one chosen cutoff.
     const contributionFactor = r.cutoff === 'monthly' ? 1 : r.contributionTiming === 'second' ? (start.endsWith('-16') ? 1 : 0) : r.contributionTiming === 'first' ? (start.endsWith('-01') ? 1 : 0) : factor;
     // Employee shares are deducted; employer shares (and SSS EC) are recorded separately and never reduce pay.
@@ -346,10 +368,11 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const taxableThirteenth = Math.max(0, thirteenthPaid + earnings.thirteenth - r.thirteenthTaxExemption) - Math.max(0, thirteenthPaid - r.thirteenthTaxExemption);
     const taxBasis = Math.max(0, gross - earnings.thirteenth + taxableThirteenth - deductions.absence - deductions.undertime - contributionTotal);
     add(deductions, 'tax', bracketAmount(r.taxBrackets, taxBasis, `${prefix} withholding tax`, blockers), `Taxable cutoff earnings ${round(taxBasis)} → approved ${r.cutoff} bracket; includes ${round(taxableThirteenth)} taxable 13th-month excess over configured annual exemption ${r.thirteenthTaxExemption}`, null, end);
+    override('deductions', deductions, ['tax']);
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

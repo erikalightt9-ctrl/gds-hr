@@ -4,6 +4,7 @@
 // Amounts are still calculated with the approved Rules & rates multipliers, and every entry keeps who and why.
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
+import { OVERRIDE_EARNINGS, OVERRIDE_DEDUCTIONS } from './engine.mjs';
 
 const ROLES = ['admin', 'hr', 'payroll'];
 const hours = z.number().min(0).max(744).default(0);
@@ -15,7 +16,8 @@ const inputSchema = z.object({
   lateMinutes: z.number().int().min(0).max(20000).default(0), undertimeMinutes: z.number().int().min(0).max(20000).default(0),
   hours: z.object(Object.fromEntries(HOUR_FIELDS.map(k => [k, hours]))).strict(),
   reason: z.string().trim().min(3, 'Give a reason or source for the manual figures (e.g. "Manual DTR, biometric down").').max(500),
-}).strict().refine(v => v.end >= v.start && v.start.slice(0, 7) === v.end.slice(0, 7), 'Choose a cutoff within one month.');
+  overrides: z.array(z.object({ component: z.enum([...OVERRIDE_EARNINGS, ...OVERRIDE_DEDUCTIONS]), amount: z.number().min(0).max(1e8), reason: z.string().trim().min(3, 'Give a reason for each override.').max(500) }).strict()).max(20).default([]),
+}).strict().refine(v => new Set(v.overrides.map(o => o.component)).size === v.overrides.length, 'Override each item only once.').refine(v => v.end >= v.start && v.start.slice(0, 7) === v.end.slice(0, 7), 'Choose a cutoff within one month.');
 
 const lockedBy = (state, employeeId, start, end) => state.runs.some(r => r.status === 'posted' && r.start <= end && r.end >= start && r.rows.some(row => row.employeeId === employeeId));
 export function savePayrollInput(store, actor, employeeId, input) {
