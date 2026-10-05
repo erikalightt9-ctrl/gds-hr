@@ -15,6 +15,7 @@ import { inspectImport, previewImport, commitImport } from './attendance-import.
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll } from './service.mjs';
 import { decideLoanApplication, loanDashboard } from './loans.mjs';
+import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOverview } from './thirteenth.mjs';
 import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, configureMfa } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
@@ -159,6 +160,10 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/live/correct' && req.method === 'POST') { send(200, correctClock(store, auth.user, await readBody(req))); return; }
       const explanationReview = pathname.match(/^\/api\/explanations\/([a-f0-9-]+)\/review$/);
       if (explanationReview && req.method === 'POST') { send(200, reviewExplanation(store, auth.user, explanationReview[1], await readBody(req))); return; }
+      if (pathname === '/api/overtime-requests' && req.method === 'GET') { send(200, overtimeQueue(store, auth.user)); return; }
+      if (pathname === '/api/overtime-requests' && req.method === 'POST') { send(201, fileOvertime(store, auth.user, await readBody(req))); return; }
+      const otDecision = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/decision$/);
+      if (otDecision && req.method === 'POST') { send(200, decideOvertime(store, auth.user, otDecision[1], await readBody(req))); return; }
       if (pathname === '/api/thirteenth' && req.method === 'GET') { send(200, thirteenthOverview(store, auth.user, url.searchParams.get('year') || '')); return; }
       if (pathname === '/api/thirteenth/prior' && req.method === 'POST') { send(200, savePriorEarnings(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/final-pay' && req.method === 'GET') { send(200, finalPayOverview(store, auth.user)); return; }

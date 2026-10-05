@@ -38,6 +38,6 @@ test('HR approves, rejects and cancels employee leave; one balance, shown the sa
     assert.throws(() => reviewLeave(store, hr, second.id, { decision: 'reject' }), /reason/);
     reviewLeave(store, hr, second.id, { decision: 'reject', remarks: 'Peak week' });
     assert.equal(sil(store).available, before, 'rejected leave does not consume credits');
-    assert.match(store.db.prepare("SELECT message FROM notifications WHERE employee_id='EMP-001' ORDER BY created_at DESC LIMIT 1").get().message, /rejected — HR remarks: Peak week/);
+    assert.match(store.db.prepare("SELECT message FROM notifications WHERE employee_id='EMP-001' ORDER BY rowid DESC LIMIT 1").get().message, /rejected — HR remarks: Peak week/);
   } finally { store.close(); }
 });

@@ -9,6 +9,7 @@ export function createPortalHr({ api, esc, table, toast }) {
     try {
       if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
       if (tab === 'loans201') return loans(box, await api('/hr/me/loans'));
+      if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
       if (tab === 'memos') return memos(box, await api('/hr/me/memos'));
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       if (tab === 'datasheet') return datasheet(box, await api('/hr/me/datasheet'));
@@ -23,6 +24,24 @@ export function createPortalHr({ api, esc, table, toast }) {
       + sectionCard(esc, '💼', 'Employment', fieldBoxes(esc, [['Employee number', r.number], ['Department', f.employment.department], ['Position', f.employment.position], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Immediate supervisor', f.employment.supervisor], ['Date hired', fmtDate(f.employment.dateHired)]]))
       + sectionCard(esc, '🪪', 'Government IDs', fieldBoxes(esc, [['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]))
       + '<p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved. Government numbers are partly hidden for your privacy.</p>';
+  }
+  function overtime(box, list) {
+    const STATUS = { pending: 'Pending HR approval', approved: 'Approved', rejected: 'Not approved', cancelled: 'Cancelled' };
+    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>File overtime</h2><span class="legend">Clocking out late is not overtime by itself. File the extra hours you actually worked; only approved hours are paid.</span></div>
+      <form id="ot-file" class="panel-body form-grid">
+        <label class="field">Date<input type="date" name="date" required></label>
+        <label class="field">Overtime hours<input type="number" name="hours" min="0.25" max="16" step="0.25" required></label>
+        <label class="field full">Work done / reason<input name="reason" required minlength="3" maxlength="1000"></label>
+        <div><button class="primary">Submit for approval</button></div></form>
+      ${table(['Date', 'Hours filed', 'Reason', 'Status', 'HR remarks', ''], list.map(o => [fmtDate(o.date), `${o.hours} h`, esc(o.reason), esc(STATUS[o.status] || o.status) + (o.status === 'approved' ? ` (${o.approvedHours} h)` : ''), esc(o.remarks || '—'), o.status === 'pending' ? `<button class="small" data-ot-cancel="${o.id}">Cancel</button>` : '']), 'No overtime filed yet.')}</section>`;
+    box.querySelector('#ot-file').onsubmit = async event => {
+      event.preventDefault(); const f = new FormData(event.target);
+      try { await api('/hr/me/overtime', { date: f.get('date'), hours: Number(f.get('hours')), reason: f.get('reason') }); toast('Overtime sent to HR for approval.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
+    };
+    box.onclick = async event => {
+      const b = event.target.closest('[data-ot-cancel]'); if (!b) return;
+      try { await api(`/hr/me/overtime/${b.dataset.otCancel}/cancel`, {}); toast('Filing cancelled.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
+    };
   }
   function loans(box, data) {
     const money = n => `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -113,5 +132,5 @@ export function createPortalHr({ api, esc, table, toast }) {
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
+  return { fill, celebrations, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
 }

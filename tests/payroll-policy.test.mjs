@@ -7,7 +7,7 @@ import { schemas } from '../src/schema.mjs';
 const MONDAY = '2026-09-21', SATURDAY = '2026-09-19';
 function state(attendanceProfile = {}) {
   const s = initialState();
-  s.rules = [{ ...defaultRules, id: 'r1', effectiveDate: '2026-01-01', approvedBy: 'admin', contributionsReviewed: true }];
+  s.rules = [{ ...defaultRules, id: 'r1', effectiveDate: '2026-01-01', approvedBy: 'admin', contributionsReviewed: true, overtimeApproval: 'attendance' }];
   s.employees = [{ id: 'E1', name: 'Policy, Test', department: 'Admin', monthlySalary: 22000, startDate: '2025-01-01', endDate: '', restDays: [0], scheduleStart: '09:00', coveredOT: true, coveredNSD: true, coveredHoliday: true, covered13th: true, leaveEligibility: [], active: true }];
   s.employeeProfiles = [{ employeeId: 'E1', section: 'attendance', scheduleEnd: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, ...attendanceProfile }];
   return s;

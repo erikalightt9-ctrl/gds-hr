@@ -4,6 +4,7 @@ import { Store } from '../src/store.mjs';
 import { preview } from '../src/service.mjs';
 import { savePayrollInput } from '../src/payroll-inputs.mjs';
 import { completeState } from './helpers.mjs';
+import { fileOvertime, decideOvertime, overtimeQueue, myOvertime } from '../src/overtime.mjs';
 
 const payroll = { username: 'pay1', role: 'payroll' }, cutoff = { start: '2026-09-01', end: '2026-09-15' };
 function fixture(change = () => {}) { const store = new Store(':memory:'), s = completeState(); s.loans = []; change(s); store.write(s); return store; }
@@ -30,16 +31,26 @@ test('a manual override replaces a calculated amount, keeps the original, and ne
   } finally { store.close(); }
 });
 
-test('with separate overtime approval, pending overtime is flagged and rejected overtime is not paid', () => {
-  const paid = fixture(ot);
-  const separate = s => { ot(s); s.rules[0].overtimeApproval = 'separate'; };
-  const pending = fixture(s => { separate(s); s.attendance[0].overtimeStatus = 'pending'; });
-  const rejected = fixture(s => { separate(s); s.attendance[0].overtimeStatus = 'rejected'; });
+test('late clock-out is not overtime: only filed and approved hours are paid, up to the hours worked', () => {
+  const store = fixture(s => { ot(s); delete s.rules[0].overtimeApproval; }), worker = { username: 'employee1', role: 'employee', employeeId: 'EMP-001' }, hr = { username: 'hr1', role: 'hr' };
+  const day = completeState().attendance[0].date;
   try {
-    assert.ok(run(paid).rows[0].earnings.regularOT > 0, 'default policy: approved attendance pays overtime');
-    const p = run(pending);
-    assert.equal(p.rows[0].earnings.regularOT, 0); assert.ok(p.blockers.some(b => /pending approval/.test(b)));
-    const r = run(rejected);
-    assert.equal(r.rows[0].earnings.regularOT, 0); assert.ok(!r.blockers.some(b => /overtime/.test(b)));
-  } finally { paid.close(); pending.close(); rejected.close(); }
+    const unfiled = run(store);
+    assert.equal(unfiled.rows[0].earnings.regularOT, 0, 'staying late without filing is not paid');
+    assert.ok(!unfiled.blockers.some(b => /overtime/.test(b)), 'and does not block payroll');
+    assert.match(unfiled.rows[0].trace.find(x => /without approved overtime filing/.test(x.formula)).formula, /3 h after the schedule/);
+    const filing = fileOvertime(store, worker, { date: day, hours: 2, reason: 'Month-end closing (demo)' });
+    assert.throws(() => fileOvertime(store, worker, { date: day, hours: 1, reason: 'Duplicate (demo)' }), /already filed/);
+    const pending = run(store);
+    assert.equal(pending.rows[0].earnings.regularOT, 0); assert.ok(pending.blockers.some(b => /pending approval/.test(b)));
+    assert.throws(() => decideOvertime(store, worker, filing.id, { decision: 'approve' }), /permission/);
+    assert.throws(() => decideOvertime(store, hr, filing.id, { decision: 'approve', hours: 5 }), /cannot exceed/);
+    decideOvertime(store, hr, filing.id, { decision: 'approve', hours: 2 });
+    const paid = run(store).rows[0], twoHours = paid.trace.filter(x => x.component === 'regularOT' && x.amount > 0);
+    assert.equal(twoHours.reduce((s, x) => s + x.quantity, 0), 2, 'only the 2 approved hours are paid, not all 3 worked');
+    assert.equal(overtimeQueue(store, hr)[0].worked, 3);
+    decideOvertime(store, hr, filing.id, { decision: 'reject', remarks: 'Not authorized (demo)' });
+    assert.equal(run(store).rows[0].earnings.regularOT, 0, 'rejected overtime is not paid');
+    assert.equal(myOvertime(store, worker)[0].status, 'rejected');
+  } finally { store.close(); }
 });

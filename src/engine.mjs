@@ -230,12 +230,20 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const under = rest || record.exception ? 0 : Math.max(0, normalHours * 60 - minutes.length - lateMinutes);
       if (r.deductUndertime && under) add(deductions, 'undertime', under / 60 * hourly, `${under} minutes ÷ 60 × ${hourly}`, record, d);
       const groups = new Map();
+      // Policy "separate" (the default): time after the schedule is overtime only up to the hours the employee filed
+      // and HR approved; clocking out late without a filing is not paid. A pending filing blocks posting.
+      const separateOT = (r.overtimeApproval || 'separate') === 'separate', filings = (state.overtimeRequests || []).filter(o => o.employeeId === e.id && o.date === d);
+      const approvedOTMinutes = filings.filter(o => o.status === 'approved').reduce((s, o) => s + o.approvedHours * 60, 0);
+      if (separateOT && e.coveredOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime filings before posting.`);
+      let unfiledMinutes = 0;
       minutes.forEach((m, index) => {
         const date = new Date(m).toISOString().slice(0, 10), c = classification(state, e, date);
         const ot = index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
+        if (ot && separateOT && e.coveredOT && index - normalHours * 60 >= approvedOTMinutes) { unfiledMinutes++; return; }
         const key = `${date}/${c}/${ot}/${night}`;
         const group = groups.get(key) || { date, c, ot, night, count: 0 }; group.count++; groups.set(key, group);
       });
+      if (unfiledMinutes) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `${round(unfiledMinutes / 60)} h after the schedule${approvedOTMinutes ? ` beyond the ${round(approvedOTMinutes / 60)} h approved` : ''} without approved overtime filing: not paid`, sourceKind: 'attendance', sourceId: record.id, date: d, quantity: round(unfiledMinutes / 60) });
       for (const g of groups.values()) {
         const mult = dayRate(g.c, r), overtime = g.c === 'ordinary' ? r.ordinaryOT : r.premiumOT;
         const fullRate = mult * (g.ot ? overtime : 1), hours = g.count / 60;
@@ -243,12 +251,6 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         const credit = !g.ot && !rest ? 1 : 0;
         // Exempt employees require an explicit approved additional-pay entry for OT.
         if (g.ot && !e.coveredOT) continue;
-        // Policy "separate": overtime is paid only once it is approved on its own; pending OT is flagged, rejected OT is not paid.
-        if (g.ot && r.overtimeApproval === 'separate' && (record.overtimeStatus || 'approved') !== 'approved') {
-          if (record.overtimeStatus === 'pending') blockers.push(`${prefix}: ${round(hours)} h overtime on ${g.date} is pending approval. Approve or reject it before posting.`);
-          trace.push({ component: component === 'basic' ? 'regularOT' : component, side: 'earnings', amount: 0, formula: `${round(hours)} h overtime ${record.overtimeStatus}: not paid`, sourceKind: 'attendance', sourceId: record.id, date: g.date, quantity: round(hours) });
-          continue;
-        }
         if (!g.ot && component !== 'basic' && !rest) holidayBase += g.c === 'rest' ? 0 : hours * hourly;
         const amount = hours * hourly * (fullRate - credit);
         workBreakdown.push({ date: g.date, classification: g.c, overtime: g.ot, night: g.night, hours: round(hours), dayMultiplier: mult, otMultiplier: g.ot ? overtime : 1, nightMultiplier: g.night && e.coveredNSD ? 1 + r.nsd : 1, combinedMultiplier: Math.round(fullRate * (g.night && e.coveredNSD ? 1 + r.nsd : 1) * 10000) / 10000, sourceId: record.id });

@@ -26,6 +26,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS loan_applications (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be edited.'); END;
       CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be deleted.'); END;
+      CREATE TABLE IF NOT EXISTS overtime_requests (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, date TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS prior_earnings (employee_id TEXT NOT NULL, month TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, month));
       CREATE TABLE IF NOT EXISTS final_pay (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS payroll_inputs (employee_id TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, start, end));
@@ -52,10 +53,11 @@ export class Store {
     state.deductions ??= [];   // added after launch; older databases start with none
     state.payrollInputs = this.db.prepare('SELECT data FROM payroll_inputs').all().map(r => JSON.parse(r.data));
     state.priorEarnings = this.db.prepare('SELECT data FROM prior_earnings').all().map(r => JSON.parse(r.data));
+    state.overtimeRequests = this.db.prepare("SELECT data FROM overtime_requests WHERE status IN ('pending','approved')").all().map(r => JSON.parse(r.data));
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
     return state;
   }
-  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
+  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.overtimeRequests; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
   transaction(fn) {
     if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');
