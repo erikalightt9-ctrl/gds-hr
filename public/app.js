@@ -48,7 +48,7 @@ async function api(path, body, method = body ? 'POST' : 'GET') {
 let toastTimer;
 function toast(text) { const node = document.querySelector('#toast'); node.textContent = text; node.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('visible'), 6000); }
 async function refresh() {
-  const user = auth?.user; if (!user) return;
+  const user = auth?.user; if (!user || user.mustChangePassword) return;   // nothing loads until a default password is replaced
   if (user.role === 'employee') { api('/branding').then(b => applyTheme(b.theme)).catch(() => {}); const data = await api('/me/dashboard'); if (auth?.user?.id === user.id) employeeData = data; return; }
   hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme);
   if (!LEGACY.includes(user.role)) { state = { employees: [], runs: [], leaves: [], loans: [], attendance: [], rules: [], leaveTypes: [], holidays: [], adjustments: [], deductions: [] }; return; }
@@ -111,13 +111,11 @@ function navGroups() {
 const groupOf = id => navGroups().find(g => g[2] && g[1].some(([key]) => key === id))?.[2] || null;
 let payGroupOpen = (() => { try { return localStorage.getItem('hr-nav-pay') === 'open'; } catch { return false; } })();
 let mobileDrawer = false;
-const PAGE_TITLES = { employee201: 'Employee 201 File', profile: 'Attendance, leave & pay' };
 let sidebarCollapsed = (() => { try { return localStorage.getItem('hr-sidebar') === 'collapsed'; } catch { return false; } })();
 function applyTheme(theme) { document.documentElement.dataset.theme = theme === 'forest' ? 'forest' : 'gds'; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'forest' ? '#0f3a26' : '#161616'); }
 function shell(content) {
   if (auth.demo) content = '<div class="notice">Preview workspace · Payroll settings and figures are sample data. Changes here do not update the live HR database.</div>' + content;
-  const groups = navGroups(), title = groups.flatMap(g => g[1]).find(n => n[0] === page)?.[1] || PAGE_TITLES[page] || '';
-  const parent = groupOf(page), crumb = parent ? `${parent.label} › ${title}` : title;
+  const groups = navGroups(), parent = groupOf(page);
   if (parent) payGroupOpen = true;   // a module opened by link, refresh or back/forward shows its menu
   const company = hrContext?.company || { name: 'GDS CAPITAL INC.', systemTitle: 'HR 201 File & Employee Management System' };
   const icon = id => `<span class="symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">${navigationIcons[id] || ''}</svg></span>`;
@@ -129,7 +127,7 @@ function shell(content) {
       return `<div class="nav-group ${payGroupOpen ? 'open' : ''}"><button class="nav-parent ${childActive ? 'has-active' : ''}" data-nav-group="${group.id}" aria-expanded="${payGroupOpen}" aria-controls="nav-${group.id}" title="${esc(group.label)}">${icon(group.icon)}<span class="nav-text">${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true"></span></button><div class="nav-sub" id="nav-${group.id}" role="group" aria-label="${esc(group.label)}"><div class="nav-sub-inner">${items.map(i => item(i, true)).join('')}</div></div></div>`;
     }).join('')}</nav>
     <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button><button class="signout-button sidebar-signout" data-signout>Sign out</button></div></aside>
-    <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong><small>${esc(crumb)}</small></span></span>
+    <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong></span></span>
       <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span><span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
       <span class="topbar-divider" aria-hidden="true"></span><span class="user-meta"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span></span></header>
     <div class="content">${content}</div></main></div>`;
@@ -330,8 +328,22 @@ async function auditPage() {
   shell(heading('Audit trail', 'Who changed what, when, and why. Payroll snapshots preserve their original records.') + `<section class="panel"><div class="panel-head"><h2>Recent activity</h2>${downloads('audit')}<span class="legend">Latest 1,000 events</span></div>${table(['Time', 'Actor', 'Action', 'Record', ''], entries.map((e, i) => [esc(new Date(e.at).toLocaleString()), esc(e.actor), badge(e.action, 'neutral'), `${esc(e.kind)}<br><small>${esc(e.recordId)}</small>`, `<button class="small" data-audit-index="${i}">Inspect change</button>`]))}</section>`);
   document.querySelectorAll('[data-audit-index]').forEach(b => b.onclick = () => showObject('Audit event', entries[Number(b.dataset.auditIndex)]));
 }
+function renderForcedPassword() {
+  app.innerHTML = `<main class="login-shell forced-password"><section class="panel login-card"><div class="panel-body"><h1>Choose your own password</h1><p class="sub">Signed in as ${esc(auth.user.username)}. Your account was created with a default password; set your own before continuing.</p>
+    <form id="forced-password" class="form-grid one"><label class="field">Default / current password<input type="password" name="currentPassword" required autocomplete="current-password"></label>
+    <label class="field">New password (at least 12 characters)<input type="password" name="newPassword" required minlength="12" maxlength="200" autocomplete="new-password"></label>
+    <label class="field">Confirm new password<input type="password" name="confirm" required minlength="12" maxlength="200" autocomplete="new-password"></label>
+    <div class="actions"><button class="primary">Save password</button><button type="button" data-signout>Sign out</button></div></form></div></section></main>`;
+  app.querySelector('#forced-password').onsubmit = async event => {
+    event.preventDefault(); const f = new FormData(event.target);
+    if (f.get('newPassword') !== f.get('confirm')) { toast('The new passwords do not match.'); return; }
+    if (f.get('newPassword') === f.get('currentPassword')) { toast('Choose a password different from the default.'); return; }
+    try { await api('/password', { currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') }); auth = { user: null }; renderLogin(); toast('Password saved. Sign in with your new password.'); } catch (error) { toast(error.message); }
+  };
+}
 function render() {
   if (!auth?.user) { renderLogin(); return; }
+  if (auth.user.mustChangePassword) { renderForcedPassword(); return; }
   offerInstall();
   startLive();
   if (auth.user.role === 'employee') { portal.draw(employeeData, auth); return; }
@@ -655,9 +667,18 @@ function renderLogin() {
 }
 async function account() {
   const users = auth.user.role === 'admin' ? await api('/users') : [];
-  openDialog('Account & access', `<div class="dialog-body"><p class="sub">Signed in as ${esc(auth.user.username)} · ${esc(auth.user.role)}</p><br><button data-logout>Sign out</button><br><br><h3>Change your password</h3><form id="password-form" class="form-grid"><label class="field">Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label><label class="field">New password<input type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="200" required></label><button class="primary" type="submit">Update password & sign out</button></form>${auth.user.role === 'admin' ? `<br><br><h3>Workspace access</h3>${table(['Username', 'Role'], users.map(u => [esc(u.username), badge({ admin: 'System Administrator', hr: 'HR Manager', hr_staff: 'HR Staff', dept_manager: 'Department Manager', viewer: 'Management', payroll: 'Payroll', employee: 'Employee' }[u.role] || u.role, 'neutral')]))}<br><form id="user-form" class="form-grid"><label class="field">Username<input name="username" minlength="3" required autocomplete="off"></label><label class="field">Role<select name="role"><option value="employee">Employee — own records only</option><option value="hr_staff">HR Staff — day-to-day 201 work</option><option value="maker">Maker — all non-salary employee records</option><option value="hr">HR Manager — people, approvals, attendance &amp; leave</option><option value="dept_manager">Department Manager — own department, view only</option><option value="payroll">Payroll — loans &amp; posting</option><option value="viewer">Management — dashboards &amp; reports</option><option value="admin">System Administrator — all settings</option></select></label><label class="field">Linked employee (Employee and Department Manager)<select name="employeeId"><option value="">Choose employee</option>${state.employees.map(e => `<option value="${esc(e.id)}">${esc(e.name)} · ${esc(e.id)}</option>`).join('')}</select></label><label class="field">Initial password<input type="password" name="password" minlength="12" maxlength="200" autocomplete="new-password" required></label><button class="primary" type="submit">Add user</button></form>` : ''}<p class="legend">${auth.user.role === 'employee' ? 'Your account can access only your own employee portal, attendance, leave and payslips.' : 'Staff report access follows your role. Employee accounts can access only their own records. Personal details, IDs, bank details and documents have additional restrictions.'}</p></div>`);
+  openDialog('Account & access', `<div class="dialog-body"><p class="sub">Signed in as ${esc(auth.user.username)} · ${esc(auth.user.role)}</p><br><button data-logout>Sign out</button><br><br><h3>Change your password</h3><form id="password-form" class="form-grid"><label class="field">Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label><label class="field">New password<input type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="200" required></label><button class="primary" type="submit">Update password & sign out</button></form>${auth.user.role === 'admin' ? `<br><br><h3>Workspace access</h3><div class="actions"><button data-employee-accounts>Create accounts for all employees</button><span class="legend">Adds a login for every registered employee without one (username = Employee ID). Existing accounts are not changed. Everyone must choose their own password at first sign-in.</span></div>${table(['Username', 'Role'], users.map(u => [esc(u.username), badge({ admin: 'System Administrator', hr: 'HR Manager', hr_staff: 'HR Staff', dept_manager: 'Department Manager', viewer: 'Management', payroll: 'Payroll', employee: 'Employee' }[u.role] || u.role, 'neutral')]))}<br><form id="user-form" class="form-grid"><label class="field">Username<input name="username" minlength="3" required autocomplete="off"></label><label class="field">Role<select name="role"><option value="employee">Employee — own records only</option><option value="hr_staff">HR Staff — day-to-day 201 work</option><option value="maker">Maker — all non-salary employee records</option><option value="hr">HR Manager — people, approvals, attendance &amp; leave</option><option value="dept_manager">Department Manager — own department, view only</option><option value="payroll">Payroll — loans &amp; posting</option><option value="viewer">Management — dashboards &amp; reports</option><option value="admin">System Administrator — all settings</option></select></label><label class="field">Linked employee (Employee and Department Manager)<select name="employeeId"><option value="">Choose employee</option>${state.employees.map(e => `<option value="${esc(e.id)}">${esc(e.name)} · ${esc(e.id)}</option>`).join('')}</select></label><label class="field">Initial password<input type="password" name="password" minlength="12" maxlength="200" autocomplete="new-password" required></label><button class="primary" type="submit">Add user</button></form>` : ''}<p class="legend">${auth.user.role === 'employee' ? 'Your account can access only your own employee portal, attendance, leave and payslips.' : 'Staff report access follows your role. Employee accounts can access only their own records. Personal details, IDs, bank details and documents have additional restrictions.'}</p></div>`);
   dialog.querySelector('[data-logout]').onclick = signOut;
   dialog.querySelector('#password-form').onsubmit = async event => { event.preventDefault(); try { await api('/password', Object.fromEntries(new FormData(event.target))); dialog.close(); auth = { user: null }; renderLogin(); toast('Password updated. Please sign in again.'); } catch (e) { toast(e.message); } };
+  dialog.querySelector('[data-employee-accounts]')?.addEventListener('click', async () => {
+    const password = window.prompt('Default password for the new employee accounts (at least 12 characters). Employees must change it at first sign-in:');
+    if (password === null) return;
+    try {
+      const r = await api('/users/employee-accounts', { password });
+      toast(`${r.created.length} account${r.created.length === 1 ? '' : 's'} created · ${r.alreadyHadAccount} already had one${r.skipped.length ? ` · ${r.skipped.length} skipped (username taken: ${r.skipped.map(s => s.name).join(', ')})` : ''}.`);
+      await account();
+    } catch (error) { toast(error.message); }
+  });
   const userForm = dialog.querySelector('#user-form');
   if (userForm) userForm.onsubmit = async event => { event.preventDefault(); try { const values = Object.fromEntries(new FormData(userForm)); if (!['employee', 'dept_manager'].includes(values.role)) delete values.employeeId; await api('/users', values); await account(); toast('User created.'); } catch (e) { toast(e.message); } };
   await portal.accountTools(auth.user, users);

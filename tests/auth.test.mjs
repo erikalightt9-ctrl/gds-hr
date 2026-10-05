@@ -43,3 +43,25 @@ test('an admin can delete another login account after typing its username; the d
     assert.throws(() => deleteUser(db, me, other.id, 'other.admin'), /last enabled administrator/);
   } finally { db.close(); }
 });
+
+test('accounts for all registered employees: existing ones untouched, default password must be changed first', async () => {
+  const { completeState } = await import('./helpers.mjs');
+  const { createEmployeeAccounts } = await import('../src/auth.mjs');
+  const db = new Store(':memory:');
+  try {
+    const s = completeState(); s.employees.push({ ...s.employees[0], id: 'EMP-002', name: 'Second Employee' }, { ...s.employees[0], id: 'EMP-003', name: 'Archived Employee', archived: true }); db.write(s);
+    const me = await addUser(db, { username: 'owner.admin', password: 'initial-password-123', role: 'admin' });
+    await addUser(db, { username: 'EMP-001', password: 'existing-password-1', role: 'employee', employeeId: 'EMP-001' }, me);
+    await assert.rejects(() => createEmployeeAccounts(db, me, 'short'), /12/);
+    await assert.rejects(() => createEmployeeAccounts(db, { ...me, role: 'hr' }, 'default-pass-123'), /permission/);
+    const r = await createEmployeeAccounts(db, me, 'default-pass-123');
+    assert.deepEqual(r.created.map(c => c.username), ['EMP-002']); assert.equal(r.alreadyHadAccount, 1);
+    assert.equal((await createEmployeeAccounts(db, me, 'default-pass-123')).created.length, 0, 'running again creates nothing');
+    const first = await login(db, 'EMP-002', 'default-pass-123', 'test');
+    assert.equal(first.user.mustChangePassword, true);
+    await changePassword(db, first.user, 'default-pass-123', 'my-own-password-99');
+    assert.equal((await login(db, 'EMP-002', 'my-own-password-99', 'test')).user.mustChangePassword, false);
+    assert.equal((await login(db, 'EMP-001', 'existing-password-1', 'test')).user.mustChangePassword, false, 'existing account unchanged');
+    assert.ok(!JSON.stringify(db.audit()).includes('default-pass-123'), 'the password is never logged');
+  } finally { db.close(); }
+});

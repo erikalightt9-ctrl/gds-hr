@@ -17,7 +17,7 @@ import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entit
 import { decideLoanApplication, loanDashboard } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOverview } from './thirteenth.mjs';
-import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa } from './auth.mjs';
+import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -97,6 +97,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      // A default password must be replaced before anything else can be used.
+      if (auth.user.mustChangePassword && !['/api/events', '/api/logout', '/api/password', '/api/version'].includes(pathname)) throw new AppError('Choose your own password first.', 403);
       if (pathname === '/api/events' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         const valid = () => !!session(store, req.headers.cookie);
@@ -229,6 +231,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         }
         if (req.method === 'POST' && !documentRoute[2]) { send(200, updateDocument(store, auth.user, documentRoute[1], await readBody(req))); return; }
       }
+      if (pathname === '/api/users/employee-accounts' && req.method === 'POST') { permit(auth.user, ['admin']); const v = z.object({ password: z.string().max(200) }).strict().parse(await readBody(req)); send(200, await createEmployeeAccounts(store, auth.user, v.password)); return; }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
         if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }

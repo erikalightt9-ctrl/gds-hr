@@ -25,6 +25,30 @@ export async function addUser(store, input, actor = null) {
     return user;
   });
 }
+// One click: a login for every registered employee who does not have one yet (existing accounts are never
+// touched). Username = Employee number; everyone starts with the default password the administrator types, and
+// must choose their own at first sign-in. The password itself is never stored or logged.
+export async function createEmployeeAccounts(store, actor, defaultPassword) {
+  permit(actor, ['admin']);
+  const password = String(defaultPassword || '');
+  if (password.length < 12 || password.length > 200) throw new AppError('Use a default password of 12–200 characters.');
+  const linked = new Set(store.db.prepare('SELECT employee_id FROM users WHERE employee_id IS NOT NULL').all().map(r => r.employee_id));
+  const pending = store.read().employees.filter(e => !e.archived && !linked.has(e.id));
+  const created = [], skipped = [];
+  for (const e of pending) {
+    const username = String(e.employeeNumber || e.id).trim();
+    if (!/^[A-Za-z0-9_.@-]{3,80}$/.test(username) || store.db.prepare('SELECT id FROM users WHERE username=? COLLATE NOCASE').get(username)) { skipped.push({ employeeId: e.id, name: e.name, reason: 'Username already taken or invalid' }); continue; }
+    const hash = await passwordHash(password);
+    store.transaction(() => {
+      if (store.db.prepare('SELECT id FROM users WHERE employee_id=? OR username=? COLLATE NOCASE').get(e.id, username)) return;
+      const user = { id: randomUUID(), username, role: 'employee', employeeId: e.id };
+      store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id,must_change_password) VALUES(?,?,?,?,?,1)').run(user.id, user.username, hash, user.role, user.employeeId);
+      store.log(actor, 'bulk-create-account', 'users', user.id, null, { ...user, mustChangePassword: true });
+      created.push({ username, name: e.name });
+    });
+  }
+  return { created, skipped, alreadyHadAccount: store.read().employees.filter(e => !e.archived).length - pending.length };
+}
 export function checkLimit(store, key, maximum = 10) {
   const now = Date.now();
   store.db.prepare('DELETE FROM login_limits WHERE until_ms < ?').run(now);
@@ -48,14 +72,14 @@ export async function login(store, username, password, key, otp = '') {
   const token = randomBytes(32).toString('hex'), csrf = randomBytes(32).toString('hex');
   store.db.prepare('DELETE FROM sessions WHERE expires < ?').run(Date.now());
   store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + 8 * 3600000);
-  return { token, csrf, user: { id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret } };
+  return { token, csrf, user: { id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret, mustChangePassword: !!user.must_change_password } };
 }
 export function session(store, cookie = '') {
   const token = cookie.split(';').map(v => v.trim()).find(v => v.startsWith('hr_session='))?.slice(11);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
+  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
   if (!row || row.disabled || row.expires < Date.now()) return null;
-  return { user: { id: row.id, username: row.username, role: row.role, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret }, csrf: row.csrf, tokenHash: hashToken(token) };
+  return { user: { id: row.id, username: row.username, role: row.role, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
 }
 export async function changePassword(store, user, currentPassword, newPassword) {
   const row = store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id);
@@ -65,7 +89,7 @@ export async function changePassword(store, user, currentPassword, newPassword) 
   const hash = await passwordHash(newPassword);
   store.transaction(() => {
     if (store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id)?.password_hash !== row.password_hash) throw new AppError('Account changed during this request. Sign in again.', 409);
-    store.db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hash, user.id);
+    store.db.prepare('UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?').run(hash, user.id);
     store.db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     store.db.prepare('DELETE FROM password_resets WHERE user_id=?').run(user.id);
     store.log(user, 'password-change', 'users', user.id, null, null);
@@ -166,7 +190,7 @@ export async function redeemPasswordReset(store, token, password) {
   return store.transaction(() => {
     const reset = store.db.prepare('SELECT * FROM password_resets WHERE token_hash=?').get(hashToken(token));
     if (!reset || reset.expires < Date.now()) throw new AppError('Reset code is invalid or expired.');
-    store.db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hash, reset.user_id);
+    store.db.prepare('UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?').run(hash, reset.user_id);
     store.db.prepare('DELETE FROM password_resets WHERE user_id=?').run(reset.user_id);
     store.db.prepare('DELETE FROM sessions WHERE user_id=?').run(reset.user_id);
     store.log({ username: 'password-recovery' }, 'password-reset', 'users', reset.user_id, null, null);

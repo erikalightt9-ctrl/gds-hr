@@ -410,3 +410,10 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .shell.collapsed .sidebar-bottom { display: flex; padding-left: 6px; padding-right: 6px; }
 .shell.collapsed .sidebar-bottom [data-account] { display: none; }
 .shell.collapsed .sidebar-bottom .sidebar-signout { padding: 9px 4px; font-size: 10.5px; letter-spacing: .02em; }
+
+/* ---------- First sign-in: choose your own password ---------- */
+.forced-password { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: linear-gradient(135deg, #171717, #3a0d12); }
+.forced-password .login-card { width: min(460px, 100%); margin: 0; }
+.forced-password h1 { font-size: 24px; margin: 0 0 8px; }
+.forced-password .form-grid.one { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
+.forced-password input { width: 100%; }
