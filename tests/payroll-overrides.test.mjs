@@ -56,3 +56,20 @@ test('late clock-out is not overtime: only filed and approved hours are paid, up
     assert.equal(myOvertime(store, worker)[0].status, 'rejected');
   } finally { store.close(); }
 });
+
+test('an absence override flows into the posted 13th-month basic and final pay', async () => {
+  const { postPayroll } = await import('../src/service.mjs');
+  const { thirteenthLedger, computeFinalPay } = await import('../src/thirteenth.mjs');
+  const { admin } = await import('./helpers.mjs');
+  const store = fixture();
+  try {
+    const base = run(store).rows[0];
+    savePayrollInput(store, payroll, 'EMP-001', { ...cutoff, mode: 'add', hours: {}, reason: 'Correction (demo)', overrides: [{ component: 'absence', amount: 2000, reason: 'Unrecorded absence (demo)' }] });
+    const preview1 = run(store), row = preview1.rows[0];
+    assert.equal(row.applicableBasic, Math.round((base.applicableBasic - 2000) * 100) / 100);
+    postPayroll(store, admin, { ...cutoff, pay13th: false, fingerprint: preview1.fingerprint, employeeIds: ['EMP-001'] });
+    assert.equal(thirteenthLedger(store, payroll, '2026')[0].postedBasic, row.applicableBasic);
+    const fp = computeFinalPay(store, payroll, { employeeId: 'EMP-001', separationDate: cutoff.end, unpaidDays: 0 });
+    assert.equal(fp.items.find(i => /13th/.test(i.label)).amount, Math.round(row.applicableBasic / 12 * 100) / 100);
+  } finally { store.close(); }
+});
