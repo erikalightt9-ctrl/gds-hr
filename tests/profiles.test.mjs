@@ -69,7 +69,7 @@ test('profile validation, shared name and document metadata', () => {
   try {
     assert.equal(getProfile(store, admin, id).sections.personal.firstName, 'ERIKA');
     saveProfile(store, admin, id, 'personal', { firstName: 'ERIKA', lastName: 'HERNANDO', middleName: 'L.', birthDate: '2000-01-01' });
-    assert.equal(store.read().employees[0].name, 'HERNANDO, ERIKA L.');
+    assert.equal(store.read().employees[0].name, 'Hernando, Erika L.', 'names are capitalized word by word');
     assert.throws(() => saveProfile(store, admin, id, 'personal', { firstName: 'Test', birthDate: '2200-01-01' }));
     assert.throws(() => saveProfile(store, admin, id, 'unknown', {}));
     assert.throws(() => saveProfile(store, admin, id, 'leave', { entitlements: [{ typeId: 'missing', annualDays: 7, effectiveYear: 2026 }] }));

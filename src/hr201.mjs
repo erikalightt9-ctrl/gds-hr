@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { saveProfile, localToday } from './profiles.mjs';
 import { HR_MANAGERS, HR_TEAM, DIRECTORY, DASHBOARD, SENSITIVE_IDS } from './roles.mjs';
+import { personalNames, titleCase } from './names.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
@@ -169,7 +170,7 @@ function writeSections(store, actor, id, v, existing = {}) {
 }
 export function createEmployee(store, actor, input) {
   permit(actor, HR_TEAM);
-  const v = employeeFormSchema.parse(input), settings = readSettings(store);
+  const parsed = employeeFormSchema.parse(input), v = { ...parsed, personal: personalNames(parsed.personal), emergency: { ...parsed.emergency, name: titleCase(parsed.emergency.name) } }, settings = readSettings(store);
   validateForm(v, settings);
   return store.transaction(() => {
     const duplicates = duplicateCandidates(store, v);
@@ -182,7 +183,7 @@ export function createEmployee(store, actor, input) {
 }
 export function updateEmployee(store, actor, id, input) {
   permit(actor, HR_TEAM);
-  const v = employeeFormSchema.parse(input), settings = readSettings(store);
+  const parsed = employeeFormSchema.parse(input), v = { ...parsed, personal: personalNames(parsed.personal), emergency: { ...parsed.emergency, name: titleCase(parsed.emergency.name) } }, settings = readSettings(store);
   validateForm(v, settings);
   return store.transaction(() => {
     const state = store.read(), master = state.employees.find(e => e.id === id);

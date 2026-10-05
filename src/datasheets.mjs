@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
 import { saveProfile, localToday } from './profiles.mjs';
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
+import { personalNames, titleCase } from './names.mjs';
 
 const f = (max = 200) => z.string().trim().max(max).default('');
 const date = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default('');
@@ -39,7 +40,7 @@ export function mySheet(store, actor) {
 }
 export function saveMySheet(store, actor, input, submit = false) {
   permit(actor, ['employee']);
-  const fields = sheetSchema.parse(input);
+  const parsed = sheetSchema.parse(input), fields = { ...parsed, personal: personalNames(parsed.personal), emergency: parsed.emergency ? { ...parsed.emergency, name: titleCase(parsed.emergency.name) } : parsed.emergency };
   if (submit) {
     const missing = [!fields.personal.firstName && 'first name', !fields.personal.lastName && 'last name', !fields.contact.mobile && 'mobile number', !fields.emergency.name && 'emergency contact'].filter(Boolean);
     if (missing.length) throw new AppError(`Please complete: ${missing.join(', ')}.`);

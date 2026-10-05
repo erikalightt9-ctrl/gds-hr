@@ -17,6 +17,13 @@ import { createBreakdown } from './payroll-breakdown.js';
 import { createLoansPage } from './loans-ui.js';
 import { createThirteenthPage } from './thirteenth-ui.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
+// Names are capitalized word by word as soon as a name box is left (the server applies the same rule on save).
+const NAME_INPUT = /^(personal\.(firstName|middleName|lastName|suffix|preferredName)|emergency\.name|spouseName|fatherName|motherName|childName.*)$/;
+const titleCase = value => value.trim().split(/\s+/).filter(Boolean).map(w => (/^(i{1,3}|iv|v|vi{0,3}|ix|x)\.?$/i.test(w) ? w.toUpperCase() : w.toLowerCase().replace(/(^|[-'’])(\p{L})/gu, (_, s, c) => s + c.toUpperCase()))).join(' ');
+document.addEventListener('focusout', event => {
+  const input = event.target;
+  if (input instanceof HTMLInputElement && NAME_INPUT.test(input.name) && input.value.trim()) { const v = titleCase(input.value); if (v !== input.value) { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); } }
+});
 const money = n => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(n || 0);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());

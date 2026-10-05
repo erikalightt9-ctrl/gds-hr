@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { date } from './schema.mjs';
 import { AppError, permit } from './service.mjs';
 import { leaveBalance, ruleOn } from './engine.mjs';
+import { sectionNames } from './names.mjs';
 
 const text = z.string().trim().max(1000).default('');
 const optionalDate = z.union([date, z.literal('')]).default('');
@@ -67,7 +68,7 @@ export function derivedInformation(e, personal = {}, asOf = localToday()) {
 export function saveProfile(store, actor, id, section, input) {
   if (!Object.hasOwn(profileSchemas, section)) throw new AppError('Unknown profile section.', 404);
   if (!canWriteSection(actor, section)) throw new AppError('You cannot edit this profile section.', 403);
-  const value = profileSchemas[section].parse(input);
+  const value = sectionNames(section, profileSchemas[section].parse(input));
   return store.transaction(() => {
     const employee = findEmployee(store, id), state = store.read();
     if (section === 'personal' && value.birthDate > localToday()) throw new AppError('Birth date cannot be in the future.');
