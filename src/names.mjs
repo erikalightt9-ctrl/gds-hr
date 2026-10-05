@@ -28,3 +28,31 @@ export function sectionNames(section, value) {
   }
   return value;
 }
+
+// One-time update of names saved before automatic capitalization (e.g. "REYES, PATRICK OLIVER L." →
+// "Reyes, Patrick Oliver L."). Runs once per database; every change is in the audit trail with the old value.
+const MIGRATION_KEY = 'migration:capitalize-names';
+export function capitalizeExistingNames(store) {
+  if (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(MIGRATION_KEY)) return 0;
+  const system = { username: 'system (name capitalization)' };
+  let changed = 0;
+  store.transaction(() => {
+    const state = store.read();
+    for (const e of state.employees) {
+      for (const section of ['personal', 'emergency', 'family']) {
+        const row = store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(e.id, section);
+        if (!row) continue;
+        const before = JSON.parse(row.data), after = sectionNames(section, before);
+        if (JSON.stringify(before) === JSON.stringify(after)) continue;
+        store.db.prepare('UPDATE employee_profiles SET data=? WHERE employee_id=? AND section=?').run(JSON.stringify(after), e.id, section);
+        store.log(system, 'capitalize-names', `profile:${section}`, e.id, before, after); changed++;
+      }
+      const personal = JSON.parse(store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(e.id)?.data || 'null');
+      const name = personal?.lastName ? [personal.lastName, [personal.firstName, personal.middleName, personal.suffix].filter(Boolean).join(' ')].filter(Boolean).join(', ') : titleCase(e.name);
+      if (name && name !== e.name) { store.log(system, 'capitalize-names', 'employees', e.id, { name: e.name }, { name }); e.name = name; changed++; }
+    }
+    state.version++; store.write(state);
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run(MIGRATION_KEY);
+  });
+  return changed;
+}

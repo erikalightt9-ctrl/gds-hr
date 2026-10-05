@@ -24,6 +24,7 @@ import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
 import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory } from './portal.mjs';
+import { runMigrations } from './migrations.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
@@ -302,6 +303,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const data = path.resolve(process.env.HR_DATA_DIR || path.join(directory, '../data'));
   await mkdir(data, { recursive: true });
   const store = new Store(path.join(data, 'hr.sqlite'));
+  const migrated = runMigrations(store);
+  if (migrated.names || migrated.departments) console.log(`One-time updates: ${migrated.names} name record(s) capitalized, ${migrated.departments} employee(s) moved to GDS Capital HQ (see the audit trail).`);
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });

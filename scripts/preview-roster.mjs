@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Store } from '../src/store.mjs';
 import { createApp } from '../src/server.mjs';
 import { addUser } from '../src/auth.mjs';
+import { runMigrations } from '../src/migrations.mjs';
 const dataPath = name => fileURLToPath(new URL(`../data/${name}`, import.meta.url));
 const store = new Store(dataPath('roster-preview.sqlite'));
 if (!store.read().employees.length) {
@@ -27,6 +28,7 @@ try {
 if (!store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n) await addUser(store, { username: 'demo.admin', password: 'Demo-preview-only-2026', role: 'admin' });
 // Only the fictional sample employee receives a preview login; real roster accounts are created by HR.
 if (store.read().employees.some(e => e.id === 'EMP-001' && e.name.includes('(sample)')) && !store.db.prepare('SELECT id FROM users WHERE employee_id=? OR username=?').get('EMP-001', 'demo.employee')) await addUser(store, { username: 'demo.employee', password: 'Demo-employee-only-2026', role: 'employee', employeeId: 'EMP-001' }, { username: 'preview-setup', role: 'admin' });
+runMigrations(store);
 const app = createApp({ store, origin: 'http://127.0.0.1:3401', setupToken: '', demo: true });
 app.listen(3401, '127.0.0.1', () => console.log('GDS roster preview ready at http://127.0.0.1:3401'));
 const close = () => { app.closeAllConnections(); app.close(() => { store.close(); process.exit(0); }); };
