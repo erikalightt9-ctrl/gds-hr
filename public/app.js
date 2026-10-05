@@ -128,10 +128,10 @@ function shell(content) {
       const childActive = items.some(([id]) => id === page);
       return `<div class="nav-group ${payGroupOpen ? 'open' : ''}"><button class="nav-parent ${childActive ? 'has-active' : ''}" data-nav-group="${group.id}" aria-expanded="${payGroupOpen}" aria-controls="nav-${group.id}" title="${esc(group.label)}">${icon(group.icon)}<span class="nav-text">${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true"></span></button><div class="nav-sub" id="nav-${group.id}" role="group" aria-label="${esc(group.label)}"><div class="nav-sub-inner">${items.map(i => item(i, true)).join('')}</div></div></div>`;
     }).join('')}</nav>
-    <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button></div></aside>
+    <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button><button class="signout-button sidebar-signout" data-signout>Sign out</button></div></aside>
     <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong><small>${esc(crumb)}</small></span></span>
       <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span><span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
-      <span class="topbar-divider" aria-hidden="true"></span><span class="user-meta"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span><button class="signout-button" data-signout>Sign out</button></span></header>
+      <span class="topbar-divider" aria-hidden="true"></span><span class="user-meta"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span></span></header>
     <div class="content">${content}</div></main></div>`;
   loadBell();
   syncRoute();

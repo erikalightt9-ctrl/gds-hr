@@ -401,3 +401,12 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .comply-list { margin: 8px 0 6px; padding-left: 22px; }
 .comply-list li { margin: 3px 0; font-weight: 600; }
 .comply-list small { font-weight: 500; }
+
+/* Sign out sits under Account & access in the sidebar. */
+.sidebar-bottom { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.sidebar-bottom .sidebar-signout { width: 100%; background: #000 !important; color: #fff !important; border: 1px solid #d9b85c !important; }
+.sidebar-bottom .sidebar-signout:hover { background: #1c1c1c !important; }
+/* Collapsed sidebar: keep Sign out reachable. */
+.shell.collapsed .sidebar-bottom { display: flex; padding-left: 6px; padding-right: 6px; }
+.shell.collapsed .sidebar-bottom [data-account] { display: none; }
+.shell.collapsed .sidebar-bottom .sidebar-signout { padding: 9px 4px; font-size: 10.5px; letter-spacing: .02em; }
