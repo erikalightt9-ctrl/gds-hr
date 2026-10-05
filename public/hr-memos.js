@@ -1,5 +1,7 @@
 // Memos: drafts, issuing to all / departments / named employees, revisions, archive, and acknowledgement tracking.
 import { fmtDate, fmtDateTime, readFile } from './hr-common.js';
+// The five memo categories offered when writing a memo (older memos keep their original category).
+const MEMO_CATEGORIES = ['General Announcement', 'Policy / Guidelines', 'Advisory / Reminder', 'Notice to Explain / Disciplinary', 'Office Order / Schedule'];
 
 export function createMemos(ctx) {
   const { api, esc, table, badge, toast, openDialog, dialog, shell, heading } = ctx;
@@ -26,11 +28,11 @@ export function createMemos(ctx) {
     if (b.dataset.open) detail(b.dataset.open);
   }
   function editor(memo, { revision = false } = {}) {
-    const d = memo?.draft || { title: '', category: 'General', reference: '', issueDate: ctx.today(), body: '', recipients: { mode: 'all', departments: [], employees: [] }, ackRequired: true, ackDeadline: '' };
+    const d = memo?.draft || { title: '', category: 'General Announcement', reference: '', issueDate: ctx.today(), body: '', recipients: { mode: 'all', departments: [], employees: [] }, ackRequired: true, ackDeadline: '' };
     const depts = ctx.context().departments, active = people.filter(p => !p.archived && p.status === 'Active');
     openDialog(revision ? `Revise memo (new version)` : memo ? 'Edit memo draft' : 'Create memo', `<form id="memo-form"><div class="dialog-body"><div id="memo-error" class="form-error hidden" role="alert"></div><div class="form-grid">
       <label class="field full">Title<input name="title" required maxlength="200" value="${esc(d.title)}"></label>
-      <label class="field">Category<input name="category" list="memo-cats" maxlength="80" value="${esc(d.category)}"><datalist id="memo-cats">${['General', 'Policy', 'Announcement', 'Advisory', 'Notice to explain', 'Schedule', 'Benefits'].map(c => `<option value="${c}">`).join('')}</datalist></label>
+      <label class="field">Category<select name="category" required>${[...MEMO_CATEGORIES, ...(d.category && !MEMO_CATEGORIES.includes(d.category) ? [d.category] : [])].map(c => `<option${c === (d.category || 'General Announcement') ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <label class="field">Reference number<input name="reference" maxlength="60" value="${esc(d.reference)}" placeholder="Assigned on issue if blank"></label>
       <label class="field">Issue date<input type="date" name="issueDate" required value="${esc(d.issueDate)}"></label>
       <label class="field">Recipients<select name="mode"><option value="all" ${d.recipients.mode === 'all' ? 'selected' : ''}>All active employees</option><option value="departments" ${d.recipients.mode === 'departments' ? 'selected' : ''}>Selected departments</option><option value="employees" ${d.recipients.mode === 'employees' ? 'selected' : ''}>Selected employees</option></select></label>

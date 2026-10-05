@@ -86,3 +86,23 @@ test('overtime filed with start and end times computes the hours, including past
     assert.throws(() => fileOvertime(store, worker, { date: '2026-09-04', startTime: '17:00', endTime: '17:05', reason: 'Too short (demo)' }), /15 minutes/);
   } finally { store.close(); }
 });
+
+test('night differential (10 PM - 6 AM) on approved overtime is computed and reaches payroll', async () => {
+  const { nightHoursBetween } = await import('../src/overtime.mjs');
+  assert.equal(nightHoursBetween('20:00', '23:30'), 1.5);
+  assert.equal(nightHoursBetween('22:00', '07:00'), 8, 'only 10 PM to 6 AM counts');
+  assert.equal(nightHoursBetween('17:00', '21:00'), 0);
+  const store = fixture(s => { s.attendance[0].timeOut = '23:00'; delete s.rules[0].overtimeApproval; }), day = completeState().attendance[0].date;
+  const worker = { username: 'employee1', role: 'employee', employeeId: 'EMP-001' }, hr = { username: 'hr1', role: 'hr' };
+  try {
+    const filing = fileOvertime(store, worker, { date: day, startTime: '16:00', endTime: '23:00', reason: 'Month-end closing (demo)' });
+    assert.equal(filing.hours, 7); assert.equal(filing.nightHours, 1);
+    assert.equal(run(store).rows[0].earnings.nsd, 0, 'nothing before approval');
+    decideOvertime(store, hr, filing.id, { decision: 'approve' });
+    const row = run(store).rows[0], r = completeState().rules[0];
+    assert.equal(row.earnings.nsd, Math.round(1 * row.hourlyRate * r.ordinaryOT * r.nsd * 100) / 100, '1 night hour × hourly × OT rate × 10%');
+    const queued = overtimeQueue(store, hr)[0];
+    assert.equal(queued.approvedNightHours, 1); assert.equal(queued.nightPay, row.earnings.nsd, 'the estimate HR sees matches payroll');
+    assert.equal(myOvertime(store, worker)[0].approvedNightHours, 1);
+  } finally { store.close(); }
+});

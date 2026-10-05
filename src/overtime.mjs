@@ -35,6 +35,26 @@ export function hoursBetween(start, end) {
   let minutes = toMin(end) - toMin(start); if (minutes <= 0) minutes += 1440;
   return round(minutes / 60);
 }
+// Minutes of a start-end span that fall in the night shift (10:00 PM to 6:00 AM, Labor Code Art. 86).
+export function nightHoursBetween(start, end) {
+  const toMin = t => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  const s = toMin(start); let e = toMin(end); if (e <= s) e += 1440;
+  let night = 0;
+  for (let m = s; m < e; m++) { const h = Math.floor((m % 1440) / 60); if (h >= 22 || h < 6) night++; }
+  return round(night / 60);
+}
+// Estimated pay for the night hours of approved overtime: hourly rate × overtime rate × night differential rate.
+// The payroll computation is final; it counts only hours actually worked beyond the schedule.
+function nightEstimate(state, employee, filing) {
+  const rule = ruleOn(state, filing.date) || state.rules[0];
+  if (!rule || !employee?.coveredNSD || !filing.nightHours) return { nightHours: filing.nightHours || 0, approvedNightHours: 0, nightPay: 0 };
+  const pay = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'payroll');
+  const daily = pay?.dailyRate ?? (employee.monthlySalary || 0) / rule.dailyDivisor, hourly = pay?.hourlyRate ?? daily / rule.hourlyDivisor;
+  // Overtime minutes are counted from the end of the schedule, so a partial approval drops the latest (night) minutes first.
+  const approvedNightHours = filing.status === 'approved' ? Math.max(0, round(filing.nightHours - Math.max(0, filing.hours - filing.approvedHours))) : 0;
+  const hours = filing.status === 'approved' ? approvedNightHours : filing.nightHours;
+  return { nightHours: filing.nightHours, approvedNightHours, nightRate: rule.nsd, nightPay: round(hours * hourly * rule.ordinaryOT * rule.nsd) };
+}
 const fileSchema = z.object({ date, startTime: time.optional(), endTime: time.optional(), hours: z.number().min(0.25).max(16).optional(), reason: z.string().trim().min(3, 'Say what the overtime work was for.').max(1000), employeeId: z.string().max(80).optional() }).strict();
 // Employees file their own overtime; HR may record it for an employee (approved at once, e.g. no portal account).
 export function fileOvertime(store, actor, input) {
@@ -55,7 +75,7 @@ export function fileOvertime(store, actor, input) {
     if (posted(state, employeeId, v.date)) throw new AppError('Payroll for that date is already posted. Contact HR or Payroll.');
     if (rowsOf(store, 'WHERE employee_id=? AND date=?', employeeId, v.date).some(o => ['pending', 'approved'].includes(o.status))) throw new AppError('Overtime is already filed for that date. Cancel it first to file again.');
     const now = new Date().toISOString();
-    const value = { id: randomUUID(), employeeId, date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', hours: v.hours, reason: v.reason, filedBy: actor.username, filedAt: now, status: self ? 'pending' : 'approved', approvedHours: self ? 0 : v.hours, decidedBy: self ? '' : actor.username, decidedAt: self ? '' : now, remarks: self ? '' : 'Recorded by HR' };
+    const value = { id: randomUUID(), employeeId, date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', nightHours: v.startTime ? nightHoursBetween(v.startTime, v.endTime) : 0, hours: v.hours, reason: v.reason, filedBy: actor.username, filedAt: now, status: self ? 'pending' : 'approved', approvedHours: self ? 0 : v.hours, decidedBy: self ? '' : actor.username, decidedAt: self ? '' : now, remarks: self ? '' : 'Recorded by HR' };
     put(store, value);
     store.log(actor, 'file', 'overtime', employeeId, null, value);
     if (self) store.notify(null, `${employee.name} filed ${v.hours} h overtime for ${v.date}.`);
@@ -94,7 +114,8 @@ export function decideOvertime(store, actor, id, input) {
 }
 export function myOvertime(store, actor) {
   if (actor.role !== 'employee') throw new AppError('Only employees have their own overtime filings.', 403);
-  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId);
+  const state = store.read(), employee = state.employees.find(e => e.id === actor.employeeId);
+  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId).map(o => ({ ...o, ...nightEstimate(state, employee, o) }));
 }
 // HR / Payroll review list: each filing with the hours attendance actually shows beyond the schedule.
 export function overtimeQueue(store, actor) {
@@ -102,6 +123,6 @@ export function overtimeQueue(store, actor) {
   const state = store.read(), people = new Map(state.employees.map(e => [e.id, e]));
   return rowsOf(store).filter(o => o.status !== 'cancelled').slice(0, 300).map(o => {
     const e = people.get(o.employeeId), record = state.attendance.find(a => a.employeeId === o.employeeId && a.date === o.date);
-    return { ...o, name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) };
+    return { ...o, ...nightEstimate(state, e, o), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) };
   }).sort((a, b) => (a.status === 'pending') === (b.status === 'pending') ? b.date.localeCompare(a.date) : a.status === 'pending' ? -1 : 1);
 }

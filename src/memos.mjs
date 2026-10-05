@@ -11,7 +11,7 @@ import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
 
 const dateField = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default('');
 const memoSchema = z.object({
-  title: z.string().trim().min(3, 'Give the memo a title.').max(200), category: z.string().trim().max(80).default('General'), reference: z.string().trim().max(60).default(''),
+  title: z.string().trim().min(3, 'Give the memo a title.').max(200), category: z.string().trim().max(80).default('General Announcement'), reference: z.string().trim().max(60).default(''),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose the issue date.'), body: z.string().trim().min(1, 'Write the memo text.').max(20000),
   recipients: z.object({ mode: z.enum(['all', 'departments', 'employees']), departments: z.array(z.string().max(120)).max(100).default([]), employees: z.array(z.string().max(80)).max(1000).default([]) }).strict(),
   ackRequired: z.boolean().default(true), ackDeadline: dateField,

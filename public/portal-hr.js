@@ -32,10 +32,11 @@ export function createPortalHr({ api, esc, table, toast }) {
         <label class="field">Date<input type="date" name="date" required></label>
         <label class="field">Start of overtime<input type="time" name="startTime" required></label>
         <label class="field">End of overtime<input type="time" name="endTime" required></label>
-        <div class="field ot-total">Total overtime<strong data-ot-hours>—</strong><small>Computed from start and end. An end time earlier than the start counts as the next day.</small></div>
+        <div class="field ot-total">Total overtime<strong data-ot-hours>—</strong><span class="ot-night" data-ot-night></span><small>Computed from start and end. An end time earlier than the start counts as the next day.</small></div>
         <label class="field full">Work done / reason<input name="reason" required minlength="3" maxlength="1000"></label>
         <div><button class="primary">Submit for approval</button></div></form>
-      ${table(['Date', 'Time', 'Hours filed', 'Reason', 'Status', 'HR remarks', ''], list.map(o => [fmtDate(o.date), o.startTime ? `${esc(o.startTime)} – ${esc(o.endTime)}` : '—', `${o.hours} h`, esc(o.reason), esc(STATUS[o.status] || o.status) + (o.status === 'approved' ? ` (${o.approvedHours} h)` : ''), esc(o.remarks || '—'), o.status === 'pending' ? `<button class="small" data-ot-cancel="${o.id}">Cancel</button>` : '']), 'No overtime filed yet.')}</section>`;
+      ${(() => { const approved = list.filter(o => o.status === 'approved'); const nh = approved.reduce((s, o) => s + (o.approvedNightHours || 0), 0), np = approved.reduce((s, o) => s + (o.nightPay || 0), 0); return nh ? `<div class="cards"><div class="card featured"><div class="card-label">Approved night differential</div><div class="card-value">${Math.round(nh * 100) / 100} h</div><div class="card-foot">≈ ₱${np.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · final amount in your payslip</div></div></div>` : ''; })()}
+      ${table(['Date', 'Time', 'Hours filed', 'Night diff', 'Reason', 'Status', 'HR remarks', ''], list.map(o => [fmtDate(o.date), o.startTime ? `${esc(o.startTime)} – ${esc(o.endTime)}` : '—', `${o.hours} h`, o.nightHours ? `${o.nightHours} h${o.nightPay ? `<small>≈ ₱${Number(o.nightPay).toFixed(2)}</small>` : ''}` : '—', esc(o.reason), esc(STATUS[o.status] || o.status) + (o.status === 'approved' ? ` (${o.approvedHours} h)` : ''), esc(o.remarks || '—'), o.status === 'pending' ? `<button class="small" data-ot-cancel="${o.id}">Cancel</button>` : '']), 'No overtime filed yet.')}</section>`;
     const form = box.querySelector('#ot-file'), total = form.querySelector('[data-ot-hours]');
     const compute = () => {
       const s = form.elements.startTime.value, e = form.elements.endTime.value;
@@ -43,6 +44,9 @@ export function createPortalHr({ api, esc, table, toast }) {
       let minutes = (Number(e.slice(0, 2)) * 60 + Number(e.slice(3))) - (Number(s.slice(0, 2)) * 60 + Number(s.slice(3))); if (minutes <= 0) minutes += 1440;
       const h = Math.round(minutes / 60 * 100) / 100, hh = Math.floor(minutes / 60), mm = minutes % 60;
       total.textContent = `${h} h (${hh} h${mm ? ` ${mm} min` : ''})${minutes <= 0 || e <= s ? ' · ends next day' : ''}`;
+      const start = Number(s.slice(0, 2)) * 60 + Number(s.slice(3)); let night = 0;
+      for (let m = start; m < start + minutes; m++) { const hr = Math.floor((m % 1440) / 60); if (hr >= 22 || hr < 6) night++; }
+      form.querySelector('[data-ot-night]').textContent = night ? `🌙 ${Math.round(night / 60 * 100) / 100} h night differential (10 PM – 6 AM): +10% of your hourly rate, computed automatically` : '';
       return h;
     };
     form.addEventListener('input', compute);
