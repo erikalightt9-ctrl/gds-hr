@@ -41,7 +41,7 @@ export function createFiles(ctx) {
     const docFilterLabel = { missing: 'with missing requirements', review: 'with documents to review', expired: 'with expired documents', newhires: 'hired in the last 30 days' }[query.docs];
     return heading('Employee 201 Files', 'Every employee record, document and history in one place.', can().manage ? '<button class="primary" data-hr-add-employee>＋ Add employee</button>' : '') +
       `<section class="panel"><div class="toolbar hr-filters">
-        <label class="search">Search<input type="search" data-q value="${esc(query.q)}" placeholder="Employee no., name, department, position or work email"></label>
+        <label class="search">Search<input type="search" data-q value="${esc(query.q)}" placeholder="Search by name, employee no., department or position"></label>
         <label>Department<select data-f="department">${options(people.map(p => p.department), query.department, 'All departments')}</select></label>
         <label>Position<select data-f="position">${options(people.map(p => p.position), query.position, 'All positions')}</select></label>
         <label>Status<select data-f="status"><option value="">Active and inactive</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
@@ -49,11 +49,13 @@ export function createFiles(ctx) {
         <button class="small" data-reset>Reset filters</button>
       </div>
       ${docFilterLabel ? `<div class="notice compact">Showing employees ${docFilterLabel}. <button class="small" data-reset>Show everyone</button></div>` : ''}
-      ${table([head('number', 'Employee no.'), head('name', 'Name'), head('department', 'Department'), head('position', 'Position'), head('classification', 'Classification'), head('status', 'Status'), head('dateHired', 'Date hired'), ...(can().manage ? ['201 completion'] : []), 'Actions'],
-        rows.map(p => [esc(p.number), `<button class="link-button" data-open="${esc(p.id)}">${esc(p.name)}</button>${p.workEmail ? `<small>${esc(p.workEmail)}</small>` : ''}`, esc(p.department || '—'), esc(p.position || '—'), esc(p.classification || '—'), statusBadge(p.archived ? 'Archived' : p.status), fmtDate(p.dateHired),
-          ...(can().manage ? [p.documents ? progress(p.documents.percent, `${p.documents.verified}/${p.documents.required} verified${p.documents.missing ? ` · ${p.documents.missing} missing` : ''}`) : '—'] : []),
-          `<span class="row-actions"><button class="small" data-open="${esc(p.id)}">View</button>${can().manage && !p.archived ? `<button class="small" data-edit-emp="${esc(p.id)}">Edit</button><button class="small" data-open="${esc(p.id)}" data-start-tab="requirements">Documents</button>` : ''}${can().approve ? (p.archived ? `<button class="small" data-restore="${esc(p.id)}">Restore</button>` : `<button class="small danger" data-archive="${esc(p.id)}">Archive</button>`) : ''}</span>`]),
-        query.q || query.department || query.position || query.status || query.classification || query.docs ? 'No employees match these filters.' : 'No employees yet. Add your first employee to start their 201 file.')}
+      <div class="directory-wrap">${table([head('name', 'Employee'), head('department', 'Department'), head('position', 'Position'), head('classification', 'Classification'), head('status', 'Status'), head('dateHired', 'Date hired'), ...(can().manage ? ['201 completion'] : []), '<span class="sr-only">Actions</span>'],
+        rows.map(p => [
+          `<button class="emp-cell" data-open="${esc(p.id)}" aria-label="Open ${esc(p.name)}"><span class="hr-avatar small" aria-hidden="true"><img src="/api/hr/employees/${encodeURIComponent(p.id)}/photo" alt="" loading="lazy" data-dir-photo>${esc(initials(p.name))}</span><span class="emp-text"><strong>${esc(p.name)}</strong><small>${esc(p.number)}</small></span></button>`,
+          `<span class="cell-strong">${esc(p.department || '—')}</span>`, esc(p.position || '—'), p.classification ? `<span class="chip-soft">${esc(p.classification)}</span>` : '<span class="muted">Not set</span>', statusBadge(p.archived ? 'Archived' : p.status), fmtDate(p.dateHired),
+          ...(can().manage ? [p.documents ? `<div class="completion">${progress(p.documents.percent, `${p.documents.verified}/${p.documents.required} verified`)}${p.documents.missing ? `<small class="completion-missing">${p.documents.missing} missing</small>` : ''}</div>` : '—'] : []),
+          `<span class="row-actions dir-actions"><button class="small primary" data-open="${esc(p.id)}">View</button>${can().manage && !p.archived ? `<button class="small" data-edit-emp="${esc(p.id)}">Edit</button><button class="small" data-open="${esc(p.id)}" data-start-tab="requirements">Documents</button>` : ''}${can().approve ? (p.archived ? `<button class="small" data-restore="${esc(p.id)}">Restore</button>` : `<button class="small ghost-danger" data-archive="${esc(p.id)}" aria-label="Archive ${esc(p.name)}">Archive</button>`) : ''}</span>`]),
+        query.q || query.department || query.position || query.status || query.classification || query.docs ? 'No employees match these filters.' : 'No employees yet. Add your first employee to start their 201 file.')}</div>
       <div class="pager"><span>${list.length} employee${list.length === 1 ? '' : 's'}${pages > 1 ? ` · page ${pageNo} of ${pages}` : ''}</span>${pages > 1 ? `<button class="small" data-page="${pageNo - 1}" ${pageNo === 1 ? 'disabled' : ''}>‹ Previous</button><button class="small" data-page="${pageNo + 1}" ${pageNo === pages ? 'disabled' : ''}>Next ›</button>` : ''}</div></section>`;
   }
   async function directory(preset = null) {
@@ -65,6 +67,7 @@ export function createFiles(ctx) {
   function draw() {
     shell(directoryHtml());
     const root = document.querySelector('.content');
+    root.querySelectorAll('[data-dir-photo]').forEach(img => { img.addEventListener('error', () => img.remove()); img.addEventListener('load', () => img.parentElement.classList.add('has-photo')); });
     root.querySelector('[data-q]').addEventListener('input', event => { query.q = event.target.value; pageNo = 1; const pos = event.target.selectionStart; draw(); const box = document.querySelector('[data-q]'); box.focus(); box.setSelectionRange(pos, pos); });
     root.addEventListener('change', event => { const f = event.target.dataset.f; if (f) { query[f] = event.target.value; pageNo = 1; draw(); } });
     root.addEventListener('click', onDirectoryClick);

@@ -250,3 +250,46 @@ dialog.wide-dialog { width: min(980px, calc(100vw - 24px)); }
 /* New-version notice (all accounts) */
 .update-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; border-radius: 12px; background: #1d1a14; color: #fff; font-size: 13px; box-shadow: 0 12px 30px -10px rgb(0 0 0 / .5); max-width: calc(100vw - 24px); }
 .update-bar .primary { white-space: nowrap; }
+
+/* ---------- Employee 201 Files: one boxed card per employee ---------- */
+.directory-wrap .scroll-table { max-height: none; overflow-x: auto; padding: 4px 18px 8px; }
+.directory-wrap table { border-collapse: separate; border-spacing: 0 10px; min-width: 1080px; white-space: normal; }
+.directory-wrap thead th { background: transparent; border: 0; color: var(--ink-soft, #5a4e34); font-size: 11px; letter-spacing: .08em; padding: 12px 16px 2px; position: static; }
+.directory-wrap tbody tr { transition: transform .15s ease, box-shadow .15s ease; }
+.directory-wrap tbody td { background: #fff; border-top: 1px solid rgb(194 154 62 / .32); border-bottom: 1px solid rgb(194 154 62 / .32); padding: 14px 16px; font-size: 13.5px; color: #2b2418; vertical-align: middle; }
+.directory-wrap tbody td:first-child { border-left: 1px solid rgb(194 154 62 / .32); border-radius: 14px 0 0 14px; padding-left: 14px; }
+.directory-wrap tbody td:last-child { border-right: 1px solid rgb(194 154 62 / .32); border-radius: 0 14px 14px 0; }
+.directory-wrap tbody tr:hover { background: transparent; }
+.directory-wrap tbody tr:hover td { background: #fffaf0; border-color: rgb(194 154 62 / .6); }
+.directory-wrap tbody tr:hover { box-shadow: 0 10px 24px -16px rgb(90 62 12 / .45); transform: translateY(-1px); }
+.directory-wrap tbody tr:has(.empty) td { border: 0; background: transparent; }
+.emp-cell { display: flex; align-items: center; gap: 12px; border: 0; background: none; padding: 0; text-align: left; box-shadow: none; color: inherit; cursor: pointer; }
+.emp-cell:hover { background: none; }
+.emp-cell:hover strong { color: var(--red-600, #a91e2d); }
+.emp-text { display: grid; gap: 2px; min-width: 0; }
+.emp-text strong { font-size: 14.5px; font-weight: 700; color: #1d1a14; line-height: 1.25; }
+.emp-text small { font-size: 12px; color: var(--ink-soft, #5a4e34); letter-spacing: .02em; }
+.hr-avatar.small { width: 40px; height: 40px; font-size: 14px; border: 1px solid rgb(194 154 62 / .4); background: linear-gradient(145deg, #fff8e4, #f3dfa8); color: #7c5d18; }
+.cell-strong { font-weight: 600; color: #2b2418; }
+.chip-soft { display: inline-block; padding: 4px 10px; border-radius: 999px; border: 1px solid rgb(194 154 62 / .4); background: #fffaf0; font-size: 12px; font-weight: 600; color: #5d4510; }
+.completion { display: grid; gap: 4px; }
+.completion .hr-progress { width: 140px; }
+.completion small { font-size: 11.5px; color: var(--ink-soft, #5a4e34); }
+.completion .completion-missing { color: #a3152a; font-weight: 600; }
+.dir-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.dir-actions .small { padding: 6px 11px; }
+.ghost-danger { color: #a3152a; border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
+.ghost-danger:hover { background: #fff1f1 !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.directory-wrap table { min-width: 1240px; }
+.directory-wrap td:nth-child(1) { min-width: 260px; }
+.directory-wrap td:nth-child(2), .directory-wrap td:nth-child(3) { min-width: 140px; }
+.directory-wrap td:nth-child(5), .directory-wrap td:nth-child(6), .directory-wrap thead th { white-space: nowrap; }
+.directory-wrap .emp-text strong { white-space: nowrap; }
+.directory-wrap table { min-width: 1060px; }
+.directory-wrap td:nth-child(1) { min-width: 230px; }
+.directory-wrap td:nth-child(2), .directory-wrap td:nth-child(3) { min-width: 110px; }
+.directory-wrap tbody td { padding: 12px 12px; }
+.directory-wrap .completion .hr-progress { width: 100px; }
+.dir-actions { gap: 5px; }
+.dir-actions .small { padding: 5px 9px; font-size: 11.5px; }
