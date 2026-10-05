@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Store } from '../src/store.mjs';
-import { createEmployee, updateEmployee, directory, dashboard, employeeForm, archiveEmployee, readSettings, saveSettings } from '../src/hr201.mjs';
+import { createEmployee, updateEmployee, directory, dashboard, employeeForm, archiveEmployee, readSettings, saveSettings, leaveCredits, saveLeaveCredits } from '../src/hr201.mjs';
 import { upload201, reviewDocument, employeeChecklist, documentSummary, document201Content, setNotApplicable } from '../src/documents201.mjs';
 import { saveMemoDraft, publishMemo, myMemos, acknowledgeMemo, memoSummary, startRevision, listMemos } from '../src/memos.mjs';
 import { saveTraining, assignParticipants, updateParticipant, trainingsForEmployee, participationRows } from '../src/trainings.mjs';
@@ -209,5 +209,21 @@ test('a requirement the employee uploads from their account lands in the HR reco
     assert.equal(hrView.status, 'Submitted'); assert.equal(hrView.current.uploadedBy, 'lia');
     assert.ok(documentSummary(store, hr).pendingReview >= 1, 'HR bell counts it for review');
     assert.match(store.db.prepare('SELECT message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 1').get().message, /uploaded “NBI clearance”/);
+  } finally { store.close(); }
+});
+
+test('HR types leave credits and leave used before the system in the 201 file; the balance follows', () => {
+  const store = fresh();
+  try {
+    const id = createEmployee(store, hr, form('Lea', 'Demo')).created.id, year = Number(new Date().toISOString().slice(0, 4));
+    assert.ok(leaveCredits(store, hr, id, year).types.some(t => t.typeId === 'sil'));
+    assert.throws(() => saveLeaveCredits(store, staff, id, { year, items: [] }), /permission/i);
+    const after = saveLeaveCredits(store, hr, id, { year, items: [{ typeId: 'sil', eligible: true, manualCredits: 7, usedBefore: 2 }, { typeId: 'vacation', eligible: true, manualCredits: null, usedBefore: 0 }], remarks: 'Encoded from the old leave card' });
+    const sil = after.types.find(t => t.typeId === 'sil');
+    assert.equal(sil.entitled, 7); assert.equal(sil.usedBefore, 2); assert.equal(sil.available, Math.max(0, 7 + sil.carry - sil.used));
+    assert.ok(['sil', 'vacation'].every(x => store.read().employees.find(e => e.id === id).leaveEligibility.includes(x)), 'eligibility saved');
+    assert.ok(store.audit().some(a => a.kind === 'profile:leave'), 'audited');
+    const cleared = saveLeaveCredits(store, hr, id, { year, items: [{ typeId: 'sil', eligible: true, manualCredits: null, usedBefore: 0 }] }).types.find(t => t.typeId === 'sil');
+    assert.equal(cleared.manualCredits, null, 'blank returns to the policy');
   } finally { store.close(); }
 });

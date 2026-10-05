@@ -79,8 +79,10 @@ function earnedEntitlement(e, t, asOf) {
 }
 export function leaveBalance(state, employee, type, asOf) {
   const custom = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'leave');
-  const override = custom?.entitlements.filter(e => e.typeId === type.id && e.effectiveYear <= Number(asOf.slice(0, 4))).sort((a, b) => b.effectiveYear - a.effectiveYear)[0];
-  const priorOverride = custom?.entitlements.filter(e => e.typeId === type.id && e.effectiveYear <= Number(asOf.slice(0, 4)) - 1).sort((a, b) => b.effectiveYear - a.effectiveYear)[0];
+  const override = custom?.entitlements.filter(e => e.typeId === type.id && e.annualDays !== null && e.annualDays !== undefined && e.effectiveYear <= Number(asOf.slice(0, 4))).sort((a, b) => b.effectiveYear - a.effectiveYear)[0];
+  const priorOverride = custom?.entitlements.filter(e => e.typeId === type.id && e.annualDays !== null && e.annualDays !== undefined && e.effectiveYear <= Number(asOf.slice(0, 4)) - 1).sort((a, b) => b.effectiveYear - a.effectiveYear)[0];
+  // Typed in the 201 file for this exact year: credits granted (replaces the policy amount) and days used before the system.
+  const manual = custom?.entitlements.find(e => e.typeId === type.id && e.effectiveYear === Number(asOf.slice(0, 4)));
   const originalType = type;
   if (override) type = { ...type, entitledDays: override.annualDays };
   const year = Number(asOf.slice(0, 4));
@@ -93,7 +95,7 @@ export function leaveBalance(state, employee, type, asOf) {
   const consumedBeforeExpiry = Math.min(carryEntitled, approved.reduce((sum, l) => sum + counted(l).filter(d => d.startsWith(`${year}-`) && d <= expiry).length, 0));
   // Expired, unused carry is removed; carry already consumed must not consume this year's grant twice.
   const carry = asOf <= expiry ? carryEntitled : consumedBeforeExpiry;
-  const entitled = earnedEntitlement(employee, type, asOf), used = usedIn(year);
+  const entitled = manual && manual.manualCredits !== null && manual.manualCredits !== undefined ? manual.manualCredits : earnedEntitlement(employee, type, asOf), used = round(usedIn(year) + (manual?.usedBefore || 0));
   return { entitled, carry, used, expired: Math.max(0, carryEntitled - carry), available: round(Math.max(0, entitled + carry - used)) };
 }
 // Salary encoded by HR for months before the system went live. A month that already has posted payroll for the

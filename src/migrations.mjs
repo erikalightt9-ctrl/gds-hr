@@ -31,6 +31,34 @@ function headquartersDepartment(store) {
     return changed;
   }));
 }
+// Company leave policy (October 2026): Vacation Leave 7 days and SIL 5 days a year, each after 12 months of
+// service. Erika, Albert, Marien and Edwin receive both; everyone else receives SIL (after their first year).
+export const VACATION_AND_SIL = ['2017-0420', '2024-0930', '2010-1024', '2024-0507'];
+function leavePolicy(store) {
+  return once(store, 'migration:leave-policy-2026-10', () => store.transaction(() => {
+    const system = { username: 'system (leave policy)' }, state = store.read();
+    let changed = 0;
+    const vacation = state.leaveTypes.find(t => t.id === 'vacation'), sil = state.leaveTypes.find(t => t.id === 'sil');
+    for (const [type, days] of [[vacation, 7], [sil, 5]]) {
+      if (!type || (type.entitledDays === days && type.minServiceMonths === 12 && type.paid)) continue;
+      const before = structuredClone(type);
+      Object.assign(type, { entitledDays: days, minServiceMonths: 12, paid: true });
+      store.log(system, 'update', 'leaveTypes', type.id, before, type); changed++;
+    }
+    for (const e of state.employees) {
+      const want = new Set(e.leaveEligibility || []);
+      want.add('sil');
+      if (vacation && VACATION_AND_SIL.includes(e.id)) want.add('vacation');
+      const after = [...want];
+      if (after.length === (e.leaveEligibility || []).length) continue;
+      store.log(system, 'update-leave-eligibility', 'employees', e.id, { leaveEligibility: e.leaveEligibility }, { leaveEligibility: after });
+      e.leaveEligibility = after; changed++;
+    }
+    state.version++; store.write(state);
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:leave-policy-2026-10');
+    return changed;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store) };
+  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store) };
 }

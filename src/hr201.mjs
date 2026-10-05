@@ -5,6 +5,7 @@ import { AppError, permit, saveRecord } from './service.mjs';
 import { saveProfile, localToday } from './profiles.mjs';
 import { HR_MANAGERS, HR_TEAM, DIRECTORY, DASHBOARD, SENSITIVE_IDS } from './roles.mjs';
 import { personalNames, titleCase } from './names.mjs';
+import { leaveBalance } from './engine.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
@@ -280,4 +281,44 @@ export function dashboard(store, actor, extras = {}) {
     probationDue: upcoming('probationEnd', settings.reminders.probationDays), reviewsDue: upcoming('reviewDate', settings.reminders.reviewDays),
     ...extras.sections,
   };
+}
+
+// ---------- Leave credits (201 file) ----------
+// HR types an employee's leave credits for a year and any days already used before the system; the balance shown
+// to the employee and used for approvals is computed from these together with leave approved in the system.
+const LEAVE_EDITORS = ['admin', 'hr', 'maker'];
+export function leaveCredits(store, actor, id, year = Number(localToday().slice(0, 4))) {
+  permit(actor, [...LEAVE_EDITORS, 'hr_staff', 'payroll', 'viewer']);
+  assertCanView(store, actor, id);
+  const state = store.read(), e = state.employees.find(x => x.id === id);
+  if (!e) throw new AppError('Employee not found.', 404);
+  const asOf = year === Number(localToday().slice(0, 4)) ? localToday() : `${year}-12-31`;
+  const entries = profileOf(store, id, 'leave').entitlements || [];
+  return {
+    year, canEdit: LEAVE_EDITORS.includes(actor.role),
+    types: state.leaveTypes.filter(t => t.paid && t.affectsPayroll !== false && t.accrual !== 'none').map(t => {
+      const m = entries.find(x => x.typeId === t.id && x.effectiveYear === year), b = leaveBalance({ ...state, employeeProfiles: [{ employeeId: id, section: 'leave', entitlements: entries }] }, e, t, asOf);
+      return { typeId: t.id, name: t.name, policyDays: t.entitledDays, eligible: e.leaveEligibility.includes(t.id), manualCredits: m?.manualCredits ?? null, usedBefore: m?.usedBefore || 0, ...b };
+    }),
+  };
+}
+const creditsSchema = z.object({ year: z.number().int().min(2000).max(2200), items: z.array(z.object({ typeId: z.string().min(1).max(80), eligible: z.boolean(), manualCredits: z.number().min(0).max(366).nullable(), usedBefore: z.number().min(0).max(366) }).strict()).max(100), remarks: z.string().trim().max(500).default('') }).strict();
+export function saveLeaveCredits(store, actor, id, input) {
+  permit(actor, LEAVE_EDITORS);
+  assertCanView(store, actor, id);
+  const v = creditsSchema.parse(input);
+  return store.transaction(() => {
+    const state = store.read(), e = state.employees.find(x => x.id === id);
+    if (!e) throw new AppError('Employee not found.', 404);
+    if (v.items.some(i => !state.leaveTypes.some(t => t.id === i.typeId))) throw new AppError('Unknown leave type.');
+    const current = profileOf(store, id, 'leave'), others = (current.entitlements || []).filter(x => x.effectiveYear !== v.year || !v.items.some(i => i.typeId === x.typeId));
+    const kept = (current.entitlements || []).filter(x => x.effectiveYear === v.year);
+    const entries = v.items.filter(i => i.manualCredits !== null || i.usedBefore).map(i => ({ typeId: i.typeId, annualDays: kept.find(k => k.typeId === i.typeId)?.annualDays ?? null, effectiveYear: v.year, manualCredits: i.manualCredits, usedBefore: i.usedBefore }));
+    saveProfile(store, actor, id, 'leave', { entitlements: [...others, ...entries], remarks: v.remarks || current.remarks || '' });
+    const eligibility = new Set(e.leaveEligibility);
+    for (const i of v.items) { if (i.eligible) eligibility.add(i.typeId); else eligibility.delete(i.typeId); }
+    const after = [...eligibility];
+    if (after.length !== e.leaveEligibility.length || after.some(x => !e.leaveEligibility.includes(x))) saveRecord(store, actor, 'employees', { ...store.read().employees.find(x => x.id === id), leaveEligibility: after }, { trusted: true });
+    return leaveCredits(store, actor, id, v.year);
+  });
 }

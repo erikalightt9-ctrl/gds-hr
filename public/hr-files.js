@@ -3,7 +3,7 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard } from './hr-common.js';
 
 const PAGE_SIZE = 15;
-const TABS = [['overview', 'Overview', '📊'], ['personal', 'Personal', '👤'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['government', 'Government IDs', '🪪'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Requirements', '✅'], ['documents', 'Documents', '📁'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅'], ['activity', 'Activity', '↺']];
+const TABS = [['overview', 'Overview', '📊'], ['personal', 'Personal', '👤'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['government', 'Government IDs', '🪪'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Requirements', '✅'], ['documents', 'Documents', '📁'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅'], ['activity', 'Activity', '↺']];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
 function serviceLength(start, today) {
@@ -105,10 +105,11 @@ export function createFiles(ctx) {
     const id = profileId;
     shell('<div class="loading">Loading employee…</div>');
     const enc = encodeURIComponent(id);
-    const [record, checklist, extra, extras] = await Promise.all([api(`/hr/employees/${enc}`), api(`/hr/employees/${enc}/documents`), api(`/hr/employees/${enc}/activity`), api(`/hr/employees/${enc}/extras`)]);
+    const [record, checklist, extra, extras, leave] = await Promise.all([api(`/hr/employees/${enc}`), api(`/hr/employees/${enc}/documents`), api(`/hr/employees/${enc}/activity`), api(`/hr/employees/${enc}/extras`), api(`/hr/employees/${enc}/leave`).catch(() => null)]);
+    extras.leave = leave;
     if (profileId !== id) return;
     const f = record.form, legacy = ctx.legacy(), today = ctx.today();
-    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (!['family', 'education', 'history'].includes(key) || extras.family));
+    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (!['family', 'education', 'history'].includes(key) || extras.family));
     if (!tabs.some(([key]) => key === tab)) tab = 'overview';
     const header = `<section class="panel hr-profile-head"><div class="hr-profile-id"><span class="hr-avatar large"><img src="/api/hr/employees/${enc}/photo" alt="" data-photo>${esc(initials(record.name))}</span><div><h1>${esc(record.name)}</h1><p class="sub">${esc(record.number)} · ${esc(f.employment.position || 'No position')} · ${esc(f.employment.department || 'No department')}</p><p>${statusBadge(record.archived ? 'Archived' : record.activity)} ${f.employment.classification ? badge(f.employment.classification, 'neutral') : ''} ${record.draft ? badge('Pay setup incomplete', 'pending') : ''}</p></div></div>
       <div class="actions"><button class="small" data-back>← All employees</button>${record.canEdit && !record.archived ? '<button class="small primary" data-edit-self>Edit record</button>' : ''}${legacy ? `<button class="small" data-legacy-profile="${esc(id)}">Attendance, leave &amp; pay →</button>` : ''}</div></section>`;
@@ -165,6 +166,10 @@ export function createFiles(ctx) {
     }
     if (tab === 'education') return block('🎓', 'Education', table(['Level', 'School', 'Course / strand', 'Years', 'Honors'], extras.education.entries.map(x => [esc(x.level), esc(x.school), esc(x.course || '—'), esc([x.yearFrom, x.yearTo].filter(Boolean).join('–') || '—'), esc(x.honors || '—')]), 'No education recorded.'), editBtn('education', edit));
     if (tab === 'history') return block('🏢', 'Employment with GDS', dl([...employmentRows(record), ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]), formBtn('employment', edit)) + block('🕘', 'Previous employment', table(['Company', 'Position', 'From', 'To', 'Reason for leaving'], extras.history.entries.map(x => [esc(x.company), esc(x.position || '—'), x.from ? fmtDate(x.from) : '—', x.to ? fmtDate(x.to) : '—', esc(x.reason || '—')]), 'No previous employment recorded.'), editBtn('history', edit));
+    if (tab === 'leave') {
+      const L = extras.leave;
+      return block('🌴', `Leave credits · ${L.year}`, table(['Leave type', 'Eligible', 'Credits this year', 'Used before the system', 'Used in the system', 'Carried over', 'Available'], L.types.map(t => [esc(t.name), t.eligible ? 'Yes' : 'No', `${t.entitled} day${t.entitled === 1 ? '' : 's'}${t.manualCredits !== null ? '<small>typed by HR</small>' : `<small>policy ${t.policyDays} days</small>`}`, `${t.usedBefore} day${t.usedBefore === 1 ? '' : 's'}`, `${Math.round((t.used - t.usedBefore) * 100) / 100} day(s)`, `${t.carry}`, `<strong>${t.available} day${t.available === 1 ? '' : 's'}</strong>`]), 'No paid leave types are configured.'), L.canEdit && !record.archived ? ' <button class="small" data-edit-leave>Edit leave credits</button>' : '') + '<p class="legend">Available = credits + carried over − used. The same balance is shown in the employee’s account and used when HR approves leave.</p>';
+    }
     if (tab === 'requirements') return documentsTab(record, checklist);
     if (tab === 'documents') {
       const files = checklist.items.flatMap(i => i.versions.map(v => ({ ...v, current: i.current?.id === v.id })));
@@ -173,6 +178,20 @@ export function createFiles(ctx) {
     if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'), edit ? ' <button class="small" data-go-memos>Send a memo</button>' : '');
     if (tab === 'trainings') return block('🏅', 'Training records', table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(x => [esc(x.title), fmtDate(x.date), x.required ? 'Required' : 'Optional', esc(x.registration), esc(x.attendance), x.completion === 'completed' ? badge('Completed') : esc(x.completion)]), 'No trainings assigned.'), edit ? ' <button class="small" data-go-trainings>Assign a training</button>' : '');
     return block('↺', 'Activity history', table(['When', 'Who', 'Action', 'Area', 'Previous → updated'], extra.activity.map(a => [fmtDateTime(a.at), esc(a.actor), esc(a.action), esc(a.area), (a.changes || []).length ? `<span class="wrap">${a.changes.map(c => `<small><strong>${esc(c.field)}</strong>: ${esc(c.before)} → ${esc(c.after)}</small>`).join('')}</span>` : '—']), record.canEdit ? 'No recorded activity yet.' : 'Activity history is available to HR.')) + '<p class="legend">The audit trail is permanent: it cannot be edited or deleted. Values you are not authorized to see (such as salary) are left out.</p>';
+  }
+  // Leave credits typed by HR: credits for the year (blank = the leave policy) and days used before the system.
+  function leaveDialog(id, L) {
+    const num = (name, value, label) => `<input type="number" min="0" max="366" step="0.5" name="${name}" value="${value ?? ''}" aria-label="${esc(label)}" class="narrow">`;
+    openDialog(`Leave credits · ${L.year}`, `<form id="leave-form"><div class="dialog-body"><p class="sub">Type the leave credits for this year. Leave “Credits this year” blank to use the leave policy. “Used before the system” is leave already taken this year before it was recorded here.</p>
+      <div class="scroll-table"><table class="edit-rows"><thead><tr><th>Leave type</th><th>Eligible</th><th>Credits this year (days)</th><th>Used before the system (days)</th></tr></thead><tbody>${L.types.map(t => `<tr data-type="${esc(t.typeId)}"><td>${esc(t.name)}<small>Policy: ${t.policyDays} days</small></td><td><input type="checkbox" name="eligible" ${t.eligible ? 'checked' : ''} aria-label="Eligible for ${esc(t.name)}"></td><td>${num('credits', t.manualCredits, `Credits for ${t.name}`)}</td><td>${num('used', t.usedBefore || '', `Used before the system for ${t.name}`)}</td></tr>`).join('')}</tbody></table></div>
+      <label class="field">Remarks (kept in the audit trail)<input name="remarks" maxlength="500"></label></div>
+      <div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary">Save leave credits</button></div></form>`);
+    dialog.classList.add('wide-dialog');
+    dialog.querySelector('#leave-form').onsubmit = async event => {
+      event.preventDefault();
+      const items = [...dialog.querySelectorAll('tr[data-type]')].map(tr => { const credits = tr.querySelector('[name=credits]').value; return { typeId: tr.dataset.type, eligible: tr.querySelector('[name=eligible]').checked, manualCredits: credits === '' ? null : Number(credits), usedBefore: Number(tr.querySelector('[name=used]').value || 0) }; });
+      try { await api(`/hr/employees/${encodeURIComponent(id)}/leave`, { year: L.year, items, remarks: event.target.elements.remarks.value }); dialog.close(); toast('Leave credits saved. The employee sees the same balance.'); tab = 'leave'; await drawProfile(); } catch (error) { toast(error.message); }
+    };
   }
   // Repeating-row editors for family, education and previous employment.
   function sectionDialog(section, extras) {
@@ -231,6 +250,7 @@ export function createFiles(ctx) {
     const id = profileId;
     try {
       if (b.dataset.tabSelect) { tab = b.dataset.tabSelect; await drawProfile(); return; }
+      if (b.hasAttribute('data-edit-leave')) { leaveDialog(id, extras.leave); return; }
       if (b.hasAttribute('data-back')) { ctx.setPage('files'); await directory(); return; }
       if (b.hasAttribute('data-edit-self')) { editEmployee(id, drawProfile); return; }
       if (b.dataset.legacyProfile) { ctx.openLegacyProfile(b.dataset.legacyProfile); return; }
