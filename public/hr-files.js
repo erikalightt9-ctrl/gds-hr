@@ -1,6 +1,6 @@
 // Employee 201 Files: directory (search, filters, sort, pagination) and the tabbed employee profile with the
 // digital 201 document checklist.
-import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard } from './hr-common.js';
 
 const PAGE_SIZE = 15;
 const TABS = [['overview', 'Overview', '📊'], ['personal', 'Personal', '👤'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['government', 'Government IDs', '🪪'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Requirements', '✅'], ['documents', 'Documents', '📁'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅'], ['activity', 'Activity', '↺']];
@@ -119,10 +119,9 @@ export function createFiles(ctx) {
     root.addEventListener('click', event => onProfileClick(event, record, checklist, extras));
   }
   const dl = rows => boxes(rows);   // all profile details use the boxed field layout
-  // Read-only field boxes: bold label above, the saved value inside its own bordered box.
-  const WIDE = new Set(['Current address', 'Permanent address', 'Reason for leaving']);
-  const boxes = rows => `<div class="field-boxes">${rows.map(([k, v]) => { const empty = v === '' || v === undefined || v === null; return `<div class="field-box-item ${WIDE.has(k) ? 'wide' : ''}"><span class="field-box-label" id="fl-${esc(k).replace(/\W+/g, '-')}">${esc(k)}</span><div class="field-box ${empty ? 'empty' : ''}" role="textbox" aria-readonly="true" aria-labelledby="fl-${esc(k).replace(/\W+/g, '-')}">${empty ? 'Not provided' : esc(v)}</div></div>`; }).join('')}</div>`;
-  const sectionCard = (icon, title, body, action = '') => `<section class="profile-card"><header class="profile-card-head"><h3><span aria-hidden="true">${icon}</span> ${esc(title)}</h3>${action}</header>${body}</section>`;
+  // Read-only field boxes and section cards come from hr-common.js, shared with the employee portal.
+  const boxes = rows => fieldBoxes(esc, rows);
+  const sectionCard = (icon, title, body, action = '') => sharedCard(esc, icon, title, body, action);
   const emergencyRows = f => [['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]];
   const block = (icon, title, body, action = '') => sectionCard(icon, title, body, action);
   const editBtn = (section, canEdit) => (canEdit ? ` <button class="small" data-edit-section="${section}">Edit</button>` : '');

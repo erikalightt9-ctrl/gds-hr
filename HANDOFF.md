@@ -13,7 +13,7 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Preview SQLite: data/roster-preview.sqlite; live SQLite: data/hr.sqlite. They are separate.
 - Live application command: npm run dev (default port 3400); public site: HR_ORIGIN=https://hr.blkstone.site npm start with the gds-hr Cloudflare tunnel.
 - Checks: npm test; npm run lint.
-- Most recent full test run: 105 tests passing (Oct 2026).
+- Most recent full test run: 106 tests passing (Oct 2026).
 
 ## Current features and approved design
 - GDS CAPITAL INC. branding: red, gold, white, black.
@@ -39,3 +39,5 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - This project was separated from the PDMN Virtual Office website repository in Oct 2026; it is now its own repository.
 - Employee 201 profile (public/hr-files.js): info cards (years of service, employment type, job level, date hired) and tabs Overview, Personal, Employment, Compensation, Government IDs, Family, Education, Employment History, Requirements, Documents, Memos, Trainings, Activity. The older four-box profile is still reached through "Attendance, leave & pay".
 - Manual time & pay entry per employee per cutoff (src/payroll-inputs.mjs, engine `manual`): mode add (hours on top of attendance) or replace (days/absences/late/undertime typed, attendance not required). Opened from the payroll computation screen.
+- Shared UI for every account: boxed fields/section cards live in public/hr-common.js (fieldBoxes, sectionCard) and are used by the HR profile and the employee portal's "My profile" tab (read-only; GET /api/hr/me/profile).
+- Interface updates reach open tabs: GET /api/version (hash of public file mtimes); app.js checks every 60 s, shows a notice and reloads at the next page change when no dialog or form is being edited. Shared records and settings are always server-side (SQLite); browser storage holds only per-device preferences (sidebar collapsed, Payroll & Attendance menu open).

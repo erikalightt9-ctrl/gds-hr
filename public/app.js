@@ -156,6 +156,24 @@ const hrCtx = {
   reloadContext: async () => { hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme); },
   openAccounts: () => account(),
 };
+// New interface versions reach every account: the tab notices, then refreshes at the next safe moment
+// (page change) or when the user chooses, never while a dialog or unsaved form is open.
+let loadedVersion = null, updateReady = false;
+async function checkVersion() {
+  try {
+    const { version } = await fetch('/api/version', { cache: 'no-store' }).then(r => r.json());
+    if (!loadedVersion) { loadedVersion = version; return; }
+    if (version !== loadedVersion && !updateReady) {
+      updateReady = true;
+      const bar = document.createElement('div'); bar.className = 'update-bar'; bar.setAttribute('role', 'status');
+      bar.innerHTML = '<span>A new version of the HR system is ready. It loads when you change page.</span><button class="small primary" data-update-now>Update now</button>';
+      document.body.append(bar);
+    }
+  } catch { /* offline: try again later */ }
+}
+function safeToReload() { return !dialog.open && !portal.isEditing() && !document.activeElement?.matches('input,textarea,select'); }
+checkVersion(); setInterval(checkVersion, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
 let routing = false;
 function routeFor() { return page === 'employee201' && files.currentId() ? `#/employee201/${encodeURIComponent(files.currentId())}` : `#/${page}`; }
 function syncRoute() {
@@ -627,6 +645,8 @@ document.addEventListener('click', async event => {
   const b = event.target.closest('button'); if (!b) return;
   try {
     if (b.hasAttribute('data-recovery')) { portal.recovery(); return; }
+    if (b.hasAttribute('data-update-now')) { if (!dialog.open || window.confirm('Close the open form and load the new version? Unsaved changes in it will be lost.')) location.reload(); return; }
+    if (b.dataset.portalTab && updateReady && safeToReload()) { location.reload(); return; }
     if (b.dataset.navGroup) {
       payGroupOpen = !payGroupOpen; try { localStorage.setItem('hr-nav-pay', payGroupOpen ? 'open' : 'closed'); } catch { /* preference only */ }
       b.closest('.nav-group').classList.toggle('open', payGroupOpen); b.setAttribute('aria-expanded', String(payGroupOpen)); return;
@@ -641,6 +661,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; await goTo({ page: item.nav, docs: item.filter }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
+    if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }
     if (b.dataset.nav) { page = b.dataset.nav; filter = ''; mobileDrawer = false; render(); }
     if (b.dataset.profile) { page = 'profile'; await profiles.open(b.dataset.profile, 'personal'); }
     if (b.dataset.tab) { subtab = b.dataset.tab; filter = ''; render(); }

@@ -1,5 +1,5 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
-import { DOC_BADGE, fmtDate, fmtDateTime, readFile } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, readFile, fieldBoxes, sectionCard } from './hr-common.js';
 
 export function createPortalHr({ api, esc, table, toast }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
@@ -7,6 +7,7 @@ export function createPortalHr({ api, esc, table, toast }) {
 
   async function fill(tab, box) {
     try {
+      if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
       if (tab === 'memos') return memos(box, await api('/hr/me/memos'));
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       if (tab === 'datasheet') return datasheet(box, await api('/hr/me/datasheet'));
@@ -14,6 +15,14 @@ export function createPortalHr({ api, esc, table, toast }) {
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
+  function profile(box, r) {
+    const f = r.form;
+    box.innerHTML = sectionCard(esc, '👤', 'Personal Information', fieldBoxes(esc, [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]))
+      + sectionCard(esc, '📞', 'Emergency Contact', fieldBoxes(esc, [['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]))
+      + sectionCard(esc, '💼', 'Employment', fieldBoxes(esc, [['Employee number', r.number], ['Department', f.employment.department], ['Position', f.employment.position], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Immediate supervisor', f.employment.supervisor], ['Date hired', fmtDate(f.employment.dateHired)]]))
+      + sectionCard(esc, '🪪', 'Government IDs', fieldBoxes(esc, [['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]))
+      + '<p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved. Government numbers are partly hidden for your privacy.</p>';
+  }
   function memos(box, list) {
     const pending = list.filter(m => m.ackRequired && !m.acknowledgedAt);
     box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${pending.length ? `${pending.length} waiting for your acknowledgement` : 'All caught up'}</span></div><div class="panel-body memo-cards">
@@ -70,5 +79,5 @@ export function createPortalHr({ api, esc, table, toast }) {
       try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); toast('Uploaded. HR will review it.'); await fill('files201', box); } catch (error) { toast(error.message); }
     };
   }
-  return { fill, tabs: [['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
+  return { fill, tabs: [['profile201', 'My profile', '👤'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
 }

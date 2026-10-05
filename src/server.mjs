@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -34,6 +34,10 @@ async function readBody(req, maximum = 256000) {
   }
   try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new AppError('Invalid JSON.'); }
 }
+function interfaceVersion() {
+  const dir = path.join(directory, '../public');
+  return readdirSync(dir).filter(f => /\.(js|css|html)$/.test(f)).map(f => `${f}:${Math.round(statSync(path.join(dir, f)).mtimeMs)}`).sort().join('|').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36);
+}
 function constantEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && timingSafeEqual(x, y); }
 export function createApp({ store, origin, setupToken, demo = false, mailer = null }) {
   const secure = origin.startsWith('https:');
@@ -60,6 +64,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (mutation && req.headers.origin !== origin) throw new AppError('Request origin is not allowed.', 403);
       const client = req.socket.remoteAddress || 'unknown';
       if (pathname === '/api/branding' && req.method === 'GET') { send(200, publicBranding(store)); return; }
+      // Interface version: every open tab compares this to the version it loaded and offers a safe refresh when it changes.
+      if (pathname === '/api/version' && req.method === 'GET') { send(200, { version: interfaceVersion() }); return; }
       if (pathname === '/api/session' && req.method === 'GET') {
         const auth = session(store, req.headers.cookie);
         send(200, { user: auth?.user || null, csrf: auth?.csrf || null, demo, setup: store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0 }); return;

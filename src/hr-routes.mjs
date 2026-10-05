@@ -32,6 +32,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   // ---------- Employee self-service ----------
   if (pathname.startsWith('/api/hr/me/')) {
     permit(actor, ['employee']);
+    if (pathname === '/api/hr/me/profile' && method === 'GET') { send(200, employeeForm(store, actor, actor.employeeId)); return true; }
     if (pathname === '/api/hr/me/memos' && method === 'GET') { send(200, myMemos(store, actor)); return true; }
     if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/acknowledge$/)) && method === 'POST') { send(200, acknowledgeMemo(store, actor, p[1], Number(p[2]))); return true; }
     if (pathname === '/api/hr/me/trainings' && method === 'GET') { send(200, myTrainings(store, actor)); return true; }

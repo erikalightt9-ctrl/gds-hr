@@ -197,7 +197,7 @@ export function employeeForm(store, actor, id) {
   if (!e) throw new AppError('Employee not found.', 404);
   const p = profileOf(store, id, 'personal'), j = profileOf(store, id, 'employment'), m = profileOf(store, id, 'emergency'), g = profileOf(store, id, 'government');
   const showIds = SENSITIVE_IDS.includes(actor.role), mask = v => (v ? (showIds ? v : `•••• ${String(v).slice(-3)}`) : '');
-  const hrView = HR_TEAM.includes(actor.role);
+  const hrView = HR_TEAM.includes(actor.role) || (actor.role === 'employee' && actor.employeeId === id);   // employees: their own record only
   return {
     id, number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
     form: {

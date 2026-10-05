@@ -112,3 +112,10 @@ export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context 
   };
   form.addEventListener('submit', event => { event.preventDefault(); save(false); });
 }
+
+// Shared read-only layout: section card + bold label above a bordered value box ("Not provided" when empty).
+const WIDE_FIELDS = new Set(['Current address', 'Permanent address', 'Reason for leaving']);
+export function fieldBoxes(esc, rows) {
+  return `<div class="field-boxes">${rows.map(([k, v]) => { const empty = v === '' || v === undefined || v === null, id = `fl-${String(k).replace(/\W+/g, '-')}`; return `<div class="field-box-item ${WIDE_FIELDS.has(k) ? 'wide' : ''}"><span class="field-box-label" id="${id}">${esc(k)}</span><div class="field-box ${empty ? 'empty' : ''}" role="textbox" aria-readonly="true" aria-labelledby="${id}">${empty ? 'Not provided' : esc(v)}</div></div>`; }).join('')}</div>`;
+}
+export const sectionCard = (esc, icon, title, body, action = '') => `<section class="profile-card"><header class="profile-card-head"><h3><span aria-hidden="true">${icon}</span> ${esc(title)}</h3>${action}</header>${body}</section>`;
