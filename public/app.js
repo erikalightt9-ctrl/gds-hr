@@ -15,6 +15,7 @@ import { createAdmin } from './hr-admin.js';
 import { createPortalHr } from './portal-hr.js';
 import { createBreakdown } from './payroll-breakdown.js';
 import { createLoansPage } from './loans-ui.js';
+import { createThirteenthPage } from './thirteenth-ui.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 const money = n => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(n || 0);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -22,7 +23,6 @@ const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }
 const label = key => key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
 const uid = () => crypto.randomUUID();
 let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun = null, filter = '', subtab = 'requests';
-let annualYear = today().slice(0, 4);
 let employeeStatusFilter = 'All Employees';
 let attendanceView = 'records'; // 'records' (all employees) or 'timecard' (one employee beside pay)
 let payrollEmployee = '';
@@ -211,6 +211,7 @@ const breakdown = createBreakdown({ esc, money, table, openDialog, dialog, actio
   },
 } });
 const loansUi = createLoansPage({ ...hrCtx, canEdit: kind => canEdit(kind), editButton: (k, id) => editButton(k, id), addButton: (k, label) => addButton(k, label), downloads: k => downloads(k) });
+const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(k) });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   page = nav.page;
@@ -291,14 +292,6 @@ function deductionsPage() {
     `<div class="cards">${card('Active deductions', active.length, 'Applied by payroll automatically', true)}${card('Employees with deductions', new Set(active.map(d => d.employeeId)).size, 'At least one active deduction')}${card('Per-cutoff total (every cutoff)', money(active.filter(d => d.schedule === 'every-cutoff').reduce((s, d) => s + d.amount, 0)), 'Recurring each payroll')}${card('Paused', (state.deductions || []).length - active.length, 'Kept but not deducted')}</div>` +
     `<section class="panel"><div class="panel-head"><h2>All deductions</h2>${downloads('deductions')}<span class="legend">SSS, PhilHealth and Pag-IBIG amounts are set per employee under Employee profile → Payroll. Loans with balances stay under Employee loans.</span></div>${searchToolbar()}${table(['Employee', 'Deduction', 'Amount', 'When', 'From', 'Until', 'Status', ''], list.map(d => [employee(d.employeeId), `${esc(d.name)}${d.notes ? `<small>${esc(d.notes)}</small>` : ''}`, money(d.amount), SCHEDULE_LABEL[d.schedule], d.startDate, d.endDate || '—', badge(d.active ? 'Active' : 'Paused', d.active ? '' : 'neutral'), editButton('deductions', d.id)]), 'No company deductions yet. Add one to deduct it automatically in payroll.')}</section>`;
 }
-function annualPage() {
-  const year = annualYear, rows = state.employees.map(e => {
-    const runs = state.runs.filter(r => r.start.startsWith(year)), items = runs.flatMap(r => r.rows.filter(row => row.employeeId === e.id));
-    const basic = items.reduce((s, r) => s + r.applicableBasic, 0), paid = items.reduce((s, r) => s + r.earnings.thirteenth, 0), accrued = e.covered13th ? Math.round(basic / 12 * 100) / 100 : 0;
-    return { e, basic, paid, accrued, items: items.length };
-  });
-  return heading('A year of work, accounted for.', '13th month pay is tracked from applicable basic salary in posted payrolls.', '<button data-nav="payroll">Open payroll →</button>') + `<div class="cards">${card('Calendar year', year, 'Posted payroll records only')}${card('Applicable basic earned', money(rows.reduce((s, r) => s + r.basic, 0)), 'Premiums excluded by policy')}${card('Accrued 13th month', money(rows.reduce((s, r) => s + r.accrued, 0)), 'Applicable annual basic ÷ 12', true)}${card('Already paid', money(rows.reduce((s, r) => s + r.paid, 0)), 'Deducted from the next payout')}</div><section class="panel"><div class="panel-head"><h2>Annual employee ledger</h2>${downloads('thirteenth')}<span class="legend">Choose “Pay accrued balance” in payroll to include a payout.</span></div>${table(['Employee', 'Posted cutoffs', 'Applicable basic', 'Accrued ÷ 12', 'Paid', 'Remaining', 'Coverage'], rows.map(r => [employee(r.e.id), r.items, money(r.basic), money(r.accrued), money(r.paid), money(Math.max(0, r.accrued - r.paid)), badge(r.e.covered13th ? 'Covered' : 'Excluded', r.e.covered13th ? '' : 'neutral')]))}</section><div class="notice success">This ledger uses the applicable basic salary saved in each posted payroll. Overtime, premiums, night differential, and allowances remain separate. Paid-leave inclusion and holiday base inclusion follow the approved policy.</div>`;
-}
 function holidaysPage() { return heading('Holiday calendar', 'Date-specific classifications, maintained from official proclamations each year.', addButton('holidays', 'Add holiday')) + `<section class="panel"><div class="panel-head"><h2>Configured dates</h2>${downloads('holidays')}<span class="legend">Rest-day combinations come from each employee’s schedule.</span></div>${searchToolbar()}${table(['Date', 'Holiday', 'Classification', 'Legal / policy basis', ''], filtered(state.holidays).sort((a, b) => a.date.localeCompare(b.date)).map(h => [h.date, esc(h.name), badge(h.kind, 'neutral'), `<span class="wrap">${esc(h.basis)}</span>`, editButton('holidays', h.id)]), 'No dates are assumed. Add the applicable official holidays for each payroll year.')}</section><div class="notice">Special non-working days without work default to no pay. Favorable company policy can provide payment. Regular-holiday pay requires the employee’s coverage and eligibility to be verified in attendance.</div>`; }
 function rulesPage() {
   const r = state.rules.filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0] || state.rules[0];
@@ -345,11 +338,11 @@ function render() {
   if (page === 'overview') page = 'dashboard';
   if (page === 'employees') page = 'files';
   if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports'].includes(page)) page = 'dashboard';
-  const hrPages = { loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
+  const hrPages = { annual: () => thirteenthUi.render(), loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') { shell(heading('Live attendance', 'Employee clock events and HR reviews synchronize automatically.') + (liveData ? portal.live(liveData) : '<div class="notice">This view is restricted to HR and administrators.</div>')); return; }
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
-  const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, annual: annualPage, holidays: holidaysPage, rules: rulesPage };
+  const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, holidays: holidaysPage, rules: rulesPage };
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   shell(views[page]());
@@ -364,14 +357,6 @@ function render() {
     const section = document.createElement('section'); section.className = 'panel';
     section.innerHTML = '<div class="panel-head"><h2>Upcoming work anniversaries</h2><span class="legend">Next 60 days</span></div>' + table(['Employee', 'Anniversary', ''], (state.anniversaries || []).map(e => [employee(e.employeeId), e.nextAnniversary, `<button class="small" data-profile="${esc(e.employeeId)}">Open profile</button>`]), 'No upcoming anniversaries. Add confirmed joining dates to employee records.');
     document.querySelector('.content').append(section);
-  }
-  if (page === 'annual') {
-    const years = [...new Set([today().slice(0, 4), ...state.runs.map(r => r.start.slice(0, 4))])].sort().reverse();
-    const picker = document.createElement('label'); picker.className = 'field'; picker.textContent = 'Calendar year';
-    const select = document.createElement('select'); select.setAttribute('aria-label', 'Calendar year');
-    years.forEach(y => { const option = new Option(y, y, false, y === annualYear); select.add(option); });
-    select.onchange = () => { annualYear = select.value; render(); }; picker.append(select);
-    document.querySelector('.page-heading .actions').prepend(picker);
   }
 }
 function openDialog(title, body, footer = '') { dialog.innerHTML = `<div class="dialog-head"><h2>${esc(title)}</h2><button class="small" data-close aria-label="Close dialog">✕</button></div>${body}${footer}`; if (!dialog.open) dialog.showModal(); }

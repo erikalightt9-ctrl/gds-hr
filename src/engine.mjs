@@ -92,6 +92,13 @@ export function leaveBalance(state, employee, type, asOf) {
   const entitled = earnedEntitlement(employee, type, asOf), used = usedIn(year);
   return { entitled, carry, used, expired: Math.max(0, carryEntitled - carry), available: round(Math.max(0, entitled + carry - used)) };
 }
+// Salary encoded by HR for months before the system went live. A month that already has posted payroll for the
+// employee is counted from payroll only, so nothing is counted twice.
+export function priorBasicFor(state, employeeId, year) {
+  const postedMonths = new Set(state.runs.filter(r => r.status === 'posted' && r.rows.some(row => row.employeeId === employeeId)).map(r => r.start.slice(0, 7)));
+  const rows = (state.priorEarnings || []).filter(p => p.employeeId === employeeId && p.month.startsWith(`${year}-`) && !postedMonths.has(p.month));
+  return { basic: round(rows.reduce((s, p) => s + p.basic, 0)), thirteenthPaid: round(rows.reduce((s, p) => s + (p.thirteenthPaid || 0), 0)), months: rows.map(p => p.month) };
+}
 export function ruleOn(state, date) {
   return state.rules.filter(r => r.effectiveDate <= date && r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
 }
@@ -305,11 +312,12 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     }
     const applicableBasic = round(Math.max(0, baseline - deductions.absence - lateReduction - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic));
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));
-    const annualBasic = round(annualRows.reduce((s, row) => s + row.applicableBasic, 0) + applicableBasic);
+    const prior = priorBasicFor(state, e.id, start.slice(0, 4));
+    const annualBasic = round(annualRows.reduce((s, row) => s + row.applicableBasic, 0) + prior.basic + applicableBasic);
     const thirteenthAccrued = e.covered13th ? round(annualBasic / 12) : 0;
-    const thirteenthPaid = round(annualRows.reduce((s, row) => s + row.earnings.thirteenth, 0));
+    const thirteenthPaid = round(annualRows.reduce((s, row) => s + row.earnings.thirteenth, 0) + prior.thirteenthPaid);
     const thirteenthBalance = Math.max(0, round(thirteenthAccrued - thirteenthPaid));
-    if (pay13th) add(earnings, 'thirteenth', thirteenthBalance, `${annualBasic} applicable annual basic ÷ 12 − ${thirteenthPaid} already paid`, null, end);
+    if (pay13th) add(earnings, 'thirteenth', thirteenthBalance, `${annualBasic} applicable annual basic${prior.basic ? ` (incl. ${prior.basic} encoded for ${prior.months.length} month${prior.months.length === 1 ? '' : 's'} before the system)` : ''} ÷ 12 − ${thirteenthPaid} already paid`, null, end);
     // Semi-monthly payroll takes half each cutoff by default, or the full monthly amount on one chosen cutoff.
     const contributionFactor = r.cutoff === 'monthly' ? 1 : r.contributionTiming === 'second' ? (start.endsWith('-16') ? 1 : 0) : r.contributionTiming === 'first' ? (start.endsWith('-01') ? 1 : 0) : factor;
     // Employee shares are deducted; employer shares (and SSS EC) are recorded separately and never reduce pay.

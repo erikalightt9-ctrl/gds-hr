@@ -2,7 +2,7 @@
 // Each report declares who may download it; the rules mirror what each role can already see on screen.
 import { AppError } from './service.mjs';
 import { REPORTS_201, brandingLine } from './reports201.mjs';
-import { leaveBalance } from './engine.mjs';
+import { leaveBalance, priorBasicFor } from './engine.mjs';
 import { canReadSection, localToday, visibleAudit } from './profiles.mjs';
 import { tablePdf, workbook } from './export.mjs';
 
@@ -71,13 +71,13 @@ export const REPORTS = {
   },
   thirteenth: {
     title: '13th month ledger', roles: STAFF, subtitle: () => `Calendar year ${localToday().slice(0, 4)}`,
-    headers: ['Employee ID', 'Name', 'Covered', 'Applicable basic (posted)', 'Accrued (÷12)', 'Paid', 'Balance'],
+    headers: ['Employee ID', 'Name', 'Covered', 'Applicable basic (posted)', 'Encoded before the system', 'Total basic', 'Accrued (÷12)', 'Paid', 'Balance'],
     rows: state => {
       const year = localToday().slice(0, 4), rows = state.runs.filter(r => r.status === 'posted' && r.start.startsWith(year)).flatMap(r => r.rows);
       return people(state).map(e => {
-        const own = rows.filter(r => r.employeeId === e.id), basic = own.reduce((s, r) => s + r.applicableBasic, 0), paid = own.reduce((s, r) => s + r.earnings.thirteenth, 0);
+        const own = rows.filter(r => r.employeeId === e.id), prior = priorBasicFor(state, e.id, year), posted = own.reduce((s, r) => s + r.applicableBasic, 0), basic = posted + prior.basic, paid = own.reduce((s, r) => s + r.earnings.thirteenth, 0) + prior.thirteenthPaid;
         const accrued = e.covered13th ? basic / 12 : 0;
-        return [e.id, e.name, yesNo(e.covered13th), money(basic), money(accrued), money(paid), money(Math.max(0, accrued - paid))];
+        return [e.id, e.name, yesNo(e.covered13th), money(posted), money(prior.basic), money(basic), money(accrued), money(paid), money(Math.max(0, accrued - paid))];
       });
     },
   },
