@@ -119,6 +119,11 @@ export function createFiles(ctx) {
     root.addEventListener('click', event => onProfileClick(event, record, checklist, extras));
   }
   const dl = rows => `<dl class="details-grid hr-details">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v === '' || v === undefined || v === null ? '<span class="muted">—</span>' : esc(v)}</dd></div>`).join('')}</dl>`;
+  // Read-only field boxes: bold label above, the saved value inside its own bordered box.
+  const WIDE = new Set(['Current address', 'Permanent address']);
+  const boxes = rows => `<div class="field-boxes">${rows.map(([k, v]) => { const empty = v === '' || v === undefined || v === null; return `<div class="field-box-item ${WIDE.has(k) ? 'wide' : ''}"><span class="field-box-label" id="fl-${esc(k).replace(/\W+/g, '-')}">${esc(k)}</span><div class="field-box ${empty ? 'empty' : ''}" role="textbox" aria-readonly="true" aria-labelledby="fl-${esc(k).replace(/\W+/g, '-')}">${empty ? 'Not provided' : esc(v)}</div></div>`; }).join('')}</div>`;
+  const sectionCard = (icon, title, body, action = '') => `<section class="profile-card"><header class="profile-card-head"><h3><span aria-hidden="true">${icon}</span> ${esc(title)}</h3>${action}</header>${body}</section>`;
+  const emergencyRows = f => [['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]];
   const block = (icon, title, body, action = '') => `<div class="profile-block"><h3 class="profile-block-title"><span aria-hidden="true">${icon}</span> ${esc(title)}${action}</h3>${body}</div>`;
   const editBtn = (section, canEdit) => (canEdit ? ` <button class="small" data-edit-section="${section}">Edit</button>` : '');
   const formBtn = (part, canEdit) => (canEdit ? ` <button class="small" data-edit-part="${part}">Edit</button>` : '');
@@ -134,12 +139,13 @@ export function createFiles(ctx) {
       const stat = (icon, label, value, sub, percent = null) => `<div class="overview-stat"><span><span aria-hidden="true">${icon}</span> ${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small>${percent === null ? '' : `<span class="hr-progress full"><span class="hr-progress-bar w${Math.round(percent / 5) * 5}"></span></span>`}</div>`;
       const outstanding = checklist.items.filter(i => i.requirement.required && !['Verified', 'Not Applicable'].includes(i.status));
       return `<div class="overview-stats">${stat('✅', 'Requirements', `${checklist.completeCount} / ${checklist.requiredCount}`, 'Complete', checklist.percent)}${stat('📁', 'Documents', docs, 'Total files')}${stat('🏅', 'Trainings', `${trainingsDone} / ${extra.trainings.length}`, 'Complete', extra.trainings.length ? Math.round(trainingsDone / extra.trainings.length * 100) : 0)}${stat('📝', 'Memos', extra.memos.length, `${acked} acknowledged`)}</div>
-        ${block('👤', 'Personal information', dl(personalRows(f)), formBtn('personal', edit))}
-        ${block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]), formBtn('emergency', edit))}
-        ${block('💼', 'Employment information', dl(employmentRows(record)), formBtn('employment', edit))}
+        ${sectionCard('👤', 'Personal Information', boxes(personalRows(f)))}
+        ${sectionCard('📞', 'Emergency Contact', boxes(emergencyRows(f)))}
+        ${block('💼', 'Employment information', dl(employmentRows(record)))}
+        <p class="legend">Overview is read-only. To change details, open the Personal, Employment or other tabs.</p>
         ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
-    if (tab === 'personal') return block('👤', 'Personal information', dl(personalRows(f)), formBtn('personal', edit)) + block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]), formBtn('emergency', edit));
+    if (tab === 'personal') return sectionCard('👤', 'Personal Information', boxes(personalRows(f)), formBtn('personal', edit)) + sectionCard('📞', 'Emergency Contact', boxes(emergencyRows(f)), formBtn('emergency', edit));
     if (tab === 'employment') return block('💼', 'Employment information', dl(employmentRows(record)), formBtn('employment', edit)) + '<p class="legend">Active / inactive status and employment classification are separate. Probation and review dates are reminders only; the system never changes status by itself.</p>';
     if (tab === 'compensation') {
       const c = extras.compensation, daily = c.basis === 'daily';
