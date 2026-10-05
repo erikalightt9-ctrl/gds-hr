@@ -8,6 +8,7 @@ import { saveTraining, deleteTraining, assignParticipants, updateParticipant, li
 import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
 import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS } from './roles.mjs';
 import { celebrationsOn, celebrantPhoto } from './celebrations.mjs';
+import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 
 const BIG = 28_500_000;
 const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="document"; filename*=UTF-8''${encodeURIComponent(meta.name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
@@ -37,6 +38,9 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   // ---------- Employee self-service ----------
   if (pathname.startsWith('/api/hr/me/')) {
     permit(actor, ['employee']);
+    if (pathname === '/api/hr/me/loans' && method === 'GET') { send(200, myLoans(store, actor)); return true; }
+    if (pathname === '/api/hr/me/loans' && method === 'POST') { send(201, applyLoan(store, actor, await readBody(req))); return true; }
+    if ((p = m(/^\/api\/hr\/me\/loans\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelLoanApplication(store, actor, p[1])); return true; }
     if (pathname === '/api/hr/me/profile' && method === 'GET') { send(200, employeeForm(store, actor, actor.employeeId)); return true; }
     if (pathname === '/api/hr/me/memos' && method === 'GET') { send(200, myMemos(store, actor)); return true; }
     if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/acknowledge$/)) && method === 'POST') { send(200, acknowledgeMemo(store, actor, p[1], Number(p[2]))); return true; }

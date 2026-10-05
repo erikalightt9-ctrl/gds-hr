@@ -144,6 +144,33 @@ export function deleteRecord(store, actor, kind, id) {
     store.write(state); store.log(actor, 'delete', kind, id, value, null);
   });
 }
+// Reverse a posted payroll: the run is kept (status "reversed") for the audit trail, its loan repayments are
+// undone so balances and remaining terms return to their pre-posting values, and the cutoff can be posted again.
+export function reversePayroll(store, actor, runId, input) {
+  permit(actor, ['admin']);
+  const reason = String(input?.reason ?? '').trim();
+  if (reason.length < 5) throw new AppError('Give a reason for reversing this payroll.');
+  return store.transaction(() => {
+    const state = store.read(), run = state.runs.find(r => r.id === runId);
+    if (!run) throw new AppError('Payroll not found.', 404);
+    if (run.status !== 'posted') throw new AppError('Only posted payroll can be reversed.');
+    const ids = new Set(run.rows.map(r => r.employeeId));
+    if (state.runs.some(r => r.status === 'posted' && r.id !== run.id && r.start > run.end && r.rows.some(row => ids.has(row.employeeId)))) throw new AppError('A later payroll is posted for these employees. Reverse the later payroll first.');
+    for (const row of run.rows) for (const d of row.loanDeductions || []) {
+      const loan = state.loans.find(l => l.id === d.loanId); if (!loan) continue;
+      const before = structuredClone(loan);
+      loan.balance = d.previousBalance;
+      loan.remainingTerms = d.previousTerms ?? Math.min(loan.terms, loan.remainingTerms + 1);
+      if (d.previousInterest !== undefined) loan.interestBalance = d.previousInterest;
+      store.log(actor, 'payroll-reversal', 'loans', loan.id, before, loan);
+    }
+    run.status = 'reversed'; run.reversedBy = actor.username; run.reversedAt = new Date().toISOString(); run.reversalReason = reason;
+    state.version++; store.write(state);
+    for (const row of run.rows) store.notify(row.employeeId, `Your payslip for ${run.start} to ${run.end} was withdrawn for correction.`);
+    store.log(actor, 'reverse', 'runs', run.id, null, { start: run.start, end: run.end, reason });
+    return run;
+  });
+}
 // HR decision on an employee's leave request. Approval re-runs every leave check (eligibility, balance, overlap,
 // posted payroll) through saveRecord; balances are derived from approved leave, so the employee's and HR's views
 // always show the same figure and nothing is deducted twice. Cancelling approved leave restores the credits.
@@ -165,7 +192,7 @@ export function postPayroll(store, actor, request) {
   permit(actor, ['admin', 'payroll']);
   return store.transaction(() => {
     const state = store.read();
-    const existing = state.runs.find(run => run.fingerprint === request.fingerprint);
+    const existing = state.runs.find(run => run.status === 'posted' && run.fingerprint === request.fingerprint);
     if (existing) return existing; // Idempotent retry after a successful commit.
     const computed = calculatePayroll(state, request.start, request.end, request.pay13th, request.employeeIds);
     if (computed.fingerprint !== request.fingerprint) throw new AppError('Records changed after preview. Recalculate and review payroll.', 409);
@@ -174,6 +201,7 @@ export function postPayroll(store, actor, request) {
     for (const row of run.rows) for (const deduction of row.loanDeductions) {
       const loan = state.loans.find(l => l.id === deduction.loanId), before = structuredClone(loan);
       loan.balance = deduction.remainingBalance; loan.remainingTerms = deduction.remainingTerms;
+      if (deduction.remainingInterest !== undefined) loan.interestBalance = deduction.remainingInterest;
       store.log(actor, 'payroll-deduction', 'loans', loan.id, before, loan);
     }
     state.runs.push(run); state.version++; store.write(state);

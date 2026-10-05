@@ -23,6 +23,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, employee_id TEXT, created_at TEXT NOT NULL, message TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS recovery_requests (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL, resolved INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS password_resets (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS loan_applications (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS payroll_inputs (employee_id TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, start, end));
       CREATE TABLE IF NOT EXISTS hr_settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS hr_counters (key TEXT PRIMARY KEY, value INTEGER NOT NULL);

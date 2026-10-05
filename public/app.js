@@ -14,6 +14,7 @@ import { createTrainings } from './hr-trainings.js';
 import { createAdmin } from './hr-admin.js';
 import { createPortalHr } from './portal-hr.js';
 import { createBreakdown } from './payroll-breakdown.js';
+import { createLoansPage } from './loans-ui.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 const money = n => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(n || 0);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -209,6 +210,7 @@ const breakdown = createBreakdown({ esc, money, table, openDialog, dialog, actio
     if (key === 'loans') { dialog.close(); goTo({ page: 'loans' }); }
   },
 } });
+const loansUi = createLoansPage({ ...hrCtx, canEdit: kind => canEdit(kind), editButton: (k, id) => editButton(k, id), addButton: (k, label) => addButton(k, label), downloads: k => downloads(k) });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   page = nav.page;
@@ -273,8 +275,10 @@ function payrollPage() {
   const cell = (row, amount, component = '') => `<button class="money-link" data-salary="${esc(row.employeeId)}" data-component="${esc(component)}" title="Show how this amount was calculated">${money(amount)}</button>`;
   html += table(headers, (run?.rows || []).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, money(r.monthlySalary), r.workingDays, `${r.creditedDays ?? r.daysPresent}${r.lateDaysLost ? `<small>${r.daysPresent} present − ${r.lateDaysLost} late</small>` : ''}`, `<span class="wrap" title="${esc(r.leaveNotes.join('; '))}">${r.leaveDays} days${r.leaveNotes.length ? `<br><small>${esc(r.leaveNotes[0])}</small>` : ''}</span>`, cell(r, r.earnings.regularOT + r.earnings.restOT + r.earnings.specialOT + r.earnings.regularHolidayOT + r.earnings.otherOT, 'overtime'), cell(r, r.earnings.additional + r.earnings.allowance, 'adjustment'), cell(r, r.earnings.thirteenth, 'thirteenth'), cell(r, r.earnings.specialHoliday, 'specialHoliday'), cell(r, r.earnings.regularHoliday, 'regularHoliday'), cell(r, r.gross, 'gross'), cell(r, r.totalDeductions, 'deductions'), cell(r, r.net, 'net'), money(r.loanBalance), r.loanDeductions.map(l => esc(l.startDate)).join('<br>') || '—', r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('<br>') || '—']), 'Choose a cutoff and calculate payroll to see the computation.') + `<div class="panel-foot"><span>PHP · Applicable Statutory / Company Payroll Rate</span><span>${run?.rows.length || 0} employees</span></div></section>`;
   if (run?.blockers.length) html += `<div class="notice"><strong>${run.blockers.length} item${run.blockers.length === 1 ? '' : 's'} to resolve before posting</strong><ul>${run.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul></div>`;
+  if (run?.id && run.status === 'posted' && auth.user.role === 'admin') html += `<div class="actions"><button data-reverse-run="${esc(run.id)}">Reverse this posting</button><span class="legend">Withdraws these payslips, restores loan balances and lets you correct and post the cutoff again. The posting stays in the audit trail.</span></div><br>`;
+  if (run?.status === 'reversed') html += `<div class="notice">This payroll was reversed by ${esc(run.reversedBy)} on ${esc((run.reversedAt || '').slice(0, 10))}: ${esc(run.reversalReason || '')}</div>`;
   if (run && !run.id && ['admin', 'payroll'].includes(auth.user.role)) html += `<div class="actions"><button class="primary" data-post ${run.blockers.length ? 'disabled' : ''}>Review & post payroll</button><span class="legend">Posting locks this cutoff and applies scheduled loan deductions.</span></div><br>`;
-  html += `<section class="panel"><div class="panel-head"><h2>Posted payroll history</h2>${downloads('payroll-runs')}</div>${table(['Cutoff', 'Gross', 'Deductions', 'Net', 'Posted by', ''], state.runs.slice().reverse().map(r => [`${r.start} → ${r.end}`, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), esc(r.postedBy), `<button class="small" data-run="${r.id}">Open payroll</button>`]))}</section><section class="panel"><div class="panel-head"><h2>Additional pay & authorized deductions</h2>${downloads('adjustments')}</div>${table(['Employee', 'Date', 'Component', 'Amount', 'Approval', ''], state.adjustments.map(a => [employee(a.employeeId), a.date, esc(label(a.kind)), money(a.amount), badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('adjustments', a.id)]))}</section>`;
+  html += `<section class="panel"><div class="panel-head"><h2>Posted payroll history</h2>${downloads('payroll-runs')}</div>${table(['Cutoff', 'Gross', 'Deductions', 'Net', 'Posted by', ''], state.runs.slice().reverse().map(r => [`${r.start} → ${r.end}${r.status === 'reversed' ? ' <small>reversed</small>' : ''}`, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), esc(r.postedBy), `<button class="small" data-run="${r.id}">Open payroll</button>`]))}</section><section class="panel"><div class="panel-head"><h2>Additional pay & authorized deductions</h2>${downloads('adjustments')}</div>${table(['Employee', 'Date', 'Component', 'Amount', 'Approval', ''], state.adjustments.map(a => [employee(a.employeeId), a.date, esc(label(a.kind)), money(a.amount), badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('adjustments', a.id)]))}</section>`;
   return html;
 }
 function loansPage() { return heading('Employee loans', 'Scheduled deductions, clear balances, and a complete repayment history.', addButton('loans', 'Add loan')) + `<div class="cards">${card('Outstanding balance', money(state.loans.reduce((s, l) => s + l.balance, 0)), 'Across all loan types', true)}${card('Active loans', state.loans.filter(l => l.balance > 0).length, 'With an outstanding balance')}${card('Total original amount', money(state.loans.reduce((s, l) => s + l.original, 0)), 'Recorded loans')}${card('Repaid / opening credits', money(state.loans.reduce((s, l) => s + l.original - l.balance, 0)), 'Original amount less remaining balance')}</div><section class="panel"><div class="panel-head"><h2>Loan register</h2>${downloads('loans')}</div>${searchToolbar()}${table(['Employee', 'Type / reference', 'Original', 'Balance', 'Monthly amortization', 'Per payroll', 'Dates', 'Remaining terms', 'Authorization', ''], filtered(state.loans).map(l => [employee(l.employeeId), `${esc(l.type)}<br><small>${esc(l.reference)}</small>`, money(l.original), money(l.balance), money(l.monthlyAmortization), money(l.perPayroll), `${l.startDate}<br><small>to ${l.endDate}</small>`, `${l.remainingTerms} / ${l.terms}`, badge(l.authorized ? 'Authorized' : 'Pending', l.authorized ? '' : 'pending'), editButton('loans', l.id)]))}</section>`; }
@@ -341,7 +345,7 @@ function render() {
   if (page === 'overview') page = 'dashboard';
   if (page === 'employees') page = 'files';
   if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports'].includes(page)) page = 'dashboard';
-  const hrPages = { dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
+  const hrPages = { loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') { shell(heading('Live attendance', 'Employee clock events and HR reviews synchronize automatically.') + (liveData ? portal.live(liveData) : '<div class="notice">This view is restricted to HR and administrators.</div>')); return; }
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
@@ -692,6 +696,10 @@ document.addEventListener('click', async event => {
     if (b.dataset.computationAdd) edit('adjustments', null, { employeeId: b.dataset.computationAdd, date: currentRun.end, approved: true });
     if (b.hasAttribute('data-account')) await account();
     if (b.hasAttribute('data-signout')) await signOut();
+    if (b.dataset.reverseRun) {
+      const reason = window.prompt('Reason for reversing this posted payroll (kept in the audit trail):'); if (!reason) return;
+      currentRun = await api(`/runs/${b.dataset.reverseRun}/reverse`, { reason }); await refresh(); render(); toast('Payroll reversed. Loan balances restored; the cutoff can be corrected and posted again.'); return;
+    }
     if (b.dataset.leaveDecision) {
       const decision = b.dataset.leaveDecision;
       const remarks = decision === 'approve' ? window.prompt('Approve this leave. Remarks for the employee (optional):', '') : window.prompt(decision === 'reject' ? 'Reason for rejecting (the employee will see this):' : 'Reason for cancelling this approved leave (credits will be restored):', '');

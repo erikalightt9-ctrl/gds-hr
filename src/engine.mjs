@@ -263,8 +263,11 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
       // Hours typed by HR, priced with the approved multipliers. Holiday hours are on a scheduled workday, so the
       // day itself is already in the salary and only the premium is added.
+      // A manual "add" entry for a component that attendance already pays would count the same work twice: flag it.
+      const fromAttendance = new Set(trace.filter(t => t.sourceKind === 'attendance' && t.side === 'earnings' && t.amount > 0).map(t => t.component));
       const H = (key, component, multiplier, label, c, ot, night = false) => {
         const h = m.hours?.[key] || 0; if (!h) return;
+        if (m.mode === 'add' && fromAttendance.has(component)) blockers.push(`${prefix}: manual ${label} hours overlap ${label} already calculated from attendance. Review the manual entry (use "replace" or remove the overlap).`);
         add(earnings, component, h * hourly * multiplier, `${tag}: ${h} h × ${hourly} × ${Math.round(multiplier * 10000) / 10000} ${label}`, src, end, h, multiplier);
         workBreakdown.push({ date: end, classification: c, overtime: ot, night, hours: h, dayMultiplier: multiplier, otMultiplier: 1, nightMultiplier: 1, combinedMultiplier: multiplier, sourceId: src.id });
       };
@@ -287,14 +290,18 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     for (const d of (state.deductions || []).filter(d => d.employeeId === e.id && d.active && deductionApplies(d, start, end))) {
       add(deductions, 'other', d.amount, d.name, { id: d.id, sourceKind: 'deductions' }, end);
     }
-    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && l.balance > 0 && l.startDate <= end && l.endDate >= start)) {
+    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && round(l.balance + (l.interestBalance || 0)) > 0 && l.startDate <= end && l.endDate >= start)) {
       if (!loan.remainingTerms) { blockers.push(`${prefix}: loan ${loan.reference} has a balance but no remaining terms.`); continue; }
       const alreadyDeducted = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 7) === start.slice(0, 7)).flatMap(run => run.rows).flatMap(row => row.loanDeductions).filter(l => l.loanId === loan.id).reduce((sum, l) => sum + l.amount, 0);
-      const amount = round(Math.min(loan.balance, loan.perPayroll, Math.max(0, loan.monthlyAmortization - alreadyDeducted)));
+      // Total due = principal + any interest; the final deduction never exceeds it. Interest is taken pro rata, so
+      // only the principal portion reduces the principal balance.
+      const interestDue = loan.interestBalance || 0, due = round(loan.balance + interestDue);
+      const amount = round(Math.min(due, loan.perPayroll, Math.max(0, loan.monthlyAmortization - alreadyDeducted)));
       if (!amount) continue;
-      loanDeductions.push({ loanId: loan.id, type: loan.type, reference: loan.reference, amount, previousBalance: loan.balance, remainingBalance: round(loan.balance - amount), startDate: loan.startDate, endDate: loan.endDate, terms: loan.terms, remainingTerms: amount === loan.balance ? 0 : loan.remainingTerms - 1 });
+      const interest = due ? round(amount * interestDue / due) : 0, principal = round(amount - interest);
+      loanDeductions.push({ loanId: loan.id, type: loan.type, reference: loan.reference, amount, principal, interest, previousBalance: loan.balance, remainingBalance: round(loan.balance - principal), previousInterest: interestDue, remainingInterest: round(interestDue - interest), startDate: loan.startDate, endDate: loan.endDate, terms: loan.terms, previousTerms: loan.remainingTerms, remainingTerms: amount >= due ? 0 : loan.remainingTerms - 1 });
       deductions.loans = round(deductions.loans + amount);
-      trace.push({ component: 'loans', side: 'deductions', amount, formula: `min(${loan.balance} balance, ${loan.perPayroll} per payroll, ${loan.monthlyAmortization - alreadyDeducted} monthly amount remaining)`, sourceKind: 'loans', sourceId: loan.id, date: end });
+      trace.push({ component: 'loans', side: 'deductions', amount, formula: `${loan.type} ${loan.reference}: min(${due} due, ${loan.perPayroll} per payroll, ${round(loan.monthlyAmortization - alreadyDeducted)} monthly amount remaining)${interest ? ` = ${principal} principal + ${interest} interest` : ''}`, sourceKind: 'loans', sourceId: loan.id, date: end });
     }
     const applicableBasic = round(Math.max(0, baseline - deductions.absence - lateReduction - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic));
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));

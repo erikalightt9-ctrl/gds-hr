@@ -8,6 +8,7 @@ export function createPortalHr({ api, esc, table, toast }) {
   async function fill(tab, box) {
     try {
       if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
+      if (tab === 'loans201') return loans(box, await api('/hr/me/loans'));
       if (tab === 'memos') return memos(box, await api('/hr/me/memos'));
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       if (tab === 'datasheet') return datasheet(box, await api('/hr/me/datasheet'));
@@ -22,6 +23,27 @@ export function createPortalHr({ api, esc, table, toast }) {
       + sectionCard(esc, '💼', 'Employment', fieldBoxes(esc, [['Employee number', r.number], ['Department', f.employment.department], ['Position', f.employment.position], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Immediate supervisor', f.employment.supervisor], ['Date hired', fmtDate(f.employment.dateHired)]]))
       + sectionCard(esc, '🪪', 'Government IDs', fieldBoxes(esc, [['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]))
       + '<p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved. Government numbers are partly hidden for your privacy.</p>';
+  }
+  function loans(box, data) {
+    const money = n => `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const STATUS = { pending: 'Pending HR review', approved: 'Approved', rejected: 'Not approved', cancelled: 'Cancelled' };
+    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My loans</h2><span class="legend">Approved loans are deducted from payroll automatically</span></div>
+      ${table(['Loan', 'Original', 'Per payroll', 'Repaid', 'Outstanding', 'Next deduction', 'Status'], data.loans.map(l => [`${esc(l.type)}<small>${esc(l.reference)}</small>`, money(l.original) + (l.interestTotal ? `<small>+ ${money(l.interestTotal)} interest</small>` : ''), money(l.perPayroll), money(l.totalRepaid), `<strong>${money(l.outstanding)}</strong>`, l.nextDeduction ? fmtDate(l.nextDeduction) : '—', esc(l.status)]), 'No loans yet.')}</section>
+      <section class="panel"><div class="panel-head"><h2>Apply for a loan</h2></div><form id="loan-apply" class="panel-body form-grid">
+        <label class="field">Loan type<select name="type"><option>Salary Loan</option><option>Other Company Loan</option><option>SSS Loan</option><option>Pag-IBIG Loan</option></select></label>
+        <label class="field">Amount requested<input type="number" name="amount" min="1" step="0.01" required></label>
+        <label class="field">Repayment months<input type="number" name="months" min="1" max="120" required value="6"></label>
+        <label class="field full">Purpose<input name="purpose" required minlength="3" maxlength="1000"></label>
+        <div><button class="primary">Submit application</button></div></form>
+        ${table(['Applied', 'Type', 'Amount', 'Months', 'Status', 'HR remarks', ''], data.applications.map(a => [fmtDate(a.appliedAt.slice(0, 10)), esc(a.type), money(a.amount), a.months, esc(STATUS[a.status] || a.status), esc(a.remarks || '—'), a.status === 'pending' ? `<button class="small" data-loan-cancel="${a.id}">Cancel</button>` : '']), 'No applications yet.')}</section>`;
+    box.querySelector('#loan-apply').onsubmit = async event => {
+      event.preventDefault(); const f = new FormData(event.target);
+      try { await api('/hr/me/loans', { type: f.get('type'), amount: Number(f.get('amount')), months: Number(f.get('months')), purpose: f.get('purpose') }); toast('Loan application sent to HR.'); await fill('loans201', box); } catch (error) { toast(error.message); }
+    };
+    box.onclick = async event => {
+      const b = event.target.closest('[data-loan-cancel]'); if (!b) return;
+      try { await api(`/hr/me/loans/${b.dataset.loanCancel}/cancel`, {}); toast('Application cancelled.'); await fill('loans201', box); } catch (error) { toast(error.message); }
+    };
   }
   function memos(box, list) {
     const pending = list.filter(m => m.ackRequired && !m.acknowledgedAt);
@@ -91,5 +113,5 @@ export function createPortalHr({ api, esc, table, toast }) {
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, tabs: [['profile201', 'My profile', '👤'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
+  return { fill, celebrations, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
 }
