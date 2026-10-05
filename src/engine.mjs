@@ -172,7 +172,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       trace.push({ component, side: side === earnings ? 'earnings' : 'deductions', amount: rounded, formula, sourceId: source?.id || r.id, sourceKind: source?.sourceKind || (source?.timeIn !== undefined ? 'attendance' : source?.typeId ? 'leaves' : source?.kind ? 'adjustments' : 'rules'), date, quantity, multiplier });
     };
     trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid ? `${daily} × ${scheduled.length} scheduled workdays (daily-paid)` : `${e.monthlySalary} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
-    for (const d of employed) {
+    // Manual entry for exactly this cutoff: "replace" skips attendance; "add" pays the typed hours on top of it.
+    const manual = (state.payrollInputs || []).find(i => i.employeeId === e.id && i.start === start && i.end === end) || null;
+    for (const d of manual?.mode === 'replace' ? [] : employed) {
       const record = state.attendance.find(a => a.employeeId === e.id && a.date === d);
       const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && l.startDate <= d && l.endDate >= d);
       const rest = isRest(e, d), kind = classification(state, e, d);
@@ -241,6 +243,40 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         if (g.night && e.coveredNSD) add(earnings, 'nsd', hours * hourly * fullRate * r.nsd, `${round(hours)} night h × ${hourly} × ${mult}${g.ot ? ` × ${overtime}` : ''} × ${r.nsd} differential only`, record, g.date, round(hours), fullRate * (1 + r.nsd));
       }
     }
+    if (manual) {
+      const m = manual, src = { id: `manual-${e.id}-${start}`, sourceKind: 'payroll-inputs' }, tag = `Manual entry by ${m.updatedBy} (${m.reason})`;
+      if (m.mode === 'replace') {
+        if (dailyPaid) {
+          const diff = round(daily * m.daysWorked - baseline);
+          if (diff) add(earnings, 'basic', diff, `${tag}: ${m.daysWorked} days worked × ${daily} instead of ${scheduled.length} scheduled days`, src, end, m.daysWorked, 1);
+          daysPresent = m.daysWorked;
+        } else {
+          if (m.absenceDays) add(deductions, 'absence', daily * m.absenceDays, `${tag}: ${m.absenceDays} absent day(s) × ${daily}`, src, end, m.absenceDays, 1);
+          daysPresent = Math.max(0, scheduled.length - m.absenceDays);
+        }
+        if (m.lateMinutes) {
+          const amount = round(m.lateMinutes / 60 * hourly), dayMinutes = (r.normalHours || 8) * 60;
+          lateDaysLost += m.lateMinutes / dayMinutes; lateReduction += amount; lateMinutesUnoffset += m.lateMinutes;
+          add(earnings, 'basic', -amount, `${tag}: late ${m.lateMinutes} min ÷ 60 × ${hourly} (days credited reduced)`, src, end);
+        }
+        if (m.undertimeMinutes) add(deductions, 'undertime', m.undertimeMinutes / 60 * hourly, `${tag}: undertime ${m.undertimeMinutes} min ÷ 60 × ${hourly}`, src, end);
+      }
+      // Hours typed by HR, priced with the approved multipliers. Holiday hours are on a scheduled workday, so the
+      // day itself is already in the salary and only the premium is added.
+      const H = (key, component, multiplier, label, c, ot, night = false) => {
+        const h = m.hours?.[key] || 0; if (!h) return;
+        add(earnings, component, h * hourly * multiplier, `${tag}: ${h} h × ${hourly} × ${Math.round(multiplier * 10000) / 10000} ${label}`, src, end, h, multiplier);
+        workBreakdown.push({ date: end, classification: c, overtime: ot, night, hours: h, dayMultiplier: multiplier, otMultiplier: 1, nightMultiplier: 1, combinedMultiplier: multiplier, sourceId: src.id });
+      };
+      H('regularOT', 'regularOT', r.ordinaryOT, 'overtime', 'ordinary', true);
+      H('restDay', 'restDay', dayRate('rest', r), 'rest day', 'rest', false);
+      H('restOT', 'restOT', dayRate('rest', r) * r.premiumOT, 'rest day overtime', 'rest', true);
+      H('specialHoliday', 'specialHoliday', dayRate('special', r) - 1, 'special holiday premium', 'special', false);
+      H('specialOT', 'specialOT', dayRate('special', r) * r.premiumOT, 'special holiday overtime', 'special', true);
+      H('regularHoliday', 'regularHoliday', dayRate('regular', r) - 1, 'regular holiday premium', 'regular', false);
+      H('regularHolidayOT', 'regularHolidayOT', dayRate('regular', r) * r.premiumOT, 'regular holiday overtime', 'regular', true);
+      H('nightDiff', 'nsd', r.nsd, 'night differential', 'ordinary', false, true);
+    }
     for (const a of state.adjustments.filter(a => a.employeeId === e.id && a.date >= start && a.date <= end)) {
       if (!a.approved) { blockers.push(`${prefix}: additional pay/deduction ${a.id} needs approval.`); continue; }
       const deduction = a.kind === 'otherDeduction';
@@ -298,7 +334,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

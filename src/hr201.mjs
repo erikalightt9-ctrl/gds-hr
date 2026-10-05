@@ -125,7 +125,7 @@ export const employeeFormSchema = z.object({
   personal: z.object({ firstName: field(120).pipe(z.string().min(1, 'First name is required.')), middleName: field(120), lastName: field(120).pipe(z.string().min(1, 'Last name is required.')), suffix: field(20), preferredName: field(120), sex: z.enum(['', 'Female', 'Male', 'Other']).default(''), birthDate: optionalDate, birthPlace: field(200), civilStatus: field(40), bloodType: field(5), nationality: field(80) }).strict(),
   contact: z.object({ workEmail: field(200), personalEmail: field(200), mobile: field(40), currentAddress: field(500), permanentAddress: field(500) }).strict(),
   emergency: z.object({ name: field(200), relationship: field(80), contact: field(40) }).strict(),
-  employment: z.object({ dateHired: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date hired is required.'), department: field(120).pipe(z.string().min(1, 'Department is required.')), position: field(120).pipe(z.string().min(1, 'Position is required.')), supervisor: field(200), workLocation: field(200), status: z.enum(['Active', 'Inactive', 'On Leave']).default('Active'), classification: field(60).pipe(z.string().min(1, 'Employment classification is required.')), contractStart: optionalDate, contractEnd: optionalDate, probationEnd: optionalDate, reviewDate: optionalDate }).strict(),
+  employment: z.object({ dateHired: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date hired is required.'), department: field(120).pipe(z.string().min(1, 'Department is required.')), position: field(120).pipe(z.string().min(1, 'Position is required.')), supervisor: field(200), workLocation: field(200), status: z.enum(['Active', 'Inactive', 'On Leave']).default('Active'), classification: field(60).pipe(z.string().min(1, 'Employment classification is required.')), contractStart: optionalDate, contractEnd: optionalDate, probationEnd: optionalDate, reviewDate: optionalDate, employmentType: z.enum(['', 'Full-Time', 'Part-Time', 'Other']).default(''), jobLevel: field(40) }).strict(),
   government: z.object({ tin: field(30), sss: field(30), philHealth: field(30), pagIbig: field(30) }).strict().default({ tin: '', sss: '', philHealth: '', pagIbig: '' }),
   employeeNumber: field(40),
   confirmDuplicate: z.boolean().default(false),
@@ -155,7 +155,7 @@ export function duplicateCandidates(store, form, exceptId = '') {
 }
 function writeSections(store, actor, id, v, existing = {}) {
   saveProfile(store, actor, id, 'personal', { ...existing.personal, lastName: v.personal.lastName, firstName: v.personal.firstName, middleName: v.personal.middleName, suffix: v.personal.suffix, sex: v.personal.sex, birthDate: v.personal.birthDate, civilStatus: v.personal.civilStatus, nationality: v.personal.nationality, mobile: v.contact.mobile, personalEmail: v.contact.personalEmail, address: v.contact.currentAddress, preferredName: v.personal.preferredName, birthPlace: v.personal.birthPlace, bloodType: v.personal.bloodType, permanentAddress: v.contact.permanentAddress });
-  saveProfile(store, actor, id, 'employment', { ...existing.employment, position: v.employment.position, employmentStatus: v.employment.classification, supervisor: v.employment.supervisor, workLocation: v.employment.workLocation, businessEmail: v.contact.workEmail, employeeStatus: v.employment.status, contractStart: v.employment.contractStart, contractEnd: v.employment.contractEnd, probationEnd: v.employment.probationEnd, reviewDate: v.employment.reviewDate });
+  saveProfile(store, actor, id, 'employment', { ...existing.employment, position: v.employment.position, employmentStatus: v.employment.classification, supervisor: v.employment.supervisor, workLocation: v.employment.workLocation, businessEmail: v.contact.workEmail, employeeStatus: v.employment.status, contractStart: v.employment.contractStart, contractEnd: v.employment.contractEnd, probationEnd: v.employment.probationEnd, reviewDate: v.employment.reviewDate, employmentType: v.employment.employmentType, jobLevel: v.employment.jobLevel });
   saveProfile(store, actor, id, 'emergency', { ...existing.emergency, name: v.emergency.name, relationship: v.emergency.relationship, contact: v.emergency.contact });
   // Government numbers: only HR Managers and Admins write them, and masked values (••••) never overwrite stored ones.
   const ids = Object.fromEntries(Object.entries(v.government).filter(([, x]) => x && !x.includes('•')));
@@ -205,10 +205,31 @@ export function employeeForm(store, actor, id) {
       personal: { firstName: p.firstName || '', middleName: p.middleName || '', lastName: p.lastName || '', suffix: p.suffix || '', preferredName: p.preferredName || '', sex: hrView ? p.sex || '' : '', birthDate: hrView ? p.birthDate || '' : '', birthPlace: hrView ? p.birthPlace || '' : '', civilStatus: hrView ? p.civilStatus || '' : '', bloodType: HR_MANAGERS.includes(actor.role) ? p.bloodType || '' : '', nationality: hrView ? p.nationality || '' : '' },
       contact: { workEmail: j.businessEmail || '', personalEmail: hrView ? p.personalEmail || '' : '', mobile: hrView ? p.mobile || '' : '', currentAddress: hrView ? p.address || '' : '', permanentAddress: hrView ? p.permanentAddress || '' : '' },
       emergency: hrView ? { name: m.name || '', relationship: m.relationship || '', contact: m.contact || '' } : { name: '', relationship: '', contact: '' },
-      employment: { dateHired: e.startDate || '', department: e.department || '', position: j.position || '', supervisor: j.supervisor || '', workLocation: j.workLocation || '', status: ['Active', 'Inactive', 'On Leave'].includes(j.employeeStatus) ? j.employeeStatus : activity(e, j) === 'Active' ? 'Active' : 'Inactive', classification: j.employmentStatus || '', contractStart: j.contractStart || '', contractEnd: j.contractEnd || '', probationEnd: j.probationEnd || '', reviewDate: j.reviewDate || '' },
+      employment: { dateHired: e.startDate || '', department: e.department || '', position: j.position || '', supervisor: j.supervisor || '', workLocation: j.workLocation || '', status: ['Active', 'Inactive', 'On Leave'].includes(j.employeeStatus) ? j.employeeStatus : activity(e, j) === 'Active' ? 'Active' : 'Inactive', classification: j.employmentStatus || '', contractStart: j.contractStart || '', contractEnd: j.contractEnd || '', probationEnd: j.probationEnd || '', reviewDate: j.reviewDate || '', employmentType: j.employmentType || '', jobLevel: j.jobLevel || '' },
       government: { tin: mask(g.tin), sss: mask(g.sss), philHealth: mask(g.philHealth), pagIbig: mask(g.pagIbig) },
     },
   };
+}
+// Extra profile tabs: family, education, previous employment and (for pay roles) compensation.
+const PAY_ROLES = ['admin', 'hr', 'payroll'];
+export function profileExtras(store, actor, id) {
+  assertCanView(store, actor, id);
+  const e = store.read().employees.find(x => x.id === id);
+  if (!e) throw new AppError('Employee not found.', 404);
+  const hrView = HR_TEAM.includes(actor.role), pay = profileOf(store, id, 'payroll');
+  return {
+    family: hrView ? { spouse: { name: '', occupation: '', contact: '' }, father: { name: '', occupation: '' }, mother: { name: '', occupation: '' }, children: [], ...profileOf(store, id, 'family') } : null,
+    education: hrView ? { entries: [], ...profileOf(store, id, 'education') } : null,
+    history: hrView ? { entries: [], ...profileOf(store, id, 'history') } : null,
+    compensation: PAY_ROLES.includes(actor.role) ? { monthlySalary: e.monthlySalary, basis: pay.basis || 'monthly', dailyRate: pay.dailyRate ?? null, hourlyRate: pay.hourlyRate ?? null, frequency: pay.frequency || '', status: pay.status || 'Active', coveredOT: e.coveredOT, coveredNSD: e.coveredNSD, coveredHoliday: e.coveredHoliday, covered13th: e.covered13th, deductions: (store.read().deductions || []).filter(d => d.employeeId === id && d.active).map(d => ({ name: d.name, amount: d.amount, schedule: d.schedule })) } : null,
+    canEdit: hrView,
+  };
+}
+export function saveProfileSection(store, actor, id, section, input) {
+  permit(actor, HR_TEAM);
+  if (!['family', 'education', 'history'].includes(section)) throw new AppError('Unknown section.', 404);
+  assertCanView(store, actor, id);
+  return saveProfile(store, actor, id, section, input);
 }
 export function archiveEmployee(store, actor, id, input) {
   permit(actor, HR_MANAGERS);

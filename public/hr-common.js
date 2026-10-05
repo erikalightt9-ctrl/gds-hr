@@ -20,7 +20,7 @@ const SECTIONS = ctx => [
   ['Emergency contact', [['emergency.name', 'Contact person'], ['emergency.relationship', 'Relationship'], ['emergency.contact', 'Contact number', 'tel']]],
   ['Employment information', [
     ['employment.dateHired', 'Date hired', 'date', { required: true }], ['employment.department', 'Department', 'list', { required: true, list: ctx.departments }], ['employment.position', 'Position', 'list', { required: true, list: ctx.positions }],
-    ['employment.supervisor', 'Immediate supervisor'], ['employment.workLocation', 'Work location'], ['employment.status', 'Status', 'select', { options: ['Active', 'Inactive', 'On Leave'] }],
+    ['employment.supervisor', 'Immediate supervisor'], ['employment.workLocation', 'Work location'], ['employment.employmentType', 'Employment type', 'select', { options: ['', 'Full-Time', 'Part-Time', 'Other'] }], ['employment.jobLevel', 'Job level', 'text', { placeholder: 'e.g. 1, Rank and file, Supervisor' }], ['employment.status', 'Status', 'select', { options: ['Active', 'Inactive', 'On Leave'] }],
     ['employment.classification', 'Employment classification', 'select', { required: true, options: ['', ...ctx.classifications] }], ['employment.contractStart', 'Contract start', 'date'], ['employment.contractEnd', 'Contract end', 'date'],
     ['employment.probationEnd', 'Probation end (reminder only)', 'date'], ['employment.reviewDate', 'Performance review date (reminder only)', 'date'], ['employeeNumber', 'Displayed employee number (optional)', 'text', { placeholder: 'Leave blank to use the generated number' }],
   ]],

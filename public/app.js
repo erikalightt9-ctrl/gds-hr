@@ -318,12 +318,53 @@ function computationTools(r) {
   return `<section class="computation-tools"><div class="computation-slip">${slip}</div>
     <h3>Manual adjustments this cutoff</h3>
     ${table(['Date', 'Type', 'Amount', 'Reason', 'Approved', ''], list.map(a => [a.date, kinds[a.kind] || esc(a.kind), `${a.kind === 'otherDeduction' ? '−' : '+'}${money(a.amount)}`, esc(a.reason), a.approved ? 'Yes' : badge('Needs approval', 'pending'), editable ? editButton('adjustments', a.id) : '']), 'No manual adjustments in this cutoff.')}
+    <h3>Manual time &amp; pay entry</h3>
+    ${r.manualEntry ? `<div class="notice compact manual-summary"><strong>${r.manualEntry.mode === 'replace' ? 'Manual figures replace attendance for this cutoff' : 'Manual hours added on top of attendance'}</strong><br>${manualSummary(r.manualEntry, r.payBasis)}<br><small>By ${esc(r.manualEntry.updatedBy)} · ${esc(r.manualEntry.reason)}</small></div>` : '<p class="legend">None. Pay comes from attendance records.</p>'}
+    ${editable ? `<button class="small" data-manual-entry="${esc(r.employeeId)}">${r.manualEntry ? 'Edit manual entry' : '✎ Enter figures manually'}</button>` : ''}
     <h3>Company deductions</h3>
     ${table(['Deduction', 'Amount', 'When', 'Status', ''], (state.deductions || []).filter(d => d.employeeId === r.employeeId).map(d => [esc(d.name), money(d.amount), SCHEDULE_LABEL[d.schedule], badge(d.active ? 'Active' : 'Paused', d.active ? '' : 'neutral'), !run.id ? editButton('deductions', d.id) : '']), 'No company deductions for this employee.')}
     ${!run.id && canEdit('deductions') ? `<button class="small" data-computation-deduction="${esc(r.employeeId)}">＋ Add company deduction</button>` : ''}
     <p class="computation-contrib">${['admin', 'hr', 'payroll'].includes(auth.user.role) ? `<button class="small" data-computation-contrib="${esc(r.employeeId)}">Review SSS / PhilHealth / Pag-IBIG basis</button>` : ''}${r.contributionChangeId ? ' <span class="legend">An approved contribution adjustment applies to this cutoff.</span>' : ''}</p>
     ${editable ? `<button class="small" data-computation-add="${esc(r.employeeId)}">＋ Add adjustment</button>` : run.id ? '<p class="legend">Posted payroll is locked; record corrections as an adjustment in an open cutoff.</p>' : ''}
   </section>`;
+}
+// Manual time & pay entry: HR types days, absences, late / undertime and hours for one cutoff.
+const MANUAL_HOURS = [['regularOT', 'Overtime (regular day)'], ['restDay', 'Rest day hours'], ['restOT', 'Rest day overtime'], ['specialHoliday', 'Special holiday hours worked'], ['specialOT', 'Special holiday overtime'], ['regularHoliday', 'Regular holiday hours worked'], ['regularHolidayOT', 'Regular holiday overtime'], ['nightDiff', 'Night differential hours (10 PM–6 AM)']];
+function manualSummary(m, basis) {
+  const parts = [];
+  if (m.mode === 'replace') { if (basis === 'daily') parts.push(`${m.daysWorked} days worked`); if (m.absenceDays) parts.push(`${m.absenceDays} absent day(s)`); if (m.lateMinutes) parts.push(`late ${m.lateMinutes} min`); if (m.undertimeMinutes) parts.push(`undertime ${m.undertimeMinutes} min`); }
+  for (const [k, label] of MANUAL_HOURS) if (m.hours?.[k]) parts.push(`${label.toLowerCase()}: ${m.hours[k]} h`);
+  return esc(parts.join(' · ') || 'No figures');
+}
+function manualEntryDialog(employeeId) {
+  const row = currentRun.rows.find(x => x.employeeId === employeeId), m = row.manualEntry || { mode: 'add', daysWorked: row.workingDays, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: '' };
+  const daily = row.payBasis === 'daily';
+  const num = (name, label, value, step = '0.25', hint = '') => `<label class="field">${label}<input type="number" name="${name}" min="0" step="${step}" value="${value ?? 0}">${hint ? `<small>${hint}</small>` : ''}</label>`;
+  openDialog(`Manual entry · ${row.employeeName}`, `<form id="manual-form"><div class="dialog-body">
+    <p class="sub">Cutoff ${currentRun.start} — ${currentRun.end} · ${daily ? 'daily-paid' : 'monthly-paid'} · hourly rate ${money(row.hourlyRate)}</p>
+    <fieldset class="form-section-box"><legend>How to use these figures</legend>
+      <label class="inline-check"><input type="radio" name="mode" value="add" ${m.mode === 'add' ? 'checked' : ''}> Add these hours on top of attendance records</label>
+      <label class="inline-check"><input type="radio" name="mode" value="replace" ${m.mode === 'replace' ? 'checked' : ''}> Use these figures instead of attendance for this cutoff (no attendance needed)</label></fieldset>
+    <fieldset class="form-section-box" data-replace-only><legend>Days and time (replaces attendance)</legend><div class="form-grid">
+      ${daily ? num('daysWorked', 'Days worked (include paid holidays)', m.daysWorked, '0.5', `${row.workingDays} scheduled days this cutoff`) : num('absenceDays', 'Absent days (unpaid)', m.absenceDays, '0.5', `${row.workingDays} scheduled days this cutoff`)}
+      ${num('lateMinutes', 'Late minutes (not offset)', m.lateMinutes, '1')}${num('undertimeMinutes', 'Undertime minutes', m.undertimeMinutes, '1')}</div></fieldset>
+    <fieldset class="form-section-box"><legend>Hours worked</legend><div class="form-grid">${MANUAL_HOURS.map(([k, label]) => num(`h.${k}`, label, m.hours?.[k])).join('')}</div>
+      <p class="legend">Pay is calculated with the approved Rules &amp; rates: overtime ×1.25, rest day ×1.3, holiday premiums and 10% night differential. Holiday hours are for holidays falling on a scheduled workday.</p></fieldset>
+    <label class="field full">Reason / source (kept in the audit trail)<input name="reason" required minlength="3" maxlength="500" value="${esc(m.reason)}" placeholder="e.g. Manual DTR signed by supervisor; biometric was offline"></label>
+  </div><div class="dialog-foot">${row.manualEntry ? '<button type="button" class="danger" data-manual-remove>Remove manual entry</button>' : ''}<button type="button" data-close>Cancel</button><button class="primary">Save and recalculate</button></div></form>`);
+  const form = dialog.querySelector('#manual-form');
+  const toggle = () => form.querySelector('[data-replace-only]').classList.toggle('hidden', form.elements.mode.value !== 'replace');
+  form.addEventListener('change', toggle); toggle();
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const v = n => Number(form.elements[n]?.value || 0);
+    const body = { start: currentRun.start, end: currentRun.end, mode: form.elements.mode.value, daysWorked: v('daysWorked'), absenceDays: v('absenceDays'), lateMinutes: Math.round(v('lateMinutes')), undertimeMinutes: Math.round(v('undertimeMinutes')), hours: Object.fromEntries(MANUAL_HOURS.map(([k]) => [k, v(`h.${k}`)])), reason: form.elements.reason.value };
+    try { await api(`/payroll/inputs/${encodeURIComponent(employeeId)}`, body); dialog.close(); if (await reopenComputation()) toast('Manual entry saved. Payroll recalculated.'); } catch (error) { toast(error.message); }
+  };
+  form.querySelector('[data-manual-remove]')?.addEventListener('click', async () => {
+    if (!window.confirm('Remove the manual entry? Pay will come from attendance again.')) return;
+    try { await api(`/payroll/inputs/${encodeURIComponent(employeeId)}?start=${currentRun.start}&end=${currentRun.end}`, null, 'DELETE'); dialog.close(); if (await reopenComputation()) toast('Manual entry removed. Payroll recalculated.'); } catch (error) { toast(error.message); }
+  });
 }
 // Recompute the reviewed employee's payroll after an adjustment changes, then reopen their computation.
 async function reopenComputation() {
@@ -569,6 +610,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.payrollEmployee) await showSalary(b.dataset.payrollEmployee);
     if (b.dataset.payslipPreview) await previewPayslip(b.dataset.payslipPreview);
     if (b.dataset.computationContrib) { const id = b.dataset.computationContrib; await contributionEditor.open(id, { onChanged: computationContext ? () => reopenComputation() : () => showSalary(id) }); return; }
+    if (b.dataset.manualEntry) { manualEntryDialog(b.dataset.manualEntry); return; }
     if (b.dataset.computationDeduction) { edit('deductions', null, { employeeId: b.dataset.computationDeduction, startDate: currentRun.start }); return; }
     if (b.dataset.computationAdd) edit('adjustments', null, { employeeId: b.dataset.computationAdd, date: currentRun.end, approved: true });
     if (b.hasAttribute('data-account')) await account();

@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Store } from './store.mjs';
 import { mailerFromEnv } from './mailer.mjs';
 import { handleHrRoutes } from './hr-routes.mjs';
+import { savePayrollInput, deletePayrollInput } from './payroll-inputs.mjs';
 import { publicBranding } from './hr201.mjs';
 import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
@@ -166,6 +167,9 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       const contributionDecision = pathname.match(/^\/api\/contribution-changes\/([a-f0-9-]+)\/review$/);
       if (contributionDecision && req.method === 'POST') { send(200, reviewContributionChange(store, auth.user, contributionDecision[1], await readBody(req))); return; }
+      const manualInput = pathname.match(/^\/api\/payroll\/inputs\/([^/]+)$/);
+      if (manualInput && req.method === 'POST') { send(200, savePayrollInput(store, auth.user, decodeURIComponent(manualInput[1]), await readBody(req))); return; }
+      if (manualInput && req.method === 'DELETE') { send(200, deletePayrollInput(store, auth.user, decodeURIComponent(manualInput[1]), url.searchParams.get('start') || '', url.searchParams.get('end') || '')); return; }
       const attendanceImport = pathname.match(/^\/api\/attendance-import\/(inspect|preview|commit)$/);
       if (attendanceImport && req.method === 'POST') {
         const body = await readBody(req, 7100000), step = attendanceImport[1];

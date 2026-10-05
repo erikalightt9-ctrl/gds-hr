@@ -1,7 +1,7 @@
 // HTTP routes for the HR 201 modules (/api/hr/...). Every handler enforces its own permission on the server.
 import { AppError, permit } from './service.mjs';
 import { visibleAudit, uploadDocument } from './profiles.mjs';
-import { readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView } from './hr201.mjs';
+import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
@@ -103,6 +103,8 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if (method === 'POST') { send(200, updateEmployee(store, actor, id, await readBody(req))); return true; }
   }
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/(archive|restore)$/)) && method === 'POST') { const id = decodeURIComponent(p[1]); send(200, p[2] === 'archive' ? archiveEmployee(store, actor, id, await readBody(req)) : restoreEmployee(store, actor, id)); return true; }
+  if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/extras$/)) && method === 'GET') { send(200, profileExtras(store, actor, decodeURIComponent(p[1]))); return true; }
+  if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/sections\/(family|education|history)$/)) && method === 'POST') { send(200, saveProfileSection(store, actor, decodeURIComponent(p[1]), p[2], await readBody(req))); return true; }
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/activity$/)) && method === 'GET') {
     const id = decodeURIComponent(p[1]); assertCanView(store, actor, id);
     send(200, { activity: HR_TEAM.includes(actor.role) ? activityFor(store, actor, id) : [], memos: memosForEmployee(store, actor, id), trainings: trainingsForEmployee(store, id) }); return true;

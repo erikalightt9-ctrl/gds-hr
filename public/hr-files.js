@@ -3,7 +3,17 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm } from './hr-common.js';
 
 const PAGE_SIZE = 15;
-const TABS = [['overview', 'Overview'], ['personal', 'Personal information'], ['employment', 'Employment details'], ['documents', '201 documents'], ['memos', 'Memos & acknowledgements'], ['trainings', 'Training records'], ['activity', 'Activity history']];
+const TABS = [['overview', 'Overview', '📊'], ['personal', 'Personal', '👤'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['government', 'Government IDs', '🪪'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Requirements', '✅'], ['documents', 'Documents', '📁'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅'], ['activity', 'Activity', '↺']];
+const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
+const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
+function serviceLength(start, today) {
+  if (!start || start > today) return 'Not started';
+  const a = new Date(`${start}T00:00:00Z`), b = new Date(`${today}T00:00:00Z`);
+  let months = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + b.getUTCMonth() - a.getUTCMonth() - (b.getUTCDate() < a.getUTCDate() ? 1 : 0);
+  if (months < 12) return months < 1 ? 'Less than a month' : `${months} month${months === 1 ? '' : 's'}`;
+  const years = Math.floor(months / 12); months %= 12;
+  return `${years} year${years === 1 ? '' : 's'}${months ? ` ${months} mo` : ''}`;
+}
 
 export function createFiles(ctx) {
   const { api, esc, table, badge, toast, openDialog, dialog, shell, heading } = ctx;
@@ -42,7 +52,7 @@ export function createFiles(ctx) {
       ${table([head('number', 'Employee no.'), head('name', 'Name'), head('department', 'Department'), head('position', 'Position'), head('classification', 'Classification'), head('status', 'Status'), head('dateHired', 'Date hired'), ...(can().manage ? ['201 completion'] : []), 'Actions'],
         rows.map(p => [esc(p.number), `<button class="link-button" data-open="${esc(p.id)}">${esc(p.name)}</button>${p.workEmail ? `<small>${esc(p.workEmail)}</small>` : ''}`, esc(p.department || '—'), esc(p.position || '—'), esc(p.classification || '—'), statusBadge(p.archived ? 'Archived' : p.status), fmtDate(p.dateHired),
           ...(can().manage ? [p.documents ? progress(p.documents.percent, `${p.documents.verified}/${p.documents.required} verified${p.documents.missing ? ` · ${p.documents.missing} missing` : ''}`) : '—'] : []),
-          `<span class="row-actions"><button class="small" data-open="${esc(p.id)}">View</button>${can().manage && !p.archived ? `<button class="small" data-edit-emp="${esc(p.id)}">Edit</button><button class="small" data-open="${esc(p.id)}" data-start-tab="documents">Documents</button>` : ''}${can().approve ? (p.archived ? `<button class="small" data-restore="${esc(p.id)}">Restore</button>` : `<button class="small danger" data-archive="${esc(p.id)}">Archive</button>`) : ''}</span>`]),
+          `<span class="row-actions"><button class="small" data-open="${esc(p.id)}">View</button>${can().manage && !p.archived ? `<button class="small" data-edit-emp="${esc(p.id)}">Edit</button><button class="small" data-open="${esc(p.id)}" data-start-tab="requirements">Documents</button>` : ''}${can().approve ? (p.archived ? `<button class="small" data-restore="${esc(p.id)}">Restore</button>` : `<button class="small danger" data-archive="${esc(p.id)}">Archive</button>`) : ''}</span>`]),
         query.q || query.department || query.position || query.status || query.classification || query.docs ? 'No employees match these filters.' : 'No employees yet. Add your first employee to start their 201 file.')}
       <div class="pager"><span>${list.length} employee${list.length === 1 ? '' : 's'}${pages > 1 ? ` · page ${pageNo} of ${pages}` : ''}</span>${pages > 1 ? `<button class="small" data-page="${pageNo - 1}" ${pageNo === 1 ? 'disabled' : ''}>‹ Previous</button><button class="small" data-page="${pageNo + 1}" ${pageNo === pages ? 'disabled' : ''}>Next ›</button>` : ''}</div></section>`;
   }
@@ -91,38 +101,105 @@ export function createFiles(ctx) {
   async function drawProfile() {
     const id = profileId;
     shell('<div class="loading">Loading employee…</div>');
-    const [record, checklist, extra] = await Promise.all([api(`/hr/employees/${encodeURIComponent(id)}`), api(`/hr/employees/${encodeURIComponent(id)}/documents`), api(`/hr/employees/${encodeURIComponent(id)}/activity`)]);
+    const enc = encodeURIComponent(id);
+    const [record, checklist, extra, extras] = await Promise.all([api(`/hr/employees/${enc}`), api(`/hr/employees/${enc}/documents`), api(`/hr/employees/${enc}/activity`), api(`/hr/employees/${enc}/extras`)]);
     if (profileId !== id) return;
-    const f = record.form, legacy = ctx.legacy();
-    const header = `<section class="panel hr-profile-head"><div class="hr-profile-id"><span class="hr-avatar large"><img src="/api/hr/employees/${encodeURIComponent(id)}/photo" alt="" data-photo>${esc(initials(record.name))}</span><div><h1>${esc(record.name)}</h1><p class="sub">${esc(record.number)} · ${esc(f.employment.position || 'No position')} · ${esc(f.employment.department || 'No department')}</p><p>${statusBadge(record.archived ? 'Archived' : record.activity)} ${f.employment.classification ? badge(f.employment.classification, 'neutral') : ''} ${record.draft ? badge('Pay setup incomplete', 'pending') : ''}</p></div></div>
+    const f = record.form, legacy = ctx.legacy(), today = ctx.today();
+    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (!['family', 'education', 'history'].includes(key) || extras.family));
+    if (!tabs.some(([key]) => key === tab)) tab = 'overview';
+    const header = `<section class="panel hr-profile-head"><div class="hr-profile-id"><span class="hr-avatar large"><img src="/api/hr/employees/${enc}/photo" alt="" data-photo>${esc(initials(record.name))}</span><div><h1>${esc(record.name)}</h1><p class="sub">${esc(record.number)} · ${esc(f.employment.position || 'No position')} · ${esc(f.employment.department || 'No department')}</p><p>${statusBadge(record.archived ? 'Archived' : record.activity)} ${f.employment.classification ? badge(f.employment.classification, 'neutral') : ''} ${record.draft ? badge('Pay setup incomplete', 'pending') : ''}</p></div></div>
       <div class="actions"><button class="small" data-back>← All employees</button>${record.canEdit && !record.archived ? '<button class="small primary" data-edit-self>Edit record</button>' : ''}${legacy ? `<button class="small" data-legacy-profile="${esc(id)}">Attendance, leave &amp; pay →</button>` : ''}</div></section>`;
-    const tabs = `<div class="tabs hr-tabs" role="tablist">${TABS.map(([key, text]) => `<button role="tab" aria-selected="${key === tab}" class="${key === tab ? 'active' : ''}" data-tab-select="${key}">${text}</button>`).join('')}</div>`;
-    shell(header + tabs + `<div class="hr-tab-body">${tabBody(record, checklist, extra)}</div>`);
+    const infoCard = (icon, label, value) => `<div class="info-card"><span class="info-icon" aria-hidden="true">${icon}</span><span><small>${esc(label)}</small><strong>${esc(value || '—')}</strong></span></div>`;
+    const info = `<div class="info-cards">${infoCard('📅', 'Years of service', serviceLength(f.employment.dateHired, today))}${infoCard('💼', 'Employment type', f.employment.employmentType || 'Not set')}${infoCard('📈', 'Job level', f.employment.jobLevel || 'Not set')}${infoCard('🗓️', 'Date hired', fmtDate(f.employment.dateHired))}</div>`;
+    const tabBar = `<section class="panel profile-tabs-panel"><div class="tabs hr-tabs profile-tab-grid" role="tablist">${tabs.map(([key, text, icon]) => `<button role="tab" aria-selected="${key === tab}" class="${key === tab ? 'active' : ''}" data-tab-select="${key}"><span aria-hidden="true">${icon}</span> ${text}</button>`).join('')}</div><div class="hr-tab-body">${tabBody(record, checklist, extra, extras)}</div></section>`;
+    shell(header + info + tabBar);
     const root = document.querySelector('.content');
     root.querySelector('[data-photo]')?.addEventListener('error', event => event.target.remove());
     root.querySelector('[data-photo]')?.addEventListener('load', event => event.target.parentElement.classList.add('has-photo'));
-    root.addEventListener('click', event => onProfileClick(event, record, checklist));
+    root.addEventListener('click', event => onProfileClick(event, record, checklist, extras));
   }
   const dl = rows => `<dl class="details-grid hr-details">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v === '' || v === undefined || v === null ? '<span class="muted">—</span>' : esc(v)}</dd></div>`).join('')}</dl>`;
-  function tabBody(record, checklist, extra) {
-    const f = record.form;
+  const block = (icon, title, body, action = '') => `<div class="profile-block"><h3 class="profile-block-title"><span aria-hidden="true">${icon}</span> ${esc(title)}${action}</h3>${body}</div>`;
+  const editBtn = (section, canEdit) => (canEdit ? ` <button class="small" data-edit-section="${section}">Edit</button>` : '');
+  function personalRows(f) { return [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ...(f.personal.bloodType ? [['Blood type', f.personal.bloodType]] : []), ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]; }
+  function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Department', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
+  function tabBody(record, checklist, extra, extras) {
+    const f = record.form, edit = extras.canEdit && !record.archived;
     if (tab === 'overview') {
+      const docs = checklist.items.flatMap(i => i.versions).length, trainingsDone = extra.trainings.filter(x => x.completion === 'completed').length, acked = extra.memos.filter(m => m.acknowledgedAt).length;
+      const stat = (icon, label, value, sub, percent = null) => `<div class="overview-stat"><span><span aria-hidden="true">${icon}</span> ${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small>${percent === null ? '' : `<span class="hr-progress full"><span class="hr-progress-bar w${Math.round(percent / 5) * 5}"></span></span>`}</div>`;
       const outstanding = checklist.items.filter(i => i.requirement.required && !['Verified', 'Not Applicable'].includes(i.status));
-      const deadlines = [['Probation end', f.employment.probationEnd], ['Performance review', f.employment.reviewDate], ['Contract end', f.employment.contractEnd], ...checklist.items.filter(i => i.status === 'Missing' && i.due).map(i => [`${i.requirement.name} due`, i.due]), ...checklist.items.filter(i => i.current?.expiryDate).map(i => [`${i.requirement.name} expires`, i.current.expiryDate])].filter(([, d]) => d).sort((a, b) => a[1].localeCompare(b[1]));
-      return `<div class="grid2"><section class="panel"><div class="panel-head"><h2>201 document completion</h2></div><div class="panel-body">${progress(checklist.percent, `${checklist.completeCount} of ${checklist.requiredCount} required documents verified`)}
-        <h3 class="spaced">Outstanding requirements</h3>${outstanding.length ? `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>` : '<p class="muted">All required documents are verified.</p>'}</div></section>
-        <section class="panel"><div class="panel-head"><h2>Deadlines and reminders</h2></div><div class="panel-body">${deadlines.length ? `<ul class="plain-list">${deadlines.map(([k, d]) => `<li><strong>${fmtDate(d)}</strong> · ${esc(k)}${d < ctx.today() ? ' <span class="danger-text">(passed)</span>' : ''}</li>`).join('')}</ul>` : '<p class="muted">No dates set.</p>'}<p class="legend">Dates are reminders only; the system never changes employment status by itself.</p></div></section></div>
-        <section class="panel"><div class="panel-head"><h2>Recent HR activity</h2></div>${table(['When', 'Who', 'What'], extra.activity.slice(0, 6).map(a => [fmtDateTime(a.at), esc(a.actor), `${esc(a.action)} · ${esc(a.area)}`]), 'No recorded activity yet.')}</section>`;
+      return `<div class="overview-stats">${stat('✅', 'Requirements', `${checklist.completeCount} / ${checklist.requiredCount}`, 'Complete', checklist.percent)}${stat('📁', 'Documents', docs, 'Total files')}${stat('🏅', 'Trainings', `${trainingsDone} / ${extra.trainings.length}`, 'Complete', extra.trainings.length ? Math.round(trainingsDone / extra.trainings.length * 100) : 0)}${stat('📝', 'Memos', extra.memos.length, `${acked} acknowledged`)}</div>
+        ${block('👤', 'Personal information', dl(personalRows(f)))}
+        ${block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]))}
+        ${block('💼', 'Employment information', dl(employmentRows(record)))}
+        ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
-    if (tab === 'personal') return `<section class="panel"><div class="panel-head"><h2>Personal information</h2></div><div class="panel-body">${dl([['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality]])}</div></section>
-      <section class="panel"><div class="panel-head"><h2>Contact</h2></div><div class="panel-body">${dl([['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Mobile', f.contact.mobile], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]])}</div></section>
-      <section class="panel"><div class="panel-head"><h2>Emergency contact</h2></div><div class="panel-body">${dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]])}</div></section>
-      <section class="panel"><div class="panel-head"><h2>Government identifiers</h2><span class="legend">${record.sensitiveIds ? 'Shown in full to authorised roles only.' : 'Masked for your role.'}</span></div><div class="panel-body">${dl([['TIN', f.government.tin], ['SSS', f.government.sss], ['PhilHealth', f.government.philHealth], ['Pag-IBIG', f.government.pagIbig]])}</div></section>`;
-    if (tab === 'employment') return `<section class="panel"><div class="panel-head"><h2>Employment details</h2></div><div class="panel-body">${dl([['Employee number', record.number], ['Date hired', fmtDate(f.employment.dateHired)], ['Department', f.employment.department], ['Position', f.employment.position], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Status', f.employment.status], ['Classification', f.employment.classification], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]])}<p class="legend">Active / inactive status and employment classification are separate: an employee can be active and probationary at the same time.</p></div></section>`;
-    if (tab === 'documents') return documentsTab(record, checklist);
-    if (tab === 'memos') return `<section class="panel"><div class="panel-head"><h2>Memos and acknowledgements</h2></div>${table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.')}</section>`;
-    if (tab === 'trainings') return `<section class="panel"><div class="panel-head"><h2>Training records</h2></div>${table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(t => [esc(t.title), fmtDate(t.date), t.required ? 'Required' : 'Optional', esc(t.registration), esc(t.attendance), t.completion === 'completed' ? badge('Completed') : esc(t.completion)]), 'No trainings assigned.')}</section>`;
-    return `<section class="panel"><div class="panel-head"><h2>Activity history</h2><span class="legend">Changes are listed without their values; sensitive details stay in the restricted audit trail.</span></div>${table(['When', 'Who', 'Action', 'Area'], extra.activity.map(a => [fmtDateTime(a.at), esc(a.actor), esc(a.action), esc(a.area)]), record.canEdit ? 'No recorded activity yet.' : 'Activity history is available to HR.')}</section>`;
+    if (tab === 'personal') return block('👤', 'Personal information', dl(personalRows(f))) + block('📞', 'Emergency contact', dl([['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]));
+    if (tab === 'employment') return block('💼', 'Employment information', dl(employmentRows(record))) + '<p class="legend">Active / inactive status and employment classification are separate. Probation and review dates are reminders only; the system never changes status by itself.</p>';
+    if (tab === 'compensation') {
+      const c = extras.compensation, daily = c.basis === 'daily';
+      return block('💰', 'Pay', dl([['Pay basis', daily ? 'Daily-paid' : 'Monthly'], [daily ? 'Daily rate' : 'Monthly salary', ctx.money(daily ? c.dailyRate : c.monthlySalary)], ...(daily ? [['Monthly equivalent', ctx.money(c.monthlySalary)]] : [['Daily rate', c.dailyRate === null ? 'From company divisor' : ctx.money(c.dailyRate)]]), ['Payroll frequency', c.frequency || 'Company default'], ['Payroll status', c.status]]))
+        + block('✔️', 'Pay coverage', dl([['Overtime', c.coveredOT ? 'Covered' : 'Not covered'], ['Night differential', c.coveredNSD ? 'Covered' : 'Not covered'], ['Holiday pay', c.coveredHoliday ? 'Covered' : 'Not covered'], ['13th month pay', c.covered13th ? 'Covered' : 'Not covered']]))
+        + block('➖', 'Active company deductions', table(['Deduction', 'Amount', 'When'], c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule)]), 'No active company deductions.'))
+        + (ctx.legacy() ? `<p class="legend">Salary, schedule and contributions are edited under <button class="link-button" data-legacy-profile="${esc(record.id)}">Attendance, leave &amp; pay</button>.</p>` : '');
+    }
+    if (tab === 'government') return block('🪪', 'Government IDs', dl([['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]])) + `<p class="legend">${record.sensitiveIds ? 'Shown in full to authorised roles only. Edit them with Edit record.' : 'Masked for your role.'}</p>`;
+    if (tab === 'family') {
+      const fam = extras.family;
+      return block('💑', 'Spouse', dl([['Name', fam.spouse.name], ['Occupation', fam.spouse.occupation], ['Contact', fam.spouse.contact]]), editBtn('family', edit))
+        + block('👪', 'Parents', dl([["Father's name", fam.father.name], ["Father's occupation", fam.father.occupation], ["Mother's maiden name", fam.mother.name], ["Mother's occupation", fam.mother.occupation]]))
+        + block('🧒', 'Children', table(['Name', 'Date of birth'], fam.children.map(c => [esc(c.name), c.birthDate ? fmtDate(c.birthDate) : '—']), 'No children recorded.'));
+    }
+    if (tab === 'education') return block('🎓', 'Education', table(['Level', 'School', 'Course / strand', 'Years', 'Honors'], extras.education.entries.map(x => [esc(x.level), esc(x.school), esc(x.course || '—'), esc([x.yearFrom, x.yearTo].filter(Boolean).join('–') || '—'), esc(x.honors || '—')]), 'No education recorded.'), editBtn('education', edit));
+    if (tab === 'history') return block('🕘', 'Previous employment', table(['Company', 'Position', 'From', 'To', 'Reason for leaving'], extras.history.entries.map(x => [esc(x.company), esc(x.position || '—'), x.from ? fmtDate(x.from) : '—', x.to ? fmtDate(x.to) : '—', esc(x.reason || '—')]), 'No previous employment recorded.'), editBtn('history', edit))
+      + block('🏢', 'With GDS', dl([['Date hired', fmtDate(f.employment.dateHired)], ['Current position', f.employment.position], ['Department', f.employment.department], ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]));
+    if (tab === 'requirements') return documentsTab(record, checklist);
+    if (tab === 'documents') {
+      const files = checklist.items.flatMap(i => i.versions.map(v => ({ ...v, current: i.current?.id === v.id })));
+      return block('📁', 'All 201 files', table(['File', 'Requirement', 'Version', 'Uploaded', 'Review', ''], files.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(v => [`<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, esc(v.requirementName || ''), `v${v.version}${v.current ? ' <small>current</small>' : ' <small>earlier</small>'}`, `${fmtDateTime(v.uploadedAt)}<small>${esc(v.uploadedBy)}</small>`, badge(v.reviewStatus, DOC_BADGE[v.reviewStatus]), `<a class="small download-link" href="/api/hr/documents/${v.id}/content?download=1">Download</a>`]), 'No files uploaded yet. Upload them from the Requirements tab.'));
+    }
+    if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'));
+    if (tab === 'trainings') return block('🏅', 'Training records', table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(x => [esc(x.title), fmtDate(x.date), x.required ? 'Required' : 'Optional', esc(x.registration), esc(x.attendance), x.completion === 'completed' ? badge('Completed') : esc(x.completion)]), 'No trainings assigned.'));
+    return block('↺', 'Activity history', table(['When', 'Who', 'Action', 'Area'], extra.activity.map(a => [fmtDateTime(a.at), esc(a.actor), esc(a.action), esc(a.area)]), record.canEdit ? 'No recorded activity yet.' : 'Activity history is available to HR.')) + '<p class="legend">Changes are listed without their values; sensitive details stay in the restricted audit trail.</p>';
+  }
+  // Repeating-row editors for family, education and previous employment.
+  function sectionDialog(section, extras) {
+    const row = (cells, removable = true) => `<tr>${cells}<td>${removable ? '<button type="button" class="small danger" data-row-del>Remove</button>' : ''}</td></tr>`;
+    const input = (name, value = '', type = 'text', extra = '') => `<td><input name="${name}" type="${type}" value="${esc(value)}" ${extra}></td>`;
+    let body, template;
+    if (section === 'family') {
+      const fam = extras.family;
+      template = row(input('childName', '', 'text', 'required maxlength="200" aria-label="Child name"') + input('childBirth', '', 'date', 'aria-label="Date of birth"'));
+      body = `<div class="form-grid"><label class="field">Spouse name<input name="spouseName" value="${esc(fam.spouse.name)}" maxlength="200"></label><label class="field">Spouse occupation<input name="spouseOccupation" value="${esc(fam.spouse.occupation)}" maxlength="200"></label><label class="field">Spouse contact<input name="spouseContact" value="${esc(fam.spouse.contact)}" maxlength="40"></label><span></span>
+        <label class="field">Father's name<input name="fatherName" value="${esc(fam.father.name)}" maxlength="200"></label><label class="field">Father's occupation<input name="fatherOccupation" value="${esc(fam.father.occupation)}" maxlength="200"></label>
+        <label class="field">Mother's maiden name<input name="motherName" value="${esc(fam.mother.name)}" maxlength="200"></label><label class="field">Mother's occupation<input name="motherOccupation" value="${esc(fam.mother.occupation)}" maxlength="200"></label></div>
+        <h3 class="spaced">Children</h3><div class="scroll-table"><table class="edit-rows"><thead><tr><th>Name</th><th>Date of birth</th><th></th></tr></thead><tbody>${fam.children.map(c => row(input('childName', c.name, 'text', 'required maxlength="200" aria-label="Child name"') + input('childBirth', c.birthDate, 'date', 'aria-label="Date of birth"'))).join('')}</tbody></table></div>`;
+    } else if (section === 'education') {
+      const levelSelect = v => `<td><select name="level" aria-label="Level">${EDUCATION_LEVELS.map(l => `<option ${l === v ? 'selected' : ''}>${l}</option>`).join('')}</select></td>`;
+      template = row(levelSelect('College') + input('school', '', 'text', 'required maxlength="200" aria-label="School"') + input('course', '', 'text', 'aria-label="Course"') + input('yearFrom', '', 'text', 'maxlength="4" class="narrow" aria-label="From year"') + input('yearTo', '', 'text', 'maxlength="4" class="narrow" aria-label="To year"') + input('honors', '', 'text', 'aria-label="Honors"'));
+      body = `<div class="scroll-table"><table class="edit-rows"><thead><tr><th>Level</th><th>School</th><th>Course / strand</th><th>From</th><th>To</th><th>Honors</th><th></th></tr></thead><tbody>${extras.education.entries.map(x => row(levelSelect(x.level) + input('school', x.school, 'text', 'required maxlength="200" aria-label="School"') + input('course', x.course, 'text', 'aria-label="Course"') + input('yearFrom', x.yearFrom, 'text', 'maxlength="4" class="narrow" aria-label="From year"') + input('yearTo', x.yearTo, 'text', 'maxlength="4" class="narrow" aria-label="To year"') + input('honors', x.honors, 'text', 'aria-label="Honors"'))).join('')}</tbody></table></div>`;
+    } else {
+      template = row(input('company', '', 'text', 'required maxlength="200" aria-label="Company"') + input('position', '', 'text', 'aria-label="Position"') + input('from', '', 'date', 'aria-label="From"') + input('to', '', 'date', 'aria-label="To"') + input('reason', '', 'text', 'aria-label="Reason for leaving"'));
+      body = `<div class="scroll-table"><table class="edit-rows"><thead><tr><th>Company</th><th>Position</th><th>From</th><th>To</th><th>Reason for leaving</th><th></th></tr></thead><tbody>${extras.history.entries.map(x => row(input('company', x.company, 'text', 'required maxlength="200" aria-label="Company"') + input('position', x.position, 'text', 'aria-label="Position"') + input('from', x.from, 'date', 'aria-label="From"') + input('to', x.to, 'date', 'aria-label="To"') + input('reason', x.reason, 'text', 'aria-label="Reason for leaving"'))).join('')}</tbody></table></div>`;
+    }
+    const title = { family: 'Family', education: 'Education', history: 'Previous employment' }[section];
+    openDialog(`Edit ${title.toLowerCase()}`, `<form id="section-form"><div class="dialog-body">${body}<button type="button" class="small spaced" data-row-add>＋ Add ${section === 'family' ? 'child' : 'row'}</button><template id="row-template">${template}</template></div><div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary">Save ${title.toLowerCase()}</button></div></form>`);
+    dialog.classList.add('wide-dialog');
+    const form = dialog.querySelector('#section-form');
+    form.addEventListener('click', event => {
+      if (event.target.closest('[data-row-del]')) event.target.closest('tr').remove();
+      if (event.target.closest('[data-row-add]')) form.querySelector('tbody').append(form.querySelector('#row-template').content.cloneNode(true));
+    });
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const rows = [...form.querySelectorAll('tbody tr')].map(tr => Object.fromEntries([...tr.querySelectorAll('[name]')].map(el => [el.name, el.value.trim()])));
+      const g = n => form.elements[n]?.value.trim() || '';
+      const value = section === 'family'
+        ? { spouse: { name: g('spouseName'), occupation: g('spouseOccupation'), contact: g('spouseContact') }, father: { name: g('fatherName'), occupation: g('fatherOccupation') }, mother: { name: g('motherName'), occupation: g('motherOccupation') }, children: rows.map(r => ({ name: r.childName, birthDate: r.childBirth })) }
+        : { entries: rows };
+      try { await api(`/hr/employees/${encodeURIComponent(profileId)}/sections/${section}`, value); dialog.classList.remove('wide-dialog'); dialog.close(); toast(`${title} saved.`); await drawProfile(); } catch (error) { toast(error.message); }
+    };
   }
   function documentsTab(record, checklist) {
     const manage = can().manage && !record.archived, approve = can().approve;
@@ -138,7 +215,7 @@ export function createFiles(ctx) {
           `<span class="row-actions">${manage && !i.hidden ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${c && !i.hidden ? `<a class="small download-link" href="/api/hr/documents/${c.id}/content?download=1">Download</a>` : ''}${i.versions.length > 1 ? `<button class="small" data-versions="${esc(i.requirement.id)}">Versions (${i.versions.length})</button>` : ''}${approve ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? 'Mark applicable' : 'Not applicable'}</button>` : ''}</span>`];
       }))}`).join('')}</section>`;
   }
-  async function onProfileClick(event, record, checklist) {
+  async function onProfileClick(event, record, checklist, extras) {
     const b = event.target.closest('button'); if (!b) return;
     const id = profileId;
     try {
@@ -146,6 +223,7 @@ export function createFiles(ctx) {
       if (b.hasAttribute('data-back')) { ctx.setPage('files'); await directory(); return; }
       if (b.hasAttribute('data-edit-self')) { editEmployee(id, drawProfile); return; }
       if (b.dataset.legacyProfile) { ctx.openLegacyProfile(b.dataset.legacyProfile); return; }
+      if (b.dataset.editSection) { sectionDialog(b.dataset.editSection, extras); return; }
       if (b.dataset.upload) uploadDialog(checklist.items.find(i => i.requirement.id === b.dataset.upload));
       if (b.dataset.review) reviewDialog(b.dataset.review, b.dataset.req);
       if (b.dataset.versions) versionsDialog(checklist.items.find(i => i.requirement.id === b.dataset.versions));

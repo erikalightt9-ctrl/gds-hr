@@ -13,7 +13,7 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Preview SQLite: data/roster-preview.sqlite; live SQLite: data/hr.sqlite. They are separate.
 - Live application command: npm run dev (default port 3400); public site: HR_ORIGIN=https://hr.blkstone.site npm start with the gds-hr Cloudflare tunnel.
 - Checks: npm test; npm run lint.
-- Most recent full test run: 102 tests passing (Oct 2026).
+- Most recent full test run: 105 tests passing (Oct 2026).
 
 ## Current features and approved design
 - GDS CAPITAL INC. branding: red, gold, white, black.
@@ -37,3 +37,5 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Red-and-gold theme is the default (Settings → Company branding); forest green is optional.
 - The 菲龍集團 GDS Capital logo is public/gds-logo.png (app) and public/payslip-logo.jpg (payslip PDF).
 - This project was separated from the PDMN Virtual Office website repository in Oct 2026; it is now its own repository.
+- Employee 201 profile (public/hr-files.js): info cards (years of service, employment type, job level, date hired) and tabs Overview, Personal, Employment, Compensation, Government IDs, Family, Education, Employment History, Requirements, Documents, Memos, Trainings, Activity. The older four-box profile is still reached through "Attendance, leave & pay".
+- Manual time & pay entry per employee per cutoff (src/payroll-inputs.mjs, engine `manual`): mode add (hours on top of attendance) or replace (days/absences/late/undertime typed, attendance not required). Opened from the payroll computation screen.
