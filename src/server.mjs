@@ -7,6 +7,9 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { Store } from './store.mjs';
 import { mailerFromEnv } from './mailer.mjs';
+import { handleHrRoutes } from './hr-routes.mjs';
+import { publicBranding } from './hr201.mjs';
+import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles } from './service.mjs';
@@ -46,7 +49,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -55,6 +58,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const mutation = req.method !== 'GET';
       if (mutation && req.headers.origin !== origin) throw new AppError('Request origin is not allowed.', 403);
       const client = req.socket.remoteAddress || 'unknown';
+      if (pathname === '/api/branding' && req.method === 'GET') { send(200, publicBranding(store)); return; }
       if (pathname === '/api/session' && req.method === 'GET') {
         const auth = session(store, req.headers.cookie);
         send(200, { user: auth?.user || null, csrf: auth?.csrf || null, demo, setup: store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0 }); return;
@@ -108,6 +112,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       const addressRoute = pathname.match(/^\/api\/location-address\/([a-f0-9-]+)$/);
       if (addressRoute && req.method === 'POST') { checkLimit(store, `geocoding:${auth.user.id}`); send(200, await locationAddress(store, auth.user, addressRoute[1])); return; }
+      if (await handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody })) return;
       if (pathname.startsWith('/api/me/')) {
         permit(auth.user, ['employee']);
         if (pathname === '/api/me/dashboard' && req.method === 'GET') { send(200, employeeDashboard(store, auth.user)); return; }
@@ -134,12 +139,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/reports' && req.method === 'GET') { send(200, availableReports(auth.user)); return; }
       const reportFile = pathname.match(/^\/api\/reports\/([a-z0-9-]+)\.(xlsx|pdf)$/);
       if (reportFile && req.method === 'GET') {
-        const file = buildReport(store, auth.user, reportFile[1], reportFile[2]);
+        const file = buildReport(store, auth.user, reportFile[1], reportFile[2], Object.fromEntries(url.searchParams));
         res.writeHead(200, { 'Content-Type': file.type, 'Content-Disposition': `attachment; filename="${file.filename}"` });
         res.end(file.body); return;
       }
       // Fail closed: employee sessions can never reach staff records, audits, exports or account management.
-      if (auth.user.role === 'employee') throw new AppError('This area is restricted to authorized staff.', 403);
+      if (!LEGACY_WORKSPACE.includes(auth.user.role)) throw new AppError('This area is restricted to authorized staff.', 403);
       if (pathname === '/api/live' && req.method === 'GET') { send(200, liveDashboard(store, auth.user)); return; }
       if (pathname === '/api/live/correct' && req.method === 'POST') { send(200, correctClock(store, auth.user, await readBody(req))); return; }
       const explanationReview = pathname.match(/^\/api\/explanations\/([a-f0-9-]+)\/review$/);

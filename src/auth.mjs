@@ -18,7 +18,7 @@ export async function addUser(store, input, actor = null) {
     if (store.db.prepare('SELECT id FROM users WHERE username=?').get(value.username)) throw new AppError('Username already exists.');
     const employees = store.read().employees;
     if (employees.some(e => e.id.toLowerCase() === value.username.toLowerCase() && e.id !== value.employeeId)) throw new AppError('This username is reserved for an Employee ID.');
-    if (value.role === 'employee' && (!employees.some(e => e.id === value.employeeId) || store.db.prepare('SELECT id FROM users WHERE employee_id=? OR username=?').get(value.employeeId, value.employeeId))) throw new AppError('Employee does not exist or already has an account/identifier.');
+    if (['employee', 'dept_manager'].includes(value.role) && (!employees.some(e => e.id === value.employeeId) || store.db.prepare('SELECT id FROM users WHERE employee_id=? OR username=?').get(value.employeeId, value.employeeId))) throw new AppError('Employee does not exist or already has an account/identifier.');
     const user = { id: randomUUID(), username: value.username, role: value.role, employeeId: value.employeeId || null };
     store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id) VALUES(?,?,?,?,?)').run(user.id, user.username, hash, user.role, user.employeeId);
     store.log(actor || user, 'create', 'users', user.id, null, user);

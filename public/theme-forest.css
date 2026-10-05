@@ -1,0 +1,83 @@
+/* GDS HR · Forest theme (Settings → Branding → Theme).
+   Dark forest-green sidebar, light mint page, white cards, emerald actions. Loaded after theme.css and only
+   active when <html data-theme="forest">; the red-and-gold theme remains available as "gds".
+   Contrast: white on --em-700 is 5.5:1, --ink on mint is 14:1. */
+:root[data-theme="forest"] {
+  --ink: #12261c;
+  --ink-soft: #3f5a4b;
+  --em-50: #f0faf5;
+  --em-100: #dff4e9;
+  --em-200: #bfe6d1;
+  --em-500: #10915f;
+  --em-600: #0b7a50;
+  --em-700: #04694a;
+  --em-800: #065039;
+  --forest-900: #0f3a26;
+  --forest-950: #0a2a1b;
+  --glass-gold: #ffffff;
+  --glass-gold-strong: #ffffff;
+  --glass-white: #ffffff;
+  --glass-edge: rgb(16 145 95 / .22);
+  --glass-edge-strong: rgb(16 145 95 / .45);
+  --glass-highlight: none;
+  --glass-shadow: 0 1px 2px rgb(10 42 27 / .05), 0 6px 18px -10px rgb(10 42 27 / .18);
+  --glass-shadow-hover: 0 2px 4px rgb(10 42 27 / .07), 0 12px 26px -12px rgb(10 42 27 / .28);
+  --blur: none;
+  --brand: var(--em-700);
+  --accent: var(--em-500);
+  --gold: var(--em-500);
+  --line: rgb(16 145 95 / .16);
+  --muted: var(--ink-soft);
+  --red-500: #c4283a; --red-600: #a91e2d; --red-700: #8c1622;
+  color: var(--ink);
+}
+:root[data-theme="forest"] body,
+:root[data-theme="forest"] .employee-shell { background: linear-gradient(180deg, #eef9f3 0%, #e6f5ec 100%); background-attachment: fixed; }
+
+/* Sidebar */
+:root[data-theme="forest"] .sidebar { background: linear-gradient(180deg, var(--forest-900) 0%, var(--forest-950) 100%); border-right: 1px solid rgb(255 255 255 / .06); box-shadow: none; }
+:root[data-theme="forest"] .nav button { color: #d7efe2; background: transparent; border: 0; box-shadow: none; }
+:root[data-theme="forest"] .sidebar-bottom button { background: transparent; color: #eaf7f0; border-color: rgb(255 255 255 / .3); }
+:root[data-theme="forest"] .nav button:hover { background: rgb(255 255 255 / .08); color: #fff; }
+:root[data-theme="forest"] .nav button.active,
+:root[data-theme="forest"] .nav button.active:hover { background: var(--em-600); color: #fff; box-shadow: inset 3px 0 0 #8ee0b7; }
+:root[data-theme="forest"] .nav-label { color: #8fc9aa; }
+:root[data-theme="forest"] .sidebar-bottom { color: rgb(255 255 255 / .7); border-top-color: rgb(255 255 255 / .12); }
+
+/* Top bar, cards, panels */
+:root[data-theme="forest"] .topbar { background: rgb(255 255 255 / .92); border-bottom: 1px solid var(--line); }
+:root[data-theme="forest"] .avatar { background: var(--em-100) !important; color: var(--em-800) !important; box-shadow: none; }
+:root[data-theme="forest"] .card,
+:root[data-theme="forest"] .panel,
+:root[data-theme="forest"] .profile-box,
+:root[data-theme="forest"] .employee-nav-cards button,
+:root[data-theme="forest"] .live-counts button,
+:root[data-theme="forest"] .employee-welcome,
+:root[data-theme="forest"] .clock-panel { background: #fff; border: 1px solid var(--line); box-shadow: var(--glass-shadow); -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-theme="forest"] .card::before, :root[data-theme="forest"] .card::after,
+:root[data-theme="forest"] .panel::after, :root[data-theme="forest"] .clock-panel::before { display: none; }
+:root[data-theme="forest"] .card.featured { background: var(--em-50); border-color: var(--em-200); }
+:root[data-theme="forest"] .panel-foot { background: var(--em-50); }
+
+/* Controls */
+:root[data-theme="forest"] button { background: #fff; color: var(--em-700); border-color: var(--em-200); }
+:root[data-theme="forest"] button:hover { background: var(--em-50); border-color: var(--glass-edge-strong); }
+:root[data-theme="forest"] button.primary { background: var(--em-700); border-color: var(--em-800); color: #fff; box-shadow: 0 4px 12px -6px rgb(4 105 74 / .6); }
+:root[data-theme="forest"] button.primary:hover { background: var(--em-800); }
+:root[data-theme="forest"] button.danger { color: #a3152a; }
+:root[data-theme="forest"] button:focus-visible, :root[data-theme="forest"] input:focus-visible, :root[data-theme="forest"] select:focus-visible, :root[data-theme="forest"] textarea:focus-visible { outline: 3px solid rgb(16 145 95 / .45); }
+:root[data-theme="forest"] input, :root[data-theme="forest"] select, :root[data-theme="forest"] textarea { border-color: rgb(16 145 95 / .28); background: #fff; box-shadow: none; }
+:root[data-theme="forest"] input:focus, :root[data-theme="forest"] select:focus, :root[data-theme="forest"] textarea:focus { border-color: var(--em-500); box-shadow: 0 0 0 4px rgb(16 145 95 / .15); }
+:root[data-theme="forest"] .tabs .active { background: var(--em-100); border-color: var(--em-500); color: var(--em-800); }
+:root[data-theme="forest"] th { background: var(--em-100); color: var(--em-800); border-bottom: 1px solid var(--line); }
+:root[data-theme="forest"] td { border-bottom-color: rgb(16 145 95 / .1); }
+:root[data-theme="forest"] tbody tr:hover { background: var(--em-50); }
+:root[data-theme="forest"] .badge { background: var(--em-100); color: var(--em-800); border: 1px solid var(--em-200); box-shadow: none; }
+:root[data-theme="forest"] .badge.pending { background: #fff4d6; color: #7a5400; border-color: #f1d48a; }
+:root[data-theme="forest"] .badge.rejected { background: #ffe9ec; color: #9b1729; border-color: #f5b8c1; }
+:root[data-theme="forest"] .badge.neutral { background: #eef1ef; color: #4b5a52; border-color: #d6ddd9; }
+:root[data-theme="forest"] .notice { background: #f3fbf6; border: 1px solid var(--em-200); color: var(--em-800); -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-theme="forest"] dialog { background: #fff; border: 1px solid var(--line); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 30px 80px -20px rgb(10 42 27 / .45); }
+:root[data-theme="forest"] .employee-top { background: var(--forest-900); border-bottom: 1px solid rgb(255 255 255 / .1); }
+:root[data-theme="forest"] .download-link:hover { background: var(--em-50); }
+:root[data-theme="forest"] a { color: var(--em-700); }

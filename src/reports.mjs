@@ -1,6 +1,7 @@
 // Downloadable reports (Excel and PDF) for every HR dataset.
 // Each report declares who may download it; the rules mirror what each role can already see on screen.
 import { AppError } from './service.mjs';
+import { REPORTS_201, brandingLine } from './reports201.mjs';
 import { leaveBalance } from './engine.mjs';
 import { canReadSection, localToday, visibleAudit } from './profiles.mjs';
 import { tablePdf, workbook } from './export.mjs';
@@ -117,21 +118,25 @@ export const REPORTS = {
   },
 };
 
+Object.assign(REPORTS, REPORTS_201);
 export function availableReports(actor) {
-  return Object.entries(REPORTS).filter(([, r]) => r.roles.includes(actor.role) && (!r.section || canReadSection(actor, r.section))).map(([key, r]) => ({ key, title: r.title }));
+  return Object.entries(REPORTS).filter(([, r]) => r.roles.includes(actor.role) && (!r.section || canReadSection(actor, r.section))).map(([key, r]) => ({ key, title: r.title, filters: r.filters || [], hr201: key in REPORTS_201 }));
 }
 
-export function buildReport(store, actor, key, format) {
+const FILTER_LABELS = { department: 'Department', status: 'Status', from: 'From', to: 'To' };
+export function buildReport(store, actor, key, format, filters = {}) {
   const report = REPORTS[key];
   if (!report || !['xlsx', 'pdf'].includes(format)) throw new AppError('Report not found.', 404);
   if (!report.roles.includes(actor.role) || (report.section && !canReadSection(actor, report.section))) throw new AppError('You cannot download this report.', 403);
-  const state = store.read(), rows = report.rows(state, store, actor);
+  const chosen = Object.fromEntries(Object.entries(filters).filter(([k, v]) => (report.filters || []).includes(k) && typeof v === 'string' && v.length <= 120 && v));
+  const state = store.read(), rows = report.rows(state, store, actor, chosen);
   const subtitle = report.own ? `${state.employees.find(e => e.id === actor.employeeId)?.name || actor.employeeId}` : report.subtitle?.() || `${rows.length} record${rows.length === 1 ? '' : 's'}`;
-  store.log(actor, 'export', 'report', key, null, { format, rows: rows.length });
+  const described = [subtitle, ...Object.entries(chosen).map(([k, v]) => `${FILTER_LABELS[k]}: ${v}`), `Generated ${localToday()}`, brandingLine(store)].join(' | ');
+  store.log(actor, 'export', 'report', key, null, { format, rows: rows.length, filters: chosen });
   const filename = `gds-hr-${key}-${localToday()}.${format}`;
   return format === 'xlsx'
-    ? { filename, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: workbook({ [report.title]: [report.headers, ...rows] }) }
-    : { filename, type: 'application/pdf', body: tablePdf({ title: report.title, subtitle, headers: report.headers, rows }) };
+    ? { filename, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: workbook({ [report.title]: [[report.title], [described], [], report.headers, ...rows] }) }
+    : { filename, type: 'application/pdf', body: tablePdf({ title: report.title, subtitle: described, headers: report.headers, rows }) };
 }
 
 // One posted payroll run as a PDF register (the Excel version already exists).

@@ -23,6 +23,15 @@ export class Store {
       CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, employee_id TEXT, created_at TEXT NOT NULL, message TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS recovery_requests (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL, resolved INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS password_resets (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS hr_settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS hr_counters (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS requirement_overrides (employee_id TEXT NOT NULL, requirement_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, requirement_id));
+      CREATE TABLE IF NOT EXISTS memos (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS memo_assignments (memo_id TEXT NOT NULL, version INTEGER NOT NULL, employee_id TEXT NOT NULL, assigned_at TEXT NOT NULL, acknowledged_at TEXT, ack_user TEXT, PRIMARY KEY(memo_id, version, employee_id));
+      CREATE TABLE IF NOT EXISTS memo_attachments (id TEXT PRIMARY KEY, memo_id TEXT NOT NULL, version INTEGER, name TEXT NOT NULL, mime TEXT NOT NULL, content BLOB NOT NULL);
+      CREATE TABLE IF NOT EXISTS trainings (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS training_participants (training_id TEXT NOT NULL, employee_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(training_id, employee_id));
+      CREATE TABLE IF NOT EXISTS datasheets (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS contribution_changes (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, effective_date TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS location_addresses (event_id TEXT PRIMARY KEY, address TEXT NOT NULL, fetched_at TEXT NOT NULL);
     `);

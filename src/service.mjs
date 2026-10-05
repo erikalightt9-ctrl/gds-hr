@@ -22,9 +22,10 @@ function validateBrackets(brackets, name) {
     if ((b.to !== null && b.to <= b.from) || (i && (sorted[i - 1].to === null || b.from < sorted[i - 1].to))) throw new AppError(`${name} brackets overlap or have invalid boundaries.`);
   });
 }
-export function saveRecord(store, actor, kind, input) {
+// `trusted` is for internal callers (e.g. the 201 form) that have already checked a narrower permission.
+export function saveRecord(store, actor, kind, input, { trusted = false } = {}) {
   if (!schemas[kind]) throw new AppError('Unknown record type.', 404);
-  permit(actor, entityRoles[kind]);
+  if (!trusted) permit(actor, entityRoles[kind]);
   const recordInput = { ...input };
   const correctionReason = kind === 'attendance' ? recordInput.correctionReason : undefined;
   if (kind === 'attendance') delete recordInput.correctionReason;

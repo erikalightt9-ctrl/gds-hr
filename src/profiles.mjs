@@ -13,8 +13,8 @@ const arrangements = ['Office', 'WFH', 'Hybrid'];
 // A weekday (0 = Sunday) whose blank fields inherit the base attendance schedule.
 const daySchedule = z.object({ day: z.number().int().min(0).max(6), scheduleStart: time, scheduleEnd: time, hoursPerDay: number(1, 16), mealBreakMinutes: number(0, 240), arrangement: choice(arrangements) }).strict();
 export const profileSchemas = {
-  personal: z.object({ lastName: text, firstName: text, middleName: text, suffix: text, sex: choice(['Female', 'Male', 'Other']), birthDate: optionalDate, civilStatus: text, nationality: text, mobile: text, personalEmail: text, address: text }).strict(),
-  employment: z.object({ position: z.string({ error: 'Position is required.' }).trim().min(1, 'Position is required.').max(1000), employmentStatus: choice(['Probationary', 'Regular', 'Project-Based', 'Contractual', 'Seasonal', 'Other']), regularizationDate: optionalDate, employmentType: choice(['Full-Time', 'Part-Time', 'Other']), supervisor: text, workLocation: text, businessEmail: text, employeeStatus: choice(['Active', 'On Leave', 'Suspended', 'Resigned', 'Terminated', 'Inactive']) }).strict(),
+  personal: z.object({ lastName: text, firstName: text, middleName: text, suffix: text, sex: choice(['Female', 'Male', 'Other']), birthDate: optionalDate, civilStatus: text, nationality: text, mobile: text, personalEmail: text, address: text, preferredName: text, birthPlace: text, bloodType: z.string().trim().max(5).default(''), permanentAddress: text }).strict(),
+  employment: z.object({ position: z.string({ error: 'Position is required.' }).trim().min(1, 'Position is required.').max(1000), employmentStatus: z.string().trim().max(60).default(''), regularizationDate: optionalDate, employmentType: choice(['Full-Time', 'Part-Time', 'Other']), supervisor: text, workLocation: text, businessEmail: text, employeeStatus: choice(['Active', 'On Leave', 'Suspended', 'Resigned', 'Terminated', 'Inactive']), contractStart: optionalDate, contractEnd: optionalDate, probationEnd: optionalDate, reviewDate: optionalDate }).strict(),
   government: z.object({ sss: text, philHealth: text, pagIbig: text, tin: text, otherId: text, expiry: optionalDate }).strict(),
   emergency: z.object({ name: text, relationship: text, contact: text, alternateContact: text, address: text }).strict(),
   attendance: z.object({ scheduleEnd: time, hoursPerDay: number(1, 16), mealBreakMinutes: number(0, 240), graceMinutes: number(0, 120), approvedLocation: text, latitude: number(-90, 90), longitude: number(-180, 180), radiusMeters: number(1, 100000), arrangement: choice(arrangements), paidFrom: choice(['actual', 'schedule']), policy: text, daySchedules: z.array(daySchedule).max(7).default([]) }).strict().refine(v => (v.latitude === null) === (v.longitude === null), 'Enter both GPS coordinates.').refine(v => new Set(v.daySchedules.map(s => s.day)).size === v.daySchedules.length, 'Duplicate day schedule.'),
@@ -24,10 +24,10 @@ export const profileSchemas = {
   contributions: z.object({ sssEmployee: number(0, 1e6), sssEmployer: number(0, 1e6), sssEc: number(0, 1e6), philHealthEmployee: number(0, 1e6), philHealthEmployer: number(0, 1e6), pagIbigEmployee: number(0, 1e6), pagIbigEmployer: number(0, 1e6), reason: text }).strict().refine(v => Object.entries(v).every(([k, x]) => k === 'reason' || x === null) || v.reason.length >= 3, 'Give a reason for overriding contributions.'),
   leave: z.object({ entitlements: z.array(z.object({ typeId: z.string().min(1).max(80), annualDays: z.number().min(0).max(366), effectiveYear: z.number().int().min(2000).max(2200) }).strict()).max(200), remarks: text }).strict().refine(v => new Set(v.entitlements.map(e => `${e.typeId}:${e.effectiveYear}`)).size === v.entitlements.length, 'Duplicate leave type and year.'),
 };
-const hr = ['admin', 'hr'], finance = ['admin', 'hr', 'payroll'];
-const privateRead = { personal: hr, government: finance, emergency: hr, bank: finance, contributions: finance };
+const hr = ['admin', 'hr'], hrTeam = ['admin', 'hr', 'hr_staff'], finance = ['admin', 'hr', 'payroll'];
+const privateRead = { personal: hrTeam, government: finance, emergency: hrTeam, bank: finance, contributions: finance, payroll: ['admin', 'hr', 'payroll', 'viewer'], leave: ['admin', 'hr', 'payroll', 'viewer'], attendance: ['admin', 'hr', 'hr_staff', 'payroll', 'viewer'] };
 export function canReadSection(actor, section) { return !privateRead[section] || privateRead[section].includes(actor.role); }
-export function canWriteSection(actor, section) { return (section === 'contributions' ? finance : ['payroll', 'bank'].includes(section) ? ['admin', 'payroll'] : hr).includes(actor.role); }
+export function canWriteSection(actor, section) { return (section === 'contributions' ? finance : ['payroll', 'bank'].includes(section) ? ['admin', 'payroll'] : ['personal', 'employment', 'emergency'].includes(section) ? hrTeam : hr).includes(actor.role); }
 function findEmployee(store, id) { const e = store.read().employees.find(e => e.id === id); if (!e) throw new AppError('Employee not found.', 404); return e; }
 function personalName(employee) {
   const parts = employee.name.split(',');
@@ -89,7 +89,8 @@ export function saveProfile(store, actor, id, section, input) {
   });
 }
 export const documentTypes = ['Photo', 'Employment Contract', 'Government ID', 'Resume/CV', 'Birth Certificate', 'Tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Company ID', 'Medical', 'Leave Supporting', 'Disciplinary', 'Other HR'];
-function canReadDocument(actor, type) { return type === 'Photo' || (['Medical', 'Disciplinary', 'Leave Supporting', 'Other HR', 'Birth Certificate', 'Resume/CV'].includes(type) ? hr : finance).includes(actor.role); }
+// 201 checklist documents have their own access rules (documents201.mjs) and appear only there.
+function canReadDocument(actor, type) { if (type === '201 Document') return false; return type === 'Photo' || (['Medical', 'Disciplinary', 'Leave Supporting', 'Other HR', 'Birth Certificate', 'Resume/CV'].includes(type) ? hr : finance).includes(actor.role); }
 const uploadSchema = z.object({ type: z.enum(documentTypes), name: z.string().trim().min(1).max(180).refine(v => !/[\x00-\x1f\\/]/.test(v), 'Invalid filename'), mime: z.enum(['application/pdf', 'image/png', 'image/jpeg']), data: z.string().min(1).max(7000000).regex(/^[A-Za-z0-9+/]*={0,2}$/), expiry: optionalDate, remarks: text }).strict();
 export function uploadDocument(store, actor, id, input) {
   if (actor.role === 'employee') { if (id !== actor.employeeId || input.type !== 'Leave Supporting') throw new AppError('You may upload supporting documents only for yourself.', 403); }

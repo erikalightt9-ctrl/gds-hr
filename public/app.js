@@ -7,20 +7,27 @@ import { welcomeScene, welcomeCulture } from './welcome.js';
 import { createTimecard } from './timecard.js';
 import { createAttendanceImport } from './attendance-import.js';
 import { createContributionEditor } from './contribution-basis.js';
+import { createFiles } from './hr-files.js';
+import { createDashboard } from './hr-dashboard.js';
+import { createMemos } from './hr-memos.js';
+import { createTrainings } from './hr-trainings.js';
+import { createAdmin } from './hr-admin.js';
+import { initials } from './hr-common.js';
+import { createPortalHr } from './portal-hr.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 const money = n => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(n || 0);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 const label = key => key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
 const uid = () => crypto.randomUUID();
-let auth, state, balances = [], page = 'overview', currentRun = null, filter = '', subtab = 'requests';
+let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun = null, filter = '', subtab = 'requests';
 let annualYear = today().slice(0, 4);
 let employeeStatusFilter = 'All Employees';
 let attendanceView = 'records'; // 'records' (all employees) or 'timecard' (one employee beside pay)
 let payrollEmployee = '';
 let computationContext = null; // the payroll computation being reviewed, reopened after an adjustment is saved // '' = all employees; otherwise the one Employee ID being calculated
 let employeeData = null, liveData = null, eventStream = null, liveTimer = null, liveUser = null, refreshTimer = null;
-const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
+const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, portalHr: createPortalHr({ api, esc, table, toast }), onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
 const contributionEditor = createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog });
 const attendanceImport = createAttendanceImport({ api, esc, table, badge, toast, openDialog, dialog, refresh, render: () => render(), getState: () => state });
 const timecard = createTimecard({ api, esc, money, badge, table, getState: () => state, canEdit: kind => canEdit(kind), editButton, cutoffDefaults }); // canEdit is defined below; look it up when used
@@ -41,7 +48,9 @@ let toastTimer;
 function toast(text) { const node = document.querySelector('#toast'); node.textContent = text; node.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('visible'), 6000); }
 async function refresh() {
   const user = auth?.user; if (!user) return;
-  if (user.role === 'employee') { const data = await api('/me/dashboard'); if (auth?.user?.id === user.id) employeeData = data; return; }
+  if (user.role === 'employee') { api('/branding').then(b => applyTheme(b.theme)).catch(() => {}); const data = await api('/me/dashboard'); if (auth?.user?.id === user.id) employeeData = data; return; }
+  hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme);
+  if (!LEGACY.includes(user.role)) { state = { employees: [], runs: [], leaves: [], loans: [], attendance: [], rules: [], leaveTypes: [], holidays: [], adjustments: [], deductions: [] }; return; }
   const data = await api('/state'); if (auth?.user?.id !== user.id) return; state = data.state; balances = data.balances;
   if (['admin', 'hr'].includes(user.role)) liveData = await api('/live');
 }
@@ -77,10 +86,69 @@ function filtered(list) { return list.filter(x => JSON.stringify({ ...x, employe
 const navigationIcons = {"overview":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/>","employees":"<circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 5\"/>","live":"<path d=\"M2 12h4l3-8 6 16 3-8h4\"/>","attendance":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 6v6l4 2\"/>","leave":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4M16 3v4M3 11h18m-13 5 3 3 5-5\"/>","payroll":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M7 15h4M7 18h7\"/>","loans":"<path d=\"M3 7h18m-4-4 4 4-4 4M21 17H3m4-4-4 4 4 4\"/>","annual":"<path d=\"M12 3 3 8l9 5 9-5-9-5ZM3 12l9 5 9-5M3 16l9 5 9-5\"/>","holidays":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4M16 3v4M3 11h18M8 15h2M14 15h2M8 18h2\"/>","rules":"<path d=\"M4 6h16M4 12h16M4 18h16\"/><circle cx=\"8\" cy=\"6\" r=\"2\"/><circle cx=\"16\" cy=\"12\" r=\"2\"/><circle cx=\"10\" cy=\"18\" r=\"2\"/>","audit":"<path d=\"M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2\"/>"};
 navigationIcons.deductions = '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8"/>';
 navigationIcons.reports = '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/>';
-const navItems = [['overview', '◫', 'Overview'], ['employees', '♧', 'Employees'], ['live', '●', 'Live attendance'], ['attendance', '◷', 'Attendance'], ['leave', '▧', 'Leave management'], ['payroll', '▤', 'Payroll'], ['loans', '↔', 'Employee loans'], ['deductions', '−', 'Deductions'], ['annual', '◈', '13th month pay'], ['holidays', '▦', 'Holiday calendar'], ['rules', '⚙', 'Rules & rates'], ['audit', '↺', 'Audit trail'], ['reports', '⇩', 'Reports & downloads']];
+const LEGACY = ['admin', 'hr', 'payroll', 'viewer'], HR_TEAM = ['admin', 'hr', 'hr_staff'];
+Object.assign(navigationIcons, {
+  dashboard: navigationIcons.overview,
+  files: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  datasheets: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  memos: '<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
+  trainings: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/>',
+});
+function navGroups() {
+  const role = auth.user.role, legacy = LEGACY.includes(role);
+  return [
+    ['', [['dashboard', 'Dashboard']]],
+    ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ['trainings', 'Trainings']]],
+    ...(legacy ? [['Time & Pay', [...(['admin', 'hr'].includes(role) ? [['live', 'Live attendance']] : []), ['attendance', 'Attendance'], ['leave', 'Leave management'], ['payroll', 'Payroll'], ['loans', 'Employee loans'], ['deductions', 'Deductions'], ['annual', '13th month pay'], ['holidays', 'Holiday calendar'], ['rules', 'Rules & rates']]]] : []),
+    ['Administration', [['reports', 'Reports'], ...(legacy ? [['audit', 'Audit trail']] : []), ...(role === 'admin' ? [['settings', 'Settings']] : [])]],
+  ];
+}
+const PAGE_TITLES = { employee201: 'Employee 201 File', profile: 'Attendance, leave & pay' };
+let sidebarCollapsed = (() => { try { return localStorage.getItem('hr-sidebar') === 'collapsed'; } catch { return false; } })();
+function applyTheme(theme) { document.documentElement.dataset.theme = theme === 'forest' ? 'forest' : 'gds'; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'forest' ? '#0f3a26' : '#161616'); }
 function shell(content) {
   if (auth.demo) content = '<div class="notice">Preview workspace · Payroll settings and figures are sample data. Changes here do not update the live HR database.</div>' + content;
-  app.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><img class="brand-logo" src="${brandLogo}" alt="GDS Capital Inc. logo" width="661" height="245"><span>GDS CAPITAL INC.</span></div><div class="nav-label">Workspace</div><nav class="nav" aria-label="HR navigation">${navItems.map(([id, , name], i) => `${i === 7 ? '<div class="nav-label">Administration</div>' : ''}<button data-nav="${id}" class="${page === id ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}><span class="symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">${navigationIcons[id]}</svg></span>${name}</button>`).join('')}</nav><div class="sidebar-bottom"><strong>Every detail, accounted for.</strong>Attendance to take-home pay.<br><button class="small" data-account>Account & access</button></div></aside><main class="main"><header class="topbar"><span>GDS CAPITAL INC. / <strong>${navItems.find(n => n[0] === page)?.[2] || 'Employee profile'}</strong></span><span><span class="optional">${esc(today())} · Asia/Manila &nbsp;&nbsp; </span>${esc(auth.user.username)} ${badge(auth.user.role, 'neutral')}<span class="avatar">${esc(auth.user.username.slice(0, 1).toUpperCase())}</span><button class="small" data-signout>Sign out</button></span></header><div class="content">${content}</div></main></div>`;
+  const groups = navGroups(), title = groups.flatMap(g => g[1]).find(n => n[0] === page)?.[1] || PAGE_TITLES[page] || '';
+  const company = hrContext?.company || { name: 'GDS CAPITAL INC.', systemTitle: 'HR 201 File & Employee Management System' };
+  const icon = id => `<span class="symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">${navigationIcons[id] || ''}</svg></span>`;
+  app.innerHTML = `<div class="shell ${sidebarCollapsed ? 'collapsed' : ''}"><aside class="sidebar" aria-label="Main menu"><div class="brand"><img class="brand-logo" src="${brandLogo}" alt="${esc(company.name)} logo" width="661" height="245"><span>${esc(company.name)}</span></div>
+    <nav class="nav" aria-label="HR navigation">${groups.map(([label, items]) => `${label ? `<div class="nav-label">${esc(label)}</div>` : ''}${items.map(([id, name]) => `<button data-nav="${id}" class="${page === id || (id === 'files' && page === 'employee201') ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''} title="${esc(name)}">${icon(id)}<span class="nav-text">${esc(name)}</span></button>`).join('')}`).join('')}</nav>
+    <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button></div></aside>
+    <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><span><strong>${esc(company.systemTitle)}</strong><small>${esc(title)}</small></span></span>
+      <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span><span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
+      <span class="avatar" aria-hidden="true">${esc(initials(auth.user.username))}</span><span class="user-meta"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span><button class="small" data-signout>Sign out</button></span></header>
+    <div class="content">${content}</div></main></div>`;
+  loadBell();
+}
+let bellItems = [];
+async function loadBell() {
+  if (!hrContext) return;
+  try {
+    const n = await api('/hr/notifications'); bellItems = n.items;
+    const badgeNode = document.querySelector('[data-bell-count]'); if (!badgeNode) return;
+    badgeNode.textContent = n.count; badgeNode.classList.toggle('hidden', !n.count);
+  } catch { /* the bell is optional; pages still work */ }
+}
+const hrCtx = {
+  api, esc, money, table, badge, toast, openDialog, dialog, heading, today,
+  shell: html => shell(html),
+  context: () => hrContext, legacy: () => LEGACY.includes(auth.user.role),
+  legacyGlance: () => ({ leave: state.leaves.filter(l => l.status === 'pending').length, net: state.runs.at(-1)?.totals?.net || 0, loans: state.loans.reduce((s, l) => s + l.balance, 0) }),
+  setPage: p => { page = p; }, refresh: () => refresh(), daysAgo: n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10),
+  go: nav => goTo(nav), quick: kind => (kind === 'employee' ? files.addEmployee() : kind === 'memo' ? memos.create() : trainings.create()),
+  openLegacyProfile: async id => { page = 'profile'; await profiles.open(id, 'personal'); },
+  reloadContext: async () => { hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme); },
+  openAccounts: () => account(),
+};
+const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
+async function goTo(nav) {
+  page = nav.page;
+  if (page === 'files') return files.directory({ status: nav.status || '', docs: nav.docs || '' });
+  if (page === 'employee201') return files.openProfile(nav.id, nav.tab || 'overview');
+  if (page === 'memos') return memos.render(nav.id);
+  if (page === 'trainings') return trainings.render(nav.id);
+  render();
 }
 function overview() {
   const runs = state.runs, last = runs.at(-1), pending = state.leaves.filter(l => l.status === 'pending').length;
@@ -179,9 +247,18 @@ function downloads(key) {
 async function reportsPage() {
   const reports = await api('/reports');
   const runs = state.runs.filter(r => r.status === 'posted').sort((a, b) => b.start.localeCompare(a.start));
-  shell(heading('Reports & downloads', 'Download any list as an Excel workbook or a printable PDF. Files contain only what your role may see.') +
-    `<section class="panel"><div class="panel-head"><h2>All reports</h2><span class="legend">${reports.length} reports available to your role</span></div><ul class="report-list">${reports.map(r => `<li><span>${esc(r.title)}</span>${downloads(r.key)}</li>`).join('')}</ul></section>` +
-    `<section class="panel"><div class="panel-head"><h2>Payroll registers</h2><span class="legend">One file per posted cutoff</span></div>${table(['Cutoff', 'Employees', 'Net', ''], runs.map(r => [`${r.start} → ${r.end}`, r.rows.length, money(r.totals.net), `<span class="download-links"><a class="small download-link" href="/api/runs/${r.id}.xlsx" download>Excel</a><a class="small download-link" href="/api/runs/${r.id}.pdf" download>PDF</a></span>`]))}</section>`);
+  const hr = reports.filter(r => r.hr201), other = reports.filter(r => !r.hr201), depts = hrContext?.departments || [];
+  const filterForm = r => r.filters.length ? `<form class="report-filters" data-report="${esc(r.key)}">${r.filters.includes('department') ? `<select name="department" aria-label="Department"><option value="">All departments</option>${depts.map(d => `<option>${esc(d)}</option>`).join('')}</select>` : ''}${r.filters.includes('status') ? '<select name="status" aria-label="Status"><option value="">Active and inactive</option><option>Active</option><option>Inactive</option><option>Archived</option></select>' : ''}${r.filters.includes('from') ? '<input type="date" name="from" aria-label="From date">' : ''}${r.filters.includes('to') ? '<input type="date" name="to" aria-label="To date">' : ''}</form>` : '';
+  shell(heading('Reports & downloads', 'Download any list as an Excel workbook or a printable PDF. Files contain only what your role may see, and each export is recorded in the audit trail.') +
+    (hr.length ? `<section class="panel"><div class="panel-head"><h2>HR 201 reports</h2><span class="legend">Choose filters, then download</span></div><ul class="report-list wide">${hr.map(r => `<li><span>${esc(r.title)}</span>${filterForm(r)}<span class="download-links"><a class="small download-link" data-report-link="${esc(r.key)}" data-format="xlsx" href="/api/reports/${esc(r.key)}.xlsx" download>Excel</a><a class="small download-link" data-report-link="${esc(r.key)}" data-format="pdf" href="/api/reports/${esc(r.key)}.pdf" download>PDF</a></span></li>`).join('')}</ul></section>` : '') +
+    (other.length ? `<section class="panel"><div class="panel-head"><h2>Attendance, leave &amp; payroll reports</h2><span class="legend">${other.length} reports available to your role</span></div><ul class="report-list">${other.map(r => `<li><span>${esc(r.title)}</span>${downloads(r.key)}</li>`).join('')}</ul></section>` : '') +
+    (LEGACY.includes(auth.user.role) ? `<section class="panel"><div class="panel-head"><h2>Payroll registers</h2><span class="legend">One file per posted cutoff</span></div>${table(['Cutoff', 'Employees', 'Net', ''], runs.map(r => [`${r.start} → ${r.end}`, r.rows.length, money(r.totals.net), `<span class="download-links"><a class="small download-link" href="/api/runs/${r.id}.xlsx" download>Excel</a><a class="small download-link" href="/api/runs/${r.id}.pdf" download>PDF</a></span>`]))}</section>` : ''));
+  // Keep each download link in step with its filters.
+  document.querySelector('.content').addEventListener('change', event => {
+    const form = event.target.closest('[data-report]'); if (!form) return;
+    const params = new URLSearchParams([...new FormData(form)].filter(([, v]) => v)).toString();
+    form.closest('li').querySelectorAll('[data-report-link]').forEach(a => { a.href = `/api/reports/${a.dataset.reportLink}.${a.dataset.format}${params ? `?${params}` : ''}`; });
+  });
 }
 async function auditPage() {
   const entries = await api('/audit');
@@ -193,6 +270,11 @@ function render() {
   offerInstall();
   startLive();
   if (auth.user.role === 'employee') { portal.draw(employeeData, auth); return; }
+  if (page === 'overview') page = 'dashboard';
+  if (page === 'employees') page = 'files';
+  if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports'].includes(page)) page = 'dashboard';
+  const hrPages = { dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
+  if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') { shell(heading('Live attendance', 'Employee clock events and HR reviews synchronize automatically.') + (liveData ? portal.live(liveData) : '<div class="notice">This view is restricted to HR and administrators.</div>')); return; }
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
   const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, annual: annualPage, holidays: holidaysPage, rules: rulesPage };
@@ -438,6 +520,8 @@ function edit(kind, id, preset = {}) {
   };
 }
 function renderLogin() {
+  document.documentElement.dataset.theme = 'gds';   // the sign-in screen keeps its approved red-and-gold design
+  page = 'dashboard'; currentRun = null;
   stopLive(); portal.reset(); document.querySelector('.install-banner')?.remove();
   app.innerHTML = `<div class="login welcome-login"><header class="welcome-head"><div class="brand"><img class="brand-logo" src="${brandLogo}" alt="GDS Capital Inc. logo" width="661" height="245"><span>GDS CAPITAL INC.</span></div><div class="eyebrow">Strength in stewardship</div><h1>Welcome to Our Human Resource Management System</h1><p>Your attendance, leave, payslips and HR requests, in one trusted place.</p></header><section class="login-form"><form id="login-form"><div class="auth-brand">GDS CAPITAL INC. / HR WORKSPACE</div><h2>${auth?.setup ? 'Set up your workspace' : 'Welcome back.'}</h2><p>${auth?.setup ? 'Create your administrator account using the one-time setup code shown in your server terminal.' : 'Sign in to your HR workspace or employee portal.'}</p><div id="login-error" class="form-error hidden" role="alert"></div>${auth?.setup ? '<label>One-time setup code<input name="token" type="password" autocomplete="off" required></label>' : ''}<label>Employee ID / username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label><label>Password<input name="password" type="password" autocomplete="${auth?.setup ? 'new-password' : 'current-password'}" required ${auth?.setup ? 'minlength="12"' : ''} maxlength="200"></label><label>Authenticator code (if enabled)<input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label><button class="primary" type="submit">${auth?.setup ? 'Create administrator account' : 'Sign in'} →</button><button type="button" data-recovery>Forgot password?</button><p class="footnote">${auth?.setup ? 'Use a unique password of at least 12 characters.' : 'Access is managed by your HR administrator.'}<br>Employee records are stored in your HR service.</p></form></section><section class="welcome-body" aria-label="Our culture">${welcomeScene()}${welcomeCulture()}</section></div>`;
   document.querySelector('#login-form').onsubmit = async event => {
@@ -453,17 +537,24 @@ function renderLogin() {
 }
 async function account() {
   const users = auth.user.role === 'admin' ? await api('/users') : [];
-  openDialog('Account & access', `<div class="dialog-body"><p class="sub">Signed in as ${esc(auth.user.username)} · ${esc(auth.user.role)}</p><br><button data-logout>Sign out</button><br><br><h3>Change your password</h3><form id="password-form" class="form-grid"><label class="field">Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label><label class="field">New password<input type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="200" required></label><button class="primary" type="submit">Update password & sign out</button></form>${auth.user.role === 'admin' ? `<br><br><h3>Workspace access</h3>${table(['Username', 'Role'], users.map(u => [esc(u.username), badge(u.role, 'neutral')]))}<br><form id="user-form" class="form-grid"><label class="field">Username<input name="username" minlength="3" required autocomplete="off"></label><label class="field">Role<select name="role"><option value="employee">Employee — own records only</option><option value="hr">HR — people, attendance & leave</option><option value="payroll">Payroll — loans & posting</option><option value="viewer">Viewer — read-only reports</option><option value="admin">Admin — all settings</option></select></label><label class="field">Employee ID (Employee role only)<select name="employeeId"><option value="">Choose employee</option>${state.employees.map(e => `<option value="${esc(e.id)}">${esc(e.name)} · ${esc(e.id)}</option>`).join('')}</select></label><label class="field">Initial password<input type="password" name="password" minlength="12" maxlength="200" autocomplete="new-password" required></label><button class="primary" type="submit">Add user</button></form>` : ''}<p class="legend">${auth.user.role === 'employee' ? 'Your account can access only your own employee portal, attendance, leave and payslips.' : 'Staff report access follows your role. Employee accounts can access only their own records. Personal details, IDs, bank details and documents have additional restrictions.'}</p></div>`);
+  openDialog('Account & access', `<div class="dialog-body"><p class="sub">Signed in as ${esc(auth.user.username)} · ${esc(auth.user.role)}</p><br><button data-logout>Sign out</button><br><br><h3>Change your password</h3><form id="password-form" class="form-grid"><label class="field">Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label><label class="field">New password<input type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="200" required></label><button class="primary" type="submit">Update password & sign out</button></form>${auth.user.role === 'admin' ? `<br><br><h3>Workspace access</h3>${table(['Username', 'Role'], users.map(u => [esc(u.username), badge({ admin: 'System Administrator', hr: 'HR Manager', hr_staff: 'HR Staff', dept_manager: 'Department Manager', viewer: 'Management', payroll: 'Payroll', employee: 'Employee' }[u.role] || u.role, 'neutral')]))}<br><form id="user-form" class="form-grid"><label class="field">Username<input name="username" minlength="3" required autocomplete="off"></label><label class="field">Role<select name="role"><option value="employee">Employee — own records only</option><option value="hr_staff">HR Staff — day-to-day 201 work</option><option value="hr">HR Manager — people, approvals, attendance &amp; leave</option><option value="dept_manager">Department Manager — own department, view only</option><option value="payroll">Payroll — loans &amp; posting</option><option value="viewer">Management — dashboards &amp; reports</option><option value="admin">System Administrator — all settings</option></select></label><label class="field">Linked employee (Employee and Department Manager)<select name="employeeId"><option value="">Choose employee</option>${state.employees.map(e => `<option value="${esc(e.id)}">${esc(e.name)} · ${esc(e.id)}</option>`).join('')}</select></label><label class="field">Initial password<input type="password" name="password" minlength="12" maxlength="200" autocomplete="new-password" required></label><button class="primary" type="submit">Add user</button></form>` : ''}<p class="legend">${auth.user.role === 'employee' ? 'Your account can access only your own employee portal, attendance, leave and payslips.' : 'Staff report access follows your role. Employee accounts can access only their own records. Personal details, IDs, bank details and documents have additional restrictions.'}</p></div>`);
   dialog.querySelector('[data-logout]').onclick = signOut;
   dialog.querySelector('#password-form').onsubmit = async event => { event.preventDefault(); try { await api('/password', Object.fromEntries(new FormData(event.target))); dialog.close(); auth = { user: null }; renderLogin(); toast('Password updated. Please sign in again.'); } catch (e) { toast(e.message); } };
   const userForm = dialog.querySelector('#user-form');
-  if (userForm) userForm.onsubmit = async event => { event.preventDefault(); try { const values = Object.fromEntries(new FormData(userForm)); if (values.role !== 'employee') delete values.employeeId; await api('/users', values); await account(); toast('User created.'); } catch (e) { toast(e.message); } };
+  if (userForm) userForm.onsubmit = async event => { event.preventDefault(); try { const values = Object.fromEntries(new FormData(userForm)); if (!['employee', 'dept_manager'].includes(values.role)) delete values.employeeId; await api('/users', values); await account(); toast('User created.'); } catch (e) { toast(e.message); } };
   await portal.accountTools(auth.user, users);
 }
 document.addEventListener('click', async event => {
   const b = event.target.closest('button'); if (!b) return;
   try {
     if (b.hasAttribute('data-recovery')) { portal.recovery(); return; }
+    if (b.hasAttribute('data-toggle-sidebar')) { sidebarCollapsed = !sidebarCollapsed; try { localStorage.setItem('hr-sidebar', sidebarCollapsed ? 'collapsed' : 'open'); } catch { /* preference only */ } document.querySelector('.shell')?.classList.toggle('collapsed', sidebarCollapsed); b.setAttribute('aria-expanded', String(!sidebarCollapsed)); return; }
+    if (b.hasAttribute('data-bell')) {
+      const menu = document.querySelector('[data-bell-menu]');
+      menu.innerHTML = bellItems.length ? bellItems.map((item, i) => `<button role="menuitem" data-bell-item="${i}">${esc(item.text)}</button>`).join('') : '<p class="muted">Nothing needs your attention.</p>';
+      menu.classList.toggle('hidden'); return;
+    }
+    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; await goTo({ page: item.nav, docs: item.filter }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
     if (b.dataset.nav) { page = b.dataset.nav; filter = ''; render(); }
