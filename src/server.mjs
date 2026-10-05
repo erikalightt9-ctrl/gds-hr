@@ -43,10 +43,35 @@ function interfaceVersion() {
   return readdirSync(dir).filter(f => /\.(js|css|html)$/.test(f)).map(f => `${f}:${Math.round(statSync(path.join(dir, f)).mtimeMs)}`).sort().join('|').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36);
 }
 function constantEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && timingSafeEqual(x, y); }
+// What an employee sees in their notification bell after each of their own submissions.
+const days = (a, b) => (b && b !== a ? `${a} to ${b}` : a);
+export function employeeNotice(pathname, data = {}) {
+  const rules = [
+    [/^\/api\/me\/clock$/, () => `Time ${data.kind === 'out' ? 'out' : 'in'} recorded${data.time ? ` at ${data.time}` : ''} and sent to HR.`],
+    [/^\/api\/me\/leaves$/, () => `Leave request submitted${data.startDate ? ` for ${days(data.startDate, data.endDate)}` : ''}. Waiting for HR approval.`],
+    [/^\/api\/me\/leaves\/[^/]+\/cancel$/, () => 'Leave request cancelled.'],
+    [/^\/api\/me\/leaves\/[^/]+\/proof$/, () => 'Leave proof uploaded. Waiting for HR review.'],
+    [/^\/api\/me\/explanations$/, () => `Attendance explanation submitted${data.date ? ` for ${data.date}` : ''}. Waiting for HR review.`],
+    [/^\/api\/me\/documents$/, () => `Supporting document uploaded${data.name ? `: ${data.name}` : ''}.`],
+    [/^\/api\/hr\/me\/overtime$/, () => `Overtime filed for ${data.date} (${data.hours} h). Waiting for HR approval.`],
+    [/^\/api\/hr\/me\/overtime\/[^/]+\/cancel$/, () => `Overtime filing for ${data.date} cancelled.`],
+    [/^\/api\/hr\/me\/loans$/, () => `${data.type || 'Loan'} application submitted. Waiting for HR review.`],
+    [/^\/api\/hr\/me\/loans\/[^/]+\/cancel$/, () => 'Loan application cancelled.'],
+    [/^\/api\/hr\/me\/datasheet$/, () => (data.status === 'submitted' ? 'Data sheet submitted. Waiting for HR review.' : 'Data sheet draft saved.')],
+    [/^\/api\/hr\/me\/documents$/, () => `201 document uploaded${data.requirementName ? `: ${data.requirementName}` : ''}. Waiting for HR review.`],
+    [/^\/api\/hr\/me\/memos\/.+\/acknowledge$/, () => 'Memo receipt acknowledged.'],
+  ];
+  const match = rules.find(([re]) => re.test(pathname));
+  return match ? match[1]() : null;
+}
 export function createApp({ store, origin, setupToken, demo = false, mailer = null }) {
   const secure = origin.startsWith('https:');
   return http.createServer(async (req, res) => {
-    const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
+    let selfNotice = null;   // set for an employee's own submissions; recorded in their notification bell
+    const send = (status, data) => {
+      if (selfNotice && status < 300) { try { const text = employeeNotice(selfNotice.pathname, data); if (text) store.notify(selfNotice.employeeId, text); } catch { /* a notice never blocks the submission */ } }
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data));
+    };
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -98,6 +123,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
       if (auth.user.mustChangePassword && !['/api/events', '/api/logout', '/api/password', '/api/version'].includes(pathname)) throw new AppError('Choose your own password first.', 403);
       if (pathname === '/api/events' && req.method === 'GET') {

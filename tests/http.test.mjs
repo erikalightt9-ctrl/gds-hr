@@ -50,3 +50,13 @@ test('HTTP login, role enforcement, CSRF, validation, and session revocation', a
   assert.equal((await call('/api/logout', {}, cookie, auth.csrf)).status, 200);
   assert.equal((await call('/api/state', null, cookie)).status, 401);
 });
+
+test('every employee submission writes a notice to the employee notification bell', async () => {
+  const { employeeNotice } = await import('../src/server.mjs');
+  assert.match(employeeNotice('/api/me/clock', { kind: 'in', time: '08:01' }), /Time in recorded at 08:01/);
+  assert.match(employeeNotice('/api/me/leaves', { startDate: '2026-10-20', endDate: '2026-10-21' }), /2026-10-20 to 2026-10-21. Waiting for HR approval/);
+  assert.match(employeeNotice('/api/hr/me/overtime', { date: '2026-10-05', hours: 2 }), /Overtime filed for 2026-10-05 \(2 h\)/);
+  assert.match(employeeNotice('/api/hr/me/documents', { requirementName: 'NBI clearance' }), /NBI clearance/);
+  assert.match(employeeNotice('/api/hr/me/memos/abc/2/acknowledge', {}), /acknowledged/);
+  assert.equal(employeeNotice('/api/password', {}), null);
+});

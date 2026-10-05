@@ -1,7 +1,7 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
 import { DOC_BADGE, fmtDate, fmtDateTime, readFile, fieldBoxes, sectionCard, celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
 
-export function createPortalHr({ api, esc, table, toast }) {
+export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message) }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
   const SHEET = { new: 'Not started', draft: 'Draft (only you can see it)', submitted: 'Submitted to HR', 'under-review': 'HR is reviewing', returned: 'Returned for correction', approved: 'Approved', rejected: 'Rejected' };
 
@@ -52,11 +52,11 @@ export function createPortalHr({ api, esc, table, toast }) {
     form.addEventListener('input', compute);
     form.onsubmit = async event => {
       event.preventDefault(); const f = new FormData(event.target);
-      try { await api('/hr/me/overtime', { date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), reason: f.get('reason') }); toast('Overtime sent to HR for approval.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
+      try { await api('/hr/me/overtime', { date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), reason: f.get('reason') }); confirm('Overtime submitted', `Your overtime for <strong>${esc(f.get('date'))}</strong> (${esc(f.get('startTime'))} – ${esc(f.get('endTime'))}) was sent to HR.<br>Status: <strong>Pending HR approval</strong>.`); await fill('overtime201', box); } catch (error) { toast(error.message); }
     };
     box.onclick = async event => {
       const b = event.target.closest('[data-ot-cancel]'); if (!b) return;
-      try { await api(`/hr/me/overtime/${b.dataset.otCancel}/cancel`, {}); toast('Filing cancelled.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
+      try { await api(`/hr/me/overtime/${b.dataset.otCancel}/cancel`, {}); confirm('Overtime cancelled', 'Your overtime filing was cancelled.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
     };
   }
   function loans(box, data) {
@@ -73,11 +73,11 @@ export function createPortalHr({ api, esc, table, toast }) {
         ${table(['Applied', 'Type', 'Amount', 'Months', 'Status', 'HR remarks', ''], data.applications.map(a => [fmtDate(a.appliedAt.slice(0, 10)), esc(a.type), money(a.amount), a.months, esc(STATUS[a.status] || a.status), esc(a.remarks || '—'), a.status === 'pending' ? `<button class="small" data-loan-cancel="${a.id}">Cancel</button>` : '']), 'No applications yet.')}</section>`;
     box.querySelector('#loan-apply').onsubmit = async event => {
       event.preventDefault(); const f = new FormData(event.target);
-      try { await api('/hr/me/loans', { type: f.get('type'), amount: Number(f.get('amount')), months: Number(f.get('months')), purpose: f.get('purpose') }); toast('Loan application sent to HR.'); await fill('loans201', box); } catch (error) { toast(error.message); }
+      try { await api('/hr/me/loans', { type: f.get('type'), amount: Number(f.get('amount')), months: Number(f.get('months')), purpose: f.get('purpose') }); confirm('Loan application submitted', `Your <strong>${esc(f.get('type'))}</strong> application was sent to HR.<br>Status: <strong>Pending HR review</strong>.`); await fill('loans201', box); } catch (error) { toast(error.message); }
     };
     box.onclick = async event => {
       const b = event.target.closest('[data-loan-cancel]'); if (!b) return;
-      try { await api(`/hr/me/loans/${b.dataset.loanCancel}/cancel`, {}); toast('Application cancelled.'); await fill('loans201', box); } catch (error) { toast(error.message); }
+      try { await api(`/hr/me/loans/${b.dataset.loanCancel}/cancel`, {}); confirm('Loan application cancelled', 'Your loan application was cancelled.'); await fill('loans201', box); } catch (error) { toast(error.message); }
     };
   }
   function memos(box, list) {
@@ -90,7 +90,7 @@ export function createPortalHr({ api, esc, table, toast }) {
     box.onclick = async event => {
       const b = event.target.closest('[data-ack]'); if (!b) return;
       b.disabled = true;
-      try { await api(`/hr/me/memos/${b.dataset.ack}/${b.dataset.version}/acknowledge`, {}); toast('Receipt acknowledged. HR can see the date and time.'); await fill('memos', box); } catch (error) { toast(error.message); b.disabled = false; }
+      try { await api(`/hr/me/memos/${b.dataset.ack}/${b.dataset.version}/acknowledge`, {}); confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); await fill('memos', box); } catch (error) { toast(error.message); b.disabled = false; }
     };
   }
 
@@ -119,7 +119,7 @@ export function createPortalHr({ api, esc, table, toast }) {
     const form = box.querySelector('#my-sheet');
     const collect = () => { const out = { personal: {}, contact: {}, emergency: {}, government: {} }; for (const el of form.querySelectorAll('[name]')) { const [g, k] = el.name.split('.'); out[g][k] = el.value.trim(); } return out; };
     const save = async submit => {
-      try { await api('/hr/me/datasheet', { fields: collect(), submit }); toast(submit ? 'Submitted. HR will review your data sheet.' : 'Draft saved.'); await fill('datasheet', box); } catch (error) { toast(error.message); }
+      try { await api('/hr/me/datasheet', { fields: collect(), submit }); confirm(submit ? 'Data sheet submitted' : 'Draft saved', submit ? 'Your data sheet was sent to HR.<br>Status: <strong>Waiting for HR review</strong>.' : 'Your data sheet draft was saved. Submit it when you are ready.'); await fill('datasheet', box); } catch (error) { toast(error.message); }
     };
     box.querySelector('[data-sheet-save]')?.addEventListener('click', () => save(false));
     form.onsubmit = event => { event.preventDefault(); if (window.confirm('Submit your data sheet to HR for review?')) save(true); };
@@ -151,7 +151,7 @@ export function createPortalHr({ api, esc, table, toast }) {
     box.onchange = async event => {
       const input = event.target.closest('[data-up]'); if (!input) return;
       const file = input.files[0]; if (!file) return;
-      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); toast('Uploaded. HR will review it.'); await fill('files201', box); } catch (error) { toast(error.message); }
+      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); await fill('files201', box); } catch (error) { toast(error.message); }
     };
   }
   // Shown at the top of the employee's dashboard on celebration days.

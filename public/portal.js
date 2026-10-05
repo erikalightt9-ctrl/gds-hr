@@ -16,7 +16,18 @@ export function createPortal(ctx) {
   const stamp = date => date ? new Date(date).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—';
   const field = (key, label, type = 'text', value = '', extra = '') => `<label class="field">${label}<input name="${key}" type="${type}" value="${esc(value)}" ${extra}></label>`;
   const card = (label, value) => `<div class="card"><div class="card-label">${label}</div><div class="card-value">${esc(value)}</div></div>`;
+  // HR Live Attendance keeps its notification list; employees see theirs in the bell.
   const notificationList = notifications => `<section class="panel"><div class="panel-head"><h2>Notifications</h2><span class="legend">Latest updates</span></div><ul class="portal-notifications">${notifications.slice(0, 12).map(n => `<li>${esc(n.message)}<small>${stamp(n.at)}</small></li>`).join('') || '<li>No notifications yet.</li>'}</ul></section>`;
+  // Notification bell: the count shows updates since the employee last opened it (remembered on this device only).
+  const SEEN_KEY = id => `gds-hr-notifications-seen:${id}`;
+  const lastSeen = id => { try { return localStorage.getItem(SEEN_KEY(id)) || ''; } catch { return ''; } };
+  const markSeen = (id, at) => { try { localStorage.setItem(SEEN_KEY(id), at); } catch { /* storage unavailable: the count simply stays */ } };
+  const bell = (data) => {
+    const list = data.notifications || [], seen = lastSeen(data.employee.id), unread = list.filter(n => n.at > seen).length;
+    return `<span class="bell-wrap employee-bell"><button class="icon-button portal-bell" data-portal-bell aria-label="Notifications${unread ? ` (${unread} new)` : ''}" aria-haspopup="true" aria-expanded="false">🔔${unread ? `<span class="bell-count">${unread > 9 ? '9+' : unread}</span>` : ''}</button><div class="bell-menu hidden" data-portal-bell-menu role="menu"><strong class="bell-title">Notifications</strong><ul class="portal-notifications">${list.slice(0, 20).map(n => `<li class="${n.at > seen ? 'unread' : ''}">${esc(n.message)}<small>${stamp(n.at)}</small></li>`).join('') || '<li>No notifications yet.</li>'}</ul></div></span>`;
+  };
+  // A confirmation that stays until the employee taps OK (toasts are easy to miss on a phone).
+  const confirmBox = (title, message) => openDialog(title, `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${message}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
   const attachmentSelect = data => `<label class="field">Supporting document<select name="documentId"><option value="">None</option>${data.documents.filter(d => d.status === 'Active').map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</select></label>`;
   function gpsCell(event) { return event && event.latitude !== null ? `<button class="small" data-location="${esc(event.id)}">${event.latitude.toFixed(6)}, ${event.longitude.toFixed(6)}</button>${[event.geofence.status && event.geofence.status !== 'Not configured' ? esc(event.geofence.status) : '', event.geofence.poorAccuracy ? 'Poor accuracy' : ''].filter(Boolean).length ? `<small>${[event.geofence.status && event.geofence.status !== 'Not configured' ? esc(event.geofence.status) : '', event.geofence.poorAccuracy ? 'Poor accuracy' : ''].filter(Boolean).join(' · ')}</small>` : ''}` : 'No device location'; }
   function history(data) {
@@ -63,7 +74,7 @@ export function createPortal(ctx) {
     const t = data.today;
     const owed = data.leaves.filter(needsProof);
     const proofReminder = owed.length ? `<div class="notice proof-reminder" role="status"><strong>Proof needed for ${owed.length === 1 ? 'your leave' : `${owed.length} leave requests`}</strong> — ${owed.map(l => `${esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId)} ${esc(l.startDate)}${l.proofStatus === 'rejected' ? ' (HR asked for a new one)' : ''}`).join(', ')}. Upload your medical certificate or other proof. <button class="small" data-portal-tab="leave">Upload proof</button></div>` : '';
-    return `${proofReminder}${data.employee.draft ? '<div class="notice">Your employee profile needs HR setup. You can view your portal, but attendance and leave submission will be available after HR completes your employment details.</div>' : ''}${t.exceptions.length ? `<div class="notice">Attendance exception: ${t.exceptions.map(esc).join(' · ')}</div>` : ''}<section class="panel"><div class="panel-head"><h2>Today’s location records</h2></div>${table(['Event', 'Time', 'GPS', 'Captured / received'], [t.clockIn, t.clockOut].filter(Boolean).map(e => [e.kind === 'in' ? 'Time in' : 'Time out', e.time, gpsCell(e), `${stamp(e.capturedAt)}<br>${stamp(e.recordedAt)}`]))}</section>${notificationList(data.notifications)}`;
+    return `${proofReminder}${data.employee.draft ? '<div class="notice">Your employee profile needs HR setup. You can view your portal, but attendance and leave submission will be available after HR completes your employment details.</div>' : ''}${t.exceptions.length ? `<div class="notice">Attendance exception: ${t.exceptions.map(esc).join(' · ')}</div>` : ''}<section class="panel"><div class="panel-head"><h2>Today’s location records</h2></div>${table(['Event', 'Time', 'GPS', 'Captured / received'], [t.clockIn, t.clockOut].filter(Boolean).map(e => [e.kind === 'in' ? 'Time in' : 'Time out', e.time, gpsCell(e), `${stamp(e.capturedAt)}<br>${stamp(e.recordedAt)}`]))}</section>`;
   }
   // Time in / Time out comes first, right after sign-in.
   function clockSection(data) {
@@ -75,32 +86,48 @@ export function createPortal(ctx) {
     const hrTabs = ctx.portalHr?.tabs || [], isHr = hrTabs.some(([key]) => key === tab);
     const tabs = [['dashboard', 'My dashboard', '🏠'], ['attendance', 'Attendance', '🕒'], ['leave', 'My leave', '🌴'], ['payslips', 'My payslips', '💰'], ...hrTabs];
     const content = isHr ? '<div id="portal-hr"><div class="loading">Loading…</div></div>' : tab === 'attendance' ? attendanceContent(data) : tab === 'leave' ? leaveContent(data) : tab === 'payslips' ? payslipContent(data) : dashboardContent(data);
-    app.innerHTML = `<div class="employee-shell"><header class="employee-top"><img class="portal-logo" src="${ctx.brandLogo}" alt="GDS Capital Inc. logo"><div><span class="eyebrow">GDS CAPITAL INC.</span><strong>My HR Portal</strong></div><div class="employee-top-actions"><button class="account-button" data-account>Account &amp; security</button><button class="signout-button" data-signout>Sign out</button></div></header><main class="employee-main">${auth.demo ? '<div class="notice">Preview workspace · Sample payroll data · Changes do not update live records.</div>' : ''}${tab === 'dashboard' ? clockSection(data) : ''}<section class="employee-welcome"><div class="employee-welcome-copy"><span class="eyebrow">Your employee workspace</span><h1>Welcome, ${esc(data.employee.name)}! <span aria-hidden="true">👋</span></h1><div class="philippine-clock" aria-label="Philippine time clock"><span class="clock-zone">🇵🇭 Philippine Time · UTC+8</span><time data-ph-clock aria-live="off"></time><span data-ph-date class="clock-date"></span></div><small>${esc(data.employee.id)} · Your attendance, leave and payslips.</small></div><img class="welcome-mascot" src="/welcome-mascot.png" width="180" height="196" alt="Red-and-gold company mascot welcoming you with an outstretched hand"></section><nav class="tabs employee-nav-cards" aria-label="Employee portal">${tabs.map(([id, label, emoji]) => `<button data-portal-tab="${id}" class="${id === tab ? 'active' : ''}" ${id === tab ? 'aria-current="page"' : ''}><span class="employee-nav-emoji" aria-hidden="true">${emoji}</span><span>${label}</span></button>`).join('')}</nav><div id="portal-content">${content}</div></main></div>`;
+    app.innerHTML = `<div class="employee-shell"><header class="employee-top"><img class="portal-logo" src="${ctx.brandLogo}" alt="GDS Capital Inc. logo"><div><span class="eyebrow">GDS CAPITAL INC.</span><strong>My HR Portal</strong></div><div class="employee-top-actions">${bell(data)}<button class="account-button" data-account>Account &amp; security</button><button class="signout-button" data-signout>Sign out</button></div></header><main class="employee-main">${auth.demo ? '<div class="notice">Preview workspace · Sample payroll data · Changes do not update live records.</div>' : ''}${tab === 'dashboard' ? clockSection(data) : ''}<section class="employee-welcome"><div class="employee-welcome-copy"><span class="eyebrow">Your employee workspace</span><h1>Welcome, ${esc(data.employee.name)}! <span aria-hidden="true">👋</span></h1><div class="philippine-clock" aria-label="Philippine time clock"><span class="clock-zone">🇵🇭 Philippine Time · UTC+8</span><time data-ph-clock aria-live="off"></time><span data-ph-date class="clock-date"></span></div><small>${esc(data.employee.id)} · Your attendance, leave and payslips.</small></div><img class="welcome-mascot" src="/welcome-mascot.png" width="180" height="196" alt="Red-and-gold company mascot welcoming you with an outstretched hand"></section><nav class="tabs employee-nav-cards" aria-label="Employee portal">${tabs.map(([id, label, emoji]) => `<button data-portal-tab="${id}" class="${id === tab ? 'active' : ''}" ${id === tab ? 'aria-current="page"' : ''}><span class="employee-nav-emoji" aria-hidden="true">${emoji}</span><span>${label}</span></button>`).join('')}</nav><div id="portal-content">${content}</div></main></div>`;
     clearInterval(clockTimer); updateClock(); clockTimer = setInterval(updateClock, 1000);
+    const bellButton = app.querySelector('[data-portal-bell]'), bellMenu = app.querySelector('[data-portal-bell-menu]');
+    if (bellButton) {
+      const setOpen = open => { bellMenu.classList.toggle('hidden', !open); bellButton.setAttribute('aria-expanded', String(open)); };
+      bellButton.onclick = event => {
+        event.stopPropagation(); const opening = bellMenu.classList.contains('hidden'); setOpen(opening);
+        if (opening && data.notifications?.length) { markSeen(data.employee.id, data.notifications[0].at); bellButton.querySelector('.bell-count')?.remove(); }
+      };
+      bellMenu.onclick = event => event.stopPropagation();
+      app.querySelector('.employee-main').addEventListener('click', () => setOpen(false));
+    }
     if (isHr) ctx.portalHr.fill(tab, app.querySelector('#portal-hr'));
     if (tab === 'dashboard') ctx.portalHr?.celebrations(app.querySelector('.employee-main'));
     ctx.portalHr?.compliance(app, tab === 'dashboard');
     app.querySelectorAll('form').forEach(form => { form.oninput = () => { dirty = true; }; form.onchange = () => { dirty = true; }; form.onsubmit = submitForm; });
     async function submitForm(event) {
       event.preventDefault(); const form = event.target, b = form.querySelector('button'); b.disabled = true;
+      let confirmation = null;
       try {
         const values = Object.fromEntries(new FormData(form));
         if (form.hasAttribute('data-employee-leave')) {
           const file = form.elements.proofFile?.files[0]; delete values.proofFile;
           if (file) values.documentId = (await uploadProof(file)).id;
           await api('/me/leaves', values);
+          const typeName = data.balances?.find(x => x.typeId === values.typeId)?.name || 'Leave';
+          confirmation = ['Leave request submitted', `Your <strong>${esc(typeName)}</strong> request for <strong>${esc(values.startDate)}${values.endDate && values.endDate !== values.startDate ? ` to ${esc(values.endDate)}` : ''}</strong> was sent to HR.<br>Status: <strong>Pending HR approval</strong>. You will be notified here when HR decides.`];
         }
         if (form.dataset.leaveProof) {
           const uploaded = await uploadProof(form.elements.proofFile.files[0]);
           await api(`/me/leaves/${form.dataset.leaveProof}/proof`, { documentId: uploaded.id });
+          confirmation = ['Leave proof uploaded', 'Your proof was attached to the leave request.<br>Status: <strong>Waiting for HR review</strong>.'];
         }
-        if (form.hasAttribute('data-employee-explanation')) await api('/me/explanations', { ...values, requestedOffset: Number(values.requestedOffset) });
+        if (form.hasAttribute('data-employee-explanation')) { await api('/me/explanations', { ...values, requestedOffset: Number(values.requestedOffset) }); confirmation = ['Explanation submitted', 'Your explanation was sent to HR for review. You will be notified here when HR decides.']; }
         if (form.hasAttribute('data-employee-upload')) {
           const file = form.elements.file.files[0]; if (!file || file.size > 5 * 1024 * 1024) throw new Error('Select a PDF, PNG or JPEG up to 5 MB.');
           const encoded = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Unable to read file.')); reader.readAsDataURL(file); });
           await api('/me/documents', { type: 'Leave Supporting', name: file.name, mime: file.type, data: encoded, expiry: '', remarks: values.remarks });
+          confirmation = ['Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded and is available to HR.`];
         }
-        dirty = false; await refresh(); render(); toast('Submitted successfully. HR receives the update automatically.');
+        dirty = false; await refresh(); render();
+        if (confirmation) confirmBox(...confirmation); else toast('Submitted successfully. HR receives the update automatically.');
       } catch (error) { toast(error.message); b.disabled = false; }
     }
   }
@@ -128,7 +155,9 @@ export function createPortal(ctx) {
         const location = await capturePosition();
         pendingClock = { kind, requestId: crypto.randomUUID(), latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: location.coords.accuracy, capturedAt: new Date(location.timestamp).toISOString() };
       }
-      await api('/me/clock', pendingClock); pendingClock = null; dirty = false; await refresh(); render(); toast(`Time ${kind} synchronized with HR.`);
+      const recordedAt = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date());
+      await api('/me/clock', pendingClock); pendingClock = null; dirty = false; await refresh(); render();
+      confirmBox(`Time ${kind} submitted`, `Your <strong>time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location and sent to HR.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
     } catch (error) { if (!/fetch|network|connect/i.test(error.message)) pendingClock = null; dirty = false; toast(error.message); button.disabled = false; button.textContent = `Retry time ${kind}`; }
   }
   function map(event) {
@@ -171,7 +200,7 @@ export function createPortal(ctx) {
     if (button.dataset.attendanceJump) scrollToSection(button.dataset.attendanceJump);
     if (button.hasAttribute('data-file-unpaid')) { tab = 'leave'; dirty = false; render(); preselectLeave('unpaid'); }
     if (button.dataset.clock) await clock(button.dataset.clock, button);
-    if (button.dataset.cancelLeave) { await api(`/me/leaves/${button.dataset.cancelLeave}/cancel`, {}); await refresh(); render(); toast('Pending leave cancelled.'); }
+    if (button.dataset.cancelLeave) { await api(`/me/leaves/${button.dataset.cancelLeave}/cancel`, {}); await refresh(); render(); confirmBox('Leave request cancelled', 'Your pending leave request was cancelled. No leave credits were used.'); }
     if (button.dataset.ownPayslip) { currentPayslip = await api(`/me/payslips/${button.dataset.ownPayslip}`); render(); }
     if (button.dataset.location) { const event = [...(historyOverride || employeeData?.history || []), ...(liveData?.history || [])].find(e => e.id === button.dataset.location); if (event) map(event); }
     if (button.hasAttribute('data-earlier-history')) { const current = historyOverride || employeeData.history; const earlier = await api(`/me/history?before=${encodeURIComponent(current.at(-1).id)}`); historyOverride = [...current, ...earlier]; historyEnd = earlier.length < 200; render(); }

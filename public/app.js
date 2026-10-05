@@ -35,7 +35,7 @@ let attendanceView = 'records'; // 'records' (all employees) or 'timecard' (one 
 let payrollEmployee = '';
 let computationContext = null; // the payroll computation being reviewed, reopened after an adjustment is saved // '' = all employees; otherwise the one Employee ID being calculated
 let employeeData = null, liveData = null, eventStream = null, liveTimer = null, liveUser = null, refreshTimer = null;
-const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, portalHr: createPortalHr({ api, esc, table, toast }), onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
+const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, portalHr: createPortalHr({ api, esc, table, toast, confirm: (title, message) => openDialog(title, `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${message}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>') }), onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
 const contributionEditor = createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog });
 const attendanceImport = createAttendanceImport({ api, esc, table, badge, toast, openDialog, dialog, refresh, render: () => render(), getState: () => state });
 const timecard = createTimecard({ api, esc, money, badge, table, getState: () => state, canEdit: kind => canEdit(kind), editButton, cutoffDefaults }); // canEdit is defined below; look it up when used
@@ -142,12 +142,17 @@ function shell(content) {
   syncRoute();
 }
 let bellItems = [];
+const bellKey = () => `gds-hr-bell-seen:${auth?.user?.id || ''}`;
+function bellSeen() { try { return JSON.parse(localStorage.getItem(bellKey()) || '[]'); } catch { return []; } }
+function markBellSeen() { try { localStorage.setItem(bellKey(), JSON.stringify(bellItems.map(item => item.text))); } catch { /* storage unavailable: the number stays */ } document.querySelector('[data-bell-count]')?.classList.add('hidden'); }
 async function loadBell() {
   if (!hrContext) return;
   try {
     const n = await api('/hr/notifications'); bellItems = n.items;
     const badgeNode = document.querySelector('[data-bell-count]'); if (!badgeNode) return;
-    badgeNode.textContent = n.count; badgeNode.classList.toggle('hidden', !n.count);
+    // The number counts items not yet seen: opening the bell clears it until something new arrives.
+    const seen = bellSeen(), unread = bellItems.filter(item => !seen.includes(item.text)).length;
+    badgeNode.textContent = unread; badgeNode.classList.toggle('hidden', !unread);
   } catch { /* the bell is optional; pages still work */ }
 }
 const hrCtx = {
@@ -705,7 +710,7 @@ document.addEventListener('click', async event => {
     if (b.hasAttribute('data-bell')) {
       const menu = document.querySelector('[data-bell-menu]');
       menu.innerHTML = bellItems.length ? bellItems.map((item, i) => `<button role="menuitem" data-bell-item="${i}">${esc(item.text)}</button>`).join('') : '<p class="muted">Nothing needs your attention.</p>';
-      menu.classList.toggle('hidden'); return;
+      menu.classList.toggle('hidden'); if (!menu.classList.contains('hidden')) markBellSeen(); return;
     }
     if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; await goTo({ page: item.nav, docs: item.filter }); return; }
     await portal.click(b, employeeData, liveData);
