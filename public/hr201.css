@@ -417,3 +417,13 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .forced-password h1 { font-size: 24px; margin: 0 0 8px; }
 .forced-password .form-grid.one { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
 .forced-password input { width: 100%; }
+
+/* Employee header: Account & security and Sign out at the top right. */
+.employee-top .employee-top-actions { display: flex; flex-direction: row; align-items: center; gap: 8px; margin-left: auto; flex-wrap: nowrap; }
+.employee-top .account-button { background: transparent; color: #fff; border: 1px solid rgb(217 184 92 / .7); border-radius: 9px; padding: 10px 16px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.employee-top .account-button:hover { background: rgb(255 255 255 / .08); }
+.employee-top .signout-button { border-color: #d9b85c !important; white-space: nowrap; }
+@media (max-width: 760px) {
+  .employee-top .employee-top-actions { gap: 6px; }
+  .employee-top .account-button, .employee-top .signout-button { padding: 8px 10px; font-size: 11px; }
+}
