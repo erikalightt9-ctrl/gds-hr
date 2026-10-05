@@ -105,7 +105,7 @@ export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context 
       const savedId = id || result.created.id;
       if (photo) await api(`/hr/employees/${encodeURIComponent(savedId)}/photo`, photo).catch(error => toast(`Saved, but the photo was not uploaded: ${error.message}`));
       dirty = false; close();
-      toast(id ? 'Employee record updated.' : `Employee saved as ${result.created.number}.`);
+      toast(id ? 'Employee record updated.' : `Employee saved as ${result.created.number}.${result.account ? ` Portal login created (username ${result.account.username}); ${result.account.emailed ? 'a setup link was emailed.' : 'an administrator issues the setup code in Account & access.'}` : ''}`);
       onSaved?.(savedId);
     } catch (error) { box.textContent = error.message; box.classList.remove('hidden'); box.scrollIntoView({ block: 'nearest' }); }
     finally { submit.disabled = false; submit.textContent = 'Save employee'; }

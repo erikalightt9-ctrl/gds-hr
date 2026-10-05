@@ -10,6 +10,7 @@ import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './rol
 import { celebrationsOn, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 import { fileOvertime, cancelOvertime, myOvertime } from './overtime.mjs';
+import { provisionEmployeeAccount } from './auth.mjs';
 
 const BIG = 28_500_000;
 const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="document"; filename*=UTF-8''${encodeURIComponent(meta.name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
@@ -27,7 +28,7 @@ function overviewExtras(store, actor) {
   };
 }
 
-export async function handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody }) {
+export async function handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody, mailer = null, origin = '' }) {
   if (!pathname.startsWith('/api/hr/')) return false;
   const actor = auth.user, method = req.method, m = re => pathname.match(re);
   let p;
@@ -111,7 +112,12 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
       send(201, uploadDocument(store, { ...actor, role: 'hr' }, id, { type: 'Photo', name: body.name, mime: body.mime, data: body.data })); return true;
     }
   }
-  if (pathname === '/api/hr/employees' && method === 'POST') { send(201, createEmployee(store, actor, await readBody(req))); return true; }
+  if (pathname === '/api/hr/employees' && method === 'POST') {
+    const result = createEmployee(store, actor, await readBody(req));
+    // The new employee's portal login is created automatically (a failure never undoes the employee record).
+    if (result.created) result.account = await provisionEmployeeAccount(store, actor, result.created.id, { mailer, origin }).catch(error => { console.error('Account provisioning failed:', error.message); return null; });
+    send(201, result); return true;
+  }
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)$/))) {
     const id = decodeURIComponent(p[1]);
     if (method === 'GET') { send(200, employeeForm(store, actor, id)); return true; }
