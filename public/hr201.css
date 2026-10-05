@@ -333,3 +333,16 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .calc-error { color: #a3152a; font-weight: 600; }
 .agency-actions { display: flex; justify-content: flex-end; }
 .contribution-agency .full { grid-column: 1 / -1; }
+
+/* ---------- Top bar: user area ---------- */
+.topbar-user { gap: 14px; }
+.topbar-user .optional { font-size: 12.5px; color: var(--ink-soft, #5a4e34); letter-spacing: .01em; }
+.topbar-divider { width: 1px; height: 30px; background: rgb(194 154 62 / .45); }
+.user-meta { text-align: right; }
+.user-meta strong { font-size: 14px; font-weight: 700; color: #1d1a14; letter-spacing: -.005em; }
+.user-meta small { font-size: 11.5px; color: #7c5d18; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.topbar [data-bell] { border-radius: 10px; background: #fff; border: 1px solid rgb(194 154 62 / .45); width: 38px; height: 38px; }
+.signout-button { background: #141414 !important; color: #fff !important; border: 1px solid #141414 !important; border-radius: 9px; padding: 10px 18px; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; box-shadow: 0 6px 16px -8px rgb(0 0 0 / .55); }
+.signout-button:hover { background: #000 !important; transform: translateY(-1px); }
+.signout-button:focus-visible { outline: 3px solid #d9b85c; outline-offset: 2px; }
+@media (max-width: 720px) { .signout-button { padding: 8px 12px; font-size: 11.5px; } .topbar-divider { display: none; } }

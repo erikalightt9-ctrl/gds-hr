@@ -12,7 +12,6 @@ import { createDashboard } from './hr-dashboard.js';
 import { createMemos } from './hr-memos.js';
 import { createTrainings } from './hr-trainings.js';
 import { createAdmin } from './hr-admin.js';
-import { initials } from './hr-common.js';
 import { createPortalHr } from './portal-hr.js';
 import { createBreakdown } from './payroll-breakdown.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
@@ -131,7 +130,7 @@ function shell(content) {
     <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button></div></aside>
     <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong><small>${esc(crumb)}</small></span></span>
       <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span><span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
-      <span class="avatar" aria-hidden="true">${esc(initials(auth.user.username))}</span><span class="user-meta"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span><button class="small" data-signout>Sign out</button></span></header>
+      <span class="topbar-divider" aria-hidden="true"></span><span class="user-meta"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span><button class="signout-button" data-signout>Sign out</button></span></header>
     <div class="content">${content}</div></main></div>`;
   loadBell();
   syncRoute();
