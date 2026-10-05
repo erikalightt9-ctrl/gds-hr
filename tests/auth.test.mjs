@@ -43,23 +43,3 @@ test('an admin can delete another login account after typing its username; the d
     assert.throws(() => deleteUser(db, me, other.id, 'other.admin'), /last enabled administrator/);
   } finally { db.close(); }
 });
-
-test('a newly encoded employee gets a portal login automatically, with no known password', async () => {
-  const { completeState } = await import('./helpers.mjs');
-  const { provisionEmployeeAccount, provisionMissingAccounts } = await import('../src/auth.mjs');
-  const db = new Store(':memory:');
-  try {
-    const s = completeState(); s.employees.push({ ...s.employees[0], id: 'EMP-002', name: 'Second Employee' }); db.write(s);
-    const me = await addUser(db, { username: 'owner.admin', password: 'initial-password-123', role: 'admin' });
-    const sent = [];
-    const account = await provisionEmployeeAccount(db, me, 'EMP-001', { mailer: null });
-    assert.equal(account.username, 'EMP-001'); assert.equal(account.role, 'employee'); assert.equal(account.emailed, false);
-    assert.equal(await provisionEmployeeAccount(db, me, 'EMP-001'), null, 'never twice');
-    assert.equal(db.db.prepare('SELECT COUNT(*) n FROM recovery_requests WHERE user_id=? AND resolved=0').get(account.id).n, 1, 'waits for an admin setup code');
-    db.db.prepare("INSERT INTO employee_profiles(employee_id,section,data) VALUES('EMP-002','employment',?)").run(JSON.stringify({ businessEmail: 'second@example.test' }));
-    const mailer = { send: async message => { sent.push(message); } };
-    assert.deepEqual(await provisionMissingAccounts(db, me, { mailer, origin: 'https://hr.example.test' }), { created: 1, emailed: 1 });
-    assert.equal(sent[0].to, 'second@example.test'); assert.match(sent[0].text, /#reset=[a-f0-9]{64}/); assert.match(sent[0].text, /EMP-002/);
-    await assert.rejects(() => provisionMissingAccounts(db, { ...me, role: 'hr' }, {}), /permission/);
-  } finally { db.close(); }
-});

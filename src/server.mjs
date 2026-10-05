@@ -17,7 +17,7 @@ import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entit
 import { decideLoanApplication, loanDashboard } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOverview } from './thirteenth.mjs';
-import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, provisionMissingAccounts } from './auth.mjs';
+import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -122,7 +122,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       const addressRoute = pathname.match(/^\/api\/location-address\/([a-f0-9-]+)$/);
       if (addressRoute && req.method === 'POST') { checkLimit(store, `geocoding:${auth.user.id}`); send(200, await locationAddress(store, auth.user, addressRoute[1])); return; }
-      if (await handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody, mailer, origin })) return;
+      if (await handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody })) return;
       if (pathname.startsWith('/api/me/')) {
         permit(auth.user, ['employee']);
         if (pathname === '/api/me/dashboard' && req.method === 'GET') { send(200, employeeDashboard(store, auth.user)); return; }
@@ -229,7 +229,6 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         }
         if (req.method === 'POST' && !documentRoute[2]) { send(200, updateDocument(store, auth.user, documentRoute[1], await readBody(req))); return; }
       }
-      if (pathname === '/api/users/provision' && req.method === 'POST') { send(200, await provisionMissingAccounts(store, auth.user, { mailer, origin })); return; }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
         if (req.method === 'GET') { send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, employeeId: u.employee_id, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }

@@ -25,52 +25,6 @@ export async function addUser(store, input, actor = null) {
     return user;
   });
 }
-// New employees get their portal login automatically when HR encodes them. The username is the Employee ID and
-// the password is random and unknown to anyone: the employee sets their own through a setup link (emailed when email
-// is configured and an address is on file) or a one-time code an administrator issues from Account & access.
-export const SETUP_LINK_HOURS = 72;
-export async function provisionEmployeeAccount(store, actor, employeeId, { mailer = null, origin = '' } = {}) {
-  const employee = store.read().employees.find(e => e.id === employeeId);
-  if (!employee || employee.archived) return null;
-  if (store.db.prepare('SELECT id FROM users WHERE employee_id=? OR username=? COLLATE NOCASE').get(employeeId, employeeId)) return null;
-  const hash = await passwordHash(randomBytes(32).toString('hex'));
-  const user = store.transaction(() => {
-    if (store.db.prepare('SELECT id FROM users WHERE employee_id=? OR username=? COLLATE NOCASE').get(employeeId, employeeId)) return null;
-    const value = { id: randomUUID(), username: employeeId, role: 'employee', employeeId };
-    store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id) VALUES(?,?,?,?,?)').run(value.id, value.username, hash, value.role, value.employeeId);
-    store.log(actor, 'auto-create-account', 'users', value.id, null, value);
-    return value;
-  });
-  if (!user) return null;
-  const email = mailer ? registeredEmail(store, { email: null, employee_id: employeeId }) : null;
-  let emailed = false;
-  if (email) {
-    const token = randomBytes(32).toString('hex'), expires = Date.now() + SETUP_LINK_HOURS * 3600000;
-    store.db.prepare('INSERT INTO password_resets VALUES(?,?,?)').run(hashToken(token), user.id, expires);
-    store.log(actor, 'email-setup-link', 'users', user.id, null, { sentTo: maskEmail(email), expires });
-    emailed = await mailer.send({ to: email, subject: 'Your GDS HR account', text: setupEmail(employee.name, employeeId, `${origin}/#reset=${token}`) }).then(() => true, error => { console.error('Account setup email failed:', error.message); return false; });
-  }
-  // Without an email, the account waits in Account & access for an administrator to issue a setup code.
-  if (!emailed) store.db.prepare('INSERT INTO recovery_requests(id,user_id,created_at) VALUES(?,?,?)').run(randomUUID(), user.id, new Date().toISOString());
-  return { ...user, emailed };
-}
-const setupEmail = (name, username, link) => `Hello ${name},
-
-Your GDS CAPITAL INC. HR account is ready. Your username is your Employee ID: ${username}
-
-Open this link to choose your password. It works once and expires in ${SETUP_LINK_HOURS} hours:
-${link}
-
-For help, contact HR.
-
-GDS CAPITAL INC. Human Resources`;
-export async function provisionMissingAccounts(store, actor, options) {
-  permit(actor, ['admin']);
-  const linked = new Set(store.db.prepare('SELECT employee_id FROM users WHERE employee_id IS NOT NULL').all().map(r => r.employee_id));
-  const created = [];
-  for (const e of store.read().employees.filter(e => !e.archived && !linked.has(e.id))) { const u = await provisionEmployeeAccount(store, actor, e.id, options); if (u) created.push(u); }
-  return { created: created.length, emailed: created.filter(u => u.emailed).length };
-}
 export function checkLimit(store, key, maximum = 10) {
   const now = Date.now();
   store.db.prepare('DELETE FROM login_limits WHERE until_ms < ?').run(now);
