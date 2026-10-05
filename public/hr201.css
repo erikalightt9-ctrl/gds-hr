@@ -227,3 +227,8 @@ dialog.wide-dialog { width: min(980px, calc(100vw - 24px)); }
 .field-box { min-height: 46px; padding: 12px 14px; background: #fff; border: 1px solid rgb(194 154 62 / .45); border-radius: 8px; font-size: 16px; line-height: 1.45; color: #1d1a14; overflow-wrap: anywhere; white-space: pre-wrap; display: flex; align-items: center; }
 .field-box.empty { color: #7a6f5c; font-style: italic; font-size: 15px; }
 @media (max-width: 720px) { .field-boxes { grid-template-columns: 1fr; } .profile-card { padding: 16px; } }
+/* Tables inside profile cards (children, education, history, memos, trainings) */
+.profile-card .scroll-table { border: 1px solid rgb(194 154 62 / .3); border-radius: 10px; }
+.profile-card td { font-size: 14px; color: #1d1a14; }
+.profile-card th { font-size: 11.5px; }
+.profile-card + .legend, .hr-tab-body > .legend { font-size: 13px; }

@@ -118,13 +118,13 @@ export function createFiles(ctx) {
     root.querySelector('[data-photo]')?.addEventListener('load', event => event.target.parentElement.classList.add('has-photo'));
     root.addEventListener('click', event => onProfileClick(event, record, checklist, extras));
   }
-  const dl = rows => `<dl class="details-grid hr-details">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v === '' || v === undefined || v === null ? '<span class="muted">—</span>' : esc(v)}</dd></div>`).join('')}</dl>`;
+  const dl = rows => boxes(rows);   // all profile details use the boxed field layout
   // Read-only field boxes: bold label above, the saved value inside its own bordered box.
-  const WIDE = new Set(['Current address', 'Permanent address']);
+  const WIDE = new Set(['Current address', 'Permanent address', 'Reason for leaving']);
   const boxes = rows => `<div class="field-boxes">${rows.map(([k, v]) => { const empty = v === '' || v === undefined || v === null; return `<div class="field-box-item ${WIDE.has(k) ? 'wide' : ''}"><span class="field-box-label" id="fl-${esc(k).replace(/\W+/g, '-')}">${esc(k)}</span><div class="field-box ${empty ? 'empty' : ''}" role="textbox" aria-readonly="true" aria-labelledby="fl-${esc(k).replace(/\W+/g, '-')}">${empty ? 'Not provided' : esc(v)}</div></div>`; }).join('')}</div>`;
   const sectionCard = (icon, title, body, action = '') => `<section class="profile-card"><header class="profile-card-head"><h3><span aria-hidden="true">${icon}</span> ${esc(title)}</h3>${action}</header>${body}</section>`;
   const emergencyRows = f => [['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]];
-  const block = (icon, title, body, action = '') => `<div class="profile-block"><h3 class="profile-block-title"><span aria-hidden="true">${icon}</span> ${esc(title)}${action}</h3>${body}</div>`;
+  const block = (icon, title, body, action = '') => sectionCard(icon, title, body, action);
   const editBtn = (section, canEdit) => (canEdit ? ` <button class="small" data-edit-section="${section}">Edit</button>` : '');
   const formBtn = (part, canEdit) => (canEdit ? ` <button class="small" data-edit-part="${part}">Edit</button>` : '');
   function personalRows(f) { return [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ...(f.personal.bloodType ? [['Blood type', f.personal.bloodType]] : []), ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]; }
