@@ -211,11 +211,12 @@ window.addEventListener('popstate', () => { applyRoute().catch(e => toast(e.mess
 // Focused amount breakdowns in the payroll table. Edits are offered only on draft payroll and only for roles
 // that may already make that change; posted payroll stays read-only.
 const breakdown = createBreakdown({ esc, money, table, openDialog, dialog, actions: {
-  can: key => !currentRun?.id && ({ manual: canEdit('adjustments'), adjustment: canEdit('adjustments'), deductions: canEdit('deductions'), contribution: ['admin', 'hr'].includes(auth.user.role), loans: canEdit('loans') })[key],
+  can: key => !currentRun?.id && ({ manual: canEdit('adjustments'), adjustment: canEdit('adjustments'), deductions: canEdit('deductions'), contribution: ['admin', 'hr'].includes(auth.user.role), loans: canEdit('loans'), tax: canEdit('adjustments') })[key],
   edit: (key, row) => {
     if (key === 'manual') { computationContext = { employeeId: row.employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds }; manualEntryDialog(row.employeeId); }
     if (key === 'adjustment') { computationContext = { employeeId: row.employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds }; edit('adjustments', null, { employeeId: row.employeeId, date: currentRun.end, approved: true }); }
     if (key === 'contribution') contributionEditor.open(row.employeeId);
+    if (key === 'tax') { computationContext = { employeeId: row.employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds }; taxDialog(row); }
     if (key === 'deductions') { dialog.close(); goTo({ page: 'deductions' }); }
     if (key === 'loans') { dialog.close(); goTo({ page: 'loans' }); }
   },
@@ -280,7 +281,7 @@ function cutoffDefaults() {
 function payrollPage() {
   const run = currentRun, period = run || cutoffDefaults();
   let html = heading('Payroll', 'From hours worked to take-home pay. Every amount has a story.', `${addButton('adjustments', 'Additional pay / deduction')}<button data-copy ${!run ? 'disabled' : ''}>Copy table</button>${run?.id ? `<a class="export-link" href="/api/runs/${run.id}.xlsx" download>Download Excel ↗</a><a class="export-link" href="/api/runs/${run.id}.pdf" download>Download PDF ↗</a>` : ''}`);
-  html += `<div class="cards">${card('Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${card('Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${card('Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${card('Employees', run?.rows.length || 0, 'In this payroll cutoff')}${card('Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel"><div class="panel-head"><div><h2>Payroll computation</h2><p>Click a salary to inspect its calculation and source records.</p></div>${badge(run?.status === 'posted' ? 'Posted' : 'Draft preview', run?.status === 'posted' ? '' : 'pending')}</div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee"><option value="">All employees</option>${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)} (${esc(e.id)})</option>`).join('')}</select></label><label>13th month payout<select name="pay13th"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Calculate payroll</button></form>`;
+  html += `<div class="cards">${card('Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${card('Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${card('Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${card('Employees', run?.rows.length || 0, 'In this payroll cutoff')}${card('Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="panel-head"><div><h2>Payroll computation</h2><p>Click a salary to inspect its calculation and source records.</p></div>${badge(run?.status === 'posted' ? 'Posted' : 'Draft preview', run?.status === 'posted' ? '' : 'pending')}</div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee"><option value="">All employees</option>${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)} (${esc(e.id)})</option>`).join('')}</select></label><label>13th month payout<select name="pay13th"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Calculate payroll</button></form>`;
   if (run?.employeeIds?.length) html += `<div class="notice" role="status">Showing payroll for <strong>${run.employeeIds.map(id => esc(state.employees.find(e => e.id === id)?.name || id)).join(', ')}</strong> only. ${run.id ? 'This posting covers only this employee.' : 'Posting will cover only this employee; others can be posted separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
   const headers = ['Employee', 'Monthly salary', 'Working days', 'Days credited', 'Leave / notes', 'Overtime', 'Adjustment', '13th month', 'Special holiday', 'Regular holiday', 'Gross', 'Deductions', 'Net salary', 'Loan balance', 'Loan date', 'Loan terms'];
   const cell = (row, amount, component = '') => `<button class="money-link" data-salary="${esc(row.employeeId)}" data-component="${esc(component)}" title="Show how this amount was calculated">${money(amount)}</button>`;
@@ -434,6 +435,32 @@ function manualSummary(m, basis) {
   return esc(parts.join(' · ') || 'No figures');
 }
 const OVERRIDABLE = [['basic', 'Basic salary', 'earnings'], ['regularOT', 'Regular overtime', 'earnings'], ['restDay', 'Rest day pay', 'earnings'], ['restOT', 'Rest day OT', 'earnings'], ['nsd', 'Night differential', 'earnings'], ['specialHoliday', 'Special holiday pay', 'earnings'], ['specialOT', 'Special holiday OT', 'earnings'], ['regularHoliday', 'Regular holiday pay', 'earnings'], ['regularHolidayOT', 'Regular holiday OT', 'earnings'], ['otherHoliday', 'Other holiday pay', 'earnings'], ['otherOT', 'Other holiday OT', 'earnings'], ['additional', 'Adjustment', 'earnings'], ['allowance', 'Allowance', 'earnings'], ['absence', 'Absence / unpaid leave', 'deductions'], ['undertime', 'Undertime', 'deductions'], ['other', 'Other deductions', 'deductions'], ['tax', 'Withholding tax', 'deductions']];
+// Withholding tax typed by Payroll/HR for one employee and cutoff (a manual override; the computed tax is kept).
+function taxDialog(row) {
+  const m = row.manualEntry, current = (m?.overrides || []).find(o => o.component === 'tax');
+  const computed = (row.overrides || []).find(o => o.component === 'tax')?.original ?? row.deductions.tax;
+  openDialog(`Adjust withholding tax · ${row.employeeName}`, `<form id="tax-form"><div class="dialog-body"><p class="sub">Cutoff ${currentRun.start} — ${currentRun.end}</p>
+    <div class="cards">${card('Computed from the tax table', money(computed), 'System-generated')}${card('Tax used in this payroll', money(row.deductions.tax), current ? 'Manual override' : 'Computed')}</div>
+    <div class="form-grid"><label class="field">Withholding tax for this cutoff (PHP)<input type="number" name="amount" min="0" step="0.01" required value="${current ? current.amount : computed}"></label>
+    <label class="field">Reason (kept in the audit trail)<input name="reason" required minlength="3" maxlength="500" value="${esc(current?.reason || '')}" placeholder="e.g. Annualization adjustment, BIR 2316 from previous employer"></label></div>
+    <p class="legend">The payslip shows this amount. The computed figure and your reason stay in the computation history.</p></div>
+    <div class="dialog-foot">${current ? '<button type="button" data-tax-reset>Reset to computed</button>' : ''}<button type="button" data-close>Cancel</button><button class="primary">Save and recalculate</button></div></form>`);
+  const save = async overrides => {
+    const base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: 'Withholding tax adjustment' };
+    const others = (base.overrides || []).filter(o => o.component !== 'tax'), all = [...others, ...overrides];
+    const empty = !m || (m.mode === 'add' && !Object.values(m.hours || {}).some(Boolean) && !others.length && m.reason === 'Withholding tax adjustment');
+    if (!all.length && empty) await api(`/payroll/inputs/${encodeURIComponent(row.employeeId)}?start=${currentRun.start}&end=${currentRun.end}`, null, 'DELETE');
+    else await api(`/payroll/inputs/${encodeURIComponent(row.employeeId)}`, { start: currentRun.start, end: currentRun.end, mode: base.mode, daysWorked: base.daysWorked || 0, absenceDays: base.absenceDays || 0, lateMinutes: base.lateMinutes || 0, undertimeMinutes: base.undertimeMinutes || 0, hours: base.hours || {}, reason: base.reason, overrides: all });
+  };
+  const form = dialog.querySelector('#tax-form');
+  form.onsubmit = async event => {
+    event.preventDefault();
+    try { await save([{ component: 'tax', amount: Number(form.elements.amount.value), reason: form.elements.reason.value }]); dialog.close(); if (await reopenComputation()) toast('Withholding tax adjusted. Payroll recalculated.'); } catch (error) { toast(error.message); }
+  };
+  form.querySelector('[data-tax-reset]')?.addEventListener('click', async () => {
+    try { await save([]); dialog.close(); if (await reopenComputation()) toast('Withholding tax reset to the computed amount.'); } catch (error) { toast(error.message); }
+  });
+}
 function manualEntryDialog(employeeId) {
   const row = currentRun.rows.find(x => x.employeeId === employeeId), m = row.manualEntry || { mode: 'add', daysWorked: row.workingDays, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: '' };
   const daily = row.payBasis === 'daily';

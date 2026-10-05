@@ -42,8 +42,8 @@ export function createBreakdown({ esc, money, table, openDialog, dialog, actions
     const amount = amountOf(key), list = entries(key), title = LABELS[key] || key;
     const body = `${['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'undertime', 'absence'].includes(key) ? rateFacts() : ''}
       ${list.length ? entryTable(list) : amount ? unavailable : '<p class="bd-none">No amount for this item in this payroll period.</p>'}${total(title, amount)}`;
-    const edit = { regularOT: 'manual', restDay: 'manual', restOT: 'manual', nsd: 'manual', specialHoliday: 'manual', specialOT: 'manual', regularHoliday: 'manual', regularHolidayOT: 'manual', otherHoliday: 'manual', otherOT: 'manual', undertime: 'manual', absence: 'manual', other: 'deductions' }[key];
-    show(key === 'basic' ? 'Basic Pay Calculation' : `${title} Calculation`, body, edit || '', edit === 'manual' ? 'Edit manual time & pay entry' : 'Manage company deductions');
+    const edit = { regularOT: 'manual', restDay: 'manual', restOT: 'manual', nsd: 'manual', specialHoliday: 'manual', specialOT: 'manual', regularHoliday: 'manual', regularHolidayOT: 'manual', otherHoliday: 'manual', otherOT: 'manual', undertime: 'manual', absence: 'manual', other: 'deductions', tax: 'tax' }[key];
+    show(key === 'basic' ? 'Basic Pay Calculation' : `${title} Calculation`, body, edit || '', edit === 'manual' ? 'Edit manual time & pay entry' : edit === 'tax' ? 'Adjust withholding tax' : 'Manage company deductions');
   }
   function grouped(key) {
     const g = GROUPS[key], parts = g.parts.filter(p => amountOf(p) || entries(p).length);
