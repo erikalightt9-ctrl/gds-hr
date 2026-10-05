@@ -231,7 +231,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
-        if (req.method === 'GET') { send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, employeeId: u.employee_id, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
+        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
         if (req.method === 'POST') { send(201, { user: await addUser(store, await readBody(req), auth.user) }); return; }
       }
       if (pathname.startsWith('/api/records/')) {
