@@ -119,3 +119,15 @@ export function fieldBoxes(esc, rows) {
   return `<div class="field-boxes">${rows.map(([k, v]) => { const empty = v === '' || v === undefined || v === null, id = `fl-${String(k).replace(/\W+/g, '-')}`; return `<div class="field-box-item ${WIDE_FIELDS.has(k) ? 'wide' : ''}"><span class="field-box-label" id="${id}">${esc(k)}</span><div class="field-box ${empty ? 'empty' : ''}" role="textbox" aria-readonly="true" aria-labelledby="${id}">${empty ? 'Not provided' : esc(v)}</div></div>`; }).join('')}</div>`;
 }
 export const sectionCard = (esc, icon, title, body, action = '') => `<section class="profile-card"><header class="profile-card-head"><h3><span aria-hidden="true">${icon}</span> ${esc(title)}</h3>${action}</header>${body}</section>`;
+
+// Today's Celebrations card (dashboards of every account).
+export function celebrationsHtml(esc, data) {
+  const list = data?.celebrations || [];
+  if (!list.length) return '';
+  const initialsOf = name => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase();
+  return `<section class="panel celebrations" aria-labelledby="celebrations-title"><div class="panel-head"><h2 id="celebrations-title">🎊 Today’s Celebrations</h2><span class="legend">${list.length} celebration${list.length === 1 ? '' : 's'} today</span></div>
+    <div class="celebration-list">${list.map(c => `<article class="celebration ${esc(c.occasion)}"><span class="hr-avatar celebrant" aria-hidden="true"><img src="/api/hr/celebrations/${encodeURIComponent(c.employeeId)}/photo" alt="" loading="lazy" data-celebrant-photo>${esc(initialsOf(c.name))}</span><div><h3>${esc(c.title)}</h3><p>${esc(c.message)}</p></div></article>`).join('')}</div></section>`;
+}
+export function bindCelebrationPhotos(root) {
+  root.querySelectorAll('[data-celebrant-photo]').forEach(img => { img.addEventListener('error', () => img.remove()); });
+}

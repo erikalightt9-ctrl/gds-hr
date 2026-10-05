@@ -1,12 +1,12 @@
 // HR dashboard: every figure is calculated on the server from current records; each card opens the matching list.
-import { DOC_BADGE, fmtDate } from './hr-common.js';
+import { DOC_BADGE, fmtDate, celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
 
 const ICONS = { total: '👥', active: '✅', inactive: '⛔', newHires: '🎉', departments: '🏢', missing: '⚠️', acks: '📝', trainings: '🎓' };
 export function createDashboard(ctx) {
   const { api, esc, table, badge, shell, heading, money } = ctx;
   async function render() {
     shell(heading('Dashboard', 'Loading…') + '<div class="loading">Loading dashboard…</div>');
-    const d = await api('/hr/dashboard'), t = d.totals, can = ctx.context().can, legacy = ctx.legacy() ? ctx.legacyGlance() : null;
+    const [d, party] = await Promise.all([api('/hr/dashboard'), api('/hr/celebrations').catch(() => null)]), t = d.totals, can = ctx.context().can, legacy = ctx.legacy() ? ctx.legacyGlance() : null;
     const card = (key, value, text, nav, sub = '') => `<button class="hr-stat" data-go="${esc(JSON.stringify(nav))}"><span class="hr-stat-icon" aria-hidden="true">${ICONS[key]}</span><strong>${value ?? '—'}</strong><span>${text}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
     const max = Math.max(1, ...d.departments.map(x => x.count));
     const attention = [
@@ -20,7 +20,7 @@ export function createDashboard(ctx) {
       ...d.reviewsDue.map(p => [`Performance review for ${p.name} on ${fmtDate(p.date)}`, { page: 'employee201', id: p.id }]),
     ].filter(Boolean);
     shell(heading('Dashboard', `${esc(ctx.context().company.name)} · figures as of ${fmtDate(d.asOf)}`) +
-      `<div class="hr-stats">
+      `${celebrationsHtml(esc, party)}<div class="hr-stats">
         ${card('total', t.total, 'Total employees', { page: 'files' }, t.archived ? `${t.archived} archived not counted` : '')}
         ${card('active', t.active, 'Active employees', { page: 'files', status: 'Active' })}
         ${card('inactive', t.inactive, 'Inactive employees', { page: 'files', status: 'Inactive' })}
@@ -44,6 +44,7 @@ export function createDashboard(ctx) {
       ${t.missingDocuments !== null ? `<section class="panel"><div class="panel-head"><h2>Missing requirements</h2><button class="small" data-go='{"page":"reports"}'>Full report</button></div>${table(['Employee', 'Department', 'Missing requirement', 'Due', 'Status', ''], d.missing.map(r => [esc(r.name), esc(r.department || '—'), esc(r.requirement), r.due ? fmtDate(r.due) : '—', `${badge(r.status, DOC_BADGE[r.status])}${r.overdue ? ' <small class="danger-text">overdue</small>' : ''}`, `<button class="small" data-go="${esc(JSON.stringify({ page: 'employee201', id: r.employeeId, tab: 'requirements' }))}">Open checklist</button>`]), 'Every required document is on file and verified.')}</section>` : ''}
       ${d.nextTrainings?.length ? `<section class="panel"><div class="panel-head"><h2>Upcoming trainings</h2></div>${table(['Training', 'Date', 'Participants', ''], d.nextTrainings.map(x => [esc(x.title) + (x.required ? ' <small>required</small>' : ''), `${fmtDate(x.date)}${x.startTime ? ` · ${x.startTime}` : ''}`, x.participants, `<button class="small" data-go="${esc(JSON.stringify({ page: 'trainings', id: x.id }))}">Open</button>`]))}</section>` : ''}
       ${legacy ? `<section class="panel"><div class="panel-head"><h2>Attendance &amp; payroll at a glance</h2></div><div class="summary-pair four"><div><strong>${legacy.leave}</strong><span>Leave requests awaiting review</span></div><div><strong>${money(legacy.net)}</strong><span>Latest posted net payroll</span></div><div><strong>${money(legacy.loans)}</strong><span>Outstanding loans</span></div><div><button class="small" data-go='{"page":"payroll"}'>Open payroll →</button></div></div></section>` : ''}`);
+    bindCelebrationPhotos(document.querySelector('.content'));
     document.querySelector('.content').addEventListener('click', event => {
       const b = event.target.closest('[data-go],[data-quick]'); if (!b) return;
       if (b.dataset.quick) { ctx.quick(b.dataset.quick); return; }

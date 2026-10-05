@@ -37,6 +37,7 @@ export const settingsSchema = z.object({
   optionalFields: z.object({ birthPlace: z.boolean(), civilStatus: z.boolean(), bloodType: z.boolean() }).strict(),
   documentRequirements: z.array(requirementSchema).max(200),
   retention: z.object({ archivedYears: z.number().int().min(1).max(50) }).strict(),
+  celebrations: z.object({ leapDay: z.enum(['feb28', 'mar1']) }).strict().default({ leapDay: 'feb28' }),
 }).strict();
 
 function defaults(state) {
@@ -51,6 +52,7 @@ function defaults(state) {
     optionalFields: { birthPlace: true, civilStatus: true, bloodType: false },
     documentRequirements: DEFAULT_REQUIREMENTS,
     retention: { archivedYears: 5 },
+    celebrations: { leapDay: 'feb28' },
   };
 }
 export function readSettings(store) {

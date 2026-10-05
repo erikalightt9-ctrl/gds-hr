@@ -346,3 +346,13 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .signout-button:hover { background: #000 !important; transform: translateY(-1px); }
 .signout-button:focus-visible { outline: 3px solid #d9b85c; outline-offset: 2px; }
 @media (max-width: 720px) { .signout-button { padding: 8px 12px; font-size: 11.5px; } .topbar-divider { display: none; } }
+
+/* ---------- Today's Celebrations ---------- */
+.celebrations { border: 1px solid rgb(194 154 62 / .55); background: linear-gradient(135deg, #fffaf0 0%, #fff1cc 100%); }
+.celebration-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 16px 20px 20px; }
+.celebration { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border-radius: 14px; background: #fff; border: 1px solid rgb(194 154 62 / .4); box-shadow: 0 8px 20px -14px rgb(90 62 12 / .45); }
+.celebration.birthday { border-left: 4px solid #c4283a; }
+.celebration.anniversary { border-left: 4px solid #c29a3e; }
+.celebration h3 { margin: 0 0 6px; font-size: 15.5px; color: #1d1a14; }
+.celebration p { margin: 0; font-size: 13px; line-height: 1.55; color: #3b3220; }
+.hr-avatar.celebrant { width: 52px; height: 52px; font-size: 17px; border: 2px solid #f1d993; background: linear-gradient(145deg, #fff8e4, #f3dfa8); color: #7c5d18; }

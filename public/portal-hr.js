@@ -1,5 +1,5 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
-import { DOC_BADGE, fmtDate, fmtDateTime, readFile, fieldBoxes, sectionCard } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, readFile, fieldBoxes, sectionCard, celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
 
 export function createPortalHr({ api, esc, table, toast }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
@@ -79,5 +79,17 @@ export function createPortalHr({ api, esc, table, toast }) {
       try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); toast('Uploaded. HR will review it.'); await fill('files201', box); } catch (error) { toast(error.message); }
     };
   }
-  return { fill, tabs: [['profile201', 'My profile', '👤'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
+  // Shown at the top of the employee's dashboard on celebration days.
+  async function celebrations(main) {
+    if (!main) return;
+    try {
+      const html = celebrationsHtml(esc, await api('/hr/celebrations'));
+      if (!html) return;
+      const box = document.createElement('div'); box.innerHTML = html;
+      const section = box.firstElementChild, anchor = main.querySelector('.employee-welcome');
+      if (anchor) anchor.after(section); else main.prepend(section);
+      bindCelebrationPhotos(section);
+    } catch { /* greetings are optional */ }
+  }
+  return { fill, celebrations, tabs: [['profile201', 'My profile', '👤'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
 }

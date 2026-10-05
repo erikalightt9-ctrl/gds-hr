@@ -7,6 +7,7 @@ import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, d
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
 import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
 import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS } from './roles.mjs';
+import { celebrationsOn, celebrantPhoto } from './celebrations.mjs';
 
 const BIG = 28_500_000;
 const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="document"; filename*=UTF-8''${encodeURIComponent(meta.name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
@@ -28,6 +29,10 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   if (!pathname.startsWith('/api/hr/')) return false;
   const actor = auth.user, method = req.method, m = re => pathname.match(re);
   let p;
+
+  // ---------- Today's Celebrations (every signed-in user) ----------
+  if (pathname === '/api/hr/celebrations' && method === 'GET') { send(200, celebrationsOn(store)); return true; }
+  if ((p = m(/^\/api\/hr\/celebrations\/([^/]+)\/photo$/)) && method === 'GET') { const row = celebrantPhoto(store, decodeURIComponent(p[1])); res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true; }
 
   // ---------- Employee self-service ----------
   if (pathname.startsWith('/api/hr/me/')) {
