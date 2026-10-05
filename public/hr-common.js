@@ -36,7 +36,7 @@ export function employeeFormHtml(ctx, esc, values = {}, { isNew = true, only = n
     else if (type === 'textarea') input = `<textarea id="${id}" name="${path}" rows="2" maxlength="500">${esc(v)}</textarea>${opt.same ? '<label class="inline-check"><input type="checkbox" data-same-address> Same as current address</label>' : ''}`;
     else if (type === 'list') { const listId = `${id}-list`; lists.push(`<datalist id="${listId}">${opt.list.map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist>`); input = `<input id="${id}" name="${path}" list="${listId}" value="${esc(v)}" maxlength="120" ${req} autocomplete="off">`; }
     else input = `<input id="${id}" name="${path}" type="${type}" value="${esc(v)}" ${req} maxlength="${type === 'date' ? 10 : 200}" ${opt.placeholder ? `placeholder="${esc(opt.placeholder)}"` : ''} ${path.startsWith('government.') && String(v).includes('•') ? 'data-masked' : ''}>`;
-    return `<label class="field" for="${id}">${esc(title)}${star}${input}</label>`;
+    return `<label class="field" for="${id}"><span>${esc(title)}${star}</span>${input}</label>`;
   };
   return `<form id="employee-form" novalidate><div class="dialog-body">
     <div id="ef-errors" class="form-error hidden" role="alert"></div>
