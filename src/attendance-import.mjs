@@ -168,7 +168,7 @@ function buildRows(state, store, input, sheet) {
     if (!cells.some(c => c !== '')) return;
     const line = headerRow + i + 2, match = matchEmployee(employees, get(cells, 'employeeId'), get(cells, 'employeeName'), input.assignments);
     const status = statusOf(get(cells, 'status')), issues = [];
-    let date, timeIn = null, timeOut = null;
+    let date, timeIn, timeOut = null;
     if (punchMode) {
       const punch = parsePunch(get(cells, 'punch'), order);
       date = (mapping.date !== null ? parseDate(get(cells, 'date'), order) : null) || punch?.date; timeIn = punch?.time || null;

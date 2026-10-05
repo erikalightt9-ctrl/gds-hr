@@ -5,8 +5,8 @@ param(
   [string]$TunnelConfig = 'C:\Users\L.Erika\.cloudflared\config.yml'
 )
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$logs = Join-Path $root 'hr\data\logs'          # hr/data is git-ignored and private
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$logs = Join-Path $root 'data\logs'          # data/ is git-ignored and private
 New-Item -ItemType Directory -Force $logs | Out-Null
 $node = (Get-Command node -ErrorAction Stop).Source
 $cloudflared = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
@@ -20,7 +20,7 @@ $log = { param($message) Add-Content (Join-Path $logs 'supervisor.log') "$(Get-D
 
 function Start-Hr {
   $env:HR_ORIGIN = $Origin
-  Start-Process -FilePath $node -ArgumentList 'hr/src/server.mjs' -WorkingDirectory $root -WindowStyle Hidden -PassThru `
+  Start-Process -FilePath $node -ArgumentList 'src/server.mjs' -WorkingDirectory $root -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (Join-Path $logs 'hr.out.log') -RedirectStandardError (Join-Path $logs 'hr.err.log')
 }
 function Start-Tunnel {

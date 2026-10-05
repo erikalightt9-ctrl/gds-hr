@@ -1,29 +1,29 @@
 # GDS CAPITAL INC. — Leave & Payroll
 
-The GDS CAPITAL INC. private HR application, housed in the existing website repository. Employee profiles, attendance, leave policies and requests, holidays, deductions, loans, payroll, and the annual 13th-month ledger share one persistent database.
+The GDS CAPITAL INC. private HR application (its own repository, separate from the PDMN Virtual Office website). Employee profiles, attendance, leave policies and requests, holidays, deductions, loans, payroll, and the annual 13th-month ledger share one persistent database.
 
-The public Next.js site remains a static export. This application runs as a **separate Node.js service** because authentication, transactions, and private employee data cannot run in the existing static-only deployment. It is not included in `out/` or the public Cloudflare upload ZIP.
+It runs as a Node.js service (live at https://hr.blkstone.site through the `gds-hr` Cloudflare tunnel). Private employee data stays in `data/`, which is never committed.
 
 ## Start locally
 
 Requires Node.js **24.14 or later** and the repository's installed dependencies (`npm install` on a new checkout).
 
 ```powershell
-npm run hr:dev
+npm run dev
 ```
 
 Open **http://127.0.0.1:3400**. On the first run, the terminal prints a one-time setup code. Enter it in the setup screen and create an administrator with a unique password of at least 12 characters. There is no default production password. Setup stops accepting new initial administrators once the first account exists.
 
-Records persist in `hr/data/hr.sqlite`. SQLite WAL/SHM files may accompany it. This folder is Git-ignored and must never be copied into `public/`, `out/`, or the static deployment archive.
+Records persist in `data/hr.sqlite`. SQLite WAL/SHM files may accompany it. This folder is Git-ignored and must never be copied into `public/` or committed.
 
-Name-only employee rosters can be saved as draft profiles. Drafts have no assumed salary, department, employment date, schedule, or benefit entitlement and are excluded from payroll and transactional HR records. Complete the profile and clear **Draft profile** before using it. Authorized local operators can import a private one-name-per-line text file with `node hr/scripts/import-roster.mjs <names.txt>`; existing names are skipped and new IDs use the `GDS-` prefix.
+Name-only employee rosters can be saved as draft profiles. Drafts have no assumed salary, department, employment date, schedule, or benefit entitlement and are excluded from payroll and transactional HR records. Complete the profile and clear **Draft profile** before using it. Authorized local operators can import a private one-name-per-line text file with `node scripts/import-roster.mjs <names.txt>`; existing names are skipped and new IDs use the `GDS-` prefix.
 
-The local roster preview, when prepared, runs with `node hr/scripts/preview-roster.mjs` on port 3401. Its changes persist separately in `hr/data/roster-preview.sqlite`; they do not update `hr/data/hr.sqlite`. It uses the same local-only demo credentials below and must not be exposed publicly. The imported roster itself is also saved in the live database, which retains its own first-run administrator setup.
+The local roster preview, when prepared, runs with `node scripts/preview-roster.mjs` on port 3401. Its changes persist separately in `data/roster-preview.sqlite`; they do not update `data/hr.sqlite`. It uses the same local-only demo credentials below and must not be exposed publicly. The imported roster itself is also saved in the live database, which retains its own first-run administrator setup.
 
 For a disposable sample workspace:
 
 ```powershell
-node hr/tests/browser-fixture.mjs
+node tests/browser-fixture.mjs
 ```
 
 Open http://127.0.0.1:3401 and use `demo.admin` / `Demo-preview-only-2026`. This separate **in-memory test service** contains fictional data and fictional contribution tables, displays a demo banner, and loses all changes on exit. These credentials do not work on the real service.
@@ -67,7 +67,7 @@ Environment options:
 | `HR_HOST` | `127.0.0.1` | Bind address; private local use by default |
 | `HR_PORT` | `3400` | Listening port |
 | `HR_ORIGIN` | `http://127.0.0.1:3400` | Exact browser origin for CSRF/origin checks |
-| `HR_DATA_DIR` | `hr/data` | Private persistent database directory |
+| `HR_DATA_DIR` | `data` | Private persistent database directory |
 | `HR_SETUP_TOKEN` | Random per first-run process | Optional explicit bootstrap code |
 
 For shared/production access, deploy this service on a Node host with a persistent private disk and an HTTPS reverse proxy, set `HR_ORIGIN` to its exact public HTTPS origin, and configure `HR_HOST` for the proxy. Secure cookies/HSTS activate for HTTPS origins. Do not expose it through a static-only Cloudflare upload. Use one service instance per database; this implementation is designed for a small HR team, not a horizontally scaled deployment. The database stores an application state document transactionally plus separate user/session/audit, modular employee-profile, and employee-document tables.
@@ -88,7 +88,7 @@ HR/Admin upload PDF, PNG or JPEG documents up to 5 MB. Files are stored as priva
 
 Administrators create accounts in **Account & access**, select **Employee — own records only**, and bind an existing Employee ID. Each employee can have only one account. They can sign in using that ID or their username. Employee sessions are denied all staff state, profile, audit, user-management and payroll-export endpoints; self-service endpoints derive ownership from the session, never a supplied Employee ID. Employee account access can be disabled and re-enabled by an administrator, revoking sessions immediately.
 
-Complete and activate the employee's master profile before they clock attendance or request leave. Creating a login does not invent dates, salaries or entitlements. Real roster logins are not automatically provisioned with shared/default passwords. The local preview has a fictional-only `demo.employee` account, password `Demo-employee-only-2026`, bound to sample `EMP-001`; it is never created in the live database. A disposable UI fixture runs with `node hr/tests/portal-browser-fixture.mjs` on port 3402.
+Complete and activate the employee's master profile before they clock attendance or request leave. Creating a login does not invent dates, salaries or entitlements. Real roster logins are not automatically provisioned with shared/default passwords. The local preview has a fictional-only `demo.employee` account, password `Demo-employee-only-2026`, bound to sample `EMP-001`; it is never created in the live database. A disposable UI fixture runs with `node tests/portal-browser-fixture.mjs` on port 3402.
 
 The employee portal includes today's status, actual/scheduled times, hours, late/undertime, original location history, leave credits and applications, pending-request cancellation, attendance explanations and offset requests, private supporting uploads, notifications and posted payslips. Payslips contain only the authenticated employee's figures and can be downloaded as paginated PDFs. The PDF uses a standard Latin font; the browser view preserves Unicode names.
 
@@ -113,8 +113,8 @@ Every list can be downloaded as an Excel workbook or a PDF from **Reports & down
 ## Verification & code map
 
 ```powershell
-npm run hr:test
-npm run hr:coverage
+npm test
+npm run coverage
 node node_modules/eslint/bin/eslint.js hr --max-warnings=0
 npm run build
 ```

@@ -199,7 +199,7 @@ export function employeeForm(store, actor, id) {
   const showIds = SENSITIVE_IDS.includes(actor.role), mask = v => (v ? (showIds ? v : `•••• ${String(v).slice(-3)}`) : '');
   const hrView = HR_TEAM.includes(actor.role);
   return {
-    id, number: displayNumber(e), name: e.name, draft: !!e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
+    id, number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
     form: {
       employeeNumber: e.employeeNumber || '',
       personal: { firstName: p.firstName || '', middleName: p.middleName || '', lastName: p.lastName || '', suffix: p.suffix || '', preferredName: p.preferredName || '', sex: hrView ? p.sex || '' : '', birthDate: hrView ? p.birthDate || '' : '', birthPlace: hrView ? p.birthPlace || '' : '', civilStatus: hrView ? p.civilStatus || '' : '', bloodType: HR_MANAGERS.includes(actor.role) ? p.bloodType || '' : '', nationality: hrView ? p.nationality || '' : '' },

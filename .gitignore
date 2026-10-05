@@ -1,0 +1,6 @@
+# Private HR database, logs and backups — never commit
+/data/
+/test-output/
+.env*
+!.env.example
+node_modules/

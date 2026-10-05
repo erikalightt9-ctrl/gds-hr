@@ -38,6 +38,7 @@ test('payroll posting persists atomic loan payment, snapshot and idempotent retr
     assert.equal(db.read().loans[0].balance, 0);
   } finally {
     db.close();
+    // eslint-disable-next-line no-unsafe-finally -- refuse to delete anything outside the temp test folder
     if (path.dirname(path.resolve(dir)) !== path.resolve(tmpdir()) || !path.basename(dir).startsWith('pdmn-hr-test-')) throw new Error('Unsafe test cleanup path');
     rmSync(dir, { recursive: true });
   }

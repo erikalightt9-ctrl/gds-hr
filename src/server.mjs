@@ -273,7 +273,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   app.requestTimeout = 15000; app.headersTimeout = 10000;
   app.listen(port, host, () => {
     console.log(`GDS CAPITAL INC. HR is running at ${origin}`);
-    console.log(mailer ? `Password reset emails are sent from ${mailer.from}.` : 'Password reset email is not configured (set HR_SMTP_* in hr/.env); recovery goes to HR.');
+    console.log(mailer ? `Password reset emails are sent from ${mailer.from}.` : 'Password reset email is not configured (set HR_SMTP_* in .env); recovery goes to HR.');
     if (!store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n) console.log(`One-time setup code: ${setupToken}\nOpen the app to create your administrator account.`);
   });
   const close = () => { app.closeAllConnections(); app.close(() => { store.close(); process.exit(0); }); };

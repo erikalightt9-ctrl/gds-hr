@@ -7,7 +7,7 @@ import { saveRecord } from '../src/service.mjs';
 // Local operator import; never exposed as an unauthenticated HTTP endpoint.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = process.argv[2];
-if (!source) throw new Error('Usage: node hr/scripts/import-roster.mjs <private names.txt>');
+if (!source) throw new Error('Usage: node scripts/import-roster.mjs <private names.txt>');
 const names = [...new Set(readFileSync(source, 'utf8').split(/\r?\n/).map(v => v.trim()).filter(Boolean))];
 if (!names.length || names.length > 500 || names.some(n => n.length > 1000)) throw new Error('Provide 1–500 names, one per line.');
 const directory = path.resolve(process.env.HR_DATA_DIR || path.join(root, 'data'));

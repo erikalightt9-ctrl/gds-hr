@@ -11,7 +11,7 @@ export function readSpreadsheet(fileName, buffer) {
   if (buffer.length > MAX_UPLOAD_BYTES) throw new AppError('The file is larger than 5 MB. Split it or remove unused sheets.', 413);
   if (buffer.subarray(0, 4).toString('latin1') === 'PK\x03\x04') return readXlsx(buffer);
   if (buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))) throw new AppError('This is an older .xls file. In Excel choose File → Save As → Excel Workbook (.xlsx), then upload that.');
-  if (/\.(csv|txt)$/i.test(fileName)) return [{ name: fileName.replace(/\.[^.]+$/, ''), rows: readCsv(buffer.toString('utf8').replace(/^﻿/, '')) }];
+  if (/\.(csv|txt)$/i.test(fileName)) return [{ name: fileName.replace(/\.[^.]+$/, ''), rows: readCsv(buffer.toString('utf8').replace(/^\uFEFF/, '')) }];
   throw new AppError('Upload an Excel workbook (.xlsx) or a CSV file.');
 }
 
