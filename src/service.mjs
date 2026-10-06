@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, leaveDates, isRest, leaveBalance } from './engine.mjs';
+import { payDateFor } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }
@@ -205,7 +206,8 @@ export function postPayroll(store, actor, request) {
       store.log(actor, 'payroll-deduction', 'loans', loan.id, before, loan);
     }
     state.runs.push(run); state.version++; store.write(state);
-    for (const row of run.rows) store.notify(row.employeeId, `Your payslip for ${run.start} to ${run.end} is available.`);
+    const payDate = payDateFor(run.start, run.end);
+    for (const row of run.rows) store.notify(row.employeeId, payDate <= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()) ? `Your payslip for ${run.start} to ${run.end} is available.` : `Payroll for ${run.start} to ${run.end} is final. Your payslip will be available on salary day, ${payDate}.`);
     store.log(actor, 'post', 'runs', run.id, null, { start: run.start, end: run.end, totals: run.totals, fingerprint: run.fingerprint });
     return run;
   });
