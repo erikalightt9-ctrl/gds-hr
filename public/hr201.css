@@ -573,3 +573,6 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .pay-reason input { padding: 10px 12px; font-size: 14px; }
 .pay-reason.invalid input { border-color: #c4283a; box-shadow: 0 0 0 3px rgb(196 40 58 / .18); }
 .pay-reason-error { color: #c4283a; font-weight: 700; }
+
+.final-banner { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 16px; border-radius: 12px; background: #171717; color: #fff; }
+.final-banner strong { background: #d9b85c; color: #171717; padding: 3px 10px; border-radius: 999px; font-size: 12px; letter-spacing: .1em; }

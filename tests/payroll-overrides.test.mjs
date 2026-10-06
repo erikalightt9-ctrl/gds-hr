@@ -141,3 +141,17 @@ test('SSS loan, Pag-IBIG loan and salary deduction typed for a cutoff reduce net
     assert.equal(p.sssLoan, 1010); assert.equal(p.piLoan, 500);
   } finally { store.close(); }
 });
+
+test('a finalized payroll is locked: no manual entries, overrides or adjustments for that cutoff; who and when are kept', async () => {
+  const { postPayroll, saveRecord } = await import('../src/service.mjs');
+  const { admin } = await import('./helpers.mjs');
+  const store = fixture();
+  try {
+    const draft = run(store);
+    const final = postPayroll(store, admin, { ...cutoff, pay13th: false, fingerprint: draft.fingerprint, employeeIds: ['EMP-001'] });
+    assert.equal(final.status, 'posted'); assert.equal(final.postedBy, admin.username); assert.ok(final.postedAt);
+    assert.throws(() => savePayrollInput(store, payroll, 'EMP-001', { ...cutoff, mode: 'add', hours: {}, overrides: [{ component: 'allowance', amount: 1 }] }), /locked|posted/i);
+    assert.throws(() => saveRecord(store, admin, 'adjustments', { id: 'adj-locked', employeeId: 'EMP-001', date: cutoff.end, kind: 'additional', amount: 100, reason: 'late change', approved: true, includedIn13th: false }), /posted|locked/i);
+    assert.equal(store.read().runs.filter(r => r.status === 'posted').length, 1);
+  } finally { store.close(); }
+});
