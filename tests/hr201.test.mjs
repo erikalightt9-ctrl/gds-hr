@@ -227,3 +227,17 @@ test('HR types leave credits and leave used before the system in the 201 file; t
     assert.equal(cleared.manualCredits, null, 'blank returns to the policy');
   } finally { store.close(); }
 });
+
+test('TIN, SSS, PhilHealth and Pag-IBIG are complied by the number on file; no proof file is needed', async () => {
+  const { saveProfile } = await import('../src/profiles.mjs');
+  const store = fresh();
+  try {
+    const id = createEmployee(store, hr, form('Nina', 'Demo')).created.id, me = { username: 'nina', role: 'employee', employeeId: id };
+    const status = reqId => employeeChecklist(store, me, id).items.find(i => i.requirement.id === reqId);
+    assert.equal(status('sss').requirement.name, 'SSS number'); assert.equal(status('sss').status, 'Missing'); assert.ok(status('sss').numberOnly);
+    assert.throws(() => upload201(store, me, id, { requirementId: 'sss', name: 'sss.pdf', mime: 'application/pdf', data: PDF }), /no file is needed/);
+    saveProfile(store, admin, id, 'government', { sss: '01-2345678-9', tin: '', philHealth: '', pagIbig: '' });
+    assert.equal(status('sss').status, 'Verified'); assert.equal(status('tin').status, 'Missing');
+    assert.ok(!JSON.stringify(employeeChecklist(store, me, id)).includes('01-2345678-9'), 'the number itself is not exposed in the checklist');
+  } finally { store.close(); }
+});

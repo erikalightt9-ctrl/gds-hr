@@ -9,6 +9,8 @@ import { leaveBalance } from './engine.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
+// Satisfied by the number on file in Government IDs; no proof file is required.
+export const NUMBER_REQUIREMENTS = { tin: { field: 'tin', name: 'TIN number' }, sss: { field: 'sss', name: 'SSS number' }, philhealth: { field: 'philHealth', name: 'PhilHealth number' }, pagibig: { field: 'pagIbig', name: 'Pag-IBIG MID number' } };
 export const COMPANY_DOCUMENTS = ['contract', 'job-description', 'onboarding', 'evaluation', 'training-cert', 'separation'];
 export const DEFAULT_REQUIREMENTS = [
   ['resume', 'Résumé / CV', 'Application documents', true, false, false],
@@ -17,10 +19,10 @@ export const DEFAULT_REQUIREMENTS = [
   ['job-description', 'Job description', 'Employment', true, false, false],
   ['onboarding', 'Onboarding acknowledgement (handbook and policies)', 'Onboarding', true, false, false],
   ['valid-id', 'Government-issued ID', 'Identification', true, true, false],
-  ['tin', 'TIN proof of registration', 'Government registration', true, false, false],
-  ['sss', 'SSS number proof (E-1 / ID)', 'Government registration', true, false, false],
-  ['philhealth', 'PhilHealth MDR / ID', 'Government registration', true, false, false],
-  ['pagibig', 'Pag-IBIG MID proof', 'Government registration', true, false, false],
+  ['tin', 'TIN number', 'Government registration', true, false, false],
+  ['sss', 'SSS number', 'Government registration', true, false, false],
+  ['philhealth', 'PhilHealth number', 'Government registration', true, false, false],
+  ['pagibig', 'Pag-IBIG MID number', 'Government registration', true, false, false],
   ['nbi', 'NBI clearance', 'Pre-employment', true, true, false],
   ['medical', 'Pre-employment medical certificate', 'Medical', false, true, true],
   ['evaluation', 'Performance evaluation', 'Performance', false, false, false],
@@ -68,7 +70,9 @@ export function readSettings(store) {
   }
   const saved = JSON.parse(row.data);
   // Settings saved before "provided by" existed: company-issued documents default to the company.
-  if (saved.documentRequirements) saved.documentRequirements = saved.documentRequirements.map(r => ({ ...r, providedBy: r.providedBy || (COMPANY_DOCUMENTS.includes(r.id) ? 'company' : 'employee') }));
+  // Government registrations need only the number (October 2026): the default proof names become number names.
+  const OLD_NAMES = { tin: 'TIN proof of registration', sss: 'SSS number proof (E-1 / ID)', philhealth: 'PhilHealth MDR / ID', pagibig: 'Pag-IBIG MID proof' };
+  if (saved.documentRequirements) saved.documentRequirements = saved.documentRequirements.map(r => ({ ...r, name: OLD_NAMES[r.id] === r.name ? NUMBER_REQUIREMENTS[r.id].name : r.name, providedBy: r.providedBy || (COMPANY_DOCUMENTS.includes(r.id) ? 'company' : 'employee') }));
   return { ...base, ...saved, company: { ...base.company, ...saved.company }, reminders: { ...base.reminders, ...saved.reminders } };
 }
 export function saveSettings(store, actor, input) {

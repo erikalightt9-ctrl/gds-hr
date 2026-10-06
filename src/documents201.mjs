@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
 import { localToday, isSalaryRequirement } from './profiles.mjs';
-import { readSettings, assertCanView, scopeEmployees } from './hr201.mjs';
+import { readSettings, assertCanView, scopeEmployees, NUMBER_REQUIREMENTS } from './hr201.mjs';
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
 
 export const DOC_STATUSES = ['Missing', 'Submitted', 'Under Review', 'Verified', 'Rejected', 'Expired', 'Not Applicable'];
@@ -27,18 +27,20 @@ function statusOf(doc, today) {
 }
 // The checklist for one employee. `actor` decides whether restricted items show file details.
 export function checklistFor(store, actor, employee, settings = readSettings(store), today = localToday()) {
-  const job = profileOf(store, employee.id, 'employment'), docs = docsOf(store, employee.id);
+  const job = profileOf(store, employee.id, 'employment'), docs = docsOf(store, employee.id), gov = profileOf(store, employee.id, 'government');
   const overrides = new Map(store.db.prepare('SELECT requirement_id, data FROM requirement_overrides WHERE employee_id=?').all(employee.id).map(r => [r.requirement_id, JSON.parse(r.data)]));
   const items = applicableRequirements(settings, employee, job).map(req => {
     const versions = docs.filter(d => d.requirementId === req.id).sort((a, b) => b.version - a.version), current = versions[0] || null;
     const na = overrides.get(req.id);
-    const status = na ? 'Not Applicable' : statusOf(current, today);
+    // Government registrations are complied by the number on file (the number itself is never shown here).
+    const number = NUMBER_REQUIREMENTS[req.id];
+    const status = na ? 'Not Applicable' : number ? (String(gov[number.field] || '').trim() ? 'Verified' : 'Missing') : statusOf(current, today);
     const due = req.dueDays !== null && req.dueDays !== undefined && employee.startDate ? addDays(employee.startDate, req.dueDays) : '';
     const hidden = !canSee(actor, req);
     return {
       requirement: req, status, due, overdue: status === 'Missing' && req.required && !!due && due < today,
       expiringSoon: status === 'Verified' && !!current?.expiryDate && current.expiryDate <= addDays(today, settings.reminders.expiryDays),
-      notApplicable: na || null, restricted: req.restricted, hidden,
+      notApplicable: na || null, restricted: req.restricted, hidden, numberOnly: !!number,
       current: hidden ? null : current, versions: hidden ? [] : versions,
     };
   });
@@ -76,6 +78,7 @@ export function upload201(store, actor, employeeId, input) {
   if (!employee) throw new AppError('Employee not found.', 404);
   const req = settings.documentRequirements.find(r => r.id === v.requirementId);
   if (!req) throw new AppError('Unknown document requirement.');
+  if (NUMBER_REQUIREMENTS[req.id]) throw new AppError(`${req.name}: no file is needed. ${self ? 'Enter the number in My data sheet.' : 'Enter the number under Government IDs.'}`);
   if (!canSee(actor, req)) throw new AppError(actor.role === 'maker' ? 'Salary-bearing documents are filed by HR Managers or Payroll.' : 'Only HR Managers can file restricted documents.', 403);
   if (!bytes.length || bytes.length > settings.uploads.documentMB * 1024 * 1024) throw new AppError(`Choose a file up to ${settings.uploads.documentMB} MB.`);
   if (!validFile(v.mime, bytes)) throw new AppError('The file content does not match a PDF, PNG or JPEG.');
