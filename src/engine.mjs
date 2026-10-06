@@ -276,11 +276,11 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         const amount = hours * hourly * (fullRate - credit);
         workBreakdown.push({ date: g.date, classification: g.c, overtime: g.ot, night: g.night, hours: round(hours), dayMultiplier: mult, otMultiplier: g.ot ? overtime : 1, nightMultiplier: g.night && e.coveredNSD ? 1 + r.nsd : 1, combinedMultiplier: Math.round(fullRate * (g.night && e.coveredNSD ? 1 + r.nsd : 1) * 10000) / 10000, sourceId: record.id });
         if (amount) {
-          add(earnings, component, amount, `${round(hours)} h × ${hourly} × (${mult}${g.ot ? ` × ${overtime}` : ''} − ${credit} already in salary)`, record, g.date, round(hours), fullRate);
+          add(earnings, component, amount, `${round(hours)} h × ${round(hourly)} × (${mult}${g.ot ? ` × ${overtime}` : ''} − ${credit} already in salary)`, record, g.date, round(hours), fullRate);
           if (component === 'basic') additionalBasic += amount;
         }
         else if (!g.ot) add(earnings, 'basic', 0, `${round(hours)} regular hours; salary already included in cutoff basic`, record, g.date, round(hours), 1);
-        if (g.night && e.coveredNSD) add(earnings, 'nsd', hours * hourly * fullRate * r.nsd, `${round(hours)} night h × ${hourly} × ${mult}${g.ot ? ` × ${overtime}` : ''} × ${r.nsd} differential only`, record, g.date, round(hours), fullRate * (1 + r.nsd));
+        if (g.night && e.coveredNSD) add(earnings, 'nsd', hours * hourly * fullRate * r.nsd, `${round(hours)} night h × ${round(hourly)} × ${mult}${g.ot ? ` × ${overtime}` : ''} × ${r.nsd} differential only`, record, g.date, round(hours), fullRate * (1 + r.nsd));
       }
     }
     if (manual) {
@@ -308,7 +308,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const H = (key, component, multiplier, label, c, ot, night = false) => {
         const h = m.hours?.[key] || 0; if (!h) return;
         if (m.mode === 'add' && fromAttendance.has(component)) blockers.push(`${prefix}: manual ${label} hours overlap ${label} already calculated from attendance. Review the manual entry (use "replace" or remove the overlap).`);
-        add(earnings, component, h * hourly * multiplier, `${tag}: ${h} h × ${hourly} × ${Math.round(multiplier * 10000) / 10000} ${label}`, src, end, h, multiplier);
+        add(earnings, component, h * hourly * multiplier, `${tag}: ${h} h × ${round(hourly)} × ${Math.round(multiplier * 10000) / 10000} ${label}`, src, end, h, multiplier);
         workBreakdown.push({ date: end, classification: c, overtime: ot, night, hours: h, dayMultiplier: multiplier, otMultiplier: 1, nightMultiplier: 1, combinedMultiplier: multiplier, sourceId: src.id });
       };
       H('regularOT', 'regularOT', r.ordinaryOT, 'overtime', 'ordinary', true);
