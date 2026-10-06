@@ -461,3 +461,23 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
   .employee-bell { position: static; }
   .employee-bell .bell-menu { position: fixed; left: 12px; right: 12px; top: 84px; width: auto; max-height: 70vh; }
 }
+
+/* ---------- Employee portal sidebar menu ---------- */
+.employee-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: start; max-width: 1400px; margin: 0 auto; }
+.employee-sidebar { position: sticky; top: 0; align-self: start; min-height: calc(100vh - 90px); background: #171717; border-right: 1px solid rgb(217 184 92 / .35); padding: 18px 12px; }
+.employee-sidebar nav { display: flex; flex-direction: column; gap: 4px; }
+.employee-sidebar button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 10px; color: rgb(255 255 255 / .86); padding: 11px 12px; font-size: 14px; font-weight: 600; box-shadow: none; }
+.employee-sidebar button:hover { background: rgb(255 255 255 / .07); color: #fff; }
+.employee-sidebar button.active { background: linear-gradient(135deg, #f6e3a6, #d9b85c); color: #171717; }
+.employee-sidebar .employee-nav-emoji { font-size: 18px; width: 24px; text-align: center; }
+.employee-sidebar .nav-flag { margin-left: auto; }
+.employee-body > .employee-main { max-width: none; margin: 0; min-width: 0; }
+.employee-menu-button { display: none; background: transparent; color: #fff; border: 1px solid rgb(217 184 92 / .7); border-radius: 9px; padding: 7px 11px; font-size: 18px; line-height: 1; }
+.employee-scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .45); z-index: 70; }
+.employee-scrim[hidden] { display: none; }
+@media (max-width: 900px) {
+  .employee-body { display: block; }
+  .employee-menu-button { display: inline-block; }
+  .employee-sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: min(280px, 82vw); min-height: 0; z-index: 80; transform: translateX(-105%); transition: transform .2s ease; overflow-y: auto; padding-top: 24px; }
+  .employee-sidebar.open { transform: translateX(0); }
+}
