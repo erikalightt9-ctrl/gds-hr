@@ -63,8 +63,9 @@ const isFigure = v => typeof v === 'number' || /^-?[\d,]+(\.\d+)?%?$/.test(Strin
 const fitWidth = (value, width, size) => { let s = String(value ?? ''); if (textWidth(s, size) <= width) return s; while (s.length > 1 && textWidth(`${s}...`, size) > width) s = s.slice(0, -1); return `${s}...`; };
 // Options: widths (relative column weights), headings may contain '\n' for two lines, totalRows (last N rows bold
 // with a rule above), note (printed under the table on the last page), rightAlign (per column; default: columns of figures),
-// groups ([{ label, from, to }]: a heading centred over columns from..to, drawn above their headings).
-export function tablePdf({ title, subtitle = '', headers, rows, widths: weights = null, totalRows = 0, note = '', rightAlign = null, groups = [] }) {
+// groups ([{ label, from, to }]: a heading centred over columns from..to, drawn above their headings),
+// emphasis (column indexes printed bold and one point larger, e.g. net salary).
+export function tablePdf({ title, subtitle = '', headers, rows, widths: weights = null, totalRows = 0, note = '', rightAlign = null, groups = [], emphasis = [] }) {
   const usable = PAGE.width - PAGE.margin * 2, size = headers.length > 10 ? 6.5 : 7.5, pad = 3;
   const want = weights || headers.map((h, i) => Math.min(40, Math.max(...String(h).split('\n').map(x => x.length), ...rows.slice(0, 400).map(r => String(r[i] ?? '').length), 4)));
   const total = want.reduce((a, b) => a + b, 0), widths = want.map(w => (w / total) * usable);
@@ -73,15 +74,16 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
   const rowHeight = size + 5, headHeight = rowHeight * headLines, top = PAGE.height - 92, bottom = 44 + (note ? 14 : 0), perPage = Math.max(1, Math.floor((top - headHeight - bottom) / rowHeight));
   const pages = []; for (let i = 0; i < Math.max(rows.length, 1); i += perPage) pages.push(rows.slice(i, i + perPage));
   const generated = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
-  const place = (text, i, x) => (right[i] ? x + widths[i] - pad - textWidth(text, size) : x + pad);
+  const sizeOf = i => (emphasis.includes(i) ? size + 1 : size);
+  const place = (text, i, x) => (right[i] ? x + widths[i] - pad - textWidth(text, sizeOf(i)) : x + pad);
   const cells = (values, y, bold) => {
     let x = PAGE.margin;
     return values.map((v, i) => {
       let room = widths[i];
       if (!right[i]) for (let j = i + 1; j < values.length && (values[j] === '' || values[j] === null || values[j] === undefined); j++) room += widths[j];
-      const s = fitWidth(v, room - pad * 2, size), tx = place(s, i, x);
+      const s = fitWidth(v, room - pad * 2, sizeOf(i)), tx = place(s, i, x);
       x += widths[i];
-      return `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${tx.toFixed(1)} ${y.toFixed(1)} Td (${pdfText(s)}) Tj ET`;
+      return `BT /${bold || emphasis.includes(i) ? 'F2' : 'F1'} ${sizeOf(i)} Tf ${tx.toFixed(1)} ${y.toFixed(1)} Td (${pdfText(s)}) Tj ET`;
     }).join(' ');
   };
   const headerCells = y0 => Array.from({ length: headLines }, (_, line) => {

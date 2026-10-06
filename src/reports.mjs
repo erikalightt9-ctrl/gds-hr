@@ -174,7 +174,7 @@ function contributionPdfTable(rows) {
 export function payrollRunPdf(run) {
   // Figures as 1,000.00, right-aligned; two-line headings so every column stays readable.
   const peso = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const headers = ['Employee\nID', 'Name', 'Days\ncredited', 'Basic', 'Overtime', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime', 'Loans', 'Other', 'Total\ndeductions', 'Net'];
+  const headers = ['Employee\nID', 'Name', 'Days\ncredited', 'Basic', 'Overtime', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime', 'Loans', 'Other', 'Total\ndeductions', 'Net\nsalary'];
   const premiums = e => Object.entries(e).filter(([k]) => !['basic', 'thirteenth', 'additional', 'allowance'].includes(k)).reduce((s, [, v]) => s + v, 0);
   const loans = d => (d.loans || 0) + (d.sssLoan || 0) + (d.pagibigLoan || 0), other = d => (d.other || 0) + (d.salaryDeduction || 0) + (d.absence || 0);
   const values = r => [r.earnings.basic, premiums(r.earnings), r.gross, r.deductions.SSS, r.deductions.PhilHealth, r.deductions['Pag-IBIG'], r.deductions.tax, r.deductions.undertime, loans(r.deductions), other(r.deductions), r.totalDeductions, r.net];
@@ -183,5 +183,5 @@ export function payrollRunPdf(run) {
   const sums = sorted.reduce((tot, r) => values(r).map((v, i) => tot[i] + (v || 0)), Array(12).fill(0));
   rows.push(['', 'TOTAL', '', ...sums.map(peso)]);
   return tablePdf({ title: `Payroll register ${run.start} to ${run.end}`, subtitle: `${run.status === 'posted' ? `Posted by ${run.postedBy || ''}` : 'Preview'} - ${run.rows.length} employees`, headers, rows, totalRows: 1,
-    widths: [46, 140, 38, 54, 52, 58, 48, 50, 46, 38, 48, 46, 48, 58, 58], groups: [{ label: 'Deductions', from: 6, to: 12 }] });
+    widths: [46, 136, 38, 54, 52, 58, 46, 50, 46, 34, 46, 42, 46, 58, 74], groups: [{ label: 'Deductions', from: 6, to: 12 }], emphasis: [14] });
 }
