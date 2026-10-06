@@ -227,7 +227,7 @@ const breakdown = createBreakdown({ esc, money, table, openDialog, dialog, actio
 } });
 const loansUi = createLoansPage({ ...hrCtx, canEdit: kind => canEdit(kind), editButton: (k, id) => editButton(k, id), addButton: (k, label) => addButton(k, label), downloads: k => downloads(k) });
 const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(k) });
-const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }) });
+const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   page = nav.page;
