@@ -492,3 +492,5 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
   .employee-sidebar { padding-bottom: 24px; }
   .employee-top .portal-logo { height: 52px; width: auto; max-width: 150px; padding: 4px 6px; }
 }
+
+.employee-top-spacer { flex: 1; }
