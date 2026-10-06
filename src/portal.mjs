@@ -264,9 +264,11 @@ export function payslipFromRow(run, row, { designation = '' } = {}) {
   const loans = (row.loanDeductions || []).map(l => ({ type: l.type || run.sources?.loans?.find(source => source.id === l.loanId)?.type || 'Loan', reference: l.reference || '', amount: l.amount, previousBalance: l.previousBalance, remainingBalance: l.remainingBalance }));
   // Use the posted employee row only; never recompute historical payslips from current rates.
   const computation = (row.trace || []).map(({ component, side, amount, formula, date }) => ({ component, side, amount, formula, date }));
-  const deductionItems = Object.entries(row.deductions).filter(([key]) => !['loans', 'other'].includes(key)).map(([label, amount]) => ({ label, amount }));
+  const TYPED = { sssLoan: 'SSS Loan', pagibigLoan: 'Pag-IBIG Loan', salaryDeduction: 'Salary Deduction' };
+  const deductionItems = Object.entries(row.deductions).filter(([key]) => !['loans', 'other', ...Object.keys(TYPED)].includes(key)).map(([label, amount]) => ({ label, amount }));
   for (const loan of loans) deductionItems.push({ label: `${loan.type}${loan.reference ? ` (${loan.reference})` : ''}`, amount: loan.amount });
-  for (const type of ['Salary Loan', 'SSS Loan', 'Pag-IBIG Loan']) if (!loans.some(l => l.type === type)) deductionItems.push({ label: type, amount: 0 });
+  for (const [key, label] of Object.entries(TYPED)) if (row.deductions[key]) deductionItems.push({ label, amount: row.deductions[key] });
+  for (const type of ['Salary Loan', 'SSS Loan', 'Pag-IBIG Loan']) if (!loans.some(l => l.type === type) && !deductionItems.some(i => i.label === type)) deductionItems.push({ label: type, amount: 0 });
   const otherItems = computation.filter(t => t.side === 'deductions' && t.component === 'other');
   deductionItems.push(...otherItems.map(t => ({ label: t.formula, amount: t.amount })));
   const residual = (total, items) => Math.round((total - items.reduce((sum, item) => sum + item.amount, 0)) * 100) / 100;

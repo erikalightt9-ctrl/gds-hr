@@ -126,3 +126,18 @@ test('late under 5 minutes is not deducted; from 5 minutes the whole late time i
   assert.equal(lost(late(12)), 12, '12 minutes late: the whole 12 minutes');
   assert.equal(lost(late(12, 12)), 0, 'fully offset: no deduction');
 });
+
+test('SSS loan, Pag-IBIG loan and salary deduction typed for a cutoff reduce net pay and reach the contributions report', async () => {
+  const { monthlyContributions } = await import('../src/contribution-report.mjs');
+  const store = fixture();
+  try {
+    const before = run(store).rows[0];
+    savePayrollInput(store, payroll, 'EMP-001', { ...cutoff, mode: 'add', hours: {}, overrides: [{ component: 'sssLoan', amount: 1010 }, { component: 'pagibigLoan', amount: 500 }, { component: 'salaryDeduction', amount: 300 }] });
+    const row = run(store).rows[0];
+    assert.deepEqual([row.deductions.sssLoan, row.deductions.pagibigLoan, row.deductions.salaryDeduction], [1010, 500, 300]);
+    assert.equal(row.net, Math.round((before.net - 1810) * 100) / 100);
+    assert.equal(row.deductions.tax, before.deductions.tax, 'loans do not change the tax computation');
+    const p = monthlyContributions(store, '2026-09').people.find(x => x.employeeId === 'EMP-001');
+    assert.equal(p.sssLoan, 1010); assert.equal(p.piLoan, 500);
+  } finally { store.close(); }
+});

@@ -114,7 +114,10 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   // Deductions.
   p.text('DEDUCTIONS', W / 2, y - 4, { size: 10, bold: true, color: COLOR.redText, align: 'center' }); y -= 12;
   const loans = Object.fromEntries((slip.loans || []).map(l => [l.type, l.amount]));
-  const other = (slip.deductionItems || []).filter(i => !['SSS', 'PhilHealth', 'Pag-IBIG', 'tax', 'late', 'undertime', 'absence', 'Salary Loan', 'SSS Loan', 'Pag-IBIG Loan'].includes(i.label) && !(slip.loans || []).some(l => i.label.startsWith(l.type)) && i.amount);
+  if (d.sssLoan) loans['SSS Loan'] = (loans['SSS Loan'] || 0) + d.sssLoan;
+  if (d.pagibigLoan) loans['Pag-IBIG Loan'] = (loans['Pag-IBIG Loan'] || 0) + d.pagibigLoan;
+  if (d.salaryDeduction) loans['Salary Deduction'] = d.salaryDeduction;
+  const other = (slip.deductionItems || []).filter(i => !['SSS', 'PhilHealth', 'Pag-IBIG', 'tax', 'late', 'undertime', 'absence', 'Salary Loan', 'SSS Loan', 'Pag-IBIG Loan', 'Salary Deduction'].includes(i.label) && !(slip.loans || []).some(l => i.label.startsWith(l.type)) && i.amount);
   const deductionRows = [['SSS', d.SSS], ['PhilHealth', d.PhilHealth], ['Pag-IBIG', d['Pag-IBIG']], ['SSS loan', loans['SSS Loan']], ['Salary loan', loans['Salary Loan']],
     ...[['Withholding tax', d.tax], ['Pag-IBIG loan', loans['Pag-IBIG Loan']], ['Absences / unpaid leave', d.absence], ['Undertime', d.undertime]].filter(([, v]) => v),
     ...Object.entries(loans).filter(([t]) => !['SSS Loan', 'Pag-IBIG Loan', 'Salary Loan'].includes(t)).map(([t, v]) => [t, v]),

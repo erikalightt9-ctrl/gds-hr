@@ -4,7 +4,7 @@ import { date as dateSchema } from './schema.mjs';
 // Computed amounts an authorized user may override. Loans (balances), contributions (own approval flow) and the
 // 13th month (annual ledger) are not overridable here.
 export const OVERRIDE_EARNINGS = ['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance'];
-export const OVERRIDE_DEDUCTIONS = ['absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG'];
+export const OVERRIDE_DEDUCTIONS = ['absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'sssLoan', 'pagibigLoan', 'salaryDeduction'];
 export const round = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const dayMs = 86400000;
 export function dates(start, end) {
@@ -175,7 +175,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const scheduled = employed.filter(d => !isRest(e, d));
     const baseline = dailyPaid ? round(daily * scheduled.length) : round(e.monthlySalary * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
     const earnings = { basic: baseline, regularOT: 0, restDay: 0, restOT: 0, nsd: 0, specialHoliday: 0, specialOT: 0, regularHoliday: 0, regularHolidayOT: 0, otherHoliday: 0, otherOT: 0, allowance: 0, additional: 0, thirteenth: 0 };
-    const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, other: 0 };
+    const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, sssLoan: 0, pagibigLoan: 0, salaryDeduction: 0, other: 0 };
     const trace = [], late = [], leaveNotes = [], loanDeductions = [], workBreakdown = [];
     let holidayBase = 0, excludedLeave = 0, additionalBasic = 0, daysPresent = 0, leaveDays = 0;
     let lateDaysLost = 0, lateReduction = 0, lateMinutesUnoffset = 0;   // late time lowers credited days, never a separate deduction
@@ -338,7 +338,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
     };
     override('earnings', earnings, OVERRIDE_EARNINGS);
-    override('deductions', deductions, ['absence', 'undertime', 'other']);
+    override('deductions', deductions, ['absence', 'undertime', 'other', 'sssLoan', 'pagibigLoan', 'salaryDeduction']);
     // Overrides of basic, absence and undertime also change the basic salary earned (13th month and final pay).
     const basicOverride = overrides.filter(o => o.component === 'basic').reduce((s, o) => s + o.delta, 0);
     // Absences reduce the attendance credited and therefore basic pay; they are not shown as a deduction.

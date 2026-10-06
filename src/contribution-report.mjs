@@ -24,6 +24,7 @@ export function monthlyContributions(store, month) {
       t.phEE += d.PhilHealth || 0; t.phER += er.PhilHealth || 0;
       t.piEE += d['Pag-IBIG'] || 0; t.piER += er['Pag-IBIG'] || 0;
       if ((d.SSS || 0) + (d.PhilHealth || 0) + (d['Pag-IBIG'] || 0) > 0 || !t.sssBasis) { t.sssBasis = row.contributionBasis?.SSS ?? row.monthlySalary ?? 0; t.phBasis = row.contributionBasis?.PhilHealth ?? row.monthlySalary ?? 0; }
+      t.sssLoan += d.sssLoan || 0; t.piLoan += d.pagibigLoan || 0;
       for (const l of row.loanDeductions || []) { if (/sss/i.test(l.type)) t.sssLoan += l.amount; else if (/pag-?ibig|hdmf/i.test(l.type)) t.piLoan += l.amount; }
       byEmployee.set(row.employeeId, t);
     }
