@@ -4,7 +4,7 @@ import { date as dateSchema } from './schema.mjs';
 // Computed amounts an authorized user may override. Loans (balances), contributions (own approval flow) and the
 // 13th month (annual ledger) are not overridable here.
 export const OVERRIDE_EARNINGS = ['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance'];
-export const OVERRIDE_DEDUCTIONS = ['absence', 'undertime', 'other', 'tax'];
+export const OVERRIDE_DEDUCTIONS = ['absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG'];
 export const round = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const dayMs = 86400000;
 export function dates(start, end) {
@@ -367,6 +367,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         trace.push({ component: 'SSS EC', side: 'employer', amount: employer['SSS EC'], formula: `${basis}: Employees' Compensation ${s.ec} x ${contributionFactor}`, sourceKind: 'rules', sourceId: r.id, date: end });
       }
     }
+    // Employee contribution shares typed for this cutoff (the employee's contribution basis is unchanged).
+    override('deductions', deductions, ['SSS', 'PhilHealth', 'Pag-IBIG']);
     const employerTotal = round(Object.values(employer).reduce((s, n) => s + n, 0));
     const gross = round(Object.values(earnings).reduce((s, n) => s + n, 0));
     const contributionTotal = deductions.SSS + deductions.PhilHealth + deductions['Pag-IBIG'];

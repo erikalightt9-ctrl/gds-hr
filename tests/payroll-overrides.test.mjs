@@ -106,3 +106,14 @@ test('night differential (10 PM - 6 AM) on approved overtime is computed and rea
     assert.equal(myOvertime(store, worker)[0].approvedNightHours, 1);
   } finally { store.close(); }
 });
+
+test('employee contribution shares can be overridden for one cutoff without changing the contribution basis', () => {
+  const store = fixture();
+  try {
+    savePayrollInput(store, payroll, 'EMP-001', { ...cutoff, mode: 'add', hours: {}, reason: 'Contribution correction (demo)', overrides: [{ component: 'SSS', amount: 550, reason: 'SSS per R-5 (demo)' }] });
+    const row = run(store).rows[0];
+    assert.equal(row.deductions.SSS, 550);
+    assert.equal(row.overrides.find(o => o.component === 'SSS').revised, 550);
+    assert.equal(row.totalDeductions, Math.round(Object.values(row.deductions).reduce((s, n) => s + n, 0) * 100) / 100);
+  } finally { store.close(); }
+});
