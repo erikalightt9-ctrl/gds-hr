@@ -23,7 +23,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       + sectionCard(esc, '📞', 'Emergency Contact', fieldBoxes(esc, [['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]))
       + sectionCard(esc, '💼', 'Employment', fieldBoxes(esc, [['Employee number', r.number], ['Department', f.employment.department], ['Position', f.employment.position], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Immediate supervisor', f.employment.supervisor], ['Date hired', fmtDate(f.employment.dateHired)]]))
       + sectionCard(esc, '🪪', 'Government IDs', fieldBoxes(esc, [['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]))
-      + '<p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved. Government numbers are partly hidden for your privacy.</p>';
+      + '<p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved.</p>';
   }
   function overtime(box, list) {
     const STATUS = { pending: 'Pending HR approval', approved: 'Approved', rejected: 'Not approved', cancelled: 'Cancelled' };

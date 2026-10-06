@@ -178,7 +178,7 @@ test('settings: only administrators change them; classifications drive the form'
   } finally { store.close(); }
 });
 
-test('employees see their own profile in the shared layout data, never anyone else’s; IDs stay masked', () => {
+test('employees see their own profile in the shared layout data, never anyone else’s; their own IDs are shown in full', () => {
   const store = fresh();
   try {
     const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id, b = createEmployee(store, hr, form('Ben', 'Other')).created.id;
@@ -187,7 +187,7 @@ test('employees see their own profile in the shared layout data, never anyone el
     const own = employeeForm(store, ana, a);
     assert.equal(own.form.contact.mobile, '09170000000');
     assert.equal(own.form.emergency.name, 'Demo Contact');
-    assert.equal(own.form.government.tin, '•••• 789');
+    assert.equal(own.form.government.tin, '123-456-789', 'employees see their own numbers in full');
     assert.equal(own.canEdit, false);
     assert.throws(() => employeeForm(store, ana, b), /only open your own/);
   } finally { store.close(); }
