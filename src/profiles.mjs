@@ -170,7 +170,7 @@ export function getProfile(store, actor, id) {
   if (canReadSection(actor, 'personal') && !sections.personal) sections.personal = personalName(employee);
   const documents = store.db.prepare('SELECT metadata FROM employee_documents WHERE employee_id=?').all(id).map(r => JSON.parse(r.metadata)).filter(d => canReadDocument(actor, d.type)).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   const rule = ruleOn(state, localToday()), dailyRate = sections.payroll?.dailyRate ?? (rule && employee.monthlySalary ? employee.monthlySalary / rule.dailyDivisor : null);
-  return { employee, sections, derived: { ...derivedInformation(employee, sections.personal), dailyRate, hourlyRate: sections.payroll?.hourlyRate ?? (dailyRate && rule ? dailyRate / rule.hourlyDivisor : null) }, documents,
+  return { employee, sections, derived: { ...derivedInformation(employee, sections.personal), dailyRate, hourlyRate: sections.payroll?.hourlyRate ?? (dailyRate && rule ? dailyRate / (sections.attendance?.hoursPerDay || rule.hourlyDivisor) : null) }, documents,
     editable: Object.keys(profileSchemas).filter(s => canWriteSection(actor, s)), readable: Object.keys(profileSchemas).filter(s => canReadSection(actor, s)),
     balances: state.leaveTypes.map(t => ({ typeId: t.id, name: t.name, eligible: employee.leaveEligibility.includes(t.id) && !employee.draft && !!employee.startDate && monthsBetween(employee.startDate, localToday()) >= t.minServiceMonths, ...leaveBalance(state, employee, t, localToday()) })),
     attendance: state.attendance.filter(a => a.employeeId === id), leaves: state.leaves.filter(a => a.employeeId === id), loans: state.loans.filter(a => a.employeeId === id), adjustments: state.adjustments.filter(a => a.employeeId === id),

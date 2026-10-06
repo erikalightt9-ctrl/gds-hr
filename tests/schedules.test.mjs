@@ -52,7 +52,7 @@ test('a 12-hour regular schedule earns overtime only after 12 paid hours', () =>
   assert.equal(regular.earnings.regularOT, 0);
   assert.equal(regular.deductions.undertime, 0);
   s.attendance = [attend(MONDAY, { timeIn: '08:00', timeOut: '21:00' })];
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularOT, 213.07, '1 h × 170.4545 × 1.25');
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularOT, 142.05, '1 h × 113.6364 (daily ÷ 12 scheduled hours) × 1.25');
 });
 
 test('attendance profiles validate day schedules and allow up to 16 regular hours', () => {

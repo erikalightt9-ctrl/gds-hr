@@ -169,7 +169,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // Daily-paid staff earn their daily rate per scheduled workday; absences then deduct whole days.
     const dailyPaid = payrollProfile?.basis === 'daily';
     if (dailyPaid && !payrollProfile.dailyRate) blockers.push(`${prefix}: daily-paid employees need a daily rate in their payroll profile.`);
-    const daily = payrollProfile?.dailyRate ?? e.monthlySalary / r.dailyDivisor, hourly = payrollProfile?.hourlyRate ?? daily / r.hourlyDivisor;
+    // Hourly rate follows the employee's own scheduled hours (a 12-hour driver: daily ÷ 12), else the rules divisor.
+    const scheduledHours = attendanceProfile?.hoursPerDay || r.hourlyDivisor;
+    const daily = payrollProfile?.dailyRate ?? e.monthlySalary / r.dailyDivisor, hourly = payrollProfile?.hourlyRate ?? daily / scheduledHours;
     const allScheduled = days.filter(d => !isRest(e, d));
     const employed = days.filter(d => d >= e.startDate && (!e.endDate || d <= e.endDate));
     const scheduled = employed.filter(d => !isRest(e, d));
