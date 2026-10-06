@@ -1,9 +1,9 @@
 // HR dashboard: every figure is calculated on the server from current records; each card opens the matching list.
-import { DOC_BADGE, fmtDate, celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
+import { fmtDate, celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
 
 const ICONS = { total: '👥', active: '✅', inactive: '⛔', newHires: '🎉', departments: '🏢', missing: '⚠️', acks: '📝', trainings: '🎓' };
 export function createDashboard(ctx) {
-  const { api, esc, table, badge, shell, heading, money } = ctx;
+  const { api, esc, table, shell, heading, money } = ctx;
   async function render() {
     shell(heading('Dashboard', 'Loading…') + '<div class="loading">Loading dashboard…</div>');
     const [d, party] = await Promise.all([api('/hr/dashboard'), api('/hr/celebrations').catch(() => null)]), t = d.totals, can = ctx.context().can, legacy = ctx.legacy() ? ctx.legacyGlance() : null;
@@ -30,6 +30,7 @@ export function createDashboard(ctx) {
         ${card('acks', t.pendingAcks, 'Pending memo acknowledgements', { page: 'memos' }, t.overdueAcks ? `${t.overdueAcks} overdue` : '')}
         ${card('trainings', t.upcomingTrainings, 'Upcoming trainings', { page: 'trainings' })}
       </div>
+      ${ctx.livePanel ? `<div id="dash-live">${ctx.livePanel()}</div>` : ''}
       ${attention.length ? `<section class="panel attention"><div class="panel-head"><h2>Attention needed</h2></div><ul class="plain-list attention-list">${attention.map(([text, nav]) => `<li><button class="link-button" data-go="${esc(JSON.stringify(nav))}">${esc(text)}</button></li>`).join('')}</ul></section>` : ''}
       <div class="grid2">
         <section class="panel"><div class="panel-head"><h2>Department summary</h2></div><div class="panel-body">${d.departments.length ? d.departments.map(x => `<div class="dept-row"><span>${esc(x.name)}</span><span class="dept-bar"><span class="dept-fill w${Math.round(x.count / max * 20) * 5}"></span></span><strong>${x.count}</strong></div>`).join('') : '<p class="muted">No employees yet.</p>'}</div></section>
@@ -40,8 +41,6 @@ export function createDashboard(ctx) {
           ${can.manage ? `<h3 class="spaced">Quick actions</h3><div class="actions"><button class="primary small" data-quick="employee">＋ Add employee</button><button class="small" data-quick="memo">＋ Create memo</button><button class="small" data-quick="training">＋ Add training</button></div>` : ''}
         </div></section>
       </div>
-      <section class="panel"><div class="panel-head"><h2>Recent employees</h2><button class="small" data-go='{"page":"files"}'>View all</button></div>${table(['Employee no.', 'Name', 'Department', 'Position', 'Date hired', 'Status', 'Classification'], d.recent.map(p => [esc(p.number), `<button class="link-button" data-go="${esc(JSON.stringify({ page: 'employee201', id: p.id }))}">${esc(p.name)}</button>`, esc(p.department || '—'), esc(p.position || '—'), fmtDate(p.dateHired), badge(p.status, p.status === 'Active' ? '' : 'rejected'), esc(p.classification || '—')]), 'No employees yet.')}</section>
-      ${t.missingDocuments !== null ? `<section class="panel"><div class="panel-head"><h2>Missing requirements</h2><button class="small" data-go='{"page":"reports"}'>Full report</button></div>${table(['Employee', 'Department', 'Missing requirement', 'Due', 'Status', ''], d.missing.map(r => [esc(r.name), esc(r.department || '—'), esc(r.requirement), r.due ? fmtDate(r.due) : '—', `${badge(r.status, DOC_BADGE[r.status])}${r.overdue ? ' <small class="danger-text">overdue</small>' : ''}`, `<button class="small" data-go="${esc(JSON.stringify({ page: 'employee201', id: r.employeeId, tab: 'requirements' }))}">Open checklist</button>`]), 'Every required document is on file and verified.')}</section>` : ''}
       ${d.nextTrainings?.length ? `<section class="panel"><div class="panel-head"><h2>Upcoming trainings</h2></div>${table(['Training', 'Date', 'Participants', ''], d.nextTrainings.map(x => [esc(x.title) + (x.required ? ' <small>required</small>' : ''), `${fmtDate(x.date)}${x.startTime ? ` · ${x.startTime}` : ''}`, x.participants, `<button class="small" data-go="${esc(JSON.stringify({ page: 'trainings', id: x.id }))}">Open</button>`]))}</section>` : ''}
       ${legacy ? `<section class="panel"><div class="panel-head"><h2>Attendance &amp; payroll at a glance</h2></div><div class="summary-pair four"><div><strong>${legacy.leave}</strong><span>Leave requests awaiting review</span></div><div><strong>${money(legacy.net)}</strong><span>Latest posted net payroll</span></div><div><strong>${money(legacy.loans)}</strong><span>Outstanding loans</span></div><div><button class="small" data-go='{"page":"payroll"}'>Open payroll →</button></div></div></section>` : ''}`);
     bindCelebrationPhotos(document.querySelector('.content'));
