@@ -588,3 +588,4 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 /* Payroll: working days column centred, month shown under the heading. */
 .payroll-computation .scroll-table th:nth-child(2), .payroll-computation .scroll-table td:nth-child(2) { text-align: center; }
 .payroll-computation th .th-sub { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: none; opacity: .8; }
+.payroll-computation .scroll-table th:not(:first-child), .payroll-computation .scroll-table td:not(:first-child) { text-align: center; }
