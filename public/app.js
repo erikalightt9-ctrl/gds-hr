@@ -454,6 +454,58 @@ function manualSummary(m, basis) {
   return esc(parts.join(' · ') || 'No figures');
 }
 const OVERRIDABLE = [['basic', 'Basic salary', 'earnings'], ['regularOT', 'Regular overtime', 'earnings'], ['restDay', 'Rest day pay', 'earnings'], ['restOT', 'Rest day OT', 'earnings'], ['nsd', 'Night differential', 'earnings'], ['specialHoliday', 'Special holiday pay', 'earnings'], ['specialOT', 'Special holiday OT', 'earnings'], ['regularHoliday', 'Regular holiday pay', 'earnings'], ['regularHolidayOT', 'Regular holiday OT', 'earnings'], ['otherHoliday', 'Other holiday pay', 'earnings'], ['otherOT', 'Other holiday OT', 'earnings'], ['additional', 'Adjustment', 'earnings'], ['allowance', 'Allowance', 'earnings'], ['absence', 'Absence / unpaid leave', 'deductions'], ['undertime', 'Undertime', 'deductions'], ['other', 'Other deductions', 'deductions'], ['tax', 'Withholding tax', 'deductions']];
+// Net pay as a form: every earning and deduction in its own box. Editable boxes save as manual overrides (with a
+// reason); government contributions and loans keep their own approval / balance flows and are shown read-only.
+const NET_EARNINGS = [['basic', 'Basic pay'], ['regularOT', 'Overtime'], ['nsd', 'Night differential'], ['restDay', 'Rest day pay'], ['restOT', 'Rest day overtime'], ['regularHoliday', 'Regular holiday pay'], ['regularHolidayOT', 'Regular holiday overtime'], ['specialHoliday', 'Special holiday pay'], ['specialOT', 'Special holiday overtime'], ['otherHoliday', 'Other holiday pay'], ['otherOT', 'Other holiday overtime'], ['allowance', 'Allowance'], ['additional', 'Adjustment'], ['thirteenth', '13th month pay', true]];
+const NET_DEDUCTIONS = [['SSS', 'SSS', true], ['PhilHealth', 'PhilHealth', true], ['Pag-IBIG', 'Pag-IBIG', true], ['tax', 'Withholding tax'], ['loans', 'Loans', true], ['absence', 'Absence / unpaid leave'], ['undertime', 'Undertime'], ['other', 'Other deductions']];
+function netPayDialog(employeeId) {
+  const row = currentRun.rows.find(r => r.employeeId === employeeId), m = row.manualEntry, editable = canEdit('adjustments');
+  computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
+  const original = key => (row.overrides || []).find(o => o.component === key)?.original;
+  const box = (side, [key, label, locked]) => {
+    const value = row[side][key] || 0, computed = original(key), always = ['basic', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG'].includes(key);
+    if (!value && computed === undefined && !always && (locked || !['allowance', 'additional', 'regularOT', 'nsd', 'absence', 'undertime', 'other'].includes(key))) return '';
+    return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${locked || !editable ? ' locked' : ''}"><span>${esc(label)}</span>
+      <input type="number" step="0.01" min="0" name="${esc(key)}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${locked || !editable ? 'readonly tabindex="-1"' : ''} aria-label="${esc(label)}">
+      <small>${computed !== undefined ? `Manual · computed ${money(computed)}` : locked ? (CONTRIB_KEYS.includes(key) ? 'From contribution basis' : key === 'loans' ? 'From approved loans' : 'Computed') : 'Computed'}</small></label>`;
+  };
+  openDialog(`Net pay · ${row.employeeName}`, `<form id="net-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · Draft (not yet posted)</p>
+    <div class="net-columns"><fieldset class="net-side"><legend>Earnings</legend>${NET_EARNINGS.map(f => box('earnings', f)).join('')}<div class="net-total"><span>Gross pay</span><strong data-net-gross>${money(row.gross)}</strong></div></fieldset>
+    <fieldset class="net-side"><legend>Deductions</legend>${NET_DEDUCTIONS.map(f => box('deductions', f)).join('')}<div class="net-total"><span>Total deductions</span><strong data-net-deductions>${money(row.totalDeductions)}</strong></div></fieldset></div>
+    <div class="net-pay"><span>Net pay</span><strong data-net-pay>${money(row.net)}</strong></div>
+    ${editable ? `<label class="field">Reason for any change (kept in the audit trail)<input name="reason" maxlength="500" value="${esc((m?.overrides || [])[0]?.reason || '')}" placeholder="e.g. Corrected per approved timesheet"></label>
+    <p class="legend">Type over an amount to change it. Changed boxes are labelled Manual and keep the computed amount for reference. Withholding tax is recomputed after earnings change unless you set it here. Contributions are changed in the contribution basis; loans in Employee Loans.</p>` : ''}</div>
+    <div class="dialog-foot"><button type="button" data-net-breakdown>View computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
+  dialog.classList.add('wide-dialog');
+  const form = dialog.querySelector('#net-form');
+  const totals = () => {
+    const sum = side => [...form.querySelectorAll(`input[data-side="${side}"]`)].reduce((s, i) => s + Number(i.value || 0), 0);
+    const restE = Object.entries(row.earnings).filter(([k]) => !form.elements[k]).reduce((s, [, v]) => s + v, 0), restD = Object.entries(row.deductions).filter(([k]) => !form.elements[k]).reduce((s, [, v]) => s + v, 0);
+    const gross = sum('earnings') + restE, ded = sum('deductions') + restD;
+    form.querySelector('[data-net-gross]').textContent = money(gross); form.querySelector('[data-net-deductions]').textContent = money(ded); form.querySelector('[data-net-pay]').textContent = money(gross - ded);
+    form.querySelectorAll('input[data-side]').forEach(i => i.closest('.net-box').classList.toggle('changed', Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004));
+  };
+  form.addEventListener('input', totals);
+  form.querySelector('[data-net-breakdown]').onclick = () => { dialog.classList.remove('wide-dialog'); breakdown.open(currentRun, row, 'net'); };
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const allowed = new Set(['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance', 'absence', 'undertime', 'other', 'tax']);
+    const reason = form.elements.reason.value.trim();
+    const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Number(i.value || 0), reason }));
+    if (overrides.length && reason.length < 3) { toast('Give a reason for the change.'); return; }
+    const base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: 'Net pay adjustment' };
+    const kept = (base.overrides || []).filter(o => !allowed.has(o.component) || form.elements[o.component]?.readOnly);
+    const all = [...kept, ...overrides];
+    try {
+      const plain = !m || (m.mode === 'add' && !Object.values(m.hours || {}).some(Boolean) && ['Net pay adjustment', 'Withholding tax adjustment'].includes(m.reason));
+      if (!all.length && plain && m) await api(`/payroll/inputs/${encodeURIComponent(employeeId)}?start=${currentRun.start}&end=${currentRun.end}`, null, 'DELETE');
+      else if (all.length || m) await api(`/payroll/inputs/${encodeURIComponent(employeeId)}`, { start: currentRun.start, end: currentRun.end, mode: base.mode, daysWorked: base.daysWorked || 0, absenceDays: base.absenceDays || 0, lateMinutes: base.lateMinutes || 0, undertimeMinutes: base.undertimeMinutes || 0, hours: base.hours || {}, reason: base.reason, overrides: all });
+      dialog.close(); dialog.classList.remove('wide-dialog');
+      if (await reopenComputation()) toast(overrides.length ? 'Net pay updated. Changes are labelled Manual.' : 'Saved.');
+    } catch (error) { toast(error.message); }
+  };
+}
+const CONTRIB_KEYS = ['SSS', 'PhilHealth', 'Pag-IBIG'];
 // Withholding tax typed by Payroll/HR for one employee and cutoff (a manual override; the computed tax is kept).
 function taxDialog(row) {
   const m = row.manualEntry, current = (m?.overrides || []).find(o => o.component === 'tax');
@@ -770,6 +822,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.add) edit(b.dataset.add);
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
     if (b.dataset.run) { currentRun = await api(`/runs/${b.dataset.run}`); page = 'payroll'; render(); }
+    if (b.dataset.salary && b.dataset.component === 'net' && currentRun && !currentRun.id) { netPayDialog(b.dataset.salary); return; }
     if (b.dataset.salary && b.dataset.component && currentRun) { breakdown.open(currentRun, currentRun.rows.find(x => x.employeeId === b.dataset.salary), b.dataset.component); return; }
     if (b.dataset.salary) await showSalary(b.dataset.salary, b.dataset.component);
     if (b.dataset.payrollEmployee) await showSalary(b.dataset.payrollEmployee);
