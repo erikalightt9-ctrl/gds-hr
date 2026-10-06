@@ -51,9 +51,9 @@ test('rest-day night work adds only differential, with no double-counting', () =
 test('unworked special holiday defaults unpaid; policy can pay it', () => {
   const s = fixture(); s.holidays = [{ id: 'h1', date: '2026-09-01', name: 'Test holiday', kind: 'special', basis: 'Test proclamation' }];
   s.attendance = [attend('2026-09-01', { status: 'off', timeIn: '', timeOut: '' })];
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].deductions.absence, 1363.64);
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 1363.64);
   s.rules[0].specialUnworked = 1;
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].deductions.absence, 0);
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 0);
 });
 test('loan deduction is capped to balance and respects its schedule', () => {
   const s = fixture(); s.loans = [{ id: 'l1', employeeId: 'EMP-001', type: 'Salary Loan', reference: 'L1', original: 50000, balance: 1200, monthlyAmortization: 5000, perPayroll: 2500, startDate: '2026-01-01', endDate: '2026-12-31', terms: 20, remainingTerms: 1, authorized: true }];
@@ -100,13 +100,13 @@ test('paid and unpaid leave affect payroll and annual basic independently', () =
   const s = completeState(); s.attendance = s.attendance.filter(a => a.date !== '2026-09-01');
   s.leaves = [{ id: 'leave', employeeId: 'EMP-001', typeId: 'vacation', startDate: '2026-09-01', endDate: '2026-09-01', days: 1, status: 'approved' }];
   let row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-  assert.equal(row.leaveDays, 1); assert.equal(row.deductions.absence, 0);
+  assert.equal(row.leaveDays, 1); assert.equal(row.absenceAmount, 0);
   s.leaveTypes.find(t => t.id === 'vacation').includedIn13th = false;
   row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
   assert.equal(row.applicableBasic, 13636.36);
   s.leaves[0].typeId = 'unpaid';
   row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-  assert.equal(row.deductions.absence, 1363.64);
+  assert.equal(row.absenceAmount, 1363.64); assert.equal(row.deductions.absence, 0, "absences reduce basic pay, not deductions");
 });
 test('contribution and withholding brackets are evaluated transparently', () => {
   const s = completeState(); const r = s.rules[0];

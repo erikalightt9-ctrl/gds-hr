@@ -456,14 +456,15 @@ function manualSummary(m, basis) {
 const OVERRIDABLE = [['basic', 'Basic salary', 'earnings'], ['regularOT', 'Regular overtime', 'earnings'], ['restDay', 'Rest day pay', 'earnings'], ['restOT', 'Rest day OT', 'earnings'], ['nsd', 'Night differential', 'earnings'], ['specialHoliday', 'Special holiday pay', 'earnings'], ['specialOT', 'Special holiday OT', 'earnings'], ['regularHoliday', 'Regular holiday pay', 'earnings'], ['regularHolidayOT', 'Regular holiday OT', 'earnings'], ['otherHoliday', 'Other holiday pay', 'earnings'], ['otherOT', 'Other holiday OT', 'earnings'], ['additional', 'Adjustment', 'earnings'], ['allowance', 'Allowance', 'earnings'], ['absence', 'Absence / unpaid leave', 'deductions'], ['undertime', 'Undertime', 'deductions'], ['other', 'Other deductions', 'deductions'], ['tax', 'Withholding tax', 'deductions']];
 // Net pay as a form: every earning and deduction in its own box. Editable boxes save as manual overrides (with a
 // reason); government contributions and loans keep their own approval / balance flows and are shown read-only.
-const NET_EARNINGS = [['basic', 'Basic pay'], ['regularOT', 'Overtime'], ['nsd', 'Night differential'], ['restDay', 'Rest day pay'], ['restOT', 'Rest day overtime'], ['regularHoliday', 'Regular holiday pay'], ['regularHolidayOT', 'Regular holiday overtime'], ['specialHoliday', 'Special holiday pay'], ['specialOT', 'Special holiday overtime'], ['otherHoliday', 'Other holiday pay'], ['otherOT', 'Other holiday overtime'], ['allowance', 'Allowance'], ['additional', 'Adjustment'], ['thirteenth', '13th month pay', true]];
-const NET_DEDUCTIONS = [['SSS', 'SSS'], ['PhilHealth', 'PhilHealth'], ['Pag-IBIG', 'Pag-IBIG'], ['tax', 'Withholding tax'], ['loans', 'Loans', true], ['absence', 'Absence / unpaid leave'], ['undertime', 'Undertime'], ['other', 'Other deductions']];
+const NET_EARNINGS = [['basic', 'Basic pay (days credited)'], ['regularOT', 'Overtime'], ['nsd', 'Night differential'], ['restDay', 'Rest day pay'], ['restOT', 'Rest day overtime'], ['regularHoliday', 'Regular holiday pay'], ['regularHolidayOT', 'Regular holiday overtime'], ['specialHoliday', 'Special holiday pay'], ['specialOT', 'Special holiday overtime'], ['otherHoliday', 'Other holiday pay'], ['otherOT', 'Other holiday overtime'], ['allowance', 'Allowance'], ['additional', 'Adjustment'], ['thirteenth', '13th month pay', true]];
+const NET_DEDUCTIONS = [['SSS', 'SSS'], ['PhilHealth', 'PhilHealth'], ['Pag-IBIG', 'Pag-IBIG'], ['tax', 'Withholding tax'], ['loans', 'Loans', true], ['undertime', 'Undertime'], ['other', 'Other deductions']];
 function netPayDialog(employeeId, focus = 'net') {
   const row = currentRun.rows.find(r => r.employeeId === employeeId), m = row.manualEntry, editable = canEdit('adjustments') && !currentRun.id;
   computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
   const original = key => (row.overrides || []).find(o => o.component === key)?.original;
   const box = (side, [key, label, locked]) => {
-    const value = row[side][key] || 0, computed = original(key), always = ['basic', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG'].includes(key);
+    const value = row[side][key] || 0, always = ['basic', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG'].includes(key);
+    const computed = key === 'basic' && original(key) !== undefined ? original(key) - (row.absenceAmount || 0) : original(key);
     if (!value && computed === undefined && !always && (locked || !['allowance', 'additional', 'regularOT', 'nsd', 'absence', 'undertime', 'other'].includes(key))) return '';
     return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${locked || !editable ? ' locked' : ''}"><span>${esc(label)}</span>
       <input type="number" step="0.01" min="0" name="${esc(key)}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${locked || !editable ? 'readonly tabindex="-1"' : ''} aria-label="${esc(label)}">
@@ -493,7 +494,7 @@ function netPayDialog(employeeId, focus = 'net') {
     event.preventDefault();
     const allowed = new Set(['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance', 'absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG']);
     const reason = '';
-    const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Number(i.value || 0), reason }));
+    const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Math.round((Number(i.value || 0) + (i.name === 'basic' ? row.absenceAmount || 0 : 0)) * 100) / 100, reason }));
     const base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: 'Net pay adjustment' };
     const kept = (base.overrides || []).filter(o => !allowed.has(o.component) || form.elements[o.component]?.readOnly);
     const all = [...kept, ...overrides];
@@ -520,7 +521,7 @@ function basicPayDialog(employeeId) {
   computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
   const original = key => (row.overrides || []).find(o => o.component === key)?.original;
   const fact = (label, value, note = '') => `<div class="net-box locked"><span>${esc(label)}</span><strong class="fact-value">${value}</strong>${note ? `<small>${note}</small>` : ''}</div>`;
-  const input = (side, key, label) => { const value = row[side][key] || 0, computed = original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}>${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`; };
+  const input = (side, key, label) => { const value = row[side][key] || 0, computed = key === 'basic' && original(key) !== undefined ? original(key) - (row.absenceAmount || 0) : original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}>${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`; };
   const daily = row.payBasis === 'daily', base = daily ? row.dailyRate * row.workingDays : row.monthlySalary * (currentRun.start.endsWith('-01') || currentRun.start.endsWith('-16') ? 0.5 : 1);
   openDialog(`Basic pay · ${row.employeeName}`, `<form id="basic-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · ${currentRun.id ? 'Posted (read-only)' : 'Draft (not yet posted)'}</p>
     <fieldset class="net-side"><legend>How basic pay is computed</legend>
@@ -529,22 +530,22 @@ function basicPayDialog(employeeId) {
       ${fact('Scheduled workdays', row.workingDays)}${fact('Days present', row.daysPresent)}${fact('Days credited', row.creditedDays ?? row.daysPresent, row.lateDaysLost ? `${row.lateDaysLost} day lost to late` : '')}
       ${fact('Leave days', row.leaveDays)}${fact('Late (not offset)', `${row.lateMinutesUnoffset || 0} min`)}${fact('Cutoff salary base', money(base), daily ? 'Daily rate × scheduled days' : 'Half of the monthly salary')}
     </fieldset>
-    <fieldset class="net-side"><legend>Amounts</legend>${input('earnings', 'basic', 'Basic pay')}${input('deductions', 'absence', 'Absence / unpaid leave')}${input('deductions', 'undertime', 'Undertime')}
-      <div class="net-total"><span>Basic pay less absence and undertime</span><strong data-basic-net>${money((row.earnings.basic || 0) - (row.deductions.absence || 0) - (row.deductions.undertime || 0))}</strong></div></fieldset>
+    <fieldset class="net-side"><legend>Amounts</legend>${fact('Absences', money(row.absenceAmount || 0), 'Already taken off the days credited')}${input('earnings', 'basic', 'Basic pay (days credited)')}${input('deductions', 'undertime', 'Undertime')}
+      <div class="net-total"><span>Basic pay less undertime</span><strong data-basic-net>${money((row.earnings.basic || 0) - (row.deductions.undertime || 0))}</strong></div></fieldset>
 </div>
     <div class="dialog-foot pay-foot"><button type="button" data-basic-full>Full pay computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
   dialog.classList.add('wide-dialog');
-  const form = dialog.querySelector('#basic-form'), shown = ['basic', 'absence', 'undertime'];
+  const form = dialog.querySelector('#basic-form'), shown = ['basic', 'undertime'];
   form.addEventListener('input', () => {
     const v = k => Number(form.elements[k].value || 0);
-    form.querySelector('[data-basic-net]').textContent = money(v('basic') - v('absence') - v('undertime'));
+    form.querySelector('[data-basic-net]').textContent = money(v('basic') - v('undertime'));
     form.querySelectorAll('input[data-side]').forEach(i => i.closest('.net-box').classList.toggle('changed', Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004));
   });
   form.querySelector('[data-basic-full]').onclick = () => { dialog.classList.remove('wide-dialog'); netPayDialog(employeeId, 'net'); };
   form.onsubmit = async event => {
     event.preventDefault();
     const reason = '';
-    const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Number(form.elements[k].value || 0), reason }));
+    const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Math.round((Number(form.elements[k].value || 0) + (k === 'basic' ? row.absenceAmount || 0 : 0)) * 100) / 100, reason }));
     try { await saveOverrides(row, shown, changed, 'Basic pay adjustment'); dialog.close(); dialog.classList.remove('wide-dialog'); if (await reopenComputation()) savedPopup(changed.length ? 'Basic pay updated. Changes are labelled Manual.' : 'Saved.'); } catch (error) { toast(error.message); }
   };
 }

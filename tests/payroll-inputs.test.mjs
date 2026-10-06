@@ -34,7 +34,7 @@ test('replace mode pays from typed figures without attendance and clears missing
     savePayrollInput(store, hr, 'EMP-001', { start: '2026-09-01', end: '2026-09-15', mode: 'replace', absenceDays: 1, lateMinutes: 30, undertimeMinutes: 60, hours: H({ regularOT: 2 }), reason: 'Biometric offline; manual timesheet' });
     const result = run(store), row = result.rows[0], daily = row.dailyRate, hourly = row.hourlyRate;
     assert.ok(!result.blockers.some(b => /EMP-001.*Missing attendance/.test(b)));
-    near(row.deductions.absence, daily, 'row.deductions.absence');
+    near(row.absenceAmount, daily, 'row.absenceAmount');
     near(row.deductions.undertime, hourly, 'row.deductions.undertime');
     near(row.lateReduction, 0.5 * hourly, 'row.lateReduction');
     assert.equal(row.daysPresent, row.workingDays - 1);

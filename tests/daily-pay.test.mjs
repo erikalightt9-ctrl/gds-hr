@@ -30,7 +30,7 @@ test('a daily-paid absence removes exactly one day of pay', () => {
   const s = dailyState();
   s.attendance[0] = { ...s.attendance[0], status: 'absent', timeIn: '', timeOut: '' };
   const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-  assert.equal(row.earnings.basic - row.deductions.absence, 12 * DAILY);
+  assert.equal(row.earnings.basic, 12 * DAILY);
 });
 
 test('monthly-paid employees are unchanged and daily basis requires a daily rate', () => {

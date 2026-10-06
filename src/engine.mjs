@@ -341,7 +341,13 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     override('deductions', deductions, ['absence', 'undertime', 'other']);
     // Overrides of basic, absence and undertime also change the basic salary earned (13th month and final pay).
     const basicOverride = overrides.filter(o => o.component === 'basic').reduce((s, o) => s + o.delta, 0);
-    const applicableBasic = round(Math.max(0, baseline - deductions.absence - lateReduction - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride));
+    // Absences reduce the attendance credited and therefore basic pay; they are not shown as a deduction.
+    const absenceAmount = round(deductions.absence || 0);
+    if (absenceAmount) {
+      earnings.basic = round(earnings.basic - absenceAmount); deductions.absence = 0;
+      for (const t of trace) if (t.component === 'absence' && t.side === 'deductions') Object.assign(t, { component: 'basic', side: 'earnings', amount: -t.amount, formula: `Absence (days credited reduced): ${t.formula}` });
+    }
+    const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride));
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));
     const prior = priorBasicFor(state, e.id, start.slice(0, 4));
     const annualBasic = round(annualRows.reduce((s, row) => s + row.applicableBasic, 0) + prior.basic + applicableBasic);
@@ -385,7 +391,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

@@ -29,8 +29,8 @@ test('early arrival is paid by default but not when paid time starts at the sche
 test('a rest-day swap is paid like a normal day without an absence deduction', () => {
   const swap = state(); swap.attendance = [day(SATURDAY, { status: 'rest-day-swap', timeIn: '', timeOut: '', breaks: [], explanation: 'Worked Sunday Sept 20 instead' })];
   const absent = state(); absent.attendance = [day(SATURDAY, { status: 'absent', timeIn: '', timeOut: '', breaks: [] })];
-  assert.equal(run(swap).deductions.absence, 0);
-  assert.ok(run(absent).deductions.absence > 0, 'control: absence is deducted');
+  assert.equal(run(swap).absenceAmount, 0);
+  assert.ok(run(absent).absenceAmount > 0, "control: absence reduces basic pay");
   assert.throws(() => schemas.attendance.parse(day(SATURDAY, { status: 'rest-day-swap', timeIn: '', timeOut: '', breaks: [], explanation: '' })), /swap/i, 'a swap must say which day was worked');
 });
 
