@@ -611,7 +611,7 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .contrib-summary .total { border-bottom: 0; border-top: 2px solid var(--gold-700, #a87b16); font-weight: 700; font-size: 15px; }
 .employer-share-link { background: none; border: 0; padding: 0; cursor: pointer; }
 /* Compact contribution editor: one row per agency, everything visible without scrolling. */
-.cb-compact .share-input { width: 112px; }
+.cb-compact .share-input { width: 100%; }
 .cb-compact .share-input .peso { padding: 0 4px 0 8px; }
 .cb-compact .share-input input { width: 100%; padding: 8px 6px; font-size: 14px; }
 .cb-compact th, .cb-compact td { padding-left: 8px; padding-right: 8px; }
@@ -622,3 +622,8 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .cb-history { margin-top: 10px; }
 .cb-history summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .cb-saved { margin: 0; padding: 8px 14px; border-radius: 10px; background: #e8f6ec; border: 1px solid #9fd3ae; color: #1f6b36; font-weight: 600; font-size: 13px; }
+/* The agency table always fits the dialog: fixed columns, boxes fill their column, no sideways scroll. */
+dialog .cb-compact .table-wrap, dialog .cb-compact .scroll-table { overflow: visible; }
+dialog .cb-compact table { table-layout: fixed; width: 100%; min-width: 0; white-space: normal; }
+dialog .cb-compact table th, dialog .cb-compact table td { padding: 8px 6px; }
+dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child { width: 20%; padding-left: 4px; }
