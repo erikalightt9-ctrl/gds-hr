@@ -494,3 +494,19 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 }
 
 .employee-top-spacer { flex: 1; }
+
+/* Employee header: logo fills the bar; larger menu button and menu items. */
+.employee-top { padding-top: 10px; padding-bottom: 10px; min-height: 84px; align-items: center; }
+.employee-top .portal-logo { height: 64px; max-width: 220px; padding: 4px 8px; border-radius: 10px; }
+.employee-menu-button { font-size: 26px; padding: 10px 16px; border-radius: 12px; }
+.employee-sidebar button { font-size: 16px; padding: 14px 14px; gap: 14px; }
+.employee-sidebar .employee-nav-emoji { font-size: 21px; width: 28px; }
+@media (max-width: 900px) {
+  .employee-top { padding: 8px 12px; min-height: 76px; gap: 10px; }
+  .employee-top .portal-logo { height: 58px; max-width: 190px; }
+  .employee-menu-button { font-size: 28px; padding: 9px 15px; }
+  .employee-sidebar { width: min(310px, 86vw); }
+  .employee-bell .bell-menu { top: 88px; }
+}
+.employee-top .employee-menu-button { font-size: 26px; padding: 10px 16px; line-height: 1; min-width: 56px; min-height: 52px; }
+@media (max-width: 900px) { .employee-top .employee-menu-button { font-size: 28px; padding: 8px 14px; min-width: 56px; min-height: 54px; } }
