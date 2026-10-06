@@ -117,3 +117,12 @@ test('employee contribution shares can be overridden for one cutoff without chan
     assert.equal(row.totalDeductions, Math.round(Object.values(row.deductions).reduce((s, n) => s + n, 0) * 100) / 100);
   } finally { store.close(); }
 });
+
+test('late under 5 minutes is not deducted; from 5 minutes the whole late time is deducted unless offset', () => {
+  const late = (minutes, offset = 0) => fixture(s => { const h = 8 + Math.floor(minutes / 60), m = minutes % 60; s.attendance[0].timeIn = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; s.attendance[0].offsetMinutes = offset; if (offset) s.attendance[0].explanation = 'Approved offset (demo)'; });
+  const lost = store => { try { return run(store).rows[0].late.find(l => l.lateMinutes > 0)?.deductibleMinutes ?? 0; } finally { store.close(); } };
+  assert.equal(lost(late(4)), 0, '4 minutes late: not deductible');
+  assert.equal(lost(late(5)), 5, '5 minutes late: the whole 5 minutes');
+  assert.equal(lost(late(12)), 12, '12 minutes late: the whole 12 minutes');
+  assert.equal(lost(late(12, 12)), 0, 'fully offset: no deduction');
+});

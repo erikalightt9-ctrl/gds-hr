@@ -221,7 +221,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // Company policy option: time before the scheduled start is not paid, so overtime only accrues after the scheduled end.
       const minutes = attendanceProfile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduledMinute) : attendanceMinutes(record);
       const lateMinutes = rest ? 0 : Math.max(0, (startMinute - scheduledMinute) / 60000);
-      const deductibleMinutes = record.exception ? 0 : Math.max(0, lateMinutes - graceMinutes - record.offsetMinutes);
+      // Late below the threshold (default 5 minutes) is not deductible; from the threshold on, the whole late time is
+      // deducted unless it is covered by an approved offset (or an approved exception).
+      const lateThreshold = r.lateThresholdMinutes ?? 5;
+      const deductibleMinutes = record.exception || lateMinutes < lateThreshold ? 0 : Math.max(0, lateMinutes - graceMinutes - record.offsetMinutes);
       // Unoffset late time is converted to a fraction of the scheduled day and taken off the days credited for pay.
       const dayMinutes = normalHours * 60, lostDay = r.deductLate ? deductibleMinutes / dayMinutes : 0, deduction = round(lostDay * daily);
       late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
