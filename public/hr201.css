@@ -564,3 +564,5 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 
 .fact-value { font-size: 17px; color: #1d1d1d; }
 #basic-form .net-side + .net-side { margin-top: 14px; }
+
+.employee-menu-heading { display: block; margin: 14px 12px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #d9b85c; }
