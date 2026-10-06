@@ -85,13 +85,12 @@ function bracketTable(mandate, brackets, { table, badge }) {
 }
 
 export function contributionsSection(rule, helpers) {
-  const { esc, table, badge } = helpers;
+  const { esc, table } = helpers;
   const summary = table(['Contribution', 'Basis', 'Total rate', 'Employee', 'Employer', 'Floor', 'Ceiling', 'Max employee / month', 'Legal basis'],
     MANDATES.map(m => [`<strong>${esc(m.name)}</strong>`, esc(m.basis), esc(m.rate), esc(m.employee), esc(m.employer), esc(m.floor), esc(m.ceiling), peso.format(m.maxEmployee), `<a href="${m.source}" target="_blank" rel="noreferrer">${esc(m.law)} ↗</a>`]));
-  const status = rule.approvedBy ? badge(`Approved by ${rule.approvedBy}`) : badge('Draft · pending approval', 'pending');
   const tables = MANDATES.map(m => `<details class="contribution-table"><summary>${esc(m.name)} computation table · ${rule.contributions[m.key].length} brackets</summary>${bracketTable(m, rule.contributions[m.key], helpers)}</details>`).join('');
   const factor = rule.cutoff === 'monthly' ? 1 : 0.5;
-  return `<section class="panel contributions-panel" data-contribution-rule="${esc(rule.id)}"><div class="panel-head"><h2>Government contributions</h2><span>${status} <span class="legend">Rules effective ${esc(rule.effectiveDate)} · ${esc(rule.cutoff)}</span></span></div>
+  return `<section class="panel contributions-panel" data-contribution-rule="${esc(rule.id)}"><div class="panel-head"><h2>Government contributions</h2></div>
     <div class="panel-body"><p class="legend">Payroll deducts the employee share each cutoff (monthly share × ${factor}). Employer shares are shown for remittance planning and are not deducted from pay.</p></div>
     <div class="scroll-table">${summary}</div>
     <div class="panel-body"><h3>Try a monthly salary</h3><label class="field contribution-calc">Monthly salary (PHP)<input type="number" min="0" step="any" data-contribution-salary placeholder="e.g. 20000"></label><div data-contribution-result></div></div>
