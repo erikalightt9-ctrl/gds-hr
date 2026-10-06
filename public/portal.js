@@ -99,6 +99,17 @@ export function createPortal(ctx) {
     menuButton.onclick = () => setMenu(!sidebar.classList.contains('open'));
     scrim.onclick = () => setMenu(false);
     sidebar.addEventListener('click', event => { if (event.target.closest('[data-portal-tab]')) setMenu(false); });
+    // Phones: swipe the menu left to close it; swipe right from the left edge of the screen to open it.
+    let touch = null;
+    const swipeStart = event => { const p = event.touches[0]; touch = { x: p.clientX, y: p.clientY, open: sidebar.classList.contains('open') }; };
+    const swipeEnd = event => {
+      if (!touch) return; const p = event.changedTouches[0], dx = p.clientX - touch.x, dy = Math.abs(p.clientY - touch.y);
+      if (dy < 60 && touch.open && dx < -50) setMenu(false);
+      else if (dy < 60 && !touch.open && touch.x < 30 && dx > 50) setMenu(true);
+      touch = null;
+    };
+    app.addEventListener('touchstart', swipeStart, { passive: true });
+    app.addEventListener('touchend', swipeEnd, { passive: true });
     const bellButton = app.querySelector('[data-portal-bell]'), bellMenu = app.querySelector('[data-portal-bell-menu]');
     if (bellButton) {
       const setOpen = open => { bellMenu.classList.toggle('hidden', !open); bellButton.setAttribute('aria-expanded', String(open)); };
