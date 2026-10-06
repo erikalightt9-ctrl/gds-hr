@@ -40,7 +40,7 @@ test('replace mode pays from typed figures without attendance and clears missing
     assert.equal(row.daysPresent, row.workingDays - 1);
     near(row.earnings.regularOT, 2 * hourly * 1.25, 'row.earnings.regularOT');
     assert.throws(() => savePayrollInput(store, viewer, 'EMP-001', { start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: H(), reason: 'x x x' }), /permission/i);
-    assert.throws(() => savePayrollInput(store, hr, 'EMP-001', { start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: H(), reason: '' }), /reason/);
+    assert.doesNotThrow(() => savePayrollInput(store, hr, 'EMP-001', { start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: H() }), 'no reason is needed');
     deletePayrollInput(store, hr, 'EMP-001', '2026-09-01', '2026-09-15');
     assert.ok(run(store).blockers.some(b => /Missing attendance/.test(b)));
   } finally { store.close(); }

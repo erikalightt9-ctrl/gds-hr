@@ -566,3 +566,10 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 #basic-form .net-side + .net-side { margin-top: 14px; }
 
 .employee-menu-heading { display: block; margin: 14px 12px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #d9b85c; }
+
+/* Pay forms: the reason sits beside Save so it is always visible. */
+.pay-foot { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.pay-reason { flex: 1 1 280px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #5a4e34; margin-right: auto; }
+.pay-reason input { padding: 10px 12px; font-size: 14px; }
+.pay-reason.invalid input { border-color: #c4283a; box-shadow: 0 0 0 3px rgb(196 40 58 / .18); }
+.pay-reason-error { color: #c4283a; font-weight: 700; }

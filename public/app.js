@@ -467,15 +467,14 @@ function netPayDialog(employeeId, focus = 'net') {
     if (!value && computed === undefined && !always && (locked || !['allowance', 'additional', 'regularOT', 'nsd', 'absence', 'undertime', 'other'].includes(key))) return '';
     return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${locked || !editable ? ' locked' : ''}"><span>${esc(label)}</span>
       <input type="number" step="0.01" min="0" name="${esc(key)}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${locked || !editable ? 'readonly tabindex="-1"' : ''} aria-label="${esc(label)}">
-      <small>${computed !== undefined ? `Manual · computed ${money(computed)}` : CONTRIB_KEYS.includes(key) ? 'From contribution basis' : key === 'loans' ? 'From approved loans' : 'Computed'}</small></label>`;
+      ${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`;
   };
   openDialog(`Pay computation · ${row.employeeName}`, `<form id="net-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · ${currentRun.id ? 'Posted (read-only)' : 'Draft (not yet posted)'}</p>
     <div class="net-columns"><fieldset class="net-side"><legend>Earnings</legend>${NET_EARNINGS.map(f => box('earnings', f)).join('')}<div class="net-total"><span>Gross pay</span><strong data-net-gross>${money(row.gross)}</strong></div></fieldset>
     <fieldset class="net-side"><legend>Deductions</legend>${NET_DEDUCTIONS.map(f => box('deductions', f)).join('')}<div class="net-total"><span>Total deductions</span><strong data-net-deductions>${money(row.totalDeductions)}</strong></div></fieldset></div>
     <div class="net-pay"><span>Net pay</span><strong data-net-pay>${money(row.net)}</strong></div>
-    ${editable ? `<label class="field">Reason for any change (kept in the audit trail)<input name="reason" maxlength="500" value="${esc((m?.overrides || [])[0]?.reason || '')}" placeholder="e.g. Corrected per approved timesheet"></label>
-    <p class="legend">Type over an amount to change it. Changed boxes are labelled Manual and keep the computed amount for reference. Withholding tax is recomputed after earnings change unless you set it here. Contribution changes here apply to this cutoff only (the employee’s contribution basis stays the same). Loans are changed in Employee Loans.</p>` : ''}</div>
-    <div class="dialog-foot"><button type="button" data-net-breakdown>View computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
+    ${editable ? `<p class="legend">Type over an amount to change it. Changed boxes are labelled Manual and keep the computed amount for reference. Withholding tax is recomputed after earnings change unless you set it here. Contribution changes here apply to this cutoff only (the employee’s contribution basis stays the same). Loans are changed in Employee Loans.</p>` : ''}</div>
+    <div class="dialog-foot pay-foot"><button type="button" data-net-breakdown>View computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
   dialog.classList.add('wide-dialog');
   const form = dialog.querySelector('#net-form');
   // Opened from Basic pay: put the cursor in the basic pay box; from Gross / Net: highlight that total.
@@ -493,9 +492,8 @@ function netPayDialog(employeeId, focus = 'net') {
   form.onsubmit = async event => {
     event.preventDefault();
     const allowed = new Set(['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance', 'absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG']);
-    const reason = form.elements.reason.value.trim();
+    const reason = '';
     const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Number(i.value || 0), reason }));
-    if (overrides.length && reason.length < 3) { toast('Give a reason for the change.'); return; }
     const base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: 'Net pay adjustment' };
     const kept = (base.overrides || []).filter(o => !allowed.has(o.component) || form.elements[o.component]?.readOnly);
     const all = [...kept, ...overrides];
@@ -508,7 +506,6 @@ function netPayDialog(employeeId, focus = 'net') {
     } catch (error) { toast(error.message); }
   };
 }
-const CONTRIB_KEYS = ['SSS', 'PhilHealth', 'Pag-IBIG'];
 // Saves the overrides for the components a form shows (others already saved are kept).
 async function saveOverrides(row, shown, changed, defaultReason) {
   const m = row.manualEntry, base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: defaultReason };
@@ -523,7 +520,7 @@ function basicPayDialog(employeeId) {
   computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
   const original = key => (row.overrides || []).find(o => o.component === key)?.original;
   const fact = (label, value, note = '') => `<div class="net-box locked"><span>${esc(label)}</span><strong class="fact-value">${value}</strong>${note ? `<small>${note}</small>` : ''}</div>`;
-  const input = (side, key, label) => { const value = row[side][key] || 0, computed = original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}><small>${computed !== undefined ? `Manual · computed ${money(computed)}` : 'Computed'}</small></label>`; };
+  const input = (side, key, label) => { const value = row[side][key] || 0, computed = original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}>${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`; };
   const daily = row.payBasis === 'daily', base = daily ? row.dailyRate * row.workingDays : row.monthlySalary * (currentRun.start.endsWith('-01') || currentRun.start.endsWith('-16') ? 0.5 : 1);
   openDialog(`Basic pay · ${row.employeeName}`, `<form id="basic-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · ${currentRun.id ? 'Posted (read-only)' : 'Draft (not yet posted)'}</p>
     <fieldset class="net-side"><legend>How basic pay is computed</legend>
@@ -534,8 +531,8 @@ function basicPayDialog(employeeId) {
     </fieldset>
     <fieldset class="net-side"><legend>Amounts</legend>${input('earnings', 'basic', 'Basic pay')}${input('deductions', 'absence', 'Absence / unpaid leave')}${input('deductions', 'undertime', 'Undertime')}
       <div class="net-total"><span>Basic pay less absence and undertime</span><strong data-basic-net>${money((row.earnings.basic || 0) - (row.deductions.absence || 0) - (row.deductions.undertime || 0))}</strong></div></fieldset>
-    ${editable ? '<label class="field">Reason for any change (kept in the audit trail)<input name="reason" maxlength="500" placeholder="e.g. Corrected days worked per timesheet"></label>' : ''}</div>
-    <div class="dialog-foot"><button type="button" data-basic-full>Full pay computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
+</div>
+    <div class="dialog-foot pay-foot"><button type="button" data-basic-full>Full pay computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
   dialog.classList.add('wide-dialog');
   const form = dialog.querySelector('#basic-form'), shown = ['basic', 'absence', 'undertime'];
   form.addEventListener('input', () => {
@@ -546,9 +543,8 @@ function basicPayDialog(employeeId) {
   form.querySelector('[data-basic-full]').onclick = () => { dialog.classList.remove('wide-dialog'); netPayDialog(employeeId, 'net'); };
   form.onsubmit = async event => {
     event.preventDefault();
-    const reason = form.elements.reason.value.trim();
+    const reason = '';
     const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Number(form.elements[k].value || 0), reason }));
-    if (changed.length && reason.length < 3) { toast('Give a reason for the change.'); return; }
     try { await saveOverrides(row, shown, changed, 'Basic pay adjustment'); dialog.close(); dialog.classList.remove('wide-dialog'); if (await reopenComputation()) savedPopup(changed.length ? 'Basic pay updated. Changes are labelled Manual.' : 'Saved.'); } catch (error) { toast(error.message); }
   };
 }
@@ -558,8 +554,7 @@ function taxDialog(row) {
   const computed = (row.overrides || []).find(o => o.component === 'tax')?.original ?? row.deductions.tax;
   openDialog(`Adjust withholding tax · ${row.employeeName}`, `<form id="tax-form"><div class="dialog-body"><p class="sub">Cutoff ${currentRun.start} — ${currentRun.end}</p>
     <div class="cards">${card('Computed from the tax table', money(computed), 'System-generated')}${card('Tax used in this payroll', money(row.deductions.tax), current ? 'Manual override' : 'Computed')}</div>
-    <div class="form-grid"><label class="field">Withholding tax for this cutoff (PHP)<input type="number" name="amount" min="0" step="0.01" required value="${current ? current.amount : computed}"></label>
-    <label class="field">Reason (kept in the audit trail)<input name="reason" required minlength="3" maxlength="500" value="${esc(current?.reason || '')}" placeholder="e.g. Annualization adjustment, BIR 2316 from previous employer"></label></div>
+    <div class="form-grid"><label class="field">Withholding tax for this cutoff (PHP)<input type="number" name="amount" min="0" step="0.01" required value="${current ? current.amount : computed}"></label></div>
     <p class="legend">The payslip shows this amount. The computed figure and your reason stay in the computation history.</p></div>
     <div class="dialog-foot">${current ? '<button type="button" data-tax-reset>Reset to computed</button>' : ''}<button type="button" data-close>Cancel</button><button class="primary">Save and recalculate</button></div></form>`);
   const save = async overrides => {
@@ -572,7 +567,7 @@ function taxDialog(row) {
   const form = dialog.querySelector('#tax-form');
   form.onsubmit = async event => {
     event.preventDefault();
-    try { await save([{ component: 'tax', amount: Number(form.elements.amount.value), reason: form.elements.reason.value }]); dialog.close(); if (await reopenComputation()) savedPopup('Withholding tax adjusted. Payroll recalculated.'); } catch (error) { toast(error.message); }
+    try { await save([{ component: 'tax', amount: Number(form.elements.amount.value), reason: '' }]); dialog.close(); if (await reopenComputation()) savedPopup('Withholding tax adjusted. Payroll recalculated.'); } catch (error) { toast(error.message); }
   };
   form.querySelector('[data-tax-reset]')?.addEventListener('click', async () => {
     try { await save([]); dialog.close(); if (await reopenComputation()) savedPopup('Withholding tax reset to the computed amount.'); } catch (error) { toast(error.message); }
@@ -595,7 +590,7 @@ function manualEntryDialog(employeeId) {
     <details class="form-section-box"${(m.overrides || []).length ? ' open' : ''}><summary>Manual overrides of calculated amounts</summary>
       <p class="legend">Replace a calculated amount for this cutoff. Leave blank to keep the system amount. Each override needs a reason; the original and revised values are kept in the audit trail.</p>
       ${table(['Item', 'Calculated', 'Override amount', 'Reason'], OVERRIDABLE.map(([k, label, side]) => { const o = (m.overrides || []).find(x => x.component === k), calc = (row.overrides || []).find(x => x.component === k)?.original ?? row[side][k] ?? 0; return [esc(label), money(calc), `<input type="number" min="0" step="0.01" name="ov.${k}" value="${o ? o.amount : ''}" aria-label="Override ${esc(label)}">`, `<input name="ovr.${k}" maxlength="500" value="${esc(o?.reason || '')}" aria-label="Reason for ${esc(label)} override">`]; }))}</details>
-    <label class="field full">Reason / source (kept in the audit trail)<input name="reason" required minlength="3" maxlength="500" value="${esc(m.reason)}" placeholder="e.g. Manual DTR signed by supervisor; biometric was offline"></label>
+    <label class="field full">Note (optional)<input name="reason" maxlength="500" value="${esc(m.reason)}" placeholder="e.g. Manual DTR signed by supervisor; biometric was offline"></label>
   </div><div class="dialog-foot">${row.manualEntry ? '<button type="button" class="danger" data-manual-remove>Remove manual entry</button>' : ''}<button type="button" data-close>Cancel</button><button class="primary">Save and recalculate</button></div></form>`);
   const form = dialog.querySelector('#manual-form');
   const toggle = () => form.querySelector('[data-replace-only]').classList.toggle('hidden', form.elements.mode.value !== 'replace');

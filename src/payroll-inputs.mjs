@@ -15,8 +15,8 @@ const inputSchema = z.object({
   daysWorked: z.number().min(0).max(31).default(0), absenceDays: z.number().min(0).max(31).default(0),
   lateMinutes: z.number().int().min(0).max(20000).default(0), undertimeMinutes: z.number().int().min(0).max(20000).default(0),
   hours: z.object(Object.fromEntries(HOUR_FIELDS.map(k => [k, hours]))).strict(),
-  reason: z.string().trim().min(3, 'Give a reason or source for the manual figures (e.g. "Manual DTR, biometric down").').max(500),
-  overrides: z.array(z.object({ component: z.enum([...OVERRIDE_EARNINGS, ...OVERRIDE_DEDUCTIONS]), amount: z.number().min(0).max(1e8), reason: z.string().trim().min(3, 'Give a reason for each override.').max(500) }).strict()).max(20).default([]),
+  reason: z.string().trim().max(500).default('Manual entry'),
+  overrides: z.array(z.object({ component: z.enum([...OVERRIDE_EARNINGS, ...OVERRIDE_DEDUCTIONS]), amount: z.number().min(0).max(1e8), reason: z.string().trim().max(500).default('') }).strict()).max(20).default([]),
 }).strict().refine(v => new Set(v.overrides.map(o => o.component)).size === v.overrides.length, 'Override each item only once.').refine(v => v.end >= v.start && v.start.slice(0, 7) === v.end.slice(0, 7), 'Choose a cutoff within one month.');
 
 const lockedBy = (state, employeeId, start, end) => state.runs.some(r => r.status === 'posted' && r.start <= end && r.end >= start && r.rows.some(row => row.employeeId === employeeId));

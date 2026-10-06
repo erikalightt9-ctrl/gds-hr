@@ -11,12 +11,12 @@ function fixture(change = () => {}) { const store = new Store(':memory:'), s = c
 const run = store => preview(store, cutoff.start, cutoff.end, false, ['EMP-001']);
 const ot = s => { s.attendance[0].timeOut = '19:00'; };
 
-test('a manual override replaces a calculated amount, keeps the original, and needs a reason', () => {
+test('a manual override replaces a calculated amount and keeps the original', () => {
   const store = fixture();
   try {
     const before = run(store).rows[0];
     const base = { ...cutoff, mode: 'add', hours: {}, reason: 'Payroll correction (demo)' };
-    assert.throws(() => savePayrollInput(store, payroll, 'EMP-001', { ...base, overrides: [{ component: 'allowance', amount: 1500, reason: '' }] }), /reason/);
+    assert.doesNotThrow(() => savePayrollInput(store, payroll, 'EMP-001', { ...base, overrides: [{ component: 'allowance', amount: 1500 }] }), 'no reason is needed');
     assert.throws(() => savePayrollInput(store, payroll, 'EMP-001', { ...base, overrides: [{ component: 'loans', amount: 0, reason: 'nope' }] }));
     savePayrollInput(store, payroll, 'EMP-001', { ...base, overrides: [{ component: 'allowance', amount: 1500, reason: 'Transport allowance (demo)' }, { component: 'tax', amount: 0, reason: 'Minimum wage earner (demo)' }] });
     const row = run(store).rows[0];

@@ -268,7 +268,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
     }
     if (manual) {
-      const m = manual, src = { id: `manual-${e.id}-${start}`, sourceKind: 'payroll-inputs' }, tag = `Manual entry by ${m.updatedBy} (${m.reason})`;
+      const m = manual, src = { id: `manual-${e.id}-${start}`, sourceKind: 'payroll-inputs' }, tag = `Manual entry by ${m.updatedBy}${m.reason ? ` (${m.reason})` : ''}`;
       if (m.mode === 'replace') {
         if (dailyPaid) {
           const diff = round(daily * m.daysWorked - baseline);
@@ -333,7 +333,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       for (const o of (manual?.overrides || []).filter(x => keys.includes(x.component))) {
         const original = round(bucket[o.component] || 0), delta = round(o.amount - original);
         bucket[o.component] = round(o.amount);
-        trace.push({ component: o.component, side, amount: delta, formula: `Manual override by ${manual.updatedBy}: ${original} calculated → ${o.amount} (${o.reason})`, sourceKind: 'payroll-overrides', sourceId: `${e.id}:${start}:${o.component}`, date: end });
+        trace.push({ component: o.component, side, amount: delta, formula: `Manual override by ${manual.updatedBy}: ${original} calculated → ${o.amount}${o.reason ? ` (${o.reason})` : ''}`, sourceKind: 'payroll-overrides', sourceId: `${e.id}:${start}:${o.component}`, date: end });
         overrides.push({ component: o.component, side, original, revised: round(o.amount), delta, reason: o.reason, by: manual.updatedBy, at: manual.updatedAt });
       }
     };
