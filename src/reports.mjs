@@ -160,16 +160,12 @@ export function buildReport(store, actor, key, format, filters = {}) {
 // One posted payroll run as a PDF register (the Excel version already exists).
 // PDF layout of the contributions report: same rows as the Excel template, figures as 1,000.00, summary labels
 // (remittance and employer share) moved under Name so they read in full.
-const CONTRIBUTION_PDF_HEADERS = ['#', 'Name', 'SSS No.', 'Monthly\ncomp.', 'SSS\nER', 'SSS\nEE', 'SSS\nTotal', 'PhilHealth No.', 'PhilHealth\nbasic', 'PHIC\nER', 'PHIC\nEE', 'PHIC\nTotal', 'Pag-IBIG No.', 'HDMF\nER', 'HDMF\nEE', 'HDMF\nTotal', 'SSS\nloan', 'HDMF\nloan', 'Adjust-\nment', 'Deductions'];
+const CONTRIBUTION_PDF_HEADERS = ['#', 'Name', 'Monthly\ncompensation', 'SSS\nER', 'SSS\nEE', 'SSS\nTotal', 'PhilHealth\nbasic', 'PHIC\nER', 'PHIC\nEE', 'PHIC\nTotal', 'HDMF\nER', 'HDMF\nEE', 'HDMF\nTotal', 'SSS\nloan', 'HDMF\nloan', 'Adjust-\nment', 'Deductions'];
 function contributionPdfTable(rows) {
   const peso = v => (typeof v === 'number' ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v);
-  const body = rows.map(r => {
-    if (!r.length) return Array(20).fill('');
-    if (r[17] && r.slice(0, 17).every(v => v === '')) return ['', r[17], ...Array(17).fill(''), peso(r[19])];   // summary line
-    return r.map((v, i) => (i === 0 ? v : peso(v)));
-  });
-  return { headers: CONTRIBUTION_PDF_HEADERS, rows: body, widths: [18, 100, 52, 50, 38, 36, 40, 62, 44, 36, 36, 40, 62, 34, 34, 38, 34, 36, 34, 50],
-    rightAlign: CONTRIBUTION_PDF_HEADERS.map((_, i) => ![1, 2, 7, 12].includes(i)) };
+  const body = rows.map(r => (r.length ? r.map((v, i) => (i === 0 ? v : peso(v))) : Array(CONTRIBUTION_PDF_HEADERS.length).fill('')));
+  return { headers: CONTRIBUTION_PDF_HEADERS, rows: body, widths: [18, 130, 56, 46, 44, 48, 52, 44, 44, 48, 40, 40, 44, 40, 40, 40, 54],
+    rightAlign: CONTRIBUTION_PDF_HEADERS.map((_, i) => i !== 1), groups: [{ label: 'SSS', from: 3, to: 5 }, { label: 'PhilHealth', from: 6, to: 9 }, { label: 'Pag-IBIG (HDMF)', from: 10, to: 12 }, { label: 'Loans', from: 13, to: 14 }] };
 }
 export function payrollRunPdf(run) {
   // Figures as 1,000.00, right-aligned; two-line headings so every column stays readable.

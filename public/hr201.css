@@ -603,3 +603,10 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .payroll-total { font-size: 14px; color: var(--ink); }
 .payroll-total strong { color: var(--red-700, #8f1420); font-size: 15px; }
 .employer-share-link { font-size: 13px; font-weight: 600; color: var(--red-700, #8f1420); text-decoration: underline; }
+.contrib-tools { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 14px; }
+.contrib-summary { margin: 0; display: grid; gap: 6px; }
+.contrib-summary div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 2px; border-bottom: 1px solid var(--line); }
+.contrib-summary dt { margin: 0; }
+.contrib-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+.contrib-summary .total { border-bottom: 0; border-top: 2px solid var(--gold-700, #a87b16); font-weight: 700; font-size: 15px; }
+.employer-share-link { background: none; border: 0; padding: 0; cursor: pointer; }
