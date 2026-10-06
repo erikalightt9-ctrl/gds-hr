@@ -304,7 +304,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         }
         if (pathname.endsWith('.pdf')) {
           store.log(auth.user, 'export', 'runs', run.id, null, { format: 'pdf' });
-          res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="payroll-${run.start}-${run.end}.pdf"` });
+          res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('view') ? 'inline' : 'attachment'}; filename="payroll-${run.start}-${run.end}.pdf"` });   // ?view=1 opens it in the browser for printing
           res.end(payrollRunPdf(run)); return;
         }
         send(200, run); return;
