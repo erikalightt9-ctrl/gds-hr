@@ -61,7 +61,7 @@ test('leave policy: 7 days vacation leave + 5 days SIL for the named employees, 
   } finally { store.close(); }
 });
 
-test('employees exempt from withholding tax have none; contributions split across cutoffs again', async () => {
+test('employees exempt from withholding tax have none; contributions once a month', async () => {
   const { Store } = await import('../src/store.mjs');
   const { completeState } = await import('./helpers.mjs');
   const { runMigrations } = await import('../src/migrations.mjs');
@@ -73,7 +73,8 @@ test('employees exempt from withholding tax have none; contributions split acros
     runMigrations(store);
     const st = store.read(), row = calculatePayroll(st, '2026-09-01', '2026-09-15').rows[0];
     assert.equal(row.deductions.tax, 0); assert.match(row.trace.find(t => t.component === 'tax').formula, /Exempt/);
-    assert.equal(st.rules[0].contributionTiming, 'split');
-    assert.equal(row.contributionFactor, 0.5, 'half of the monthly contribution each cutoff');
+    assert.equal(st.rules[0].contributionTiming, 'second', 'contributions once a month, on the 16th–end cutoff');
+    assert.equal(row.contributionFactor, 0, 'nothing on the 1st–15th cutoff');
+    assert.equal(calculatePayroll(st, '2026-09-16', '2026-09-30').rows[0].contributionFactor, 1, 'full monthly amount on the 16th–end cutoff');
   } finally { store.close(); }
 });

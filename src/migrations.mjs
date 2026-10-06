@@ -82,6 +82,20 @@ function noWithholdingTax(store) {
     return changed;
   }));
 }
+// October 2026 (later instruction): deductions are taken once a month — contributions in full on the 16th–end cutoff.
+function contributionsOnceAMonth(store) {
+  return once(store, 'migration:contributions-monthly-2026-10', () => store.transaction(() => {
+    const system = { username: 'system (contribution timing)' }, state = store.read();
+    let changed = 0;
+    for (const rule of state.rules.filter(r => r.contributionTiming !== 'second')) {
+      store.log(system, 'set-contribution-timing', 'rules', rule.id, { contributionTiming: rule.contributionTiming || 'split' }, { contributionTiming: 'second' });
+      rule.contributionTiming = 'second'; changed++;
+    }
+    state.version++; store.write(state);
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:contributions-monthly-2026-10');
+    return changed;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store) };
+  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store) };
 }
