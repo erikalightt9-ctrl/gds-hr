@@ -188,7 +188,15 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // Manual entry for exactly this cutoff: "replace" skips attendance; "add" pays the typed hours on top of it.
     const manual = (state.payrollInputs || []).find(i => i.employeeId === e.id && i.start === start && i.end === end) || null;
     for (const d of manual?.mode === 'replace' ? [] : employed) {
-      const record = state.attendance.find(a => a.employeeId === e.id && a.date === d);
+      // Real time: a time-in with no time out yet counts as a scheduled workday (lateness from the actual time in);
+      // it stays flagged until the time out is recorded.
+      const openIn = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === d);
+      let record = state.attendance.find(a => a.employeeId === e.id && a.date === d);
+      if (!record && openIn) {
+        const sched = scheduleOn(e, attendanceProfile, d, r), [sh, sm] = (sched.start || openIn.time).split(':').map(Number), endMin = sh * 60 + sm + Math.round(sched.hoursPerDay * 60);
+        record = { id: `open-${openIn.id}`, employeeId: e.id, date: d, status: 'present', scheduledIn: sched.start || openIn.time, timeIn: openIn.time, timeOut: `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`, endNextDay: endMin >= 1440, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true };
+        blockers.push(`${prefix}: timed in at ${openIn.time} on ${d} with no time out yet; counted as a scheduled day until the time out is recorded.`);
+      }
       const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && l.startDate <= d && l.endDate >= d);
       const rest = isRest(e, d), kind = classification(state, e, d);
       if (leave && !rest) {
@@ -200,8 +208,14 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         if (record?.status === 'present') blockers.push(`${prefix}: attendance conflicts with leave on ${d}.`);
         continue;
       }
-      if (!record) { if (!rest || kind !== 'rest') blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`); continue; }
-      if (!record.approved) { blockers.push(`${prefix}: attendance on ${d} is not approved.`); continue; }
+      if (!record) {
+        if (!rest || kind !== 'rest') blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
+        // No attendance on a scheduled workday: the day is not credited (no pay) until attendance or a leave is recorded.
+        if (!rest && kind === 'ordinary') add(deductions, 'absence', daily, `${daily} × 1 day with no attendance record (not credited)`, null, d);
+        continue;
+      }
+      // Unapproved attendance is still counted (real time) but must be approved before the payroll is final.
+      if (!record.approved && !String(record.id).startsWith('open-')) blockers.push(`${prefix}: attendance on ${d} is not approved.`);
       if (record.status !== 'present') {
         if (record.status === 'official-business') { add(earnings, 'basic', 0, 'Approved official business; salary already included in cutoff basic', record, d); continue; }
         if (record.status === 'rest-day-swap') { add(earnings, 'basic', 0, `Rest-day swap (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
@@ -344,7 +358,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // Absences reduce the attendance credited and therefore basic pay; they are not shown as a deduction.
     const absenceAmount = round(deductions.absence || 0);
     if (absenceAmount) {
-      earnings.basic = round(earnings.basic - absenceAmount); deductions.absence = 0;
+      earnings.basic = Math.max(0, round(earnings.basic - absenceAmount)); deductions.absence = 0;   // rounding never makes it negative
+      if (!daysPresent && !leaveDays && earnings.basic < 1) earnings.basic = 0;   // no day credited: no centavo residue from rounding
       for (const t of trace) if (t.component === 'absence' && t.side === 'deductions') Object.assign(t, { component: 'basic', side: 'earnings', amount: -t.amount, formula: `Absence (days credited reduced): ${t.formula}` });
     }
     const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride));

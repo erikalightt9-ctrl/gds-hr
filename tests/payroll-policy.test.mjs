@@ -14,6 +14,15 @@ function state(attendanceProfile = {}) {
 }
 const day = (date, extra = {}) => ({ id: date, employeeId: 'E1', date, status: 'present', scheduledIn: '09:00', timeIn: '07:00', timeOut: '18:00', endNextDay: false, breaks: [{ start: `${date}T12:00`, end: `${date}T13:00` }], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true, ...extra });
 const run = s => calculatePayroll(s, '2026-09-16', '2026-09-30').rows[0];
+// Present on every other scheduled day of the cutoff (days without attendance are not credited).
+const withOtherDays = s => {
+  const taken = new Set(s.attendance.map(a => a.date));
+  for (let d = new Date('2026-09-16T00:00:00Z'); d <= new Date('2026-09-30T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10);
+    if (!taken.has(iso) && !s.employees[0].restDays.includes(d.getUTCDay())) s.attendance.push(day(iso, { timeIn: '09:00' }));
+  }
+  return s;
+};
 
 test('early arrival is paid by default but not when paid time starts at the schedule', () => {
   const actual = state(); actual.attendance = [day(MONDAY)];
@@ -27,7 +36,7 @@ test('early arrival is paid by default but not when paid time starts at the sche
 });
 
 test('a rest-day swap is paid like a normal day without an absence deduction', () => {
-  const swap = state(); swap.attendance = [day(SATURDAY, { status: 'rest-day-swap', timeIn: '', timeOut: '', breaks: [], explanation: 'Worked Sunday Sept 20 instead' })];
+  const swap = state(); swap.attendance = [day(SATURDAY, { status: 'rest-day-swap', timeIn: '', timeOut: '', breaks: [], explanation: 'Worked Sunday Sept 20 instead' })]; withOtherDays(swap);
   const absent = state(); absent.attendance = [day(SATURDAY, { status: 'absent', timeIn: '', timeOut: '', breaks: [] })];
   assert.equal(run(swap).absenceAmount, 0);
   assert.ok(run(absent).absenceAmount > 0, "control: absence reduces basic pay");

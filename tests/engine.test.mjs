@@ -10,6 +10,15 @@ export function fixture() {
   s.employees = [{ id: 'EMP-001', name: 'Test Employee', department: 'Operations', monthlySalary: 30000, startDate: '2025-01-01', endDate: '', restDays: [0, 6], scheduleStart: '08:00', coveredOT: true, coveredNSD: true, coveredHoliday: true, covered13th: true, leaveEligibility: ['vacation', 'sil'], active: true }];
   return s;
 }
+// Present on every other scheduled weekday of the cutoff (days without attendance are not credited).
+function withOtherDays(s, start = '2026-09-01', end = '2026-09-15') {
+  const taken = new Set(s.attendance.map(a => a.date));
+  for (let d = new Date(`${start}T00:00:00Z`); d <= new Date(`${end}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10);
+    if (!taken.has(iso) && !s.employees[0].restDays.includes(d.getUTCDay())) s.attendance.push(attend(iso));
+  }
+  return s;
+}
 export function attend(date, extra = {}) {
   return { id: date, employeeId: 'EMP-001', date, status: 'present', scheduledIn: '08:00', timeIn: '08:00', timeOut: '16:00', endNextDay: false, breaks: [], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true, ...extra };
 }
@@ -23,23 +32,22 @@ test('NSD crosses midnight and excludes timed breaks', () => {
   assert.equal(nightMinutes('2026-09-01T21:00', '2026-09-02T07:00', [{ start: '2026-09-02T01:00', end: '2026-09-02T02:00' }]), 420);
 });
 test('ordinary OT and lateness are independently traced; late time reduces credited days, not a deduction line', () => {
-  const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })];
+  const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })]; withOtherDays(s);
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15');
   const row = p.rows[0];
   assert.equal(row.earnings.regularOT, 426.14);
   assert.equal(row.deductions.late, undefined, 'no separate late deduction');
   assert.equal(row.earnings.basic, 15000 - 42.61, '15 min of a 480-min day = 0.03125 day x 1,363.64 daily');
-  assert.equal(row.creditedDays, 0.9688, 'credited days are kept to 4 decimals');
-  assert.ok(p.blockers.some(x => x.includes('Missing attendance')));
+  assert.equal(row.creditedDays, 10.9688, 'credited days are kept to 4 decimals (11 days present, 0.03125 day lost)');
   assert.equal(row.late[0].deductibleMinutes, 15);
   assert.equal(row.late[0].sourceId, '2026-09-01');
 });
 test('approved exception and offset protect covered late time', () => {
   for (const extra of [{ exception: true }, { offsetMinutes: 15 }]) {
-    const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:15', ...extra })];
+    const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:15', ...extra })]; withOtherDays(s);
     const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
     assert.equal(row.earnings.basic, 15000, 'covered late time does not reduce pay');
-    assert.equal(row.creditedDays, 1);
+    assert.equal(row.creditedDays, 11, 'all 11 days fully credited');
   }
 });
 test('rest-day night work adds only differential, with no double-counting', () => {
@@ -50,7 +58,7 @@ test('rest-day night work adds only differential, with no double-counting', () =
 });
 test('unworked special holiday defaults unpaid; policy can pay it', () => {
   const s = fixture(); s.holidays = [{ id: 'h1', date: '2026-09-01', name: 'Test holiday', kind: 'special', basis: 'Test proclamation' }];
-  s.attendance = [attend('2026-09-01', { status: 'off', timeIn: '', timeOut: '' })];
+  s.attendance = [attend('2026-09-01', { status: 'off', timeIn: '', timeOut: '' })]; withOtherDays(s);
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 1363.64);
   s.rules[0].specialUnworked = 1;
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 0);
@@ -148,4 +156,21 @@ test('unworked holiday on a rest day needs an eligibility record before posting'
   assert.ok(calculatePayroll(s, '2026-09-01', '2026-09-15').blockers.some(b => b.includes('2026-09-06')));
   s.attendance.push(attend('2026-09-06', { status: 'off', timeIn: '', timeOut: '' }));
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday, 1363.64);
+});
+
+test('scheduled workdays with no attendance are not credited: 0 days worked means 0 basic pay, and the payroll stays flagged', () => {
+  const s = fixture(); s.attendance = [];
+  const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
+  assert.equal(row.earnings.basic, 0, 'no days worked, no basic pay');
+  assert.ok(p.blockers.some(b => /Missing attendance/.test(b)), 'still flagged for review before finalizing');
+});
+
+test('payroll is real time: unapproved attendance and a time-in without time out are counted, and stay flagged', () => {
+  const s = fixture(); s.attendance = [attend('2026-09-02', { approved: false })]; withOtherDays(s);
+  s.attendance = s.attendance.filter(a => a.date !== '2026-09-01');
+  s.openClockIns = [{ id: 'ci-1', employeeId: 'EMP-001', workDate: '2026-09-01', time: '08:30' }];
+  const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
+  assert.equal(row.daysPresent, 11, 'the open time-in day and the unapproved day both count');
+  assert.equal(row.creditedDays, 10.9375, '30 minutes late on the open day: 1 - 30/480');
+  assert.ok(p.blockers.some(b => /no time out yet/.test(b)) && p.blockers.some(b => /not approved/.test(b)), 'flagged until complete');
 });
