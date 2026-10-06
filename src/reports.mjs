@@ -69,7 +69,7 @@ export const REPORTS = {
   'payroll-runs': {
     title: 'Posted payroll summary', roles: STAFF,
     headers: ['Cutoff start', 'Cutoff end', 'Employees', 'Gross', 'Deductions', 'Net', 'Posted by', 'Posted at'],
-    rows: state => state.runs.slice().sort((a, b) => b.start.localeCompare(a.start)).map(r => [r.start, r.end, r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.postedBy || '', r.postedAt || '']),
+    rows: state => state.runs.filter(r => r.status === 'posted').sort((a, b) => b.start.localeCompare(a.start)).map(r => [r.start, r.end, r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.postedBy || '', r.postedAt || '']),
   },
   'gov-contributions': {
     title: 'Government contributions (monthly)', roles: ['admin', 'hr', 'payroll'], filters: ['month'],
