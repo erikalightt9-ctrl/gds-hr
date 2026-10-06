@@ -49,6 +49,8 @@ export class Store {
   }
   read() {
     const state = JSON.parse(this.db.prepare('SELECT data FROM state WHERE id=1').get().data);
+    // Employees are always listed alphabetically (payroll, attendance, leave, reports, pickers).
+    state.employees.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
     state.employeeProfiles = this.db.prepare("SELECT * FROM employee_profiles WHERE section IN ('employment','attendance','payroll','leave','contributions')").all().map(r => ({ employeeId: r.employee_id, section: r.section, ...JSON.parse(r.data) }));
     state.deductions ??= [];   // added after launch; older databases start with none
     state.payrollInputs = this.db.prepare('SELECT data FROM payroll_inputs').all().map(r => JSON.parse(r.data));
