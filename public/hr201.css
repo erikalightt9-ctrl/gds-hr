@@ -600,3 +600,5 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
   .employee-sidebar button { padding: 11px 12px; font-size: 15px; }
   .employee-menu-heading { margin: 10px 12px 2px; }
 }
+.payroll-total { font-size: 14px; color: var(--ink); }
+.payroll-total strong { color: var(--red-700, #8f1420); font-size: 15px; }
