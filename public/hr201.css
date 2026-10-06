@@ -558,3 +558,6 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .net-pay { display: flex; justify-content: space-between; align-items: center; margin: 16px 0; padding: 16px 18px; border-radius: 14px; background: linear-gradient(135deg, #171717, #3a0d12); color: #fff; }
 .net-pay strong { font-size: 26px; color: #f6d77d; }
 @media (max-width: 760px) { .net-columns { grid-template-columns: 1fr; } }
+
+.net-total.net-focus { box-shadow: 0 0 0 2px #c4283a; }
+.net-pay.net-focus { box-shadow: 0 0 0 3px #d9b85c; }

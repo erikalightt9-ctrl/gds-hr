@@ -284,10 +284,9 @@ function payrollPage() {
   html += `<div class="cards">${card('Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${card('Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${card('Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${card('Employees', run?.rows.length || 0, 'In this payroll cutoff')}${card('Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="panel-head"><div><h2>Payroll computation</h2><p>Click a salary to inspect its calculation and source records.</p></div>${badge(run?.status === 'posted' ? 'Posted' : 'Draft preview', run?.status === 'posted' ? '' : 'pending')}</div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee"><option value="">All employees</option>${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)} (${esc(e.id)})</option>`).join('')}</select></label><label>13th month payout<select name="pay13th"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Calculate payroll</button></form>`;
   if (run?.employeeIds?.length) html += `<div class="notice" role="status">Showing payroll for <strong>${run.employeeIds.map(id => esc(state.employees.find(e => e.id === id)?.name || id)).join(', ')}</strong> only. ${run.id ? 'This posting covers only this employee.' : 'Posting will cover only this employee; others can be posted separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
   // Simple view: what was earned, what was deducted, what is paid. Click any amount for the full computation.
-  const headers = ['Employee', 'Days worked', 'Basic pay', 'Overtime, night & holiday pay', 'Other additions', 'Gross pay', 'Deductions', 'Net pay'];
+  const headers = ['Employee', 'Basic pay', 'Gross pay', 'Net pay'];
   const cell = (row, amount, component = '') => `<button class="money-link" data-salary="${esc(row.employeeId)}" data-component="${esc(component)}" title="Show how this amount was calculated">${money(amount)}</button>`;
-  const sum = (r, keys) => keys.reduce((s, k) => s + (r.earnings[k] || 0), 0);
-  html += table(headers, (run?.rows || []).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, `${r.creditedDays ?? r.daysPresent} of ${r.workingDays}${r.leaveDays ? `<small>${r.leaveDays} leave day${r.leaveDays === 1 ? '' : 's'}</small>` : ''}`, cell(r, r.earnings.basic, 'basic'), cell(r, sum(r, ['regularOT', 'restOT', 'specialOT', 'regularHolidayOT', 'otherOT', 'nsd', 'restDay', 'specialHoliday', 'regularHoliday', 'otherHoliday']), 'extras'), cell(r, sum(r, ['additional', 'allowance', 'thirteenth']), 'additions'), cell(r, r.gross, 'gross'), cell(r, r.totalDeductions, 'deductions'), `<strong>${cell(r, r.net, 'net')}</strong>`]), 'Choose a cutoff and calculate payroll to see the computation.') + `<div class="panel-foot"><span>PHP · Applicable Statutory / Company Payroll Rate</span><span>${run?.rows.length || 0} employees</span></div></section>`;
+  html += table(headers, (run?.rows || []).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, cell(r, r.earnings.basic, 'basic'), cell(r, r.gross, 'gross'), `<strong>${cell(r, r.net, 'net')}</strong>`]), 'Choose a cutoff and calculate payroll to see the computation.') + `<div class="panel-foot"><span>PHP · Applicable Statutory / Company Payroll Rate</span><span>${run?.rows.length || 0} employees</span></div></section>`;
   if (run?.blockers.length) html += `<div class="notice"><strong>${run.blockers.length} item${run.blockers.length === 1 ? '' : 's'} to resolve before posting</strong><ul>${run.blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul></div>`;
   if (run?.id && run.status === 'posted' && auth.user.role === 'admin') html += `<div class="actions"><button data-reverse-run="${esc(run.id)}">Reverse this posting</button><span class="legend">Withdraws these payslips, restores loan balances and lets you correct and post the cutoff again. The posting stays in the audit trail.</span></div><br>`;
   if (run?.status === 'reversed') html += `<div class="notice">This payroll was reversed by ${esc(run.reversedBy)} on ${esc((run.reversedAt || '').slice(0, 10))}: ${esc(run.reversalReason || '')}</div>`;
@@ -458,8 +457,8 @@ const OVERRIDABLE = [['basic', 'Basic salary', 'earnings'], ['regularOT', 'Regul
 // reason); government contributions and loans keep their own approval / balance flows and are shown read-only.
 const NET_EARNINGS = [['basic', 'Basic pay'], ['regularOT', 'Overtime'], ['nsd', 'Night differential'], ['restDay', 'Rest day pay'], ['restOT', 'Rest day overtime'], ['regularHoliday', 'Regular holiday pay'], ['regularHolidayOT', 'Regular holiday overtime'], ['specialHoliday', 'Special holiday pay'], ['specialOT', 'Special holiday overtime'], ['otherHoliday', 'Other holiday pay'], ['otherOT', 'Other holiday overtime'], ['allowance', 'Allowance'], ['additional', 'Adjustment'], ['thirteenth', '13th month pay', true]];
 const NET_DEDUCTIONS = [['SSS', 'SSS'], ['PhilHealth', 'PhilHealth'], ['Pag-IBIG', 'Pag-IBIG'], ['tax', 'Withholding tax'], ['loans', 'Loans', true], ['absence', 'Absence / unpaid leave'], ['undertime', 'Undertime'], ['other', 'Other deductions']];
-function netPayDialog(employeeId) {
-  const row = currentRun.rows.find(r => r.employeeId === employeeId), m = row.manualEntry, editable = canEdit('adjustments');
+function netPayDialog(employeeId, focus = 'net') {
+  const row = currentRun.rows.find(r => r.employeeId === employeeId), m = row.manualEntry, editable = canEdit('adjustments') && !currentRun.id;
   computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
   const original = key => (row.overrides || []).find(o => o.component === key)?.original;
   const box = (side, [key, label, locked]) => {
@@ -469,7 +468,7 @@ function netPayDialog(employeeId) {
       <input type="number" step="0.01" min="0" name="${esc(key)}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${locked || !editable ? 'readonly tabindex="-1"' : ''} aria-label="${esc(label)}">
       <small>${computed !== undefined ? `Manual · computed ${money(computed)}` : CONTRIB_KEYS.includes(key) ? 'From contribution basis' : key === 'loans' ? 'From approved loans' : 'Computed'}</small></label>`;
   };
-  openDialog(`Net pay · ${row.employeeName}`, `<form id="net-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · Draft (not yet posted)</p>
+  openDialog(`Pay computation · ${row.employeeName}`, `<form id="net-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · ${currentRun.id ? 'Posted (read-only)' : 'Draft (not yet posted)'}</p>
     <div class="net-columns"><fieldset class="net-side"><legend>Earnings</legend>${NET_EARNINGS.map(f => box('earnings', f)).join('')}<div class="net-total"><span>Gross pay</span><strong data-net-gross>${money(row.gross)}</strong></div></fieldset>
     <fieldset class="net-side"><legend>Deductions</legend>${NET_DEDUCTIONS.map(f => box('deductions', f)).join('')}<div class="net-total"><span>Total deductions</span><strong data-net-deductions>${money(row.totalDeductions)}</strong></div></fieldset></div>
     <div class="net-pay"><span>Net pay</span><strong data-net-pay>${money(row.net)}</strong></div>
@@ -478,6 +477,9 @@ function netPayDialog(employeeId) {
     <div class="dialog-foot"><button type="button" data-net-breakdown>View computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
   dialog.classList.add('wide-dialog');
   const form = dialog.querySelector('#net-form');
+  // Opened from Basic pay: put the cursor in the basic pay box; from Gross / Net: highlight that total.
+  if (focus === 'basic' && editable) form.elements.basic?.focus();
+  else form.querySelector(focus === 'gross' ? '[data-net-gross]' : '[data-net-pay]')?.closest('div')?.classList.add('net-focus');
   const totals = () => {
     const sum = side => [...form.querySelectorAll(`input[data-side="${side}"]`)].reduce((s, i) => s + Number(i.value || 0), 0);
     const restE = Object.entries(row.earnings).filter(([k]) => !form.elements[k]).reduce((s, [, v]) => s + v, 0), restD = Object.entries(row.deductions).filter(([k]) => !form.elements[k]).reduce((s, [, v]) => s + v, 0);
@@ -822,7 +824,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.add) edit(b.dataset.add);
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
     if (b.dataset.run) { currentRun = await api(`/runs/${b.dataset.run}`); page = 'payroll'; render(); }
-    if (b.dataset.salary && b.dataset.component === 'net' && currentRun && !currentRun.id) { netPayDialog(b.dataset.salary); return; }
+    if (b.dataset.salary && ['basic', 'gross', 'net'].includes(b.dataset.component) && currentRun && b.closest('.payroll-computation')) { netPayDialog(b.dataset.salary, b.dataset.component); return; }
     if (b.dataset.salary && b.dataset.component && currentRun) { breakdown.open(currentRun, currentRun.rows.find(x => x.employeeId === b.dataset.salary), b.dataset.component); return; }
     if (b.dataset.salary) await showSalary(b.dataset.salary, b.dataset.component);
     if (b.dataset.payrollEmployee) await showSalary(b.dataset.payrollEmployee);
