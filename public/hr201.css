@@ -518,3 +518,27 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .agency-pagibig { background: #1c4fa1; border: 2px solid #d62828; }
 .agency-name { display: inline-flex; align-items: center; font-weight: 700; }
 .contribution-agency legend { display: inline-flex; align-items: center; }
+
+/* ---------- Holiday calendar cards ---------- */
+.holiday-calendar { padding: 6px 20px 20px; }
+.holiday-month h3 { margin: 18px 0 10px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #8a6a1f; }
+.holiday-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+.holiday-card { display: grid; grid-template-columns: 58px 46px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #fff; border: 1px solid #efe2bd; box-shadow: 0 10px 22px -18px rgb(90 62 12 / .5); border-left: 5px solid #c9b07a; }
+.holiday-card.kind-regular { border-left-color: #c4283a; }
+.holiday-card.kind-special, .holiday-card.kind-double { border-left-color: #d9a520; }
+.holiday-card.kind-ordinary { border-left-color: #9aa0a6; }
+.holiday-card.past { opacity: .62; }
+.holiday-card.next { box-shadow: 0 0 0 2px #d9b85c, 0 14px 28px -16px rgb(150 100 10 / .6); background: linear-gradient(135deg, #fffaf0, #fff1cc); }
+.holiday-date { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 58px; border-radius: 12px; background: #171717; color: #fff; }
+.holiday-date strong { font-size: 22px; line-height: 1; }
+.holiday-date span { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #f2d58a; margin-top: 3px; }
+.holiday-icon { font-size: 30px; text-align: center; }
+.holiday-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.holiday-info h4 { margin: 0; font-size: 15px; color: #1d1d1d; }
+.holiday-info small { color: #8a8170; font-size: 11.5px; overflow-wrap: anywhere; }
+.holiday-kind { align-self: flex-start; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #f4ecd8; color: #6b5420; }
+.kind-regular .holiday-kind { background: #fde4e7; color: #a01b2b; }
+.kind-special .holiday-kind, .kind-double .holiday-kind { background: #fff2c9; color: #8a6400; }
+.kind-ordinary .holiday-kind { background: #eceff1; color: #4b5560; }
+.holiday-next { align-self: flex-start; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: #c4283a; padding: 2px 8px; border-radius: 999px; }
+@media (max-width: 600px) { .holiday-grid { grid-template-columns: 1fr; } .holiday-card { grid-template-columns: 50px 36px minmax(0, 1fr); } .holiday-actions { grid-column: 1 / -1; justify-self: end; } }
