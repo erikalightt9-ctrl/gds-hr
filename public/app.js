@@ -343,10 +343,10 @@ async function reportsPage() {
   const reports = await api('/reports');
   const runs = state.runs.filter(r => r.status === 'posted').sort((a, b) => b.start.localeCompare(a.start));
   const hr = reports.filter(r => r.hr201), other = reports.filter(r => !r.hr201), depts = hrContext?.departments || [];
-  const filterForm = r => r.filters.length ? `<form class="report-filters" data-report="${esc(r.key)}">${r.filters.includes('department') ? `<select name="department" aria-label="Department"><option value="">All departments</option>${depts.map(d => `<option>${esc(d)}</option>`).join('')}</select>` : ''}${r.filters.includes('status') ? '<select name="status" aria-label="Status"><option value="">Active and inactive</option><option>Active</option><option>Inactive</option><option>Archived</option></select>' : ''}${r.filters.includes('from') ? '<input type="date" name="from" aria-label="From date">' : ''}${r.filters.includes('to') ? '<input type="date" name="to" aria-label="To date">' : ''}</form>` : '';
+  const filterForm = r => r.filters.length ? `<form class="report-filters" data-report="${esc(r.key)}">${r.filters.includes('department') ? `<select name="department" aria-label="Department"><option value="">All departments</option>${depts.map(d => `<option>${esc(d)}</option>`).join('')}</select>` : ''}${r.filters.includes('status') ? '<select name="status" aria-label="Status"><option value="">Active and inactive</option><option>Active</option><option>Inactive</option><option>Archived</option></select>' : ''}${r.filters.includes('from') ? '<input type="date" name="from" aria-label="From date">' : ''}${r.filters.includes('to') ? '<input type="date" name="to" aria-label="To date">' : ''}${r.filters.includes('month') ? `<input type="month" name="month" aria-label="Month" value="${today().slice(0, 7)}">` : ''}</form>` : '';
   shell(heading('Reports & downloads', 'Download any list as an Excel workbook or a printable PDF. Files contain only what your role may see, and each export is recorded in the audit trail.') +
     (hr.length ? `<section class="panel"><div class="panel-head"><h2>HR 201 reports</h2><span class="legend">Choose filters, then download</span></div><ul class="report-list wide">${hr.map(r => `<li><span>${esc(r.title)}</span>${filterForm(r)}<span class="download-links"><a class="small download-link" data-report-link="${esc(r.key)}" data-format="xlsx" href="/api/reports/${esc(r.key)}.xlsx" download>Excel</a><a class="small download-link" data-report-link="${esc(r.key)}" data-format="pdf" href="/api/reports/${esc(r.key)}.pdf" download>PDF</a></span></li>`).join('')}</ul></section>` : '') +
-    (other.length ? `<section class="panel"><div class="panel-head"><h2>Attendance, leave &amp; payroll reports</h2><span class="legend">${other.length} reports available to your role</span></div><ul class="report-list">${other.map(r => `<li><span>${esc(r.title)}</span>${downloads(r.key)}</li>`).join('')}</ul></section>` : '') +
+    (other.length ? `<section class="panel"><div class="panel-head"><h2>Attendance, leave &amp; payroll reports</h2><span class="legend">${other.length} reports available to your role</span></div><ul class="report-list">${other.map(r => r.filters.length ? `<li><span>${esc(r.title)}</span>${filterForm(r)}<span class="download-links"><a class="small download-link" data-report-link="${esc(r.key)}" data-format="xlsx" href="/api/reports/${esc(r.key)}.xlsx?month=${today().slice(0, 7)}" download>Excel</a><a class="small download-link" data-report-link="${esc(r.key)}" data-format="pdf" href="/api/reports/${esc(r.key)}.pdf?month=${today().slice(0, 7)}" download>PDF</a></span></li>` : `<li><span>${esc(r.title)}</span>${downloads(r.key)}</li>`).join('')}</ul></section>` : '') +
     (LEGACY.includes(auth.user.role) ? `<section class="panel"><div class="panel-head"><h2>Payroll registers</h2><span class="legend">One file per posted cutoff</span></div>${table(['Cutoff', 'Employees', 'Net', ''], runs.map(r => [`${r.start} → ${r.end}`, r.rows.length, money(r.totals.net), `<span class="download-links"><a class="small download-link" href="/api/runs/${r.id}.xlsx" download>Excel</a><a class="small download-link" href="/api/runs/${r.id}.pdf" download>PDF</a></span>`]))}</section>` : ''));
   // Keep each download link in step with its filters.
   document.querySelector('.content').addEventListener('change', event => {
@@ -928,6 +928,15 @@ document.addEventListener('click', async event => {
       };
     }
   } catch (e) { toast(e.message); }
+});
+// Semi-monthly cutoffs: choosing a start date fills the matching end (1st → 15th, 16th → last day of the month),
+// so a payroll is never run over a whole month by mistake (manual entries are saved per cutoff).
+document.addEventListener('change', event => {
+  const input = event.target; if (input.name !== 'start' || !input.closest('#cutoff-form') || !input.value) return;
+  const [y, m, d] = input.value.split('-').map(Number), end = input.closest('form').elements.end;
+  const startDay = d <= 15 ? 1 : 16, last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  input.value = `${y}-${String(m).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
+  end.value = `${y}-${String(m).padStart(2, '0')}-${String(startDay === 1 ? 15 : last).padStart(2, '0')}`;
 });
 document.addEventListener('submit', async event => {
   if (event.target.id !== 'cutoff-form') return;

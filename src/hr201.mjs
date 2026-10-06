@@ -33,7 +33,7 @@ export const DEFAULT_REQUIREMENTS = [
 const text = (max = 200) => z.string().trim().max(max);
 const requirementSchema = z.object({ id: z.string().regex(/^[a-z0-9-]{1,60}$/), name: text().min(1), category: text(80).min(1), required: z.boolean(), expires: z.boolean(), restricted: z.boolean(), providedBy: z.enum(['employee', 'company']).default('employee'), departments: z.array(text(120)).max(100), classifications: z.array(text(60)).max(30), dueDays: z.number().int().min(0).max(365).nullable().default(null) }).strict();
 export const settingsSchema = z.object({
-  company: z.object({ name: text(120).min(1), systemTitle: text(120).min(1), theme: z.enum(['forest', 'gds']) }).strict(),
+  company: z.object({ name: text(120).min(1), systemTitle: text(120).min(1), theme: z.enum(['forest', 'gds']), sssEmployerNo: text(40).default(''), philhealthEmployerNo: text(40).default(''), pagibigEmployerNo: text(40).default(''), egovFee: z.number().min(0).max(10000).default(15) }).strict(),
   departments: z.array(text(120).min(1)).max(200),
   positions: z.array(text(120).min(1)).max(500),
   classifications: z.array(text(60).min(1)).min(1).max(30),
@@ -48,7 +48,7 @@ export const settingsSchema = z.object({
 
 function defaults(state) {
   return {
-    company: { name: 'GDS CAPITAL INC.', systemTitle: 'HR 201 File & Employee Management System', theme: 'gds' },
+    company: { name: 'GDS CAPITAL INC.', systemTitle: 'HR 201 File & Employee Management System', theme: 'gds', sssEmployerNo: '80017223883000', philhealthEmployerNo: '2010012089', pagibigEmployerNo: '209939490004', egovFee: 15 },
     departments: [...new Set(state.employees.map(e => e.department).filter(Boolean))].sort(),
     positions: [],
     classifications: ['Probationary', 'Regular', 'Project-Based', 'Fixed-Term', 'Contractual', 'Seasonal'],

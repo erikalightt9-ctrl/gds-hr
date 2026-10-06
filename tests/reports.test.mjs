@@ -24,7 +24,7 @@ test('every report downloads as a real Excel workbook and PDF', () => {
     for (const key of Object.keys(REPORTS).filter(k => !k.startsWith('my-'))) {
       const xlsx = buildReport(store, admin, key, 'xlsx'), pdf = buildReport(store, admin, key, 'pdf');
       assert.equal(xlsx.body.subarray(0, 2).toString(), 'PK', `${key} xlsx is a zip`);
-      assert.match(xlsx.filename, new RegExp(`^gds-hr-${key}-\\d{4}-\\d{2}-\\d{2}\\.xlsx$`));
+      assert.match(xlsx.filename, key === 'gov-contributions' ? /^gds-hr-government-contributions-\d{4}-\d{2}\.xlsx$/ : new RegExp(`^gds-hr-${key}-\\d{4}-\\d{2}-\\d{2}\\.xlsx$`));
       assert.equal(pdf.body.subarray(0, 5).toString(), '%PDF-', `${key} pdf header`);
       assert.match(pdf.body.toString('latin1'), /%%EOF$/);
     }
@@ -74,5 +74,19 @@ test('payroll register PDF includes totals', () => {
     const pdf = payrollRunPdf(run).toString('latin1');
     assert.match(pdf, /^%PDF-/);
     assert.match(pdf, /TOTAL/);
+  } finally { store.close(); }
+});
+
+test('monthly government contributions report sums both cutoffs; the summary adds the eGov fee', async () => {
+  const { monthlyContributions, contributionRows } = await import('../src/contribution-report.mjs');
+  const store = fixture();
+  try {
+    const report = monthlyContributions(store, '2026-09');
+    assert.ok(report.people.length >= 1);
+    const p = report.people[0];
+    assert.equal(p.deductions, Math.round((p.sssEE + p.phEE + p.piEE + p.sssLoan + p.piLoan) * 100) / 100);
+    const last = contributionRows(report, 15).at(-1);
+    assert.equal(last[17], 'TOTAL REMITTANCE');
+    assert.equal(last[19], Math.round((report.totals.sss + report.totals.ph + report.totals.pi + report.totals.sssLoan + report.totals.piLoan + 15) * 100) / 100);
   } finally { store.close(); }
 });

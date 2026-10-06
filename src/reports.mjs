@@ -5,6 +5,8 @@ import { REPORTS_201, brandingLine } from './reports201.mjs';
 import { leaveBalance, priorBasicFor } from './engine.mjs';
 import { canReadSection, localToday, visibleAudit, auditChanges } from './profiles.mjs';
 import { tablePdf, workbook } from './export.mjs';
+import { monthlyContributions, contributionRows, CONTRIBUTION_HEADERS, MONTH_NAME } from './contribution-report.mjs';
+import { readSettings } from './hr201.mjs';
 
 const STAFF = ['admin', 'hr', 'payroll', 'viewer'];
 const money = n => (n === null || n === undefined || n === '' ? '' : Math.round(Number(n) * 100) / 100);
@@ -69,6 +71,21 @@ export const REPORTS = {
     headers: ['Cutoff start', 'Cutoff end', 'Employees', 'Gross', 'Deductions', 'Net', 'Posted by', 'Posted at'],
     rows: state => state.runs.slice().sort((a, b) => b.start.localeCompare(a.start)).map(r => [r.start, r.end, r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.postedBy || '', r.postedAt || '']),
   },
+  'gov-contributions': {
+    title: 'Government contributions (monthly)', roles: ['admin', 'hr', 'payroll'], filters: ['month'],
+    // Custom layout: company header with employer numbers, one line per employee, totals and remittance summary.
+    custom: (store, actor, chosen, format) => {
+      const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(chosen.month || '') ? chosen.month : localToday().slice(0, 7);
+      const c = readSettings(store).company, report = monthlyContributions(store, month), rows = contributionRows(report, c.egovFee ?? 15);
+      const ids = `SSS ID NO. ${c.sssEmployerNo || '—'} | PHIC ID NO. ${c.philhealthEmployerNo || '—'} | HDMF ID NO. ${c.pagibigEmployerNo || '—'}`;
+      const status = report.draft ? 'Includes unposted (draft) payroll' : 'From posted payroll';
+      store.log(actor, 'export', 'report', 'gov-contributions', null, { format, month, rows: report.people.length });
+      const filename = `gds-hr-government-contributions-${month}.${format}`;
+      return format === 'xlsx'
+        ? { filename, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: workbook({ [`Contributions ${month}`]: [[c.name], [MONTH_NAME(month)], [`SSS ID NO. ${c.sssEmployerNo || ''}`], [`PHIC ID NO. ${c.philhealthEmployerNo || ''}`], [`HDMF ID NO. ${c.pagibigEmployerNo || ''}`], [status], [], CONTRIBUTION_HEADERS, ...rows] }) }
+        : { filename, type: 'application/pdf', body: tablePdf({ title: `${c.name} · ${MONTH_NAME(month)} · Government contributions`, subtitle: `${ids} | ${status} | Generated ${localToday()}`, headers: CONTRIBUTION_HEADERS, rows: rows.filter(r => r.length).map(r => r.map(v => (typeof v === 'number' ? money(v) : v))) }) };
+    },
+  },
   thirteenth: {
     title: '13th month ledger', roles: STAFF, subtitle: () => `Calendar year ${localToday().slice(0, 4)}`,
     headers: ['Employee ID', 'Name', 'Covered', 'Applicable basic (posted)', 'Encoded before the system', 'Total basic', 'Accrued (÷12)', 'Paid', 'Balance'],
@@ -123,12 +140,13 @@ export function availableReports(actor) {
   return Object.entries(REPORTS).filter(([, r]) => r.roles.includes(actor.role) && (!r.section || canReadSection(actor, r.section))).map(([key, r]) => ({ key, title: r.title, filters: r.filters || [], hr201: key in REPORTS_201 }));
 }
 
-const FILTER_LABELS = { department: 'Department', status: 'Status', from: 'From', to: 'To' };
+const FILTER_LABELS = { department: 'Department', status: 'Status', from: 'From', to: 'To', month: 'Month' };
 export function buildReport(store, actor, key, format, filters = {}) {
   const report = REPORTS[key];
   if (!report || !['xlsx', 'pdf'].includes(format)) throw new AppError('Report not found.', 404);
   if (!report.roles.includes(actor.role) || (report.section && !canReadSection(actor, report.section))) throw new AppError('You cannot download this report.', 403);
   const chosen = Object.fromEntries(Object.entries(filters).filter(([k, v]) => (report.filters || []).includes(k) && typeof v === 'string' && v.length <= 120 && v));
+  if (report.custom) return report.custom(store, actor, chosen, format);
   const state = store.read(), rows = report.rows(state, store, actor, chosen);
   const subtitle = report.own ? `${state.employees.find(e => e.id === actor.employeeId)?.name || actor.employeeId}` : report.subtitle?.() || `${rows.length} record${rows.length === 1 ? '' : 's'}`;
   const described = [subtitle, ...Object.entries(chosen).map(([k, v]) => `${FILTER_LABELS[k]}: ${v}`), `Generated ${localToday()}`, brandingLine(store)].join(' | ');
