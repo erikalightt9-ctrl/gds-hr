@@ -615,7 +615,9 @@ function manualEntryDialog(employeeId) {
 async function reopenComputation() {
   const c = computationContext; if (!c) return false;
   currentRun = await api('/payroll/preview', { start: c.start, end: c.end, pay13th: c.pay13th, ...(c.employeeIds ? { employeeIds: c.employeeIds } : {}) });
-  page = 'payroll'; render(); await showSalary(c.employeeId); return true;
+  // After saving, return to the payroll table (recalculated) instead of reopening the computation window.
+  if (dialog.open) dialog.close();
+  page = 'payroll'; render(); return true;
 }
 async function previewPayslip(employeeId) {
   const c = computationContext, tab = window.open('', '_blank');
