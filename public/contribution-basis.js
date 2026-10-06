@@ -1,6 +1,9 @@
 // Per-employee SSS / PhilHealth / Pag-IBIG review: contribution basis per agency (kept apart from the salary),
 // optional fixed shares, a required reason and the full change history. HR and Admin changes apply on save.
 const AGENCIES = ['SSS', 'PhilHealth', 'Pag-IBIG'];
+// Agency badges in each agency's colours (official logo files can replace these: drop them in public/agency/).
+const AGENCY_BADGE = { SSS: ['SSS', 'sss'], PhilHealth: ['PH', 'philhealth'], 'Pag-IBIG': ['PI', 'pagibig'] };
+const agencyMark = name => `<span class="agency-mark agency-${AGENCY_BADGE[name][1]}" aria-hidden="true">${AGENCY_BADGE[name][0]}</span>`;
 const STATUS = { pending: ['Awaiting approval', 'pending'], approved: ['Applied', ''], rejected: ['Rejected', 'rejected'], removed: ['Removed', 'neutral'] };
 
 export function createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog }) {
@@ -31,7 +34,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
     const a = data.active?.agencies?.[name] || {}, salary = data.employee.monthlySalary || 0;
     manual[name] = Object.fromEntries(SHARES[name].map(k => [k, a[k] !== null && a[k] !== undefined ? a[k] : null]));
     const autoLabel = name === 'Pag-IBIG' ? 'Default' : 'Auto-calculated';
-    return `<fieldset class="contribution-agency" data-agency="${name}"><legend>${name}</legend>
+    return `<fieldset class="contribution-agency" data-agency="${name}"><legend>${agencyMark(name)} ${name}</legend>
       <label class="field">Contribution basis (monthly)<input type="number" min="0" step="0.01" name="${name}.basis" value="${a.basis ?? salary}" data-cb-basis="${name}" required><small data-cb-hint="${name}">Actual salary ${money(salary)}.</small></label>
       ${SHARES[name].map(k => `<label class="field">${SHARE_LABEL[k]}${k === 'employer' && name === 'SSS' ? ' <small class="inline-note">excludes EC</small>' : ''}<span class="share-input"><span class="peso">₱</span><input type="number" min="0" step="0.01" name="${name}.${k}" data-share="${name}.${k}" aria-describedby="st-${name}-${k}"></span><span class="share-state" id="st-${name}-${k}" data-state="${name}.${k}">${autoLabel}</span><button type="button" class="small link-button hidden" data-reset-share="${name}.${k}">Reset to ${name === 'Pag-IBIG' ? 'default' : 'automatic'}</button></label>`).join('')}
       <div class="calc-ref full" data-ref="${name}" aria-live="polite">Calculating…</div>
@@ -103,7 +106,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
   function draw() {
     const d = data, e = d.employee, c = d.current;
     const summary = table(['Agency', 'Contribution basis', 'Employee share', 'Employer share', 'EC', 'Source'], AGENCIES.map(name => [
-      name, money(c[name].basis) + (c[name].basisAdjusted ? `<small>Salary ${money(e.monthlySalary || 0)}</small>` : ''), money(c[name].employee), money(c[name].employer), name === 'SSS' ? money(c[name].ec) : '—',
+      `<span class="agency-name">${agencyMark(name)} ${name}</span>`, money(c[name].basis) + (c[name].basisAdjusted ? `<small>Salary ${money(e.monthlySalary || 0)}</small>` : ''), money(c[name].employee), money(c[name].employer), name === 'SSS' ? money(c[name].ec) : '—',
       c[name].basisAdjusted || c[name].sharesAdjusted ? badge('Approved adjustment', 'pending') : badge('Salary and rules table', 'neutral')]));
     const history = table(['Effective', 'Requested', 'Change (monthly)', 'Reason', 'Status', ''], d.changes.map(ch => [
       ch.effectiveDate, `${esc(ch.requestedBy)}<small>${esc(ch.requestedAt.slice(0, 16).replace('T', ' '))}</small>`,

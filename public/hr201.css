@@ -510,3 +510,11 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 }
 .employee-top .employee-menu-button { font-size: 26px; padding: 10px 16px; line-height: 1; min-width: 56px; min-height: 52px; }
 @media (max-width: 900px) { .employee-top .employee-menu-button { font-size: 28px; padding: 8px 14px; min-width: 56px; min-height: 54px; } }
+
+/* Government agency badges (SSS blue, PhilHealth green, Pag-IBIG blue with red) */
+.agency-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 10.5px; font-weight: 900; letter-spacing: .02em; color: #fff; vertical-align: middle; margin-right: 6px; box-shadow: 0 2px 6px -2px rgb(0 0 0 / .35); }
+.agency-sss { background: #0b3d91; }
+.agency-philhealth { background: #12823b; }
+.agency-pagibig { background: #1c4fa1; border: 2px solid #d62828; }
+.agency-name { display: inline-flex; align-items: center; font-weight: 700; }
+.contribution-agency legend { display: inline-flex; align-items: center; }
