@@ -179,7 +179,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const reportFile = pathname.match(/^\/api\/reports\/([a-z0-9-]+)\.(xlsx|pdf)$/);
       if (reportFile && req.method === 'GET') {
         const file = buildReport(store, auth.user, reportFile[1], reportFile[2], Object.fromEntries(url.searchParams));
-        res.writeHead(200, { 'Content-Type': file.type, 'Content-Disposition': `attachment; filename="${file.filename}"` });
+        res.writeHead(200, { 'Content-Type': file.type, 'Content-Disposition': `${url.searchParams.get('view') && file.type === 'application/pdf' ? 'inline' : 'attachment'}; filename="${file.filename}"` });
         res.end(file.body); return;
       }
       if (pathname === '/api/audit' && req.method === 'GET' && auth.user.role === 'maker') { send(200, visibleAudit(store, auth.user)); return; }

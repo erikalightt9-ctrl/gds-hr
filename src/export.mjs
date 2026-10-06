@@ -62,13 +62,14 @@ const textWidth = (s, size) => [...String(s)].reduce((w, c) => w + glyphWidth(c)
 const isFigure = v => typeof v === 'number' || /^-?[\d,]+(\.\d+)?%?$/.test(String(v ?? '').trim());
 const fitWidth = (value, width, size) => { let s = String(value ?? ''); if (textWidth(s, size) <= width) return s; while (s.length > 1 && textWidth(`${s}...`, size) > width) s = s.slice(0, -1); return `${s}...`; };
 // Options: widths (relative column weights), headings may contain '\n' for two lines, totalRows (last N rows bold
-// with a rule above), note (printed under the table on the last page). Columns of figures are right-aligned.
-export function tablePdf({ title, subtitle = '', headers, rows, widths: weights = null, totalRows = 0, note = '' }) {
+// with a rule above), note (printed under the table on the last page), rightAlign (per column; default: columns of figures),
+// groups ([{ label, from, to }]: a heading centred over columns from..to, drawn above their headings).
+export function tablePdf({ title, subtitle = '', headers, rows, widths: weights = null, totalRows = 0, note = '', rightAlign = null, groups = [] }) {
   const usable = PAGE.width - PAGE.margin * 2, size = headers.length > 10 ? 6.5 : 7.5, pad = 3;
   const want = weights || headers.map((h, i) => Math.min(40, Math.max(...String(h).split('\n').map(x => x.length), ...rows.slice(0, 400).map(r => String(r[i] ?? '').length), 4)));
   const total = want.reduce((a, b) => a + b, 0), widths = want.map(w => (w / total) * usable);
-  const right = headers.map((_, i) => { const vals = rows.map(r => r[i]).filter(v => v !== '' && v !== null && v !== undefined); return vals.length > 0 && vals.every(isFigure); });
-  const headLines = Math.max(...headers.map(h => String(h).split('\n').length));
+  const right = rightAlign || headers.map((_, i) => { const vals = rows.map(r => r[i]).filter(v => v !== '' && v !== null && v !== undefined); return vals.length > 0 && vals.every(isFigure); });
+  const headLines = Math.max(...headers.map(h => String(h).split('\n').length)) + (groups.length ? 1 : 0);
   const rowHeight = size + 5, headHeight = rowHeight * headLines, top = PAGE.height - 92, bottom = 44 + (note ? 14 : 0), perPage = Math.max(1, Math.floor((top - headHeight - bottom) / rowHeight));
   const pages = []; for (let i = 0; i < Math.max(rows.length, 1); i += perPage) pages.push(rows.slice(i, i + perPage));
   const generated = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
@@ -76,7 +77,9 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
   const cells = (values, y, bold) => {
     let x = PAGE.margin;
     return values.map((v, i) => {
-      const s = fitWidth(v, widths[i] - pad * 2, size), tx = place(s, i, x);
+      let room = widths[i];
+      if (!right[i]) for (let j = i + 1; j < values.length && (values[j] === '' || values[j] === null || values[j] === undefined); j++) room += widths[j];
+      const s = fitWidth(v, room - pad * 2, size), tx = place(s, i, x);
       x += widths[i];
       return `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${tx.toFixed(1)} ${y.toFixed(1)} Td (${pdfText(s)}) Tj ET`;
     }).join(' ');
@@ -100,6 +103,11 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
       `1 1 1 rg BT /F1 8.5 Tf ${PAGE.margin} ${PAGE.height - 46} Td (${pdfText(`GDS CAPITAL INC.${subtitle ? ` - ${subtitle}` : ''}`)}) Tj ET`,
       `0.97 0.92 0.78 rg ${PAGE.margin} ${top - headHeight + rowHeight - 4} ${usable} ${headHeight + 2} re f`,     // header row
       `0.42 0.30 0.06 rg ${headerCells(top)}`,
+      ...groups.map(g => {
+        const x0 = PAGE.margin + widths.slice(0, g.from).reduce((a, b) => a + b, 0), span = widths.slice(g.from, g.to + 1).reduce((a, b) => a + b, 0);
+        const tx = x0 + (span - textWidth(g.label, size + 1)) / 2, ruleY = top - 3.5;
+        return `0.42 0.30 0.06 rg BT /F2 ${size + 1} Tf ${tx.toFixed(1)} ${top.toFixed(1)} Td (${pdfText(g.label)}) Tj ET 0.42 0.30 0.06 RG 0.6 w ${(x0 + pad).toFixed(1)} ${ruleY.toFixed(1)} m ${(x0 + span - pad).toFixed(1)} ${ruleY.toFixed(1)} l S`;
+      }),
     ];
     const first = top - headHeight + rowHeight;
     page.forEach((row, r) => {

@@ -83,7 +83,7 @@ export const REPORTS = {
       const filename = `gds-hr-government-contributions-${month}.${format}`;
       return format === 'xlsx'
         ? { filename, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: workbook({ [`Contributions ${month}`]: [[c.name], [MONTH_NAME(month)], [`SSS ID NO. ${c.sssEmployerNo || ''}`], [`PHIC ID NO. ${c.philhealthEmployerNo || ''}`], [`HDMF ID NO. ${c.pagibigEmployerNo || ''}`], [status], [], CONTRIBUTION_HEADERS, ...rows] }) }
-        : { filename, type: 'application/pdf', body: tablePdf({ title: `${c.name} · ${MONTH_NAME(month)} · Government contributions`, subtitle: `${ids} | ${status} | Generated ${localToday()}`, headers: CONTRIBUTION_HEADERS, rows: rows.filter(r => r.length).map(r => r.map(v => (typeof v === 'number' ? money(v) : v))) }) };
+        : { filename, type: 'application/pdf', body: tablePdf({ title: `${c.name} · ${MONTH_NAME(month)} · Government contributions`, subtitle: `${ids} | ${status} | Generated ${localToday()}`, ...contributionPdfTable(rows) }) };
     },
   },
   thirteenth: {
@@ -158,17 +158,30 @@ export function buildReport(store, actor, key, format, filters = {}) {
 }
 
 // One posted payroll run as a PDF register (the Excel version already exists).
+// PDF layout of the contributions report: same rows as the Excel template, figures as 1,000.00, summary labels
+// (remittance and employer share) moved under Name so they read in full.
+const CONTRIBUTION_PDF_HEADERS = ['#', 'Name', 'SSS No.', 'Monthly\ncomp.', 'SSS\nER', 'SSS\nEE', 'SSS\nTotal', 'PhilHealth No.', 'PhilHealth\nbasic', 'PHIC\nER', 'PHIC\nEE', 'PHIC\nTotal', 'Pag-IBIG No.', 'HDMF\nER', 'HDMF\nEE', 'HDMF\nTotal', 'SSS\nloan', 'HDMF\nloan', 'Adjust-\nment', 'Deductions'];
+function contributionPdfTable(rows) {
+  const peso = v => (typeof v === 'number' ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v);
+  const body = rows.map(r => {
+    if (!r.length) return Array(20).fill('');
+    if (r[17] && r.slice(0, 17).every(v => v === '')) return ['', r[17], ...Array(17).fill(''), peso(r[19])];   // summary line
+    return r.map((v, i) => (i === 0 ? v : peso(v)));
+  });
+  return { headers: CONTRIBUTION_PDF_HEADERS, rows: body, widths: [18, 100, 52, 50, 38, 36, 40, 62, 44, 36, 36, 40, 62, 34, 34, 38, 34, 36, 34, 50],
+    rightAlign: CONTRIBUTION_PDF_HEADERS.map((_, i) => ![1, 2, 7, 12].includes(i)) };
+}
 export function payrollRunPdf(run) {
   // Figures as 1,000.00, right-aligned; two-line headings so every column stays readable.
   const peso = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const headers = ['Employee\nID', 'Name', 'Days\ncredited', 'Basic', 'OT &\npremiums', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime', 'Loans', 'Other', 'Total\ndeductions', 'Net', 'Employer\nshare*'];
+  const headers = ['Employee\nID', 'Name', 'Days\ncredited', 'Basic', 'Overtime', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime', 'Loans', 'Other', 'Total\ndeductions', 'Net'];
   const premiums = e => Object.entries(e).filter(([k]) => !['basic', 'thirteenth', 'additional', 'allowance'].includes(k)).reduce((s, [, v]) => s + v, 0);
   const loans = d => (d.loans || 0) + (d.sssLoan || 0) + (d.pagibigLoan || 0), other = d => (d.other || 0) + (d.salaryDeduction || 0) + (d.absence || 0);
-  const values = r => [r.earnings.basic, premiums(r.earnings), r.gross, r.deductions.SSS, r.deductions.PhilHealth, r.deductions['Pag-IBIG'], r.deductions.tax, r.deductions.undertime, loans(r.deductions), other(r.deductions), r.totalDeductions, r.net, r.employerTotal ?? 0];
+  const values = r => [r.earnings.basic, premiums(r.earnings), r.gross, r.deductions.SSS, r.deductions.PhilHealth, r.deductions['Pag-IBIG'], r.deductions.tax, r.deductions.undertime, loans(r.deductions), other(r.deductions), r.totalDeductions, r.net];
   const sorted = run.rows.slice().sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' }));
   const rows = sorted.map(r => [r.employeeId, r.employeeName, Number(r.creditedDays ?? r.daysPresent).toLocaleString('en-US', { maximumFractionDigits: 4 }), ...values(r).map(peso)]);
-  const sums = sorted.reduce((tot, r) => values(r).map((v, i) => tot[i] + (v || 0)), Array(13).fill(0));
+  const sums = sorted.reduce((tot, r) => values(r).map((v, i) => tot[i] + (v || 0)), Array(12).fill(0));
   rows.push(['', 'TOTAL', '', ...sums.map(peso)]);
   return tablePdf({ title: `Payroll register ${run.start} to ${run.end}`, subtitle: `${run.status === 'posted' ? `Posted by ${run.postedBy || ''}` : 'Preview'} - ${run.rows.length} employees`, headers, rows, totalRows: 1,
-    widths: [44, 128, 36, 50, 48, 54, 44, 46, 42, 34, 44, 42, 44, 54, 54, 50], note: '* Employer SSS, EC, PhilHealth and Pag-IBIG: paid by the company, not deducted from pay.' });
+    widths: [46, 140, 38, 54, 52, 58, 48, 50, 46, 38, 48, 46, 48, 58, 58], groups: [{ label: 'Deductions', from: 6, to: 12 }] });
 }

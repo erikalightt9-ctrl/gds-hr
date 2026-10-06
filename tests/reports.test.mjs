@@ -85,7 +85,9 @@ test('monthly government contributions report sums both cutoffs; the summary add
     assert.ok(report.people.length >= 1);
     const p = report.people[0];
     assert.equal(p.deductions, Math.round((p.sssEE + p.phEE + p.piEE + p.sssLoan + p.piLoan) * 100) / 100);
-    const last = contributionRows(report, 15).at(-1);
+    const all = contributionRows(report, 15), last = all.find(r => r[17] === 'TOTAL REMITTANCE');
+    assert.equal(all.at(-1)[17], 'TOTAL EMPLOYER SHARE');
+    assert.equal(all.at(-1)[19], report.employer.total, 'employer share section');
     assert.equal(last[17], 'TOTAL REMITTANCE');
     assert.equal(last[19], Math.round((report.totals.sss + report.totals.ph + report.totals.pi + report.totals.sssLoan + report.totals.piLoan + 15) * 100) / 100);
   } finally { store.close(); }

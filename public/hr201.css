@@ -602,3 +602,4 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 }
 .payroll-total { font-size: 14px; color: var(--ink); }
 .payroll-total strong { color: var(--red-700, #8f1420); font-size: 15px; }
+.employer-share-link { font-size: 13px; font-weight: 600; color: var(--red-700, #8f1420); text-decoration: underline; }

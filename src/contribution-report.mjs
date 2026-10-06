@@ -36,7 +36,9 @@ export function monthlyContributions(store, month) {
     return { ...out, sssNo: gov.sss || '', phNo: gov.philHealth || '', piNo: gov.pagIbig || '', deductions: r2(t.sssEE + t.phEE + t.piEE + t.sssLoan + t.piLoan) };
   });
   const sum = key => r2(people.reduce((s, p) => s + p[key], 0));
-  return { month, draft, people, totals: { basis: sum('sssBasis'), sss: r2(sum('sssEE') + sum('sssER')), ph: r2(sum('phEE') + sum('phER')), pi: r2(sum('piEE') + sum('piER')), sssLoan: sum('sssLoan'), piLoan: sum('piLoan'), deductions: sum('deductions') } };
+  const employer = { sss: sum('sssER'), ph: sum('phER'), pi: sum('piER') };
+  employer.total = r2(employer.sss + employer.ph + employer.pi);
+  return { month, draft, people, employer, totals: { basis: sum('sssBasis'), sss: r2(sum('sssEE') + sum('sssER')), ph: r2(sum('phEE') + sum('phER')), pi: r2(sum('piEE') + sum('piER')), sssLoan: sum('sssLoan'), piLoan: sum('piLoan'), deductions: sum('deductions') } };
 }
 
 // Employees outside payroll whose contributions are still remitted (payroll status 'Remittance only'): full monthly
@@ -66,5 +68,9 @@ export function contributionRows(report, fee = 0) {
   rows.push([]);
   const grand = r2(t.sss + t.ph + t.pi + t.sssLoan + t.piLoan + fee);
   for (const [label, amount] of [['SSS', t.sss], ['PHILHEALTH', t.ph], ['HDMF', t.pi], ...(t.sssLoan ? [['SSS LOAN', t.sssLoan]] : []), ...(t.piLoan ? [['PAG-IBIG LOAN', t.piLoan]] : []), ['AUB eGov payment fee', fee], ['TOTAL REMITTANCE', grand]]) rows.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', label, '', amount]);
+  // Employer share: what GDS pays on top of salaries (SSS includes EC); included in the remittance above.
+  const er = report.employer;
+  rows.push([]);
+  for (const [label, amount] of [['EMPLOYER SHARE (paid by GDS, not deducted from pay)', ''], ['SSS employer (incl. EC)', er.sss], ['PhilHealth employer', er.ph], ['Pag-IBIG employer', er.pi], ['TOTAL EMPLOYER SHARE', er.total]]) rows.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', label, '', amount]);
   return rows;
 }
