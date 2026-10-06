@@ -7,10 +7,10 @@ const agencyMark = name => `<span class="agency-mark agency-${AGENCY_BADGE[name]
 const STATUS = { pending: ['Awaiting approval', 'pending'], approved: ['Applied', ''], rejected: ['Rejected', 'rejected'], removed: ['Removed', 'neutral'] };
 
 export function createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog }) {
-  let data = null, employeeId = '', done = null, saved = null;   // saved: refresh the calling page after a change
+  let data = null, employeeId = '', done = null, saved = null, notice = '';   // notice: the green confirmation after a save   // saved: refresh the calling page after a change
 
   async function open(id, { onChanged = null, onSaved = null } = {}) {
-    employeeId = id; done = onChanged; saved = onSaved;
+    employeeId = id; done = onChanged; saved = onSaved; notice = '';
     try { data = await api(`/employees/${encodeURIComponent(id)}/contributions`); draw(); } catch (error) { toast(error.message); }
   }
 
@@ -84,7 +84,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
       <p class="sub">${esc(e.id)} · Actual monthly salary <strong>${money(e.monthlySalary || 0)}</strong> · amounts are monthly</p>
       ${d.canSubmit ? `<form id="cb-form">
         ${table(['Agency', 'Declared salary', 'Employee share', 'Employer share', 'EC'], AGENCIES.map(agencyRow))}
-        <div class="cb-save"><label class="field">Applies from cutoff<select name="effectiveDate">${cutoffStarts()}</select></label><button class="primary">Save</button></div>
+        <div class="cb-save"><label class="field">Applies from cutoff<select name="effectiveDate">${cutoffStarts()}</select></label><button class="primary">Save</button>${notice ? `<p class="cb-saved" role="status">✓ ${esc(notice)}</p>` : ''}</div>
       </form>` : ''}
       <details class="cb-history"><summary>Change history (${d.changes.length})</summary>${history}</details></div>`, `<div class="dialog-foot">${done ? '<button data-cb-back>Back to payroll computation</button>' : ''}<button data-close>Close</button></div>`);
     const cbForm = dialog.querySelector('#cb-form');
@@ -106,7 +106,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
     const agencies = Object.fromEntries(AGENCIES.map(n => [n, { basis: num(`${n}.basis`), employee: manual[n].employee, employer: manual[n].employer, ec: n === 'SSS' ? manual.SSS.ec : null }]));
     try {
       const change = await api(`/employees/${encodeURIComponent(employeeId)}/contributions`, { effectiveDate: form.get('effectiveDate'), agencies });
-      toast(change.status === 'approved' ? 'Saved and applied. Payroll previews and payslips now use it.' : 'Saved.');
+      notice = change.status === 'approved' ? `Saved. Applies from the ${change.effectiveDate} cutoff; payroll and contributions now use these amounts.` : 'Saved.';
       await after();
     } catch (error) { toast(error.message); }
   }
@@ -114,7 +114,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
     const button = event.target.closest('[data-cb-review]'); if (!button) return;
     const decision = button.dataset.cbReview, note = window.prompt(decision === 'approve' ? 'Note (optional):' : `Reason for ${decision === 'remove' ? 'removing' : 'rejecting'} this change:`, '');
     if (note === null) return;
-    try { await api(`/contribution-changes/${button.dataset.id}/review`, { decision, note }); toast({ approve: 'Change applied.', reject: 'Change rejected.', remove: 'Change removed. Payroll goes back to the previous setting.' }[decision]); await after(); }
+    try { await api(`/contribution-changes/${button.dataset.id}/review`, { decision, note }); notice = { approve: 'Change applied.', reject: 'Change rejected.', remove: 'Change removed. The previous amounts apply again.' }[decision]; await after(); }
     catch (error) { toast(error.message); }
   }
   async function after() {
