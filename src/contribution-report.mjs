@@ -42,6 +42,7 @@ export function monthlyContributions(store, month) {
 
 // Employees outside payroll whose contributions are still remitted (payroll status 'Remittance only'): full monthly
 // shares from the contribution basis (approved contribution change, else the monthly salary on the record).
+const SHARE_KEYS = { SSS: ['sssEmployee', 'sssEmployer', 'sssEc'], PhilHealth: ['philHealthEmployee', 'philHealthEmployer'], 'Pag-IBIG': ['pagIbigEmployee', 'pagIbigEmployer'] };
 function remittanceOnlyRows(state, month) {
   const end = lastDay(month), rule = ruleOn(state, end);
   if (!rule) return [];
@@ -50,7 +51,8 @@ function remittanceOnlyRows(state, month) {
     const setting = activeContributionSetting(state.contributionChanges, e.id, end), t = { employeeId: e.id, name: e.name, sssBasis: 0, phBasis: 0, sssEE: 0, sssER: 0, phEE: 0, phER: 0, piEE: 0, piER: 0, sssLoan: 0, piLoan: 0 };
     const share = name => {
       const basis = setting?.agencies?.[name]?.basis ?? e.monthlySalary;
-      return basis ? { basis, ...contributionShares(name, rule.contributions[name], basis, name, []) } : { basis: 0, employee: 0, employer: 0, ec: 0 };
+      const a = setting?.agencies?.[name] || {}, [eeKey, erKey, ecKey] = SHARE_KEYS[name], override = { [eeKey]: a.employee, [erKey]: a.employer, ...(ecKey ? { [ecKey]: a.ec } : {}) };
+      return basis ? { basis, ...contributionShares(name, rule.contributions[name], basis, name, [], override) } : { basis: 0, employee: 0, employer: 0, ec: 0 };
     };
     const sss = share('SSS'), ph = share('PhilHealth'), pi = share('Pag-IBIG');
     return { ...t, sssBasis: sss.basis, phBasis: ph.basis, sssEE: sss.employee, sssER: sss.employer + sss.ec, phEE: ph.employee, phER: ph.employer, piEE: pi.employee, piER: pi.employer };

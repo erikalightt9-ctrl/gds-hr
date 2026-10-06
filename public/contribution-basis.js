@@ -7,10 +7,10 @@ const agencyMark = name => `<span class="agency-mark agency-${AGENCY_BADGE[name]
 const STATUS = { pending: ['Awaiting approval', 'pending'], approved: ['Applied', ''], rejected: ['Rejected', 'rejected'], removed: ['Removed', 'neutral'] };
 
 export function createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog }) {
-  let data = null, employeeId = '', done = null;
+  let data = null, employeeId = '', done = null, saved = null;   // saved: refresh the calling page after a change
 
-  async function open(id, { onChanged = null } = {}) {
-    employeeId = id; done = onChanged;
+  async function open(id, { onChanged = null, onSaved = null } = {}) {
+    employeeId = id; done = onChanged; saved = onSaved;
     try { data = await api(`/employees/${encodeURIComponent(id)}/contributions`); draw(); } catch (error) { toast(error.message); }
   }
 
@@ -164,6 +164,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
   }
   async function after() {
     data = await api(`/employees/${encodeURIComponent(employeeId)}/contributions`); draw();
+    saved?.();
   }
   return { open };
 }
