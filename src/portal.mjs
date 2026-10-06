@@ -218,7 +218,8 @@ export function employeeDashboard(store, actor, now = new Date()) {
 export function liveDashboard(store, actor, now = new Date()) {
   permit(actor, ['admin', 'hr']);
   const state = store.read();
-  const employees = state.employees.filter(e => !e.endDate || e.endDate >= local(now).slice(0, 10)).map(e => ({ employeeId: e.id, name: e.name, ...todayAttendance(store, e, now) }));
+  // Only people who clock in: not drafts (incomplete or remittance-only profiles such as the CEO), not archived, not separated.
+  const employees = state.employees.filter(e => !e.draft && !e.archived && (!e.endDate || e.endDate >= local(now).slice(0, 10))).map(e => ({ employeeId: e.id, name: e.name, ...todayAttendance(store, e, now) }));
   const explanations = store.db.prepare('SELECT data FROM attendance_explanations ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
   const history = store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
   return { employees, explanations, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };

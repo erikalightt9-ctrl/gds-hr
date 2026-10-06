@@ -73,7 +73,7 @@ function startLive() {
     try {
       await refresh();
       const editing = dialog.open || portal.isEditing() || document.activeElement?.matches('input,select,textarea');
-      if (!editing && page === 'dashboard' && liveData && document.querySelector('#dash-live')) document.querySelector('#dash-live').innerHTML = portal.live(liveData, { todayOnly: true });   // live attendance in place
+      if (!editing && page === 'dashboard' && liveData && document.querySelector('#dash-live')) document.querySelector('#dash-live').innerHTML = portal.live(liveData, { countsOnly: true });   // live attendance in place
       else if (!editing && (auth?.user?.role === 'employee' || ['overview', 'live', 'attendance', 'leave', 'employees'].includes(page))) render();
       else { const indicator = document.querySelector('#portal-sync'); if (indicator) indicator.textContent = '● Updates received · your form is preserved'; }
     } catch { const indicator = document.querySelector('#portal-sync'); if (indicator) indicator.textContent = 'Connection interrupted · reconnecting'; }
@@ -164,7 +164,7 @@ const hrCtx = {
   api, esc, money, table, badge, toast, openDialog, dialog, heading, today,
   shell: html => shell(html),
   context: () => hrContext, legacy: () => LEGACY.includes(auth.user.role),
-  livePanel: () => (liveData ? portal.live(liveData, { todayOnly: true }) : ''),   // Live attendance on the dashboard (HR and Admin)
+  livePanel: () => (liveData ? portal.live(liveData, { countsOnly: true }) : ''),   // Live attendance on the dashboard (HR and Admin)
   legacyGlance: () => ({ leave: state.leaves.filter(l => l.status === 'pending').length, net: state.runs.at(-1)?.totals?.net || 0, loans: state.loans.reduce((s, l) => s + l.balance, 0) }),
   setPage: p => { page = p; }, refresh: () => refresh(), daysAgo: n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10),
   go: nav => goTo(nav), quick: kind => (kind === 'employee' ? files.addEmployee() : kind === 'memo' ? memos.create() : trainings.create()),
