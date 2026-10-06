@@ -509,6 +509,49 @@ function netPayDialog(employeeId, focus = 'net') {
   };
 }
 const CONTRIB_KEYS = ['SSS', 'PhilHealth', 'Pag-IBIG'];
+// Saves the overrides for the components a form shows (others already saved are kept).
+async function saveOverrides(row, shown, changed, defaultReason) {
+  const m = row.manualEntry, base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: defaultReason };
+  const all = [...(base.overrides || []).filter(o => !shown.includes(o.component)), ...changed];
+  const plain = !m || (m.mode === 'add' && !Object.values(m.hours || {}).some(Boolean) && ['Net pay adjustment', 'Withholding tax adjustment', 'Basic pay adjustment'].includes(m.reason));
+  if (!all.length && plain) { if (m) await api(`/payroll/inputs/${encodeURIComponent(row.employeeId)}?start=${currentRun.start}&end=${currentRun.end}`, null, 'DELETE'); return; }
+  await api(`/payroll/inputs/${encodeURIComponent(row.employeeId)}`, { start: currentRun.start, end: currentRun.end, mode: base.mode, daysWorked: base.daysWorked || 0, absenceDays: base.absenceDays || 0, lateMinutes: base.lateMinutes || 0, undertimeMinutes: base.undertimeMinutes || 0, hours: base.hours || {}, reason: base.reason, overrides: all });
+}
+// Basic pay: how it was computed (rate, days, absences, late, undertime) with Basic pay, Absence and Undertime editable.
+function basicPayDialog(employeeId) {
+  const row = currentRun.rows.find(r => r.employeeId === employeeId), editable = canEdit('adjustments') && !currentRun.id;
+  computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
+  const original = key => (row.overrides || []).find(o => o.component === key)?.original;
+  const fact = (label, value, note = '') => `<div class="net-box locked"><span>${esc(label)}</span><strong class="fact-value">${value}</strong>${note ? `<small>${note}</small>` : ''}</div>`;
+  const input = (side, key, label) => { const value = row[side][key] || 0, computed = original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}><small>${computed !== undefined ? `Manual · computed ${money(computed)}` : 'Computed'}</small></label>`; };
+  const daily = row.payBasis === 'daily', base = daily ? row.dailyRate * row.workingDays : row.monthlySalary * (currentRun.start.endsWith('-01') || currentRun.start.endsWith('-16') ? 0.5 : 1);
+  openDialog(`Basic pay · ${row.employeeName}`, `<form id="basic-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · ${currentRun.id ? 'Posted (read-only)' : 'Draft (not yet posted)'}</p>
+    <fieldset class="net-side"><legend>How basic pay is computed</legend>
+      ${fact(daily ? 'Daily rate' : 'Monthly salary', money(daily ? row.dailyRate : row.monthlySalary), daily ? 'Daily-paid' : 'Monthly-paid')}
+      ${fact('Daily rate used', money(row.dailyRate))}${fact('Hourly rate used', money(row.hourlyRate))}
+      ${fact('Scheduled workdays', row.workingDays)}${fact('Days present', row.daysPresent)}${fact('Days credited', row.creditedDays ?? row.daysPresent, row.lateDaysLost ? `${row.lateDaysLost} day lost to late` : '')}
+      ${fact('Leave days', row.leaveDays)}${fact('Late (not offset)', `${row.lateMinutesUnoffset || 0} min`)}${fact('Cutoff salary base', money(base), daily ? 'Daily rate × scheduled days' : 'Half of the monthly salary')}
+    </fieldset>
+    <fieldset class="net-side"><legend>Amounts</legend>${input('earnings', 'basic', 'Basic pay')}${input('deductions', 'absence', 'Absence / unpaid leave')}${input('deductions', 'undertime', 'Undertime')}
+      <div class="net-total"><span>Basic pay less absence and undertime</span><strong data-basic-net>${money((row.earnings.basic || 0) - (row.deductions.absence || 0) - (row.deductions.undertime || 0))}</strong></div></fieldset>
+    ${editable ? '<label class="field">Reason for any change (kept in the audit trail)<input name="reason" maxlength="500" placeholder="e.g. Corrected days worked per timesheet"></label>' : ''}</div>
+    <div class="dialog-foot"><button type="button" data-basic-full>Full pay computation</button><button type="button" data-close>Close</button>${editable ? '<button class="primary">Save and recalculate</button>' : ''}</div></form>`);
+  dialog.classList.add('wide-dialog');
+  const form = dialog.querySelector('#basic-form'), shown = ['basic', 'absence', 'undertime'];
+  form.addEventListener('input', () => {
+    const v = k => Number(form.elements[k].value || 0);
+    form.querySelector('[data-basic-net]').textContent = money(v('basic') - v('absence') - v('undertime'));
+    form.querySelectorAll('input[data-side]').forEach(i => i.closest('.net-box').classList.toggle('changed', Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004));
+  });
+  form.querySelector('[data-basic-full]').onclick = () => { dialog.classList.remove('wide-dialog'); netPayDialog(employeeId, 'net'); };
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const reason = form.elements.reason.value.trim();
+    const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Number(form.elements[k].value || 0), reason }));
+    if (changed.length && reason.length < 3) { toast('Give a reason for the change.'); return; }
+    try { await saveOverrides(row, shown, changed, 'Basic pay adjustment'); dialog.close(); dialog.classList.remove('wide-dialog'); if (await reopenComputation()) toast(changed.length ? 'Basic pay updated. Changes are labelled Manual.' : 'Saved.'); } catch (error) { toast(error.message); }
+  };
+}
 // Withholding tax typed by Payroll/HR for one employee and cutoff (a manual override; the computed tax is kept).
 function taxDialog(row) {
   const m = row.manualEntry, current = (m?.overrides || []).find(o => o.component === 'tax');
@@ -825,7 +868,8 @@ document.addEventListener('click', async event => {
     if (b.dataset.add) edit(b.dataset.add);
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
     if (b.dataset.run) { currentRun = await api(`/runs/${b.dataset.run}`); page = 'payroll'; render(); }
-    if (b.dataset.salary && ['basic', 'gross', 'net'].includes(b.dataset.component) && currentRun && b.closest('.payroll-computation')) { netPayDialog(b.dataset.salary, b.dataset.component); return; }
+    if (b.dataset.salary && b.dataset.component === 'basic' && currentRun && b.closest('.payroll-computation')) { basicPayDialog(b.dataset.salary); return; }
+    if (b.dataset.salary && ['gross', 'net'].includes(b.dataset.component) && currentRun && b.closest('.payroll-computation')) { netPayDialog(b.dataset.salary, b.dataset.component); return; }
     if (b.dataset.salary && b.dataset.component && currentRun) { breakdown.open(currentRun, currentRun.rows.find(x => x.employeeId === b.dataset.salary), b.dataset.component); return; }
     if (b.dataset.salary) await showSalary(b.dataset.salary, b.dataset.component);
     if (b.dataset.payrollEmployee) await showSalary(b.dataset.payrollEmployee);

@@ -561,3 +561,6 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 
 .net-total.net-focus { box-shadow: 0 0 0 2px #c4283a; }
 .net-pay.net-focus { box-shadow: 0 0 0 3px #d9b85c; }
+
+.fact-value { font-size: 17px; color: #1d1d1d; }
+#basic-form .net-side + .net-side { margin-top: 14px; }
