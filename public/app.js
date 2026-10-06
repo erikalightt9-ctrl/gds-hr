@@ -504,7 +504,7 @@ function netPayDialog(employeeId, focus = 'net') {
       if (!all.length && plain && m) await api(`/payroll/inputs/${encodeURIComponent(employeeId)}?start=${currentRun.start}&end=${currentRun.end}`, null, 'DELETE');
       else if (all.length || m) await api(`/payroll/inputs/${encodeURIComponent(employeeId)}`, { start: currentRun.start, end: currentRun.end, mode: base.mode, daysWorked: base.daysWorked || 0, absenceDays: base.absenceDays || 0, lateMinutes: base.lateMinutes || 0, undertimeMinutes: base.undertimeMinutes || 0, hours: base.hours || {}, reason: base.reason, overrides: all });
       dialog.close(); dialog.classList.remove('wide-dialog');
-      if (await reopenComputation()) toast(overrides.length ? 'Net pay updated. Changes are labelled Manual.' : 'Saved.');
+      if (await reopenComputation()) savedPopup(overrides.length ? 'Net pay updated. Changes are labelled Manual.' : 'Saved.');
     } catch (error) { toast(error.message); }
   };
 }
@@ -549,7 +549,7 @@ function basicPayDialog(employeeId) {
     const reason = form.elements.reason.value.trim();
     const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Number(form.elements[k].value || 0), reason }));
     if (changed.length && reason.length < 3) { toast('Give a reason for the change.'); return; }
-    try { await saveOverrides(row, shown, changed, 'Basic pay adjustment'); dialog.close(); dialog.classList.remove('wide-dialog'); if (await reopenComputation()) toast(changed.length ? 'Basic pay updated. Changes are labelled Manual.' : 'Saved.'); } catch (error) { toast(error.message); }
+    try { await saveOverrides(row, shown, changed, 'Basic pay adjustment'); dialog.close(); dialog.classList.remove('wide-dialog'); if (await reopenComputation()) savedPopup(changed.length ? 'Basic pay updated. Changes are labelled Manual.' : 'Saved.'); } catch (error) { toast(error.message); }
   };
 }
 // Withholding tax typed by Payroll/HR for one employee and cutoff (a manual override; the computed tax is kept).
@@ -572,10 +572,10 @@ function taxDialog(row) {
   const form = dialog.querySelector('#tax-form');
   form.onsubmit = async event => {
     event.preventDefault();
-    try { await save([{ component: 'tax', amount: Number(form.elements.amount.value), reason: form.elements.reason.value }]); dialog.close(); if (await reopenComputation()) toast('Withholding tax adjusted. Payroll recalculated.'); } catch (error) { toast(error.message); }
+    try { await save([{ component: 'tax', amount: Number(form.elements.amount.value), reason: form.elements.reason.value }]); dialog.close(); if (await reopenComputation()) savedPopup('Withholding tax adjusted. Payroll recalculated.'); } catch (error) { toast(error.message); }
   };
   form.querySelector('[data-tax-reset]')?.addEventListener('click', async () => {
-    try { await save([]); dialog.close(); if (await reopenComputation()) toast('Withholding tax reset to the computed amount.'); } catch (error) { toast(error.message); }
+    try { await save([]); dialog.close(); if (await reopenComputation()) savedPopup('Withholding tax reset to the computed amount.'); } catch (error) { toast(error.message); }
   });
 }
 function manualEntryDialog(employeeId) {
@@ -604,14 +604,19 @@ function manualEntryDialog(employeeId) {
     event.preventDefault();
     const v = n => Number(form.elements[n]?.value || 0);
     const body = { start: currentRun.start, end: currentRun.end, mode: form.elements.mode.value, daysWorked: v('daysWorked'), absenceDays: v('absenceDays'), lateMinutes: Math.round(v('lateMinutes')), undertimeMinutes: Math.round(v('undertimeMinutes')), hours: Object.fromEntries(MANUAL_HOURS.map(([k]) => [k, v(`h.${k}`)])), reason: form.elements.reason.value, overrides: OVERRIDABLE.filter(([k]) => form.elements[`ov.${k}`].value !== '').map(([k]) => ({ component: k, amount: Number(form.elements[`ov.${k}`].value), reason: form.elements[`ovr.${k}`].value })) };
-    try { await api(`/payroll/inputs/${encodeURIComponent(employeeId)}`, body); dialog.close(); if (await reopenComputation()) toast('Manual entry saved. Payroll recalculated.'); } catch (error) { toast(error.message); }
+    try { await api(`/payroll/inputs/${encodeURIComponent(employeeId)}`, body); dialog.close(); if (await reopenComputation()) savedPopup('Manual entry saved. Payroll recalculated.'); } catch (error) { toast(error.message); }
   };
   form.querySelector('[data-manual-remove]')?.addEventListener('click', async () => {
     if (!window.confirm('Remove the manual entry? Pay will come from attendance again.')) return;
-    try { await api(`/payroll/inputs/${encodeURIComponent(employeeId)}?start=${currentRun.start}&end=${currentRun.end}`, null, 'DELETE'); dialog.close(); if (await reopenComputation()) toast('Manual entry removed. Payroll recalculated.'); } catch (error) { toast(error.message); }
+    try { await api(`/payroll/inputs/${encodeURIComponent(employeeId)}?start=${currentRun.start}&end=${currentRun.end}`, null, 'DELETE'); dialog.close(); if (await reopenComputation()) savedPopup('Manual entry removed. Payroll recalculated.'); } catch (error) { toast(error.message); }
   });
 }
 // Recompute the reviewed employee's payroll after an adjustment changes, then reopen their computation.
+// Pop-up after a payroll save: the message and the employee's recalculated gross, deductions and net pay.
+function savedPopup(message) {
+  const id = computationContext?.employeeId, row = currentRun?.rows.find(r => r.employeeId === id);
+  openDialog('Saved and recalculated', `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${esc(message)}</p>${row ? `<div class="cards">${card('Gross pay', money(row.gross), esc(row.employeeName))}${card('Total deductions', money(row.totalDeductions), 'This cutoff')}${card('Net pay', money(row.net), 'Recalculated', true)}</div>` : ''}</div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
+}
 async function reopenComputation() {
   const c = computationContext; if (!c) return false;
   currentRun = await api('/payroll/preview', { start: c.start, end: c.end, pay13th: c.pay13th, ...(c.employeeIds ? { employeeIds: c.employeeIds } : {}) });
