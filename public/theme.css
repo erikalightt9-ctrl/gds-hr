@@ -607,3 +607,8 @@ dialog::backdrop { background: rgb(20 16 8 / .45); backdrop-filter: blur(6px); }
 .sidebar .brand-logo { width: 184px; max-width: 100%; padding: 6px 8px; border-radius: 10px; }
 .welcome-head .brand-logo { width: 220px; padding: 8px 10px; }
 @media (max-width: 900px) { .welcome-head .brand-logo { width: 170px; } }
+
+/* Sign-in brand chip: the logo fills the box evenly (no caption). */
+.welcome-head .brand { padding: 8px; gap: 0; }
+.welcome-head .brand-logo { width: 300px; max-width: 70vw; padding: 8px 12px; border-radius: 12px; }
+@media (max-width: 760px) { .welcome-head .brand-logo { width: 220px; } }
