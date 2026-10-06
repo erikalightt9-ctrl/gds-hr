@@ -589,3 +589,14 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .payroll-computation .scroll-table th:nth-child(2), .payroll-computation .scroll-table td:nth-child(2) { text-align: center; }
 .payroll-computation th .th-sub { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: none; opacity: .8; }
 .payroll-computation .scroll-table th:not(:first-child), .payroll-computation .scroll-table td:not(:first-child) { text-align: center; }
+
+/* Employee menu: the items scroll; Account & security and Sign out stay pinned and visible at the bottom. */
+.employee-sidebar { display: flex; flex-direction: column; overflow: hidden; height: calc(100vh - 84px); min-height: 0; }
+.employee-sidebar nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.employee-sidebar-foot { flex: 0 0 auto; margin-top: 0; padding-bottom: max(10px, env(safe-area-inset-bottom)); background: #171717; }
+.employee-sidebar .sidebar-signout { display: flex; padding: 13px 14px; font-size: 15px; }
+@media (max-width: 900px) {
+  .employee-sidebar { height: 100dvh; padding-bottom: 0; }
+  .employee-sidebar button { padding: 11px 12px; font-size: 15px; }
+  .employee-menu-heading { margin: 10px 12px 2px; }
+}
