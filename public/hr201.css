@@ -584,3 +584,7 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .portal-subtabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
 .portal-subtabs button { border-radius: 999px; padding: 9px 16px; font-weight: 700; background: #fff; border: 1px solid #e6d7ae; color: #5a4e34; }
 .portal-subtabs button.active { background: linear-gradient(135deg, #f6e3a6, #d9b85c); color: #171717; border-color: #d9b85c; }
+
+/* Payroll: working days column centred, month shown under the heading. */
+.payroll-computation .scroll-table th:nth-child(2), .payroll-computation .scroll-table td:nth-child(2) { text-align: center; }
+.payroll-computation th .th-sub { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: none; opacity: .8; }
