@@ -610,3 +610,12 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .contrib-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
 .contrib-summary .total { border-bottom: 0; border-top: 2px solid var(--gold-700, #a87b16); font-weight: 700; font-size: 15px; }
 .employer-share-link { background: none; border: 0; padding: 0; cursor: pointer; }
+/* Compact contribution editor: one row per agency, everything visible without scrolling. */
+.cb-compact .share-input input { width: 88px; }
+.cb-compact th, .cb-compact td { padding-left: 8px; padding-right: 8px; }
+.cb-compact td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
+.cb-compact .share-state { display: block; min-height: 14px; font-size: 11px; }
+.cb-save { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 12px 0 4px; }
+.cb-save .field { margin: 0; min-width: 220px; }
+.cb-history { margin-top: 10px; }
+.cb-history summary { cursor: pointer; font-weight: 600; padding: 6px 0; }

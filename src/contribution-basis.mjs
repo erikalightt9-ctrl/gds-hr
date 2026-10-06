@@ -13,7 +13,7 @@ const agencySchema = z.object({ basis: money, employee: money, employer: money, 
 const changeSchema = z.object({
   effectiveDate: z.string().regex(/^\d{4}-\d{2}-(01|16)$/, 'Choose a cutoff start date (the 1st or the 16th).'),
   agencies: z.object(Object.fromEntries(AGENCIES.map(a => [a, agencySchema.default({})]))).strict(),
-  reason: z.string().trim().min(10, 'Explain the change and its supporting record (at least 10 characters).').max(2000),
+  reason: z.string().trim().max(2000).default('').transform(v => v || 'Adjusted in Government contributions'),   // optional
 }).strict();
 const reviewSchema = z.object({ decision: z.enum(['approve', 'reject', 'remove']), note: z.string().trim().max(1000).default('') }).strict();
 

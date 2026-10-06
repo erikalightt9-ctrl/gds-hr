@@ -28,45 +28,25 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
   const SHARES = { SSS: ['employee', 'employer', 'ec'], PhilHealth: ['employee', 'employer'], 'Pag-IBIG': ['employee', 'employer'] };
   const SHARE_LABEL = { employee: 'Employee share (monthly)', employer: 'Employer share (monthly)', ec: "Employees' Compensation (EC)" };
   let calc = {}, manual = {}, timers = {};
-  const peso = v => `₱${Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const pct = v => `${Math.round(v * 10000) / 100}%`;
-  function agencyFields(name) {
+  function agencyRow(name) {
     const a = data.active?.agencies?.[name] || {}, salary = data.employee.monthlySalary || 0;
     manual[name] = Object.fromEntries(SHARES[name].map(k => [k, a[k] !== null && a[k] !== undefined ? a[k] : null]));
-    const autoLabel = name === 'Pag-IBIG' ? 'Default' : 'Auto-calculated';
-    return `<fieldset class="contribution-agency" data-agency="${name}"><legend>${agencyMark(name)} ${name}</legend>
-      <label class="field">Contribution basis (monthly)<input type="number" min="0" step="0.01" name="${name}.basis" value="${a.basis ?? salary}" data-cb-basis="${name}" required><small data-cb-hint="${name}">Actual salary ${money(salary)}.</small></label>
-      ${SHARES[name].map(k => `<label class="field">${SHARE_LABEL[k]}${k === 'employer' && name === 'SSS' ? ' <small class="inline-note">excludes EC</small>' : ''}<span class="share-input"><span class="peso">₱</span><input type="number" min="0" step="0.01" name="${name}.${k}" data-share="${name}.${k}" aria-describedby="st-${name}-${k}"></span><span class="share-state" id="st-${name}-${k}" data-state="${name}.${k}">${autoLabel}</span><button type="button" class="small link-button hidden" data-reset-share="${name}.${k}">Reset to ${name === 'Pag-IBIG' ? 'default' : 'automatic'}</button></label>`).join('')}
-      <div class="calc-ref full" data-ref="${name}" aria-live="polite">Calculating…</div>
-      <div class="full agency-actions"><button type="button" class="small" data-recalc="${name}">Recalculate</button></div>
-    </fieldset>`;
+    const share = k => (SHARES[name].includes(k)
+      ? `<span class="share-input"><span class="peso">₱</span><input type="number" min="0" step="0.01" name="${name}.${k}" data-share="${name}.${k}" aria-label="${name} ${SHARE_LABEL[k]}"></span><small class="share-state" data-state="${name}.${k}"></small>`
+      : '—');
+    return [`<span class="agency-name">${agencyMark(name)} ${name}</span>`,
+      `<span class="share-input"><span class="peso">₱</span><input type="number" min="0" step="0.01" name="${name}.basis" value="${a.basis ?? salary}" data-cb-basis="${name}" required aria-label="${name} declared salary"></span>`,
+      share('employee'), share('employer'), share('ec')];
   }
+  // Shares follow the tables for the declared salary unless typed; a cleared box goes back to the table amount.
   function fill(name) {
-    const r = calc[name], ref = dialog.querySelector(`[data-ref="${name}"]`); if (!ref) return;
+    const r = calc[name];
     for (const k of SHARES[name]) {
-      const input = dialog.querySelector(`[data-share="${name}.${k}"]`), state = dialog.querySelector(`[data-state="${name}.${k}"]`), reset = dialog.querySelector(`[data-reset-share="${name}.${k}"]`);
-      const m = manual[name][k];
-      if (m !== null) {
-        input.value = Number(m).toFixed(2);
-        const differs = r && !r.error && Math.abs(r[k] - m) > 0.004;
-        state.textContent = differs ? `Manually adjusted · table amount ${peso(r[k])}, review` : 'Manually adjusted';
-        state.className = `share-state ${differs ? 'flag' : 'manual'}`; reset.classList.remove('hidden');
-      } else {
-        input.value = r && !r.error ? Number(r[k]).toFixed(2) : '';
-        state.textContent = r?.error ? 'Not calculated' : name === 'Pag-IBIG' ? 'Default' : 'Auto-calculated';
-        state.className = `share-state ${r?.error ? 'flag' : 'auto'}`; reset.classList.add('hidden');
-      }
+      const input = dialog.querySelector(`[data-share="${name}.${k}"]`), state = dialog.querySelector(`[data-state="${name}.${k}"]`), m = manual[name][k];
+      if (!input) continue;
+      if (m !== null) { input.value = Number(m).toFixed(2); state.textContent = 'Typed'; state.className = 'share-state manual'; }
+      else { input.value = r && !r.error ? Number(r[k]).toFixed(2) : ''; state.textContent = r?.error ? 'Not calculated' : ''; state.className = `share-state ${r?.error ? 'flag' : 'auto'}`; }
     }
-    if (!r) { ref.textContent = 'Calculating…'; return; }
-    if (r.error) { ref.innerHTML = `<span class="calc-error">${esc(r.error)}</span>`; return; }
-    const x = r.reference, range = `${peso(x.bracket.from)} – ${x.bracket.to === null ? 'and over' : peso(x.bracket.to - 0.01)}`;
-    const employerTotal = (manual[name].employer ?? r.employer) + (name === 'SSS' ? (manual.SSS.ec ?? r.ec) : 0);
-    const lines = name === 'SSS'
-      ? [`Bracket ${range}`, x.msc !== undefined ? `Monthly Salary Credit ${peso(x.msc)}` : 'Single-bracket table (no Monthly Salary Credit ranges)', `Employer total incl. EC ${peso(employerTotal)} (EC counted once, never deducted from pay)`]
-      : name === 'PhilHealth'
-        ? [x.floor !== null ? `Basis applied ${peso(x.appliedBasis)} (floor ${peso(x.floor)}, ceiling ${peso(x.ceiling)})` : `Basis applied ${peso(x.appliedBasis)}`, `Total premium ${peso((manual.PhilHealth.employee ?? r.employee) + (manual.PhilHealth.employer ?? r.employer))}`, x.employeeRate || x.employerRate ? `Rate ${pct(x.employeeRate)} employee + ${pct(x.employerRate)} employer = ${pct(x.employeeRate + x.employerRate)}` : x.floor !== null ? `Fixed amounts at the ${x.appliedBasis === x.floor ? 'floor' : 'ceiling'}` : 'Fixed amounts from the table']
-        : [`Table default ${peso(r.employee)} employee and ${peso(r.employer)} employer`];
-    ref.innerHTML = `${lines.map(l => `<span>${esc(l)}</span>`).join('')}<span class="calc-source">Rules ${esc(x.ruleId)} · effective ${esc(x.effectiveDate)}</span>`;
   }
   async function recalc(names) {
     const form = dialog.querySelector('#cb-form'); if (!form) return;
@@ -84,7 +64,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
   }
   function onFormInput(event) {
     const el = event.target;
-    if (el.dataset.cbBasis) { hint(event); const n = el.dataset.cbBasis; clearTimeout(timers[n]); timers[n] = setTimeout(() => recalc([n]), 300); }
+    if (el.dataset.cbBasis) { const n = el.dataset.cbBasis; clearTimeout(timers[n]); timers[n] = setTimeout(() => recalc([n]), 300); }
     if (el.dataset.share) {
       const [n, k] = el.dataset.share.split('.');
       // A cleared box goes back to the calculated amount; it is never read as zero.
@@ -93,55 +73,30 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
       if (el.value !== '') { const keep = el.value; fill(n); el.value = keep; } else fill(n);
     }
   }
-  function onFormClick(event) {
-    const b = event.target.closest('[data-reset-share],[data-recalc]'); if (!b) return;
-    if (b.dataset.resetShare) { const [n, k] = b.dataset.resetShare.split('.'); manual[n][k] = null; fill(n); }
-    if (b.dataset.recalc) {
-      const n = b.dataset.recalc;
-      if (Object.values(manual[n]).some(v => v !== null) && !window.confirm(`Replace the manually adjusted ${n} amounts with the calculated ones?`)) return;
-      for (const k of SHARES[n]) manual[n][k] = null;
-      recalc([n]);
-    }
-  }
   function draw() {
-    const d = data, e = d.employee, c = d.current;
-    const summary = table(['Agency', 'Contribution basis', 'Employee share', 'Employer share', 'EC', 'Source'], AGENCIES.map(name => [
-      `<span class="agency-name">${agencyMark(name)} ${name}</span>`, money(c[name].basis) + (c[name].basisAdjusted ? `<small>Salary ${money(e.monthlySalary || 0)}</small>` : ''), money(c[name].employee), money(c[name].employer), name === 'SSS' ? money(c[name].ec) : '—',
-      c[name].basisAdjusted || c[name].sharesAdjusted ? badge('Approved adjustment', 'pending') : badge('Salary and rules table', 'neutral')]));
-    const history = table(['Effective', 'Requested', 'Change (monthly)', 'Reason', 'Status', ''], d.changes.map(ch => [
+    const d = data, e = d.employee;
+    const history = table(['Effective', 'By', 'Change (monthly)', 'Status', ''], d.changes.map(ch => [
       ch.effectiveDate, `${esc(ch.requestedBy)}<small>${esc(ch.requestedAt.slice(0, 16).replace('T', ' '))}</small>`,
-      `<span class="wrap">${AGENCIES.filter(n => JSON.stringify(ch.before[n]) !== JSON.stringify(ch.after[n])).map(n => `${n}: basis ${money(ch.before[n].basis)} → ${money(ch.after[n].basis)}, EE ${money(ch.before[n].employee)} → ${money(ch.after[n].employee)}, ER ${money(ch.before[n].employer)} → ${money(ch.after[n].employer)}`).join('<br>') || 'No amount change'}</span>`,
-      `<span class="wrap">${esc(ch.reason)}</span>`,
-      badge(...STATUS[ch.status]) + (ch.reviewedBy ? `<small>${esc(ch.reviewedBy)} · ${esc(ch.reviewedAt.slice(0, 16).replace('T', ' '))}${ch.reviewNote ? ` · ${esc(ch.reviewNote)}` : ''}</small>` : ''),
-      !d.canApprove ? '' : ch.status === 'pending' ? `<button class="small primary" data-cb-review="approve" data-id="${esc(ch.id)}">Apply</button> <button class="small" data-cb-review="reject" data-id="${esc(ch.id)}">Reject</button>` : ch.status === 'approved' ? `<button class="small" data-cb-review="remove" data-id="${esc(ch.id)}">Remove</button>` : '']), 'No adjustments yet. This employee uses the actual salary and the Rules & rates table.');
-    openDialog(`Government contributions · ${e.name}`, `<div class="dialog-body" id="cb-root">
-      <p class="sub">${esc(e.id)} · Actual monthly salary <strong>${money(e.monthlySalary || 0)}</strong> (not changed here) · Rules version ${esc(d.ruleId || '—')} · as of ${d.asOf}</p>
-      <h3>In force now</h3>${summary}
-      ${d.canSubmit ? `<hr><h3>Adjust the contribution computation</h3>
-      <p class="legend">Enter the monthly contribution basis; the shares fill in from the approved Rules &amp; rates tables for the chosen month. Type over a share only when an adjustment is needed (it is marked <em>Manually adjusted</em>). Amounts are monthly; payroll deducts them on the configured cutoff schedule. The salary record is not changed, and every change keeps the previous amounts, your name and the date.</p>
-      <form id="cb-form"><div class="form-grid">
-        <label class="field">Applies from cutoff<select name="effectiveDate">${cutoffStarts()}</select><small>Posted payroll is never changed.</small></label>
-        <div></div>
-        ${AGENCIES.map(agencyFields).join('')}
-        <label class="field full">Reason and supporting record<textarea name="reason" required minlength="10" maxlength="2000" placeholder="e.g. Sept 2026 DTR: 6 unpaid absence days; compensation actually paid ₱20,000 (payroll register ref.)"></textarea></label>
-      </div><button class="primary">Save and apply</button></form>` : ''}
-      <hr><h3>Change history</h3>${history}</div>`, `<div class="dialog-foot">${done ? '<button data-cb-back>Back to payroll computation</button>' : ''}<button data-close>Close</button></div>`);
+      `<span class="wrap">${AGENCIES.filter(n => JSON.stringify(ch.before[n]) !== JSON.stringify(ch.after[n])).map(n => `${n}: salary ${money(ch.before[n].basis)} → ${money(ch.after[n].basis)}, EE ${money(ch.before[n].employee)} → ${money(ch.after[n].employee)}, ER ${money(ch.before[n].employer)} → ${money(ch.after[n].employer)}`).join('<br>') || 'No amount change'}</span>`,
+      badge(...STATUS[ch.status]),
+      !d.canApprove ? '' : ch.status === 'pending' ? `<button class="small primary" data-cb-review="approve" data-id="${esc(ch.id)}">Apply</button> <button class="small" data-cb-review="reject" data-id="${esc(ch.id)}">Reject</button>` : ch.status === 'approved' ? `<button class="small" data-cb-review="remove" data-id="${esc(ch.id)}">Remove</button>` : '']), 'No adjustments yet.');
+    openDialog(`Government contributions · ${e.name}`, `<div class="dialog-body cb-compact" id="cb-root">
+      <p class="sub">${esc(e.id)} · Actual monthly salary <strong>${money(e.monthlySalary || 0)}</strong> · amounts are monthly</p>
+      ${d.canSubmit ? `<form id="cb-form">
+        ${table(['Agency', 'Declared salary', 'Employee share', 'Employer share', 'EC'], AGENCIES.map(agencyRow))}
+        <div class="cb-save"><label class="field">Applies from cutoff<select name="effectiveDate">${cutoffStarts()}</select></label><button class="primary">Save</button></div>
+      </form>` : ''}
+      <details class="cb-history"><summary>Change history (${d.changes.length})</summary>${history}</details></div>`, `<div class="dialog-foot">${done ? '<button data-cb-back>Back to payroll computation</button>' : ''}<button data-close>Close</button></div>`);
     const cbForm = dialog.querySelector('#cb-form');
     if (cbForm) {
       calc = {};
       cbForm.addEventListener('submit', submit);
       cbForm.addEventListener('input', onFormInput);
-      cbForm.addEventListener('click', onFormClick);
       cbForm.elements.effectiveDate.addEventListener('change', () => recalc(AGENCIES));
       recalc(AGENCIES);
     }
     dialog.querySelector('#cb-root').addEventListener('click', review);
     dialog.querySelector('[data-cb-back]')?.addEventListener('click', () => done?.());
-  }
-  function hint(event) {
-    const name = event.target.dataset.cbBasis; if (!name) return;
-    const salary = data.employee.monthlySalary || 0, v = event.target.value === '' ? null : Number(event.target.value);
-    dialog.querySelector(`[data-cb-hint="${name}"]`).textContent = v === null || v === salary ? `Same as the actual salary, ${money(salary)}.` : `${v < salary ? 'Lower' : 'Higher'} than the actual salary by ${money(Math.abs(salary - v))}. The salary record stays ${money(salary)}.`;
   }
   async function submit(event) {
     event.preventDefault();
@@ -150,7 +105,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
     if (errors.length) { toast(`Fix ${errors.join(', ')} first: ${calc[errors[0]].error}`); return; }
     const agencies = Object.fromEntries(AGENCIES.map(n => [n, { basis: num(`${n}.basis`), employee: manual[n].employee, employer: manual[n].employer, ec: n === 'SSS' ? manual.SSS.ec : null }]));
     try {
-      const change = await api(`/employees/${encodeURIComponent(employeeId)}/contributions`, { effectiveDate: form.get('effectiveDate'), reason: form.get('reason'), agencies });
+      const change = await api(`/employees/${encodeURIComponent(employeeId)}/contributions`, { effectiveDate: form.get('effectiveDate'), agencies });
       toast(change.status === 'approved' ? 'Saved and applied. Payroll previews and payslips now use it.' : 'Saved.');
       await after();
     } catch (error) { toast(error.message); }

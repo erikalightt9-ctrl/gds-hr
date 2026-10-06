@@ -21,10 +21,9 @@ function fixture() {
 }
 const change = agencies => ({ effectiveDate: '2026-09-01', reason: 'September DTR: 6 unpaid absence days, compensation actually paid 20,000.', agencies });
 
-test('HR sets any basis or amount with a reason; it applies on save, keeps history and can be removed; salary unchanged', () => {
+test('HR sets any basis or amount (reason optional); it applies on save, keeps history and can be removed; salary unchanged', () => {
   const store = fixture();
   try {
-    assert.throws(() => submitContributionChange(store, hr, 'EMP-001', { ...change({}), reason: 'lower' }), /at least 10/);
     assert.throws(() => submitContributionChange(store, hr, 'EMP-001', { ...change({}), effectiveDate: '2026-09-05' }), /cutoff start/);
     assert.throws(() => submitContributionChange(store, viewer, 'EMP-001', change({})), /permission/i);
     assert.throws(() => submitContributionChange(store, { username: 'p', role: 'payroll' }, 'EMP-001', change({})), /permission/i);
@@ -82,4 +81,11 @@ test('the contribution form calculator reads the approved tables exactly and nev
   assert.match(calculateAgency(null, 'SSS', 15000).error, /No approved Rules/);
   assert.match(calculateAgency({ ...rule, contributions: { ...rule.contributions, SSS: [] } }, 'SSS', 15000).error, /not configured/);
   assert.match(calculateAgency({ ...rule, contributions: { ...rule.contributions, SSS: [sss[0]] } }, 'SSS', 15000).error, /no brackets/);
+});
+
+test('a contribution change without a reason is recorded with a standard note', () => {
+  const store = fixture();
+  try {
+    assert.equal(submitContributionChange(store, hr, 'EMP-001', { effectiveDate: '2026-09-01', agencies: {} }).reason, 'Adjusted in Government contributions');
+  } finally { store.close(); }
 });
