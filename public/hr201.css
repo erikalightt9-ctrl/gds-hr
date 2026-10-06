@@ -459,7 +459,7 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .employee-bell .bell-menu { z-index: 1000; }
 @media (max-width: 760px) {
   .employee-bell { position: static; }
-  .employee-bell .bell-menu { position: fixed; left: 12px; right: 12px; top: 84px; width: auto; max-height: 70vh; }
+  .employee-bell .bell-menu { position: fixed; left: 12px; right: 12px; top: 100px; width: auto; max-height: 70vh; }
 }
 
 /* ---------- Employee portal sidebar menu ---------- */
@@ -480,4 +480,15 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
   .employee-menu-button { display: inline-block; }
   .employee-sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: min(280px, 82vw); min-height: 0; z-index: 80; transform: translateX(-105%); transition: transform .2s ease; overflow-y: auto; padding-top: 24px; }
   .employee-sidebar.open { transform: translateX(0); }
+}
+
+/* Account & security and Sign out live at the bottom of the employee menu; the logo is larger. */
+.employee-sidebar { display: flex; flex-direction: column; }
+.employee-sidebar-foot { margin-top: auto; padding-top: 14px; border-top: 1px solid rgb(255 255 255 / .12); display: flex; flex-direction: column; gap: 8px; }
+.employee-sidebar .sidebar-signout { justify-content: center; background: #000; color: #fff; border: 1px solid #d9b85c; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.employee-sidebar .sidebar-signout:hover { background: #1c1c1c; }
+.employee-top .portal-logo { height: 68px; width: auto; max-width: 200px; aspect-ratio: 661 / 245; padding: 6px 8px; }
+@media (max-width: 900px) {
+  .employee-sidebar { padding-bottom: 24px; }
+  .employee-top .portal-logo { height: 52px; width: auto; max-width: 150px; padding: 4px 6px; }
 }
