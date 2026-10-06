@@ -156,7 +156,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
   if (!validCutoff) blockers.push(`Dates do not match the ${r.cutoff} payroll cutoff.`);
   const factor = r.cutoff === 'monthly' ? 1 : 0.5;
   const chosen = employeeIds?.length ? new Set(employeeIds) : null;
-  const rows = state.employees.filter(e => (!chosen || chosen.has(e.id)) && !e.draft && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start)).map(e => {
+  // 'Remittance only' (e.g. the CEO): government contributions are remitted but the employee is not paid through payroll.
+  const remittanceOnly = new Set((state.employeeProfiles || []).filter(p => p.section === 'payroll' && p.status === 'Remittance only').map(p => p.employeeId));
+  const rows = state.employees.filter(e => (!chosen || chosen.has(e.id)) && !e.draft && !remittanceOnly.has(e.id) && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start)).map(e => {
     const prefix = `${e.id} ${e.name}`;
     const payrollProfile = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'payroll');
     const contributionOverride = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'contributions');

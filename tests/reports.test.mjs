@@ -90,3 +90,19 @@ test('monthly government contributions report sums both cutoffs; the summary add
     assert.equal(last[19], Math.round((report.totals.sss + report.totals.ph + report.totals.pi + report.totals.sssLoan + report.totals.piLoan + 15) * 100) / 100);
   } finally { store.close(); }
 });
+
+test("'Remittance only' employees (e.g. the CEO) are left out of payroll but their full monthly contributions are in the report", async () => {
+  const { monthlyContributions } = await import('../src/contribution-report.mjs');
+  const { calculatePayroll } = await import('../src/engine.mjs');
+  const store = fixture();
+  try {
+    const normal = monthlyContributions(store, '2026-09').people.find(x => x.employeeId === 'EMP-002');
+    saveProfile(store, admin, 'EMP-002', 'payroll', { status: 'Remittance only' });
+    const state = store.read();
+    assert.ok(!calculatePayroll(state, '2026-09-01', '2026-09-15').rows.some(r => r.employeeId === 'EMP-002'), 'not in payroll');
+    const p = monthlyContributions(store, '2026-09').people.find(x => x.employeeId === 'EMP-002');
+    assert.ok(p, 'still in the remittance report');
+    assert.equal(p.sssBasis, state.employees.find(e => e.id === 'EMP-002').monthlySalary);
+    assert.equal(p.sssEE + p.phEE + p.piEE, normal.sssEE + normal.phEE + normal.piEE, 'same monthly shares as when paid through payroll');
+  } finally { store.close(); }
+});

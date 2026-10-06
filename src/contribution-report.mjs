@@ -1,7 +1,7 @@
 // Monthly government contributions report (SSS, PhilHealth, Pag-IBIG) in the company's remittance layout.
 // Amounts come from payroll for the month: posted runs where they exist, otherwise the current draft computation,
 // so manual changes made in payroll are included. Employer SSS includes EC.
-import { calculatePayroll } from './engine.mjs';
+import { calculatePayroll, ruleOn, contributionShares, activeContributionSetting } from './engine.mjs';
 
 const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const lastDay = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
@@ -29,6 +29,7 @@ export function monthlyContributions(store, month) {
       byEmployee.set(row.employeeId, t);
     }
   }
+  for (const t of remittanceOnlyRows(state, month)) byEmployee.set(t.employeeId, t);
   const people = [...byEmployee.values()].sort((a, b) => a.name.localeCompare(b.name)).map(t => {
     const gov = profileOf(store, t.employeeId, 'government');
     const out = Object.fromEntries(Object.entries(t).map(([k, v]) => [k, typeof v === 'number' ? r2(v) : v]));
@@ -36,6 +37,23 @@ export function monthlyContributions(store, month) {
   });
   const sum = key => r2(people.reduce((s, p) => s + p[key], 0));
   return { month, draft, people, totals: { basis: sum('sssBasis'), sss: r2(sum('sssEE') + sum('sssER')), ph: r2(sum('phEE') + sum('phER')), pi: r2(sum('piEE') + sum('piER')), sssLoan: sum('sssLoan'), piLoan: sum('piLoan'), deductions: sum('deductions') } };
+}
+
+// Employees outside payroll whose contributions are still remitted (payroll status 'Remittance only'): full monthly
+// shares from the contribution basis (approved contribution change, else the monthly salary on the record).
+function remittanceOnlyRows(state, month) {
+  const end = lastDay(month), rule = ruleOn(state, end);
+  if (!rule) return [];
+  const ids = new Set((state.employeeProfiles || []).filter(p => p.section === 'payroll' && p.status === 'Remittance only').map(p => p.employeeId));
+  return state.employees.filter(e => ids.has(e.id) && !e.archived && (!e.startDate || e.startDate <= end) && (!e.endDate || e.endDate >= `${month}-01`)).map(e => {
+    const setting = activeContributionSetting(state.contributionChanges, e.id, end), t = { employeeId: e.id, name: e.name, sssBasis: 0, phBasis: 0, sssEE: 0, sssER: 0, phEE: 0, phER: 0, piEE: 0, piER: 0, sssLoan: 0, piLoan: 0 };
+    const share = name => {
+      const basis = setting?.agencies?.[name]?.basis ?? e.monthlySalary;
+      return basis ? { basis, ...contributionShares(name, rule.contributions[name], basis, name, []) } : { basis: 0, employee: 0, employer: 0, ec: 0 };
+    };
+    const sss = share('SSS'), ph = share('PhilHealth'), pi = share('Pag-IBIG');
+    return { ...t, sssBasis: sss.basis, phBasis: ph.basis, sssEE: sss.employee, sssER: sss.employer + sss.ec, phEE: ph.employee, phER: ph.employer, piEE: pi.employee, piER: pi.employer };
+  });
 }
 
 export const CONTRIBUTION_HEADERS = ['#', 'Name', 'SSS No.', 'Monthly compensation', 'SSS ER', 'SSS EE', 'SSS Total', 'PhilHealth No.', 'Basic', 'PHIC ER', 'PHIC EE', 'PHIC Total', 'Pag-IBIG No.', 'HDMF ER', 'HDMF EE', 'HDMF Total', 'SSS Loan', 'Pag-IBIG Loan', 'Adjustment from last deductions', 'Deductions'];
