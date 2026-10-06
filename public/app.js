@@ -499,7 +499,8 @@ function netPayDialog(employeeId, focus = 'net') {
     const reason = '';
     const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Math.round((Number(i.value || 0) + (i.name === 'basic' ? row.absenceAmount || 0 : 0)) * 100) / 100, reason }));
     const base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: 'Net pay adjustment' };
-    const kept = (base.overrides || []).filter(o => !allowed.has(o.component) || form.elements[o.component]?.readOnly);
+    // Keep every saved amount this form does not show (e.g. a locked absence); only the boxes shown are replaced.
+    const kept = (base.overrides || []).filter(o => !allowed.has(o.component) || !form.elements[o.component] || form.elements[o.component].readOnly);
     const all = [...kept, ...overrides];
     try {
       const plain = !m || (m.mode === 'add' && !Object.values(m.hours || {}).some(Boolean) && ['Net pay adjustment', 'Withholding tax adjustment'].includes(m.reason));
