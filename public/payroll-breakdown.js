@@ -12,6 +12,8 @@ const LABELS = {
 const GROUPS = {
   overtime: { title: 'Overtime Calculation', parts: ['regularOT', 'restOT', 'specialOT', 'regularHolidayOT', 'otherOT'] },
   adjustment: { title: 'Adjustment Breakdown', parts: ['additional', 'allowance'] },
+  extras: { title: 'Overtime, Night & Holiday Pay', parts: ['regularOT', 'restOT', 'specialOT', 'regularHolidayOT', 'otherOT', 'nsd', 'restDay', 'specialHoliday', 'regularHoliday', 'otherHoliday'] },
+  additions: { title: 'Other Additions', parts: ['additional', 'allowance', 'thirteenth'] },
 };
 const SOURCE = { attendance: 'System-generated · attendance', 'payroll-inputs': 'Manual entry', adjustments: 'Manual entry · adjustment', deductions: 'System-generated · company deduction', leaves: 'System-generated · approved leave', employees: 'System-generated · salary record', rules: 'System-generated · rates table', loans: 'System-generated · approved loan', 'payroll-overrides': 'Manual override' };
 const CONTRIB = ['SSS', 'PhilHealth', 'Pag-IBIG'];
