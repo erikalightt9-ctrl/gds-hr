@@ -55,23 +55,41 @@ function pdfText(value) {
   }
   return out;
 }
-const fit = (value, chars) => { const s = String(value ?? ''); return s.length > chars ? `${s.slice(0, Math.max(1, chars - 3))}...` : s; };
 
-export function tablePdf({ title, subtitle = '', headers, rows }) {
-  const usable = PAGE.width - PAGE.margin * 2, size = headers.length > 10 ? 6.5 : 7.5, charWidth = size * 0.5;
-  // Column widths follow content length (capped), then scale to the page width.
-  const want = headers.map((h, i) => Math.min(40, Math.max(String(h).length, ...rows.slice(0, 400).map(r => String(r[i] ?? '').length), 4)));
+// Approximate Helvetica advance widths (per 1 pt of font size): enough to right-align figures and fit text.
+const glyphWidth = c => (/[0-9]/.test(c) ? 0.556 : /[.,:;' ]/.test(c) ? 0.278 : /[-()]/.test(c) ? 0.333 : /[A-Z]/.test(c) ? 0.667 : /[mw]/.test(c) ? 0.833 : /[ijlt]/.test(c) ? 0.25 : 0.52);
+const textWidth = (s, size) => [...String(s)].reduce((w, c) => w + glyphWidth(c), 0) * size;
+const isFigure = v => typeof v === 'number' || /^-?[\d,]+(\.\d+)?%?$/.test(String(v ?? '').trim());
+const fitWidth = (value, width, size) => { let s = String(value ?? ''); if (textWidth(s, size) <= width) return s; while (s.length > 1 && textWidth(`${s}...`, size) > width) s = s.slice(0, -1); return `${s}...`; };
+// Options: widths (relative column weights), headings may contain '\n' for two lines, totalRows (last N rows bold
+// with a rule above), note (printed under the table on the last page). Columns of figures are right-aligned.
+export function tablePdf({ title, subtitle = '', headers, rows, widths: weights = null, totalRows = 0, note = '' }) {
+  const usable = PAGE.width - PAGE.margin * 2, size = headers.length > 10 ? 6.5 : 7.5, pad = 3;
+  const want = weights || headers.map((h, i) => Math.min(40, Math.max(...String(h).split('\n').map(x => x.length), ...rows.slice(0, 400).map(r => String(r[i] ?? '').length), 4)));
   const total = want.reduce((a, b) => a + b, 0), widths = want.map(w => (w / total) * usable);
-  const rowHeight = size + 5, top = PAGE.height - 92, bottom = 44, perPage = Math.max(1, Math.floor((top - bottom) / rowHeight) - 1);
+  const right = headers.map((_, i) => { const vals = rows.map(r => r[i]).filter(v => v !== '' && v !== null && v !== undefined); return vals.length > 0 && vals.every(isFigure); });
+  const headLines = Math.max(...headers.map(h => String(h).split('\n').length));
+  const rowHeight = size + 5, headHeight = rowHeight * headLines, top = PAGE.height - 92, bottom = 44 + (note ? 14 : 0), perPage = Math.max(1, Math.floor((top - headHeight - bottom) / rowHeight));
   const pages = []; for (let i = 0; i < Math.max(rows.length, 1); i += perPage) pages.push(rows.slice(i, i + perPage));
   const generated = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
+  const place = (text, i, x) => (right[i] ? x + widths[i] - pad - textWidth(text, size) : x + pad);
   const cells = (values, y, bold) => {
     let x = PAGE.margin;
     return values.map((v, i) => {
-      const s = `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${(x + 3).toFixed(1)} ${y.toFixed(1)} Td (${pdfText(fit(v, Math.floor((widths[i] - 6) / charWidth)))}) Tj ET`;
-      x += widths[i]; return s;
+      const s = fitWidth(v, widths[i] - pad * 2, size), tx = place(s, i, x);
+      x += widths[i];
+      return `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${tx.toFixed(1)} ${y.toFixed(1)} Td (${pdfText(s)}) Tj ET`;
     }).join(' ');
   };
+  const headerCells = y0 => Array.from({ length: headLines }, (_, line) => {
+    let x = PAGE.margin;
+    return headers.map((h, i) => {
+      const parts = String(h).split('\n'), text = parts[line - (headLines - parts.length)] ?? '';   // bottom-aligned headings
+      const s = fitWidth(text, widths[i] - pad * 2, size), tx = place(s, i, x);
+      x += widths[i];
+      return s ? `BT /F2 ${size} Tf ${tx.toFixed(1)} ${(y0 - line * rowHeight).toFixed(1)} Td (${pdfText(s)}) Tj ET` : '';
+    }).join(' ');
+  }).join(' ');
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'];
   const pageIds = [];
   pages.forEach((page, index) => {
@@ -80,13 +98,16 @@ export function tablePdf({ title, subtitle = '', headers, rows }) {
       `0.85 0.72 0.36 rg 0 ${PAGE.height - 61} ${PAGE.width} 3 re f`,                   // gold rule
       `1 1 1 rg BT /F2 15 Tf ${PAGE.margin} ${PAGE.height - 30} Td (${pdfText(title)}) Tj ET`,
       `1 1 1 rg BT /F1 8.5 Tf ${PAGE.margin} ${PAGE.height - 46} Td (${pdfText(`GDS CAPITAL INC.${subtitle ? ` - ${subtitle}` : ''}`)}) Tj ET`,
-      `0.97 0.92 0.78 rg ${PAGE.margin} ${top - 4} ${usable} ${rowHeight + 2} re f`,     // header row
-      `0.42 0.30 0.06 rg ${cells(headers, top, true)}`,
+      `0.97 0.92 0.78 rg ${PAGE.margin} ${top - headHeight + rowHeight - 4} ${usable} ${headHeight + 2} re f`,     // header row
+      `0.42 0.30 0.06 rg ${headerCells(top)}`,
     ];
+    const first = top - headHeight + rowHeight;
     page.forEach((row, r) => {
-      const y = top - (r + 1) * rowHeight;
-      if (r % 2) parts.push(`0.99 0.97 0.91 rg ${PAGE.margin} ${y - 4} ${usable} ${rowHeight} re f`);
-      parts.push(`0.13 0.11 0.08 rg ${cells(row, y, false)}`);
+      const y = first - (r + 1) * rowHeight, n = index * perPage + r, isTotal = n >= rows.length - totalRows;
+      if (isTotal && n === rows.length - totalRows) parts.push(`0.42 0.30 0.06 RG 0.8 w ${PAGE.margin} ${(y + rowHeight - 3.5).toFixed(1)} m ${PAGE.margin + usable} ${(y + rowHeight - 3.5).toFixed(1)} l S`);
+      else if (r % 2) parts.push(`0.99 0.97 0.91 rg ${PAGE.margin} ${y - 4} ${usable} ${rowHeight} re f`);
+      parts.push(`0.13 0.11 0.08 rg ${cells(row, y, isTotal)}`);
+      if (note && index === pages.length - 1 && r === page.length - 1) parts.push(`0.35 0.30 0.20 rg BT /F1 7 Tf ${PAGE.margin + pad} ${(y - rowHeight - 4).toFixed(1)} Td (${pdfText(note)}) Tj ET`);
     });
     if (!rows.length) parts.push(`0.35 0.30 0.20 rg BT /F1 9 Tf ${PAGE.margin + 3} ${top - rowHeight - 4} Td (No records.) Tj ET`);
     parts.push(`0.35 0.30 0.20 rg BT /F1 7 Tf ${PAGE.margin} 22 Td (${pdfText(`Confidential - Generated ${generated} (Asia/Manila) - ${rows.length} record${rows.length === 1 ? '' : 's'}`)}) Tj ET`,

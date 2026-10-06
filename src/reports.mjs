@@ -159,10 +159,16 @@ export function buildReport(store, actor, key, format, filters = {}) {
 
 // One posted payroll run as a PDF register (the Excel version already exists).
 export function payrollRunPdf(run) {
-  const headers = ['Employee ID', 'Name', 'Days credited', 'Basic', 'OT & premiums', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime/Absence', 'Loans', 'Other', 'Total deductions', 'Net', 'Employer share*'];
+  // Figures as 1,000.00, right-aligned; two-line headings so every column stays readable.
+  const peso = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const headers = ['Employee\nID', 'Name', 'Days\ncredited', 'Basic', 'OT &\npremiums', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime', 'Loans', 'Other', 'Total\ndeductions', 'Net', 'Employer\nshare*'];
   const premiums = e => Object.entries(e).filter(([k]) => !['basic', 'thirteenth', 'additional', 'allowance'].includes(k)).reduce((s, [, v]) => s + v, 0);
-  const rows = run.rows.map(r => [r.employeeId, r.employeeName, r.creditedDays ?? r.daysPresent, money(r.earnings.basic), money(premiums(r.earnings)), money(r.gross), money(r.deductions.SSS), money(r.deductions.PhilHealth), money(r.deductions['Pag-IBIG']), money(r.deductions.tax), money(r.deductions.undertime + r.deductions.absence), money(r.deductions.loans), money(r.deductions.other), money(r.totalDeductions), money(r.net), money(r.employerTotal ?? 0)]);
-  rows.push(['', 'TOTAL', '', '', '', money(run.totals.gross), '', '', '', '', '', '', '', money(run.totals.deductions), money(run.totals.net), money(run.totals.employer ?? 0)]);
-  rows.push(['', '* Employer SSS, EC, PhilHealth and Pag-IBIG: paid by the company, not deducted from pay.', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
-  return tablePdf({ title: `Payroll register ${run.start} to ${run.end}`, subtitle: `${run.status === 'posted' ? `Posted by ${run.postedBy || ''}` : 'Preview'} - ${run.rows.length} employees`, headers, rows });
+  const loans = d => (d.loans || 0) + (d.sssLoan || 0) + (d.pagibigLoan || 0), other = d => (d.other || 0) + (d.salaryDeduction || 0) + (d.absence || 0);
+  const values = r => [r.earnings.basic, premiums(r.earnings), r.gross, r.deductions.SSS, r.deductions.PhilHealth, r.deductions['Pag-IBIG'], r.deductions.tax, r.deductions.undertime, loans(r.deductions), other(r.deductions), r.totalDeductions, r.net, r.employerTotal ?? 0];
+  const sorted = run.rows.slice().sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' }));
+  const rows = sorted.map(r => [r.employeeId, r.employeeName, Number(r.creditedDays ?? r.daysPresent).toLocaleString('en-US', { maximumFractionDigits: 4 }), ...values(r).map(peso)]);
+  const sums = sorted.reduce((tot, r) => values(r).map((v, i) => tot[i] + (v || 0)), Array(13).fill(0));
+  rows.push(['', 'TOTAL', '', ...sums.map(peso)]);
+  return tablePdf({ title: `Payroll register ${run.start} to ${run.end}`, subtitle: `${run.status === 'posted' ? `Posted by ${run.postedBy || ''}` : 'Preview'} - ${run.rows.length} employees`, headers, rows, totalRows: 1,
+    widths: [44, 128, 36, 50, 48, 54, 44, 46, 42, 34, 44, 42, 44, 54, 54, 50], note: '* Employer SSS, EC, PhilHealth and Pag-IBIG: paid by the company, not deducted from pay.' });
 }
