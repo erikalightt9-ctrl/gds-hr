@@ -138,7 +138,8 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (!onDashboard || !due.length || !main || main.querySelector('.compliance-alert')) return;
       const box = document.createElement('section'); box.className = 'compliance-alert'; box.setAttribute('role', 'alert');
       box.innerHTML = `<div><strong>⚠️ Not complied: ${due.length} 201 file requirement${due.length === 1 ? '' : 's'} to upload</strong><ol class="comply-list">${due.map(i => `<li>${esc(i.requirement.name)}${i.status === 'Missing' ? '' : ` <small>(${esc(STATUS_TEXT[i.status])})</small>`}</li>`).join('')}</ol><p class="legend">Upload ${due.length === 1 ? 'it' : 'them'} in My 201 documents. This notice is lifted once every required file is uploaded.</p></div><button class="primary" data-portal-tab="files201">Upload now</button>`;
-      const anchor = main.querySelector('.employee-welcome');
+      // Below the welcome and the time-in card, above the menu cards.
+      const anchor = main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
       if (anchor) anchor.after(box); else main.prepend(box);
     } catch { /* the checklist is optional on the dashboard */ }
   }
