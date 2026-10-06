@@ -612,3 +612,18 @@ dialog::backdrop { background: rgb(20 16 8 / .45); backdrop-filter: blur(6px); }
 .welcome-head .brand { padding: 8px; gap: 0; }
 .welcome-head .brand-logo { width: 300px; max-width: 70vw; padding: 8px 12px; border-radius: 12px; }
 @media (max-width: 760px) { .welcome-head .brand-logo { width: 220px; } }
+
+/* ---------- Sign-in on white (by request): dark headline, solid red culture cards, white sign-in card ---------- */
+.welcome-login { background: #fff; }
+.welcome-login::before, .welcome-login::after { display: none; }
+.welcome-head h1 { color: var(--red-700, #8f1420); text-shadow: none; }
+.welcome-head p { color: #4a3b33; }
+.welcome-head .eyebrow, .welcome-motto { color: #a87b16; }
+.welcome-scene img { filter: drop-shadow(0 14px 22px rgb(60 20 10 / .18)); }
+.welcome-culture .culture-title { color: #2a1a12; }
+.welcome-culture .culture-hint, .welcome-culture .culture-close { color: #6b5a50; }
+.culture-card { background: linear-gradient(135deg, #c8202f 0%, #a51b2a 55%, #7d111d 100%); border-color: #e9c46a; box-shadow: 0 10px 24px -14px rgb(120 10 20 / .55); }
+.welcome-login .login-form form { background: #fff; border-color: #ead9b0; box-shadow: 0 24px 50px -24px rgb(60 20 10 / .35), 0 0 0 1px rgb(234 217 176 / .6); }
+.welcome-login .login-form form::before { display: none; }
+.welcome-login .login-form input { background: #fff; border-color: #dcc9a0; }
+@media (max-width: 900px) { .welcome-head, .welcome-body { background: #fff !important; } }
