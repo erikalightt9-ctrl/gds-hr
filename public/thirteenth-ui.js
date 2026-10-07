@@ -4,6 +4,11 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const fmt = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
   const card = (label, value, foot, featured = false) => `<div class="card${featured ? ' featured' : ''}"><div class="card-label">${esc(label)}</div><div class="card-value">${value}</div><div class="card-foot">${esc(foot)}</div></div>`;
+  // Amounts show as 1,000.00 in the boxes; commas are removed before saving.
+  const fmtAmount = v => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const parseAmount = v => { const s = String(v ?? '').replace(/,/g, '').trim(); return s === '' ? '' : s; };
+  // Leaving an amount box shows it as 1,000.00 (text that is not a number is left for the user to correct).
+  document.addEventListener('focusout', e => { if (e.target.matches?.('[data-amount]')) { const v = parseAmount(e.target.value); if (v !== '' && !Number.isNaN(Number(v))) e.target.value = fmtAmount(v); } });
   let year = today().slice(0, 4), data = null, finalData = null, lastResult = null, lastInput = null;
 
   async function render() {
@@ -15,7 +20,7 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     const years = [...new Set([today().slice(0, 4), ...data.years])].sort().reverse();
     const gridRow = r => [esc(r.name), ...months.map(m => {
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`);
-      return posted ? '<span class="share-state">Payroll</span>' : `<input class="share-input" type="number" min="0" step="0.01" aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? p.basic : ''}"${editable ? '' : ' disabled'}>`;
+      return posted ? '<span class="share-state">Payroll</span>' : `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable ? '' : ' disabled'}>`;
     }), `<button class="small" data-prior-detail="${esc(r.employeeId)}">Details</button>`];
     shell(heading('13th month & final pay', 'PD 851: total basic salary earned in the calendar year ÷ 12. Months before the system went live are encoded below; months with posted payroll are counted from payroll.') +
       `<div class="actions"><label class="field">Calendar year<select id="th-year" aria-label="Calendar year">${years.map(y => `<option${y === year ? ' selected' : ''}>${y}</option>`).join('')}</select></label></div>
@@ -70,8 +75,10 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     const b = event.target.closest('button'); if (!b) return;
     try {
       if (b.id === 'th-save') {
+        const bad = [...document.querySelectorAll('[data-prior]')].find(i => parseAmount(i.value) !== '' && (Number.isNaN(Number(parseAmount(i.value))) || Number(parseAmount(i.value)) < 0));
+        if (bad) { bad.focus(); toast(`Check the amount “${bad.value}”: enter a number such as 1,000.00.`); return; }
         const entries = [...document.querySelectorAll('[data-prior]')].flatMap(input => {
-          const p = data.prior.find(x => x.employeeId === input.dataset.prior && x.month === input.dataset.month), value = input.value.trim();
+          const p = data.prior.find(x => x.employeeId === input.dataset.prior && x.month === input.dataset.month), value = parseAmount(input.value);
           if (value === '' && !p) return [];
           if (p && value !== '' && Number(value) === p.basic) return [];
           return [{ employeeId: input.dataset.prior, month: input.dataset.month, basic: value === '' ? null : Number(value), thirteenthPaid: p?.thirteenthPaid || 0, notes: p?.notes || '' }];
@@ -95,16 +102,18 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     const r = data.ledger.find(x => x.employeeId === employeeId), lastMonth = year === today().slice(0, 4) ? Number(today().slice(5, 7)) : 12;
     const rows = Array.from({ length: lastMonth }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`).map(m => {
       const p = data.prior.find(x => x.employeeId === employeeId && x.month === m), posted = data.postedMonths[employeeId]?.includes(m);
-      return [MONTHS[Number(m.slice(5)) - 1], posted ? '<span class="share-state">From posted payroll</span>' : `<input class="share-input" type="number" min="0" step="0.01" name="basic-${m}" value="${p ? p.basic : ''}" aria-label="Basic ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input class="share-input" type="number" min="0" step="0.01" name="paid-${m}" value="${p?.thirteenthPaid || ''}" aria-label="13th month paid ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input name="notes-${m}" maxlength="500" value="${esc(p?.notes || '')}" aria-label="Notes ${m}"${data.canEncode ? '' : ' disabled'}>`, p ? `<small>${esc(p.enteredBy)} · ${fmt(p.enteredAt)}</small>` : ''];
+      return [MONTHS[Number(m.slice(5)) - 1], posted ? '<span class="share-state">From posted payroll</span>' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="basic-${m}" value="${p ? fmtAmount(p.basic) : ''}" aria-label="Basic ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="paid-${m}" value="${p?.thirteenthPaid ? fmtAmount(p.thirteenthPaid) : ''}" aria-label="13th month paid ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input name="notes-${m}" maxlength="500" value="${esc(p?.notes || '')}" aria-label="Notes ${m}"${data.canEncode ? '' : ' disabled'}>`, p ? `<small>${esc(p.enteredBy)} · ${fmt(p.enteredAt)}</small>` : ''];
     });
     openDialog(`Salary records · ${r.name}`, `<form id="prior-detail"><div class="dialog-body"><p class="sub">Basic salary earned and any 13th month already paid (advance or partial) for each month before the system.</p>${table(['Month', 'Basic salary earned', '13th month paid', 'Notes', 'Encoded by'], rows)}</div>
       <div class="dialog-foot"><button type="button" data-close>Close</button>${data.canEncode ? '<button class="primary">Save</button>' : ''}</div></form>`);
     dialog.querySelector('#prior-detail').onsubmit = async ev => {
       ev.preventDefault(); const f = new FormData(ev.target), entries = [];
+      const bad = [...ev.target.querySelectorAll('[data-amount]')].find(i => parseAmount(i.value) !== '' && (Number.isNaN(Number(parseAmount(i.value))) || Number(parseAmount(i.value)) < 0));
+      if (bad) { bad.focus(); bad.setCustomValidity('Enter a number such as 1,000.00.'); bad.reportValidity(); bad.oninput = () => bad.setCustomValidity(''); return; }
       for (const [key] of f.entries()) {
         if (!key.startsWith('basic-')) continue;
-        const m = key.slice(6), basic = String(f.get(key)).trim(), p = data.prior.find(x => x.employeeId === employeeId && x.month === m);
-        const paid = Number(f.get(`paid-${m}`) || 0), notes = String(f.get(`notes-${m}`) || '');
+        const m = key.slice(6), basic = parseAmount(f.get(key)), p = data.prior.find(x => x.employeeId === employeeId && x.month === m);
+        const paid = Number(parseAmount(f.get(`paid-${m}`)) || 0), notes = String(f.get(`notes-${m}`) || '');
         if (basic === '' && !p) { if (paid) { toast(`Enter the basic salary for ${m} before the 13th month paid.`); return; } continue; }
         if (p && basic !== '' && Number(basic) === p.basic && paid === (p.thirteenthPaid || 0) && notes === (p.notes || '')) continue;
         entries.push({ employeeId, month: m, basic: basic === '' ? null : Number(basic), thirteenthPaid: paid, notes });
