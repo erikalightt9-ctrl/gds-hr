@@ -29,3 +29,12 @@ test('an employee paid through payroll cannot be moved to manual encoding; only 
     assert.throws(() => addContributionEmployee(store, { username: 'v', role: 'viewer' }, { lastName: 'A', firstName: 'B', monthlySalary: 1, startMonth: '2026-09' }), /permission/i);
   } finally { store.close(); }
 });
+
+test('remittance-only people are not in the 13th month ledger', async () => {
+  const { thirteenthLedger } = await import('../src/thirteenth.mjs');
+  const store = fixture();
+  try {
+    addContributionEmployee(store, admin, { lastName: 'Cheng', firstName: 'Demry', employeeNumber: 'CEO-1', monthlySalary: 22000, startMonth: '2026-01' });
+    assert.ok(!thirteenthLedger(store, admin, '2026').some(r => r.employeeId === 'CEO-1'));
+  } finally { store.close(); }
+});

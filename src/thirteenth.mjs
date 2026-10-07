@@ -46,7 +46,9 @@ export function savePriorEarnings(store, actor, input) {
 export function thirteenthLedger(store, actor, year) {
   permit(actor, [...PAY, 'viewer']);
   const state = store.read(), thisMonth = localToday().slice(0, 7);
-  return state.employees.filter(e => !e.draft || e.startDate).map(e => {
+  // Remittance-only people (e.g. the CEO) are not paid through payroll and have no 13th month here.
+  const remittanceOnly = new Set((state.employeeProfiles || []).filter(p => p.section === 'payroll' && p.status === 'Remittance only').map(p => p.employeeId));
+  return state.employees.filter(e => (!e.draft || e.startDate) && !remittanceOnly.has(e.id)).map(e => {
     const runs = state.runs.filter(r => r.status === 'posted' && r.start.startsWith(year)).flatMap(r => r.rows.filter(row => row.employeeId === e.id).map(row => ({ run: r, row })));
     const postedBasic = r2(runs.reduce((s, x) => s + x.row.applicableBasic, 0)), postedPaid = r2(runs.reduce((s, x) => s + x.row.earnings.thirteenth, 0));
     const prior = priorBasicFor(state, e.id, year);
