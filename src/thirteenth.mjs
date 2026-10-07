@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
-import { ruleOn, leaveBalance, dates, isRest, priorBasicFor } from './engine.mjs';
+import { ruleOn, leaveBalance, dates, isRest, priorBasicFor, fullyPostedMonths } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 
 const PAY = ['admin', 'payroll', 'hr'];
@@ -27,7 +27,7 @@ export function savePriorEarnings(store, actor, input) {
     for (const e of entries) {
       if (!state.employees.some(x => x.id === e.employeeId)) throw new AppError(`Unknown employee ${e.employeeId}.`);
       if (e.month > thisMonth) throw new AppError(`${e.month} is in the future.`);
-      const posted = state.runs.some(r => r.status === 'posted' && r.start.slice(0, 7) === e.month && r.rows.some(row => row.employeeId === e.employeeId));
+      const posted = fullyPostedMonths(state, e.employeeId).has(e.month);   // part-month payroll: the encoded record holds the other cutoff
       const before = store.db.prepare('SELECT data FROM prior_earnings WHERE employee_id=? AND month=?').get(e.employeeId, e.month);
       if (e.basic === null) {   // blank clears the entry
         if (before) { store.db.prepare('DELETE FROM prior_earnings WHERE employee_id=? AND month=?').run(e.employeeId, e.month); store.log(actor, 'delete', 'prior-earnings', `${e.employeeId}:${e.month}`, JSON.parse(before.data), null); removed++; }
@@ -133,7 +133,7 @@ export function thirteenthOverview(store, actor, year) {
   permit(actor, [...PAY, 'viewer']);
   if (!/^\d{4}$/.test(String(year))) throw new AppError('Choose a calendar year.');
   const state = store.read(), postedMonths = {};
-  for (const r of state.runs.filter(r => r.status === 'posted' && r.start.startsWith(year))) for (const row of r.rows) (postedMonths[row.employeeId] ||= []).push(r.start.slice(0, 7));
+  for (const e of state.employees) { const full = [...fullyPostedMonths(state, e.id)].filter(m => m.startsWith(year)); if (full.length) postedMonths[e.id] = full; }
   return {
     year, ledger: thirteenthLedger(store, actor, year), postedMonths, canEncode: PAY.includes(actor.role),
     prior: state.priorEarnings.filter(p => p.month.startsWith(`${year}-`)),

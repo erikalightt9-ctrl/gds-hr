@@ -34,21 +34,21 @@ test('salary encoded for months before the system counts toward the 13th month, 
   } finally { store.close(); }
 });
 
-test('a month with posted payroll cannot be encoded and is never counted twice; blanks clear an entry', () => {
+test('a month only partly in posted payroll keeps its encoded record (the other cutoff); blanks clear an entry', () => {
   const store = fixture();
   try {
     encode(store, ['09']);
     postSeptFirstHalf(store);
     const l = thirteenthLedger(store, payroll, '2026')[0];
-    assert.equal(l.priorBasic, 0, 'September comes from posted payroll only');
-    assert.throws(() => encode(store, ['09']), /posted payroll/);
+    assert.ok(l.priorBasic > 0, 'Sept 16-30 paid outside the system still counts beside the posted Sept 1-15');
+    assert.doesNotThrow(() => encode(store, ['09']));
     encode(store, ['01']); encode(store, ['01'], null);
-    assert.equal(thirteenthLedger(store, payroll, '2026')[0].priorMonths.length, 0);
+    assert.deepEqual(thirteenthLedger(store, payroll, '2026')[0].priorMonths, ['2026-09'], 'January cleared; September kept');
     assert.throws(() => savePriorEarnings(store, payroll, { entries: [{ employeeId: 'EMP-001', month: '2099-01', basic: 1 }] }), /future/);
     assert.throws(() => savePriorEarnings(store, payroll, { entries: [{ employeeId: 'NOPE', month: '2026-01', basic: 1 }] }), /Unknown employee/);
     assert.throws(() => savePriorEarnings(store, { username: 'x', role: 'hr_staff' }, { entries: [{ employeeId: 'EMP-001', month: '2026-01', basic: 1 }] }), /permission/);
     assert.throws(() => savePriorEarnings(store, payroll, { entries: [{ employeeId: 'EMP-001', month: '2026-13', basic: 1 }] }));
-    assert.equal(thirteenthOverview(store, payroll, '2026').postedMonths['EMP-001'][0], '2026-09');
+    assert.equal(thirteenthOverview(store, payroll, '2026').postedMonths['EMP-001'], undefined, 'not a whole month from payroll');
   } finally { store.close(); }
 });
 

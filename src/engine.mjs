@@ -100,8 +100,18 @@ export function leaveBalance(state, employee, type, asOf) {
 }
 // Salary encoded by HR for months before the system went live. A month that already has posted payroll for the
 // employee is counted from payroll only, so nothing is counted twice.
+// Months whose whole period (1st to month end) is covered by posted payroll for the employee.
+export function fullyPostedMonths(state, employeeId) {
+  const runs = state.runs.filter(r => r.status === 'posted' && r.rows.some(row => row.employeeId === employeeId));
+  const months = new Set(runs.map(r => r.start.slice(0, 7))), full = new Set();
+  for (const m of months) {
+    const end = new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).toISOString().slice(0, 10);
+    if (runs.some(r => r.start === `${m}-01`) && runs.some(r => r.end === end && r.start.startsWith(m))) full.add(m);
+  }
+  return full;
+}
 export function priorBasicFor(state, employeeId, year) {
-  const postedMonths = new Set(state.runs.filter(r => r.status === 'posted' && r.rows.some(row => row.employeeId === employeeId)).map(r => r.start.slice(0, 7)));
+  const postedMonths = fullyPostedMonths(state, employeeId);
   const rows = (state.priorEarnings || []).filter(p => p.employeeId === employeeId && p.month.startsWith(`${year}-`) && !postedMonths.has(p.month));
   return { basic: round(rows.reduce((s, p) => s + p.basic, 0)), thirteenthPaid: round(rows.reduce((s, p) => s + (p.thirteenthPaid || 0), 0)), months: rows.map(p => p.month) };
 }
