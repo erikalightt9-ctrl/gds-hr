@@ -13,7 +13,7 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     const months = Array.from({ length: lastMonth }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     const prior = new Map(data.prior.map(p => [`${p.employeeId}:${p.month}`, p]));
     const years = [...new Set([today().slice(0, 4), ...data.years])].sort().reverse();
-    const gridRow = r => [esc(r.name) + `<small>${esc(r.employeeId)}</small>`, ...months.map(m => {
+    const gridRow = r => [esc(r.name), ...months.map(m => {
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`);
       return posted ? '<span class="share-state">Payroll</span>' : `<input class="share-input" type="number" min="0" step="0.01" aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? p.basic : ''}"${editable ? '' : ' disabled'}>`;
     }), `<button class="small" data-prior-detail="${esc(r.employeeId)}">Details</button>`];
