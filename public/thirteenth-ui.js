@@ -31,7 +31,7 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
       <section class="panel"><div class="panel-head"><div class="th-head"><span class="legend">Basic salary actually earned each month (after absences and unpaid leave; exclude overtime, holiday premiums and allowances). Leave blank to clear.</span></div></div>
         <div class="th-year-band">YEAR ${esc(year)}</div>
         <div class="table-wrap">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), ''], L.map(gridRow), 'No employees.')}</div>
-        ${editable ? '<div class="panel-foot"><span>Changes are recorded in the audit log.</span><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
+        ${editable ? '<div class="panel-foot"><span></span><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
       ${finalPanel()}`);
     const content = document.querySelector('.content');
     content.querySelector('#th-year').onchange = e => { year = e.target.value; render().catch(err => toast(err.message)); };
