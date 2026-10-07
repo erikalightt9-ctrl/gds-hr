@@ -633,3 +633,6 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .cards.cards-5 .card-value { font-size: clamp(20px, 1.9vw, 27px); }
 @media (max-width: 1100px) { .cards.cards-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .cards.cards-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 13th month salary records: year banner above the month columns; payroll amounts in read-only cells. */
+.th-year-band { text-align: center; font-weight: 800; letter-spacing: .12em; font-size: 15px; padding: 10px 0; color: var(--red-700, #8f1420); background: linear-gradient(180deg, #fff8e6, #f8e9c4); border-top: 1px solid var(--line); }
+.payroll-amount { display: block; font-weight: 700; font-variant-numeric: tabular-nums; padding: 8px 4px 0; }

@@ -136,8 +136,14 @@ export function thirteenthOverview(store, actor, year) {
   if (!/^\d{4}$/.test(String(year))) throw new AppError('Choose a calendar year.');
   const state = store.read(), postedMonths = {};
   for (const e of state.employees) { const full = [...fullyPostedMonths(state, e.id)].filter(m => m.startsWith(year)); if (full.length) postedMonths[e.id] = full; }
+  // Basic pay counted from finalized payroll, by month: shown on the page as soon as a payroll is final.
+  const postedBasic = {};
+  for (const run of state.runs.filter(r => r.status === 'posted' && r.start.startsWith(year))) for (const row of run.rows) {
+    const byMonth = (postedBasic[row.employeeId] ||= {}), m = run.start.slice(0, 7);
+    byMonth[m] = r2((byMonth[m] || 0) + (row.applicableBasic || 0));
+  }
   return {
-    year, ledger: thirteenthLedger(store, actor, year), postedMonths, canEncode: PAY.includes(actor.role),
+    year, ledger: thirteenthLedger(store, actor, year), postedMonths, postedBasic, canEncode: PAY.includes(actor.role),
     prior: state.priorEarnings.filter(p => p.month.startsWith(`${year}-`)),
     years: [...new Set([...state.runs.map(r => r.start.slice(0, 4)), ...state.priorEarnings.map(p => p.month.slice(0, 4))])],
   };

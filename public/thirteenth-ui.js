@@ -14,19 +14,22 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
   async function render() {
     shell(heading('13th month & final pay', 'Loading…') + '<div class="loading">Loading the ledger…</div>');
     [data, finalData] = await Promise.all([api(`/thirteenth?year=${year}`), api('/final-pay').catch(() => null)]);
-    const L = data.ledger, editable = data.canEncode, lastMonth = year === today().slice(0, 4) ? Number(today().slice(5, 7)) : 12;
-    const months = Array.from({ length: lastMonth }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+    const L = data.ledger, editable = data.canEncode, thisMonth = today().slice(0, 7);
+    const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     const prior = new Map(data.prior.map(p => [`${p.employeeId}:${p.month}`, p]));
     const years = [...new Set([today().slice(0, 4), ...data.years])].sort().reverse();
     const gridRow = r => [esc(r.name), ...months.map(m => {
-      const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`);
-      return posted ? '<span class="share-state">Payroll</span>' : `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable ? '' : ' disabled'}>`;
+      const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`), fromPayroll = data.postedBasic?.[r.employeeId]?.[m] || 0;
+      if (posted) return `<span class="payroll-amount">${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
+      const future = m > thisMonth;
+      return `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}${future ? ' placeholder="From payroll"' : ''}>${fromPayroll ? `<small class="share-state">+ ${fmtAmount(fromPayroll)} payroll</small>` : ''}`;
     }), `<button class="small" data-prior-detail="${esc(r.employeeId)}">Details</button>`];
     shell(heading('13th month & final pay', 'PD 851: total basic salary earned in the calendar year ÷ 12. Months before the system went live are encoded below; months with posted payroll are counted from payroll.') +
       `<div class="actions"><label class="field">Calendar year<select id="th-year" aria-label="Calendar year">${years.map(y => `<option${y === year ? ' selected' : ''}>${y}</option>`).join('')}</select></label></div>
       <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
       <section class="panel"><div class="panel-head"><h2>Annual 13th month ledger</h2>${downloads('thirteenth')}<span class="legend">To pay out, choose “Pay accrued balance” when computing payroll.</span></div>${table(['Employee', 'From payroll', 'Encoded (months)', 'Total basic', 'Accrued ÷ 12', 'Paid', 'Balance', 'Coverage'], L.map(r => [esc(r.name), money(r.postedBasic), `${money(r.priorBasic)}<small>${r.priorMonths.length} month${r.priorMonths.length === 1 ? '' : 's'}</small>`, money(r.totalBasic), money(r.accrued), money(r.paid), `<strong>${money(r.balance)}</strong>`, badge(r.covered13th ? 'Covered' : 'Excluded', r.covered13th ? '' : 'neutral')]), 'No employees.')}</section>
       <section class="panel"><div class="panel-head"><h2>Salary records before the system</h2><span class="legend">Basic salary actually earned each month (after absences and unpaid leave; exclude overtime, holiday premiums and allowances). Leave blank to clear.</span></div>
+        <div class="th-year-band">YEAR ${esc(year)}</div>
         <div class="table-wrap">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), ''], L.map(gridRow), 'No employees.')}</div>
         ${editable ? '<div class="panel-foot"><span>Changes are recorded in the audit log.</span><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
       ${finalPanel()}`);
@@ -99,7 +102,7 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
 
   // Per-employee detail: basic, 13th month already paid and notes per month.
   function detail(employeeId) {
-    const r = data.ledger.find(x => x.employeeId === employeeId), lastMonth = year === today().slice(0, 4) ? Number(today().slice(5, 7)) : 12;
+    const r = data.ledger.find(x => x.employeeId === employeeId), lastMonth = year === today().slice(0, 4) ? Number(today().slice(5, 7)) : 12;   // details: months up to now
     const rows = Array.from({ length: lastMonth }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`).map(m => {
       const p = data.prior.find(x => x.employeeId === employeeId && x.month === m), posted = data.postedMonths[employeeId]?.includes(m);
       return [MONTHS[Number(m.slice(5)) - 1], posted ? '<span class="share-state">From posted payroll</span>' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="basic-${m}" value="${p ? fmtAmount(p.basic) : ''}" aria-label="Basic ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="paid-${m}" value="${p?.thirteenthPaid ? fmtAmount(p.thirteenthPaid) : ''}" aria-label="13th month paid ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input name="notes-${m}" maxlength="500" value="${esc(p?.notes || '')}" aria-label="Notes ${m}"${data.canEncode ? '' : ' disabled'}>`, p ? `<small>${esc(p.enteredBy)} · ${fmt(p.enteredAt)}</small>` : ''];

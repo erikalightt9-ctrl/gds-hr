@@ -84,3 +84,13 @@ test('final pay: unpaid salary, pro-rated 13th month, leave conversion, separati
     assert.equal(store.db.prepare("SELECT COUNT(*) n FROM audit WHERE kind='final-pay'").get().n, 1);
   } finally { store.close(); }
 });
+
+test('basic pay from a finalized payroll appears on the 13th month page by month, automatically', () => {
+  const store = fixture();
+  try {
+    const { posted } = postSeptFirstHalf(store);
+    const amount = thirteenthOverview(store, payroll, '2026').postedBasic['EMP-001']['2026-09'];
+    assert.equal(amount, posted.rows[0].applicableBasic);
+    assert.ok(amount > 0);
+  } finally { store.close(); }
+});
