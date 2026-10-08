@@ -78,7 +78,7 @@ export const REPORTS = {
       const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(chosen.month || '') ? chosen.month : localToday().slice(0, 7);
       const c = readSettings(store).company, report = monthlyContributions(store, month), rows = contributionRows(report, c.egovFee ?? 15);
       const ids = `SSS ID NO. ${c.sssEmployerNo || '—'} | PHIC ID NO. ${c.philhealthEmployerNo || '—'} | HDMF ID NO. ${c.pagibigEmployerNo || '—'}`;
-      const status = report.draft ? 'Includes unposted (draft) payroll' : 'From posted payroll';
+      const status = report.recorded ? 'Recorded remittance' : report.draft ? 'Includes unposted (draft) payroll' : 'From posted payroll';
       store.log(actor, 'export', 'report', 'gov-contributions', null, { format, month, rows: report.people.length });
       const filename = `gds-hr-government-contributions-${month}.${format}`;
       return format === 'xlsx'
@@ -160,12 +160,12 @@ export function buildReport(store, actor, key, format, filters = {}) {
 // One posted payroll run as a PDF register (the Excel version already exists).
 // PDF layout of the contributions report: same rows as the Excel template, figures as 1,000.00, summary labels
 // (remittance and employer share) moved under Name so they read in full.
-const CONTRIBUTION_PDF_HEADERS = ['#', 'Name', 'Monthly\ncompensation', 'SSS\nER', 'SSS\nEE', 'SSS\nTotal', 'PhilHealth\nbasic', 'PHIC\nER', 'PHIC\nEE', 'PHIC\nTotal', 'HDMF\nER', 'HDMF\nEE', 'HDMF\nTotal', 'SSS\nloan', 'HDMF\nloan', 'Adjust-\nment', 'Deductions'];
+const CONTRIBUTION_PDF_HEADERS = ['#', 'Name', 'Monthly\ncompensation', 'SSS\nER', 'SSS\nEE', 'SSS\nTotal', 'PhilHealth\nbasic', 'PHIC\nER', 'PHIC\nEE', 'PHIC\nTotal', 'HDMF\nER', 'HDMF\nEE', 'HDMF\nTotal', 'SSS\nloan', 'HDMF\nloan', 'Cash\nloan', 'Adjust-\nment', 'Deductions'];
 function contributionPdfTable(rows) {
   const peso = v => (typeof v === 'number' ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v);
   const body = rows.map(r => (r.length ? r.map((v, i) => (i === 0 ? v : peso(v))) : Array(CONTRIBUTION_PDF_HEADERS.length).fill('')));
-  return { headers: CONTRIBUTION_PDF_HEADERS, rows: body, widths: [18, 130, 56, 46, 44, 48, 52, 44, 44, 48, 40, 40, 44, 40, 40, 40, 54],
-    rightAlign: CONTRIBUTION_PDF_HEADERS.map((_, i) => i !== 1), groups: [{ label: 'SSS', from: 3, to: 5 }, { label: 'PhilHealth', from: 6, to: 9 }, { label: 'Pag-IBIG (HDMF)', from: 10, to: 12 }, { label: 'Loans', from: 13, to: 14 }] };
+  return { headers: CONTRIBUTION_PDF_HEADERS, rows: body, widths: [18, 124, 56, 46, 44, 48, 52, 44, 44, 48, 40, 40, 44, 38, 38, 38, 38, 54],
+    rightAlign: CONTRIBUTION_PDF_HEADERS.map((_, i) => i !== 1), groups: [{ label: 'SSS', from: 3, to: 5 }, { label: 'PhilHealth', from: 6, to: 9 }, { label: 'Pag-IBIG (HDMF)', from: 10, to: 12 }, { label: 'Loans', from: 13, to: 15 }] };
 }
 export function payrollRunPdf(run) {
   // Figures as 1,000.00, right-aligned; two-line headings so every column stays readable.

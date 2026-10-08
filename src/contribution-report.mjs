@@ -3,12 +3,22 @@
 // so manual changes made in payroll are included. Employer SSS includes EC.
 import { calculatePayroll, ruleOn, contributionShares, activeContributionSetting } from './engine.mjs';
 import { permit } from './service.mjs';
+import { recordedMonth } from './contribution-history.mjs';
 
 const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const lastDay = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
 export const MONTH_NAME = month => new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
 
+// A month recorded from its remittance sheet (before payroll moved into the system), shown exactly as remitted.
+function fromRecorded(rec) {
+  const people = rec.rows.map(r => ({ employeeId: r.employeeId, name: r.name, sssBasis: r.compensation, phBasis: r.phBasis, sssEE: r.sssEE, sssER: r.sssER, phEE: r.phEE, phER: r.phER, piEE: r.piEE, piER: r.piER, sssLoan: r.sssLoan, piLoan: r.piLoan, cashLoan: r.cashLoan, deductions: r.deductions, note: r.note }));
+  const sum = key => r2(people.reduce((s, p) => s + (p[key] || 0), 0));
+  const employer = { sss: sum('sssER'), ph: sum('phER'), pi: sum('piER') }; employer.total = r2(employer.sss + employer.ph + employer.pi);
+  return { month: rec.month, draft: false, recorded: true, fee: rec.fee, people, employer, totals: { basis: sum('sssBasis'), sss: r2(sum('sssEE') + sum('sssER')), ph: r2(sum('phEE') + sum('phER')), pi: r2(sum('piEE') + sum('piER')), sssLoan: sum('sssLoan'), piLoan: sum('piLoan'), cashLoan: sum('cashLoan'), deductions: sum('deductions') } };
+}
 export function monthlyContributions(store, month) {
+  const rec = recordedMonth(store, month);
+  if (rec) return fromRecorded(rec);
   const state = store.read(), cutoff = (state.rules[0]?.cutoff) || 'semi-monthly';
   const periods = cutoff === 'monthly' ? [[`${month}-01`, lastDay(month)]] : [[`${month}-01`, `${month}-15`], [`${month}-16`, lastDay(month)]];
   const byEmployee = new Map();
@@ -60,22 +70,23 @@ function remittanceOnlyRows(state, month) {
 }
 
 // Employee SSS / PhilHealth / Pag-IBIG numbers are not printed in this report.
-export const CONTRIBUTION_HEADERS = ['#', 'Name', 'Monthly compensation', 'SSS ER', 'SSS EE', 'SSS Total', 'PhilHealth basic', 'PHIC ER', 'PHIC EE', 'PHIC Total', 'HDMF ER', 'HDMF EE', 'HDMF Total', 'SSS Loan', 'Pag-IBIG Loan', 'Adjustment from last deductions', 'Deductions'];
+export const CONTRIBUTION_HEADERS = ['#', 'Name', 'Monthly compensation', 'SSS ER', 'SSS EE', 'SSS Total', 'PhilHealth basic', 'PHIC ER', 'PHIC EE', 'PHIC Total', 'HDMF ER', 'HDMF EE', 'HDMF Total', 'SSS Loan', 'Pag-IBIG Loan', 'Cash loan', 'Adjustment from last deductions', 'Deductions'];
 const LAST = CONTRIBUTION_HEADERS.length - 1;
 const summaryRow = (label, amount) => ['', label, ...Array(LAST - 2).fill(''), amount];
 // Remittance lines (what is paid to the agencies) and the employer share (paid by GDS on top of salaries; SSS incl. EC).
 export function remittanceSummary(report, fee = 0) {
   const t = report.totals, er = report.employer;
-  const remittance = [['SSS', t.sss], ['PhilHealth', t.ph], ['Pag-IBIG (HDMF)', t.pi], ...(t.sssLoan ? [['SSS loan', t.sssLoan]] : []), ...(t.piLoan ? [['Pag-IBIG loan', t.piLoan]] : []), ['AUB eGov payment fee', fee]];
+  const withLoans = !report.recorded;   // recorded sheets list the agency contributions and the eGov fee only
+  const remittance = [['SSS', t.sss], ['PhilHealth', t.ph], ['Pag-IBIG (HDMF)', t.pi], ...(withLoans && t.sssLoan ? [['SSS loan', t.sssLoan]] : []), ...(withLoans && t.piLoan ? [['Pag-IBIG loan', t.piLoan]] : []), ['AUB eGov payment fee', report.recorded ? report.fee ?? fee : fee]];
   const total = r2(remittance.reduce((sum, [, v]) => sum + v, 0));
   return { remittance, total, employer: [['SSS employer (incl. EC)', er.sss], ['PhilHealth employer', er.ph], ['Pag-IBIG employer', er.pi]], employerTotal: er.total };
 }
 // Rows in the report layout: one line per employee, the totals line, the remittance summary and the employer share.
 export function contributionRows(report, fee = 0) {
   const blank = v => (v ? v : '');
-  const rows = report.people.map((p, i) => [i + 1, p.name, p.sssBasis, p.sssER, p.sssEE, r2(p.sssER + p.sssEE), p.phBasis, p.phER, p.phEE, r2(p.phER + p.phEE), p.piER, p.piEE, r2(p.piER + p.piEE), blank(p.sssLoan), blank(p.piLoan), '', p.deductions]);
+  const rows = report.people.map((p, i) => [i + 1, p.name, p.sssBasis, p.sssER, p.sssEE, r2(p.sssER + p.sssEE), p.phBasis, p.phER, p.phEE, r2(p.phER + p.phEE), p.piER, p.piEE, r2(p.piER + p.piEE), blank(p.sssLoan), blank(p.piLoan), blank(p.cashLoan), '', p.deductions]);
   const t = report.totals, s = remittanceSummary(report, fee);
-  rows.push(['', 'TOTAL', t.basis, '', '', t.sss, '', '', '', t.ph, '', '', t.pi, blank(t.sssLoan), blank(t.piLoan), '', t.deductions]);
+  rows.push(['', 'TOTAL', t.basis, '', '', t.sss, '', '', '', t.ph, '', '', t.pi, blank(t.sssLoan), blank(t.piLoan), blank(t.cashLoan), '', t.deductions]);
   rows.push([], summaryRow('REMITTANCE', ''));
   for (const [label, amount] of s.remittance) rows.push(summaryRow(label, amount));
   rows.push(summaryRow('TOTAL REMITTANCE', s.total));

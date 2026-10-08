@@ -87,10 +87,10 @@ test('monthly government contributions report sums both cutoffs; the summary add
     assert.equal(p.deductions, Math.round((p.sssEE + p.phEE + p.piEE + p.sssLoan + p.piLoan) * 100) / 100);
     const all = contributionRows(report, 15), last = all.find(r => r[1] === 'TOTAL REMITTANCE');
     assert.equal(all.at(-1)[1], 'TOTAL EMPLOYER SHARE');
-    assert.equal(all.at(-1)[16], report.employer.total, 'employer share section');
+    assert.equal(all.at(-1).at(-1), report.employer.total, 'employer share section');
     assert.equal(last[1], 'TOTAL REMITTANCE');
     assert.ok(!JSON.stringify(all).includes('34-0000000-1'), 'employee government numbers are not in the report');
-    assert.equal(last[16], Math.round((report.totals.sss + report.totals.ph + report.totals.pi + report.totals.sssLoan + report.totals.piLoan + 15) * 100) / 100);
+    assert.equal(last.at(-1), Math.round((report.totals.sss + report.totals.ph + report.totals.pi + report.totals.sssLoan + report.totals.piLoan + 15) * 100) / 100);
   } finally { store.close(); }
 });
 
@@ -107,5 +107,21 @@ test("'Remittance only' employees (e.g. the CEO) are left out of payroll but the
     assert.ok(p, 'still in the remittance report');
     assert.equal(p.sssBasis, state.employees.find(e => e.id === 'EMP-002').monthlySalary);
     assert.equal(p.sssEE + p.phEE + p.piEE, normal.sssEE + normal.phEE + normal.piEE, 'same monthly shares as when paid through payroll');
+  } finally { store.close(); }
+});
+
+test('a recorded remittance month is shown exactly as the sheet (former employees, cash loans; remittance = contributions + eGov fee)', async () => {
+  const { saveRecordedMonth } = await import('../src/contribution-history.mjs');
+  const { monthlyContributions, remittanceSummary } = await import('../src/contribution-report.mjs');
+  const store = fixture();
+  try {
+    saveRecordedMonth(store, admin, { month: '2026-01', fee: 15, rows: [
+      { name: 'Former, Person', compensation: 9082, sssER: 910, sssEE: 450, phBasis: 22000, phER: 550, phEE: 550, piER: 200, piEE: 200, deductions: 1200 },
+      { name: 'Alejo, Debralyn', employeeId: 'EMP-001', compensation: 18070, sssER: 1830, sssEE: 900, phBasis: 18070, phER: 451.75, phEE: 451.75, piER: 200, piEE: 200, piLoan: 239, cashLoan: 1000, deductions: 2790.75 },
+    ] });
+    const r = monthlyContributions(store, '2026-01');
+    assert.equal(r.recorded, true); assert.equal(r.people.length, 2);
+    assert.equal(r.totals.sss, 4090); assert.equal(r.totals.cashLoan, 1000);
+    assert.equal(remittanceSummary(r, 99).total, Math.round((4090 + 2003.5 + 800 + 15) * 100) / 100, 'loans not added; the recorded fee is used');
   } finally { store.close(); }
 });
