@@ -17,7 +17,8 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     const L = data.ledger, editable = data.canEncode, thisMonth = today().slice(0, 7);
     const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     const prior = new Map(data.prior.map(p => [`${p.employeeId}:${p.month}`, p]));
-    const years = [...new Set([today().slice(0, 4), ...data.years])].sort().reverse();
+    // This year, the next five (ready ahead; filled from payroll as each month is finalized) and every year with records.
+    const thisYear = Number(today().slice(0, 4)), years = [...new Set([...Array.from({ length: 6 }, (_, i) => String(thisYear + i)), ...data.years])].sort().reverse();
     const gridRow = r => [esc(r.name), ...months.map(m => {
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`), fromPayroll = data.postedBasic?.[r.employeeId]?.[m] || 0;
       if (posted) return `<span class="payroll-amount">${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
