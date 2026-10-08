@@ -139,7 +139,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
         <label class="field">Notes<input name="notes" maxlength="2000"></label>
         <div class="full"><button class="primary">Compute final pay</button></div>
       </form><div id="fp-result"></div>
-      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by', ''], finalData.records.map(r => [esc(r.name), fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), `${esc(r.computedBy)}<small>${fmt(r.computedAt)}</small>`, `<button class="small" data-final-view="${esc(r.id)}">View</button>`]), 'No saved final pay computations yet.')}</section>`;
+      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(r.computedBy)]), 'No saved final pay computations yet.')}</section>`;
   }
 
   const resultHtml = r => `<div class="panel-body"><h3>${esc(r.name)} · final pay as of ${fmt(r.separationDate)}</h3><p class="legend">Daily rate ${money(r.dailyRate)} · monthly ${money(r.monthlySalary)} · ${r.yearsOfService} year${r.yearsOfService === 1 ? '' : 's'} of service (counted) · release due ${fmt(r.releaseDue)}</p>
@@ -188,10 +188,6 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       if (b.dataset.thSplit) { const [id, m] = b.dataset.thSplit.split('|'); splitMonth(id, m); }
       if (b.hasAttribute('data-final-save')) {
         await api('/final-pay/compute', { ...lastInput, save: true }); toast('Final pay computation saved.'); await render();
-      }
-      if (b.dataset.finalView) {
-        const r = finalData.records.find(x => x.id === b.dataset.finalView);
-        openDialog(`Final pay · ${r.name}`, `<div class="dialog-body">${resultHtml(r)}${r.notes ? `<p class="legend">Notes: ${esc(r.notes)}</p>` : ''}<p class="legend">Computed by ${esc(r.computedBy)} on ${fmt(r.computedAt)}.</p></div>`, '<div class="dialog-foot"><button data-close>Close</button></div>');
       }
     } catch (error) { toast(error.message); }
   }

@@ -6,18 +6,18 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const LOGO_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/payslip-logo.jpg');
-const W = 595, H = 842, LEFT = 40, RIGHT = 555, WIDTH = RIGHT - LEFT;
-const COLOR = { ink: '0.13 0.13 0.13', muted: '0.42 0.42 0.42', line: '0.78 0.74 0.68', red: '0.71 0.12 0.17', redText: '0.80 0.18 0.20', gold: '0.85 0.72 0.36', goldTint: '0.99 0.95 0.84', band: '0.97 0.96 0.94', net: '1 0.90 0.45', white: '1 1 1' };
+export const W = 595, H = 842, LEFT = 40, RIGHT = 555, WIDTH = RIGHT - LEFT;
+export const COLOR = { ink: '0.13 0.13 0.13', muted: '0.42 0.42 0.42', line: '0.78 0.74 0.68', red: '0.71 0.12 0.17', redText: '0.80 0.18 0.20', gold: '0.85 0.72 0.36', goldTint: '0.99 0.95 0.84', band: '0.97 0.96 0.94', net: '1 0.90 0.45', white: '1 1 1' };
 
 // Helvetica advance widths (per 1000 em) for alignment; unlisted characters use an average.
 const WIDTHS = { ' ': 278, ',': 278, '.': 278, '-': 333, ':': 278, '(': 333, ')': 333, '/': 278, '0': 556, '1': 556, '2': 556, '3': 556, '4': 556, '5': 556, '6': 556, '7': 556, '8': 556, '9': 556, P: 667, H: 722 };
-const textWidth = (s, size, bold = false) => [...s].reduce((w, c) => w + (WIDTHS[c] ?? (c === c.toUpperCase() && /[A-Z]/.test(c) ? 690 : 520)), 0) * size / 1000 * (bold ? 1.06 : 1);
-const SUBSTITUTE = { '₱': 'PHP ', '–': '-', '—': '-', '−': '-', '×': 'x', '→': '->', '’': "'", '‘': "'", '“': '"', '”': '"', 'ñ': 'n', 'Ñ': 'N' };
+export const textWidth = (s, size, bold = false) => [...s].reduce((w, c) => w + (WIDTHS[c] ?? (c === c.toUpperCase() && /[A-Z]/.test(c) ? 690 : 520)), 0) * size / 1000 * (bold ? 1.06 : 1);
+const SUBSTITUTE = { '₱': 'PHP ', '–': '-', '—': '-', '−': '-', '×': 'x', '÷': '/', '→': '->', '’': "'", '‘': "'", '“': '"', '”': '"', 'ñ': 'n', 'Ñ': 'N' };
 const clean = value => [...String(value ?? '')].map(c => SUBSTITUTE[c] ?? c).join('').replace(/[^\x20-\x7e]/g, '?');
 const pdfString = s => clean(s).replace(/[\\()]/g, '\\$&');
-const amount = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const amount = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const longDate = iso => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${MONTHS[m - 1]} ${d}, ${y}`; };
+export const longDate = iso => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${MONTHS[m - 1]} ${d}, ${y}`; };
 const period = (start, end) => start.slice(0, 7) === end.slice(0, 7) ? `${MONTHS[Number(start.slice(5, 7)) - 1]} ${Number(start.slice(8))}-${Number(end.slice(8))}, ${start.slice(0, 4)}` : `${longDate(start)} - ${longDate(end)}`;
 
 function jpegInfo(buffer) {
@@ -30,14 +30,14 @@ function jpegInfo(buffer) {
   return null;
 }
 let cachedLogo;
-function logo() {
+export function logo() {
   if (cachedLogo !== undefined) return cachedLogo;
   const data = existsSync(LOGO_FILE) ? readFileSync(LOGO_FILE) : null, info = data && jpegInfo(data);
   cachedLogo = info ? { data, ...info } : null;
   return cachedLogo;
 }
 
-class Page {
+export class Page {
   constructor() { this.ops = []; }
   fill(color, x, y, w, h) { this.ops.push(`${color} rg ${x} ${y} ${w} ${h} re f`); }
   stroke(x, y, w, h, color = COLOR.line) { this.ops.push(`${color} RG 0.6 w ${x} ${y} ${w} ${h} re S`); }
@@ -144,7 +144,11 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   p.text('Prepared by: Payroll Department', LEFT + 12, sign - 20, { size: 9.5 });
   p.text(`${slip.employeeId} | ${draft ? 'Draft for review' : `Payroll ${String(slip.id || '').slice(0, 8)}`} | Questions? Message HR through the GDS HR app.`, W / 2, 50, { size: 7, color: COLOR.muted, align: 'center' });
 
-  // Assemble the PDF.
+  return assemblePdf(p, image);
+}
+
+// One A4 page (with the logo when present) into PDF bytes.
+export function assemblePdf(p, image = logo()) {
   const stream = p.ops.join('\n'), objects = [];
   objects.push('<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
   objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >>${image ? ' /XObject << /Logo 8 0 R >>' : ''} >> /Contents 4 0 R >>`);

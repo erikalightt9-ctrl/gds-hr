@@ -16,7 +16,8 @@ import { contributionReview, submitContributionChange, reviewContributionChange,
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
 import { decideLoanApplication, loanDashboard, setLoanSkips } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
-import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayOverview, addThirteenthYear } from './thirteenth.mjs';
+import { renderFinalPayPdf } from './final-pay-pdf.mjs';
+import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayRecord, finalPayOverview, addThirteenthYear } from './thirteenth.mjs';
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
@@ -210,6 +211,13 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/thirteenth/prior' && req.method === 'POST') { send(200, savePriorEarnings(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/thirteenth/overrides' && req.method === 'POST') { send(200, saveThirteenthOverrides(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/final-pay' && req.method === 'GET') { send(200, finalPayOverview(store, auth.user)); return; }
+      const finalPdf = pathname.match(/^\/api\/final-pay\/([a-f0-9-]+)\.pdf$/);
+      if (finalPdf && req.method === 'GET') {
+        const record = finalPayRecord(store, auth.user, finalPdf[1]), employee = store.read().employees.find(x => x.id === record.employeeId);
+        store.log(auth.user, 'export', 'final-pay', record.id, null, { format: 'pdf' });
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="final-pay-${record.employeeId}-${record.separationDate}.pdf"` });
+        res.end(renderFinalPayPdf(record, { designation: designationOf(store, record.employeeId), startDate: employee?.startDate || '' })); return;
+      }
       if (pathname === '/api/final-pay/compute' && req.method === 'POST') { send(200, computeFinalPay(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);

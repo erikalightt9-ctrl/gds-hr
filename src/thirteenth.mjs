@@ -164,6 +164,12 @@ export function computeFinalPay(store, actor, input) {
   }
   return result;
 }
+export function finalPayRecord(store, actor, id) {
+  permit(actor, PAY);
+  const row = store.db.prepare('SELECT data FROM final_pay WHERE id=?').get(id);
+  if (!row) throw new AppError('Final pay computation not found.', 404);
+  return JSON.parse(row.data);
+}
 export function finalPayRecords(store, actor) {
   permit(actor, PAY);
   return store.db.prepare('SELECT data FROM final_pay ORDER BY rowid DESC').all().map(r => JSON.parse(r.data));
