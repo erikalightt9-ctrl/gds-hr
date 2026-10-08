@@ -7,20 +7,13 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
   const card = (label, value, foot, featured = false) => `<div class="card${featured ? ' featured' : ''}"><div class="card-label">${esc(label)}</div><div class="card-value">${value}</div><div class="card-foot">${esc(foot)}</div></div>`;
   const lines = (rows, totalLabel, total) => `<dl class="contrib-summary">${rows.map(([label, amount]) => `<div><dt>${esc(label)}</dt><dd>${money(amount)}</dd></div>`).join('')}<div class="total"><dt>${esc(totalLabel)}</dt><dd>${money(total)}</dd></div></dl>`;
 
-  // Month buttons for the year (records start January 2026); ‹ › move between years.
-  const FIRST = '2026-01', NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  function monthPicker() {
-    const y = Number(month.slice(0, 4)), current = today().slice(0, 7);
-    const yearBtn = (label, target, disabled) => `<button class="small" ${disabled ? 'disabled' : `data-contrib-month-pick="${target}"`} aria-label="${label}">${label === 'Previous year' ? '‹' : '›'}</button>`;
-    return `<div class="month-picker"><div class="month-year">${yearBtn('Previous year', `${y - 1}-12`, `${y - 1}-12` < FIRST)}<strong>${y}</strong>${yearBtn('Next year', `${y + 1}-01`, false)}</div><div class="month-buttons">${NAMES.map((n, i) => { const m = `${y}-${String(i + 1).padStart(2, '0')}`; return `<button class="small${m === month ? ' active' : ''}${m === current ? ' now' : ''}" data-contrib-month-pick="${m}" ${m < FIRST ? 'disabled' : ''}>${n}</button>`; }).join('')}</div></div>`;
-  }
   async function render() {
     shell(heading('Government contributions', 'Loading…') + '<div class="loading">Loading contributions…</div>');
     const d = await api(`/contributions?month=${month}`), t = d.totals, s = d.summary;
     const employeeShare = d.people.reduce((sum, p) => sum + p.sssEE + p.phEE + p.piEE, 0);
     const files = ['xlsx', 'pdf'].map(f => `<a class="small download-link" href="/api/reports/gov-contributions.${f}?month=${month}" download>${f === 'xlsx' ? 'Excel' : 'PDF'}</a>`).join('');
     shell(heading('Government contributions', 'SSS, PhilHealth and Pag-IBIG for the month: what employees pay, what GDS pays, and the total remittance.')
-      + `<div class="actions contrib-tools">${monthPicker()}${canAdd() ? '<button class="primary" data-contrib-add>+ Add employee</button>' : ''}<span class="download-links">${files}</span></div>`
+      + `<div class="actions contrib-tools"><label class="field">Month<input type="month" id="contrib-month" value="${esc(month)}"></label>${canAdd() ? '<button class="primary" data-contrib-add>+ Add employee</button>' : ''}<span class="download-links">${files}</span></div>`
       + `<div class="cards">${card('Employee share', money(employeeShare), 'Deducted from salaries')}${card('Employer share', money(d.employer.total), 'Paid by GDS (SSS incl. EC)')}${card('Total remittance', money(s.total), `${d.monthName} · incl. loans and eGov fee`, true)}${card('Employees', d.people.length, 'In this month')}</div>`
       + `<section class="panel"><div class="panel-head"><h2>Per employee · ${esc(d.monthName)}</h2>${d.recorded ? '<span class="badge">Recorded from the remittance sheet</span>' : ''}</div><div class="table-wrap">${table(['Employee', 'Monthly compensation', 'SSS EE', 'SSS ER', 'PhilHealth declared salary', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Loans', 'Employee deductions', ''],
         [...d.people.map(p => [esc(p.name), money(p.sssBasis), money(p.sssEE), money(p.sssER), money(p.phBasis), money(p.phEE), money(p.phER), money(p.piEE), money(p.piER), money(p.sssLoan + p.piLoan + (p.cashLoan || 0)), `<strong>${money(p.deductions)}</strong>`, p.employeeId && !d.recorded ? `<button class="small" data-contrib-edit="${esc(p.employeeId)}" title="Adjust ${esc(p.name)}'s contribution basis or premiums">Edit</button>` : '']),
@@ -34,7 +27,7 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
       const b = e.target.closest('[data-contrib-edit]'); if (b) editContribution(b.dataset.contribEdit, refresh);
       if (e.target.closest('[data-contrib-add]')) addDialog(d.people.map(p => p.employeeId), refresh);
     };
-    document.querySelectorAll('[data-contrib-month-pick]').forEach(b => { b.onclick = () => { month = b.dataset.contribMonthPick; render().catch(err => toast(err.message)); }; });
+    document.querySelector('#contrib-month').onchange = e => { if (e.target.value) { month = e.target.value; render().catch(err => toast(err.message)); } };
   }
   // Add employee for manual encoding: a registered employee who is not in payroll, or a new person.
   function addDialog(listed, refresh) {
