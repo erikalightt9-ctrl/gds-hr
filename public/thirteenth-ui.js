@@ -1,6 +1,6 @@
 // 13th Month Pay page: the annual ledger (posted payroll + salary encoded for months before the system),
 // the encoding grid for those earlier months, and the final pay computation for separated employees.
-export function createThirteenthPage({ api, esc, money, table, badge, toast, openDialog, dialog, shell, heading, today, downloads, tabs = () => '' }) {
+export function createThirteenthPage({ api, esc, money, table, badge, toast, openDialog, dialog, shell, heading, today, downloads }) {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const fmt = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
   const card = (label, value, foot, featured = false) => `<div class="card${featured ? ' featured' : ''}"><div class="card-label">${esc(label)}</div><div class="card-value">${value}</div><div class="card-foot">${esc(foot)}</div></div>`;
@@ -12,22 +12,23 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
   let year = null, data = null, finalData = null, lastResult = null, lastInput = null;
 
   // The page opens on the list of years; each one opens that year's 13th month pay.
-  async function open() { year = null; await render(); }
-  async function chooser() {
-    shell(heading('13th month pay', 'Loading…') + '<div class="loading">Loading…</div>');
+  async function open(y = null) { year = y || today().slice(0, 4); await render(); }
+  // The 13th Month Pay section on the Payroll page: one card per year (this year, years with records, years added).
+  async function section(openYear) {
     const thisYear = today().slice(0, 4), current = await api(`/thirteenth?year=${thisYear}`);
-    // This year, every year with records, and the years added ahead with "+ Add year".
     const last = Math.max(Number(thisYear), current.lastYear || 0), years = [...new Set([...Array.from({ length: last - Number(thisYear) + 1 }, (_, i) => String(Number(thisYear) + i)), ...current.years])].sort();
-    const accrued = r => money(r.ledger.reduce((s, x) => s + x.accrued, 0));
-    shell(heading('Payroll & 13th Month', 'Choose a year to see each employee\'s basic salary, the 13th month earned and the balance to pay.') + tabs() +
-      `<div class="year-cards">${years.map(y => `<button class="year-card${y === thisYear ? ' current' : ''}" data-th-open="${esc(y)}"><strong>${esc(y)}</strong><span>13th Month Pay</span><small>${y === thisYear ? `Earned so far ${accrued(current)}` : y > thisYear ? 'Fills in from payroll' : 'Past year'}</small></button>`).join('')}${current.canEncode ? `<button class="year-card add-year" data-th-add><strong>＋</strong><span>Add year</span><small>Adds ${last + 1}</small></button>` : ''}</div>`);
-    document.querySelector('.content').onclick = async e => {
-      if (e.target.closest('[data-th-add]')) { try { await api('/thirteenth/years', {}); await chooser(); } catch (err) { toast(err.message); } return; }
-      const b = e.target.closest('[data-th-open]'); if (b) { year = b.dataset.thOpen; render().catch(err => toast(err.message)); }
+    const accrued = money(current.ledger.reduce((s, x) => s + x.accrued, 0));
+    const box = document.createElement('section'); box.className = 'panel';
+    const draw = () => { box.innerHTML = `<div class="panel-head"><div><h2>🎁 13th Month Pay</h2><p>Basic salary earned in the year ÷ 12. Choose a year to see each employee, the salary records and final pay.</p></div></div><div class="panel-body"><div class="year-cards">${years.map(y => `<button class="year-card${y === thisYear ? ' current' : ''}" data-th-open="${esc(y)}"><strong>${esc(y)}</strong><span>13th Month Pay</span><small>${y === thisYear ? `Earned so far ${accrued}` : y > thisYear ? 'Fills in from payroll' : 'Past year'}</small></button>`).join('')}${current.canEncode ? `<button class="year-card add-year" data-th-add><strong>＋</strong><span>Add year</span><small>Adds ${Math.max(Number(thisYear), current.lastYear || 0) + 1}</small></button>` : ''}</div></div>`; };
+    draw();
+    box.onclick = async e => {
+      if (e.target.closest('[data-th-add]')) { try { const r = await api('/thirteenth/years', {}); years.push(String(r.lastYear)); current.lastYear = r.lastYear; draw(); } catch (err) { toast(err.message); } return; }
+      const b = e.target.closest('[data-th-open]'); if (b) openYear(b.dataset.thOpen);
     };
+    return box;
   }
   async function render() {
-    if (!year) return chooser();
+    if (!year) year = today().slice(0, 4);
     shell(heading('13th month & final pay', 'Loading…') + '<div class="loading">Loading the ledger…</div>');
     [data, finalData] = await Promise.all([api(`/thirteenth?year=${year}`), api('/final-pay').catch(() => null)]);
     const L = data.ledger, editable = data.canEncode, thisMonth = today().slice(0, 7);
@@ -39,8 +40,8 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
       const future = m > thisMonth;
       return `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}${future ? ' placeholder="From payroll"' : ''}>${fromPayroll ? `<small class="share-state">+ ${fmtAmount(fromPayroll)} payroll</small>` : ''}`;
     }), `<button class="small" data-prior-detail="${esc(r.employeeId)}">Details</button>`];
-    shell(heading(`${year} 13th Month Pay`, 'PD 851: total basic salary earned in the calendar year ÷ 12. Months before the system went live are encoded below; months with posted payroll are counted from payroll.') + tabs() +
-      `<div class="actions"><button class="small" data-th-back>← All years</button></div>
+    shell(heading(`${year} 13th Month Pay`, 'PD 851: total basic salary earned in the calendar year ÷ 12. Months before the system went live are encoded below; months with posted payroll are counted from payroll.') +
+      `<div class="actions"><button class="small" data-nav="payroll">← Payroll</button></div>
       <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
       <section class="panel"><div class="panel-head"><h2>Annual 13th month ledger</h2>${downloads('thirteenth')}<span class="legend">To pay out, choose “Pay accrued balance” when computing payroll.</span></div>${table(['Employee', 'From payroll', 'Encoded (months)', 'Total basic', 'Accrued ÷ 12', 'Paid', 'Balance', 'Coverage'], L.map(r => [esc(r.name), money(r.postedBasic), `${money(r.priorBasic)}<small>${r.priorMonths.length} month${r.priorMonths.length === 1 ? '' : 's'}</small>`, money(r.totalBasic), money(r.accrued), money(r.paid), `<strong>${money(r.balance)}</strong>`, badge(r.covered13th ? 'Covered' : 'Excluded', r.covered13th ? '' : 'neutral')]), 'No employees.')}</section>
       <section class="panel"><div class="panel-head"><div class="th-head"><span class="legend">Basic salary actually earned each month (after absences and unpaid leave; exclude overtime, holiday premiums and allowances). Leave blank to clear.</span></div></div>
@@ -49,7 +50,6 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
         ${editable ? '<div class="panel-foot"><span></span><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
       ${finalPanel()}`);
     const content = document.querySelector('.content');
-    content.querySelector('[data-th-back]').onclick = () => { year = null; render().catch(err => toast(err.message)); };
     content.addEventListener('click', onClick);
     content.querySelector('#fp-form')?.addEventListener('submit', onCompute);
   }
@@ -140,5 +140,5 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
       try { await api('/thirteenth/prior', { entries }); dialog.close(); toast('Salary records saved.'); await render(); } catch (error) { toast(error.message); }
     };
   }
-  return { open, render };
+  return { open, section, render };
 }

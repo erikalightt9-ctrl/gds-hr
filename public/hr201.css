@@ -679,3 +679,4 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .pw-wrap input { width: 100%; padding-right: 44px; }
 .pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; padding: 6px 8px; font-size: 16px; line-height: 1; cursor: pointer; }
 .pw-eye:hover { background: rgb(0 0 0 / .05); border-radius: 8px; }
+.section-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 28px 0 14px; font-size: 20px; }
