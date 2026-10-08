@@ -344,13 +344,9 @@ function holidayCards(list) {
   const sorted = list.slice().sort((a, b) => a.date.localeCompare(b.date)), next = sorted.find(h => h.date >= today() && h.kind !== 'ordinary');
   const months = [...new Set(sorted.map(h => h.date.slice(0, 7)))];
   const fmt = (d, opts) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', opts);
-  return `<div class="holiday-calendar">${months.map(m => `<section class="holiday-month"><h3>${fmt(`${m}-01`, { month: 'long', year: 'numeric' })}</h3><div class="holiday-grid">${sorted.filter(h => h.date.startsWith(m)).map(h => `
-    <article class="holiday-card kind-${esc(h.kind)}${h === next ? ' next' : ''}${h.date < today() ? ' past' : ''}">
-      <div class="holiday-date"><strong>${fmt(h.date, { day: 'numeric' })}</strong><span>${fmt(h.date, { weekday: 'short' })}</span></div>
-      <div class="holiday-icon" aria-hidden="true">${holidayIcon(h.name)}</div>
-      <div class="holiday-info"><h4>${esc(h.name)}</h4><span class="holiday-kind">${esc(KIND_LABEL[h.kind] || h.kind)}</span>${h === next ? '<span class="holiday-next">Next holiday</span>' : ''}<small>${esc(h.basis)}</small></div>
-      <div class="holiday-actions">${editButton('holidays', h.id)}</div>
-    </article>`).join('')}</div></section>`).join('')}</div>`;
+  // Compact year view: one small box per month, one line per date (hover for the proclamation), coloured dot for the type.
+  const editIcon = id => (canEdit('holidays') ? `<button class="hol-edit" data-edit="holidays" data-id="${esc(id)}" title="Review / edit" aria-label="Review or edit">✎</button>` : '');
+  return `<div class="hol-legend"><span class="dot kind-regular"></span>Regular holiday <span class="dot kind-special"></span>Special non-working <span class="dot kind-ordinary"></span>Working day</div><div class="hol-year">${months.map(m => `<section class="hol-month"><h3>${fmt(`${m}-01`, { month: 'long', year: 'numeric' })}</h3><ul>${sorted.filter(h => h.date.startsWith(m)).map(h => `<li class="${h === next ? 'next' : ''}${h.date < today() ? ' past' : ''}" title="${esc(KIND_LABEL[h.kind] || h.kind)} · ${esc(h.basis || '')}"><span class="dot kind-${esc(h.kind)}"></span><b>${fmt(h.date, { day: 'numeric' })}</b><small>${fmt(h.date, { weekday: 'short' })}</small><span class="hol-name">${holidayIcon(h.name)} ${esc(h.name)}</span>${h === next ? '<em>Next</em>' : ''}${editIcon(h.id)}</li>`).join('')}</ul></section>`).join('')}</div>`;
 }
 function holidaysPage() { return heading('Holiday calendar', 'Date-specific classifications, maintained from official proclamations each year.', addButton('holidays', 'Add holiday')) + `<section class="panel"><div class="panel-head"><h2>Configured dates</h2>${downloads('holidays')}<span class="legend">Rest-day combinations come from each employee’s schedule.</span></div>${searchToolbar()}${holidayCards(filtered(state.holidays))}</section><div class="notice">Special non-working days without work default to no pay. Favorable company policy can provide payment. Regular-holiday pay requires the employee’s coverage and eligibility to be verified in attendance.</div>`; }
 function rulesPage() {
