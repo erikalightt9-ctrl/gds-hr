@@ -7,6 +7,17 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
   // Amounts show as 1,000.00 in the boxes; commas are removed before saving.
   const fmtAmount = v => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
+  // The row's months added up as they are on screen: typed amount + basic from finalized payroll (a fully posted month counts payroll only).
+  function rowSum(emp) {
+    let sum = 0;
+    for (let i = 1; i <= 12; i++) {
+      const m = `${year}-${String(i).padStart(2, '0')}`, fromPayroll = data.postedBasic?.[emp]?.[m] || 0;
+      if (data.postedMonths[emp]?.includes(m)) { sum += fromPayroll; continue; }
+      const typed = Number(parseAmount(document.querySelector(`.th-grid [data-prior="${CSS.escape(emp)}"][data-month="${m}"]`)?.value) || 0);
+      sum += (Number.isNaN(typed) ? 0 : typed) + fromPayroll;
+    }
+    return r2(sum);
+  }
   // Undo / redo for the salary records grid, like Excel: each finished edit (and the 13th month it recalculated) is one step.
   const history = { undo: [], redo: [] };
   let snapshot = null;
@@ -88,13 +99,17 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     content.addEventListener('click', onClick);
     snapshot = readGrid(); syncUndo();
     content.addEventListener('change', e => { if (e.target.closest('.th-grid')) recordStep(); });
-    // Typing a Total earned updates that row's 13th month pay (÷ 12) unless the 13th month was edited separately.
+    // Live formula: Jan + Feb + … + Dec = Total earned; Total earned ÷ 12 = 13th month pay.
     content.addEventListener('input', e => {
-      if (e.target.dataset.thOv !== 'total') return;
-      const row = data.ledger.find(x => x.employeeId === e.target.dataset.emp), th = content.querySelector(`[data-th-ov="13th"][data-emp="${CSS.escape(e.target.dataset.emp)}"]`);
-      const raw = parseAmount(e.target.value), v = raw === '' ? row?.computedTotal : Number(raw);
-      if (!row?.covered13th || !th || row.thirteenthEdited || Number.isNaN(v)) return;
-      th.value = fmtAmount(r2(v / 12));
+      const t = e.target, emp = t.dataset.thOv === 'total' ? t.dataset.emp : t.dataset.prior;
+      if (!emp || !(t.dataset.thOv === 'total' || t.dataset.month)) return;
+      const row = data.ledger.find(x => x.employeeId === emp), box = kind => content.querySelector(`[data-th-ov="${kind}"][data-emp="${CSS.escape(emp)}"]`);
+      if (!row) return;
+      let total;
+      if (t.dataset.month) { total = rowSum(emp); if (box('total')) box('total').value = fmtAmount(total); }
+      else { const raw = parseAmount(t.value); total = raw === '' ? rowSum(emp) : Number(raw); }
+      if (Number.isNaN(total) || !box('13th')) return;
+      box('13th').value = fmtAmount(row.covered13th ? r2(total / 12) : 0);
     });
     content.addEventListener('change', e => {
       const dd = e.target.closest('.leave-dropdown'); if (!dd) return;
@@ -159,7 +174,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
         const overrides = data.ledger.flatMap(row => {
           const box = kind => document.querySelector(`[data-th-ov="${kind}"][data-emp="${CSS.escape(row.employeeId)}"]`);
           const read = (el, computed) => { const v = parseAmount(el?.value); return v === '' || Number(v) === computed ? null : Number(v); };
-          const totalBasic = read(box('total'), row.computedTotal), thirteenth = read(box('13th'), row.covered13th ? r2((totalBasic ?? row.computedTotal) / 12) : 0);
+          const sum = rowSum(row.employeeId), totalBasic = read(box('total'), sum), thirteenth = read(box('13th'), row.covered13th ? r2((totalBasic ?? sum) / 12) : 0);
           const was = { totalBasic: row.totalEdited ? row.totalBasic : null, thirteenth: row.thirteenthEdited ? row.accrued : null };
           return totalBasic === was.totalBasic && thirteenth === was.thirteenth ? [] : [{ employeeId: row.employeeId, totalBasic, thirteenth }];
         });
