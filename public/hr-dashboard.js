@@ -14,7 +14,7 @@ export function createDashboard(ctx) {
         ${card('active', t.active, 'Active employees', { page: 'files', status: 'Active' })}
         ${card('inactive', t.inactive, 'Inactive employees', { page: 'files', status: 'Inactive' })}
         ${card('newHires', t.newHires, 'New hires (last 30 days)', { page: 'files', docs: 'newhires' })}
-        ${card('departments', t.departments, 'Departments & companies', { dialog: 'departments' }, 'Click to view or add')}
+        ${card('departments', t.departments, 'Subsidiaries', { dialog: 'departments' }, 'Click to view or add')}
         ${t.missingDocuments !== null ? card('missing', t.missingDocuments, 'Missing requirements', { page: 'files', docs: 'missing' }, `${t.employeesMissing} employee${t.employeesMissing === 1 ? '' : 's'} affected`) : ''}
         ${card('acks', t.pendingAcks, 'Pending memo acknowledgements', { page: 'memos' }, t.overdueAcks ? `${t.overdueAcks} overdue` : '')}
         ${card('trainings', t.upcomingTrainings, 'Upcoming trainings', { page: 'trainings' })}
@@ -36,9 +36,9 @@ export function createDashboard(ctx) {
     let settings = null;
     try { settings = await api('/hr/settings'); } catch { settings = null; }   // only System Administrators can change the list
     const draw = (items, error = '') => {
-      ctx.openDialog('Departments & companies', `<div class="dialog-body"><p class="sub">GDS Capital group: each department or company, with its number of employees. Assign employees in their 201 file (Edit record → Department).</p>
-        <ul class="plain-list dept-list">${items.map(x => `<li><span><strong>${esc(x.name)}</strong> <small>${x.count} employee${x.count === 1 ? '' : 's'}</small></span>${settings && x.name !== 'Unassigned' && !x.count ? `<button class="small danger" data-dept-remove="${esc(x.name)}">Remove</button>` : ''}</li>`).join('')}</ul>
-        ${settings ? `<form id="dept-add" class="dept-add"><input name="name" maxlength="120" required placeholder="e.g. GDS Realty Corp. or Finance Department" aria-label="New department or company"><button class="primary">＋ Add</button></form>` : '<p class="legend">Only System Administrators can add or remove departments.</p>'}
+      ctx.openDialog('Subsidiaries', `<div class="dialog-body"><p class="sub">Companies of the GDS Capital group. Assign an employee in their 201 file (Edit record).</p>
+        <ul class="plain-list dept-list">${items.filter(x => x.name !== 'Unassigned').map(x => `<li><span><strong>${esc(x.name)}</strong></span>${settings && x.name !== 'Unassigned' && !x.count ? `<button class="small danger" data-dept-remove="${esc(x.name)}">Remove</button>` : ''}</li>`).join('')}</ul>
+        ${settings ? `<form id="dept-add" class="dept-add"><input name="name" maxlength="120" required placeholder="e.g. PDMN or GDS Realty Corp." aria-label="New subsidiary"><button class="primary">＋ Add</button></form>` : '<p class="legend">Only System Administrators can add or remove subsidiaries.</p>'}
         ${error ? `<p class="form-error" role="alert">${esc(error)}</p>` : ''}</div>`);
       const box = ctx.dialog;
       const save = async (names, items2) => {
