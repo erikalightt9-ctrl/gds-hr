@@ -766,3 +766,22 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .th-year-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .th-year-pick .field { margin: 0; min-width: 120px; }
 .th-total { display: block; font-size: 14px; white-space: nowrap; }
+/* 13th month salary records: Employee to Total fits the page without sideways scrolling */
+.th-grid .scroll-table { overflow: visible; max-height: none; }
+.th-grid table { table-layout: fixed; width: 100%; }
+.th-grid th, .th-grid td { padding: 8px 3px; white-space: normal; }
+.th-grid th:first-child, .th-grid td:first-child { width: 12%; padding-left: 10px; font-size: 11.5px; }
+.th-grid th:last-child, .th-grid td:last-child { width: 9%; padding-right: 10px; }
+.th-grid th { text-align: center; font-size: 9.5px; letter-spacing: .02em; }
+.th-grid input.share-input { display: block; width: 100%; min-width: 0; padding: 6px 3px; font-size: 11px; text-align: right; border-radius: 6px; }
+.th-grid .payroll-amount { font-size: 11px; text-align: right; padding: 6px 3px 0; }
+.th-grid .th-total { font-size: 12px; }
+.th-grid td:last-child .share-state { display: block; font-size: 9.5px; white-space: nowrap; }
+/* Final pay: leave to convert, as a dropdown with tick boxes */
+.leave-dropdown { position: relative; max-width: 420px; }
+.leave-dropdown summary { list-style: none; cursor: pointer; border: 1px solid #d6d6d6; border-radius: 6px; background: #fff; padding: 10px 34px 10px 11px; font-weight: 500; position: relative; }
+.leave-dropdown summary::-webkit-details-marker { display: none; }
+.leave-dropdown summary::after { content: '\25BE'; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.leave-dropdown[open] summary::after { content: '\25B4'; }
+.leave-options { position: absolute; z-index: 5; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; box-shadow: 0 10px 30px #0000001f; padding: 6px 10px; max-height: 260px; overflow: auto; }
+.leave-options label.check { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-weight: 500; }

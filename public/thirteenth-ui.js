@@ -38,19 +38,23 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`), fromPayroll = data.postedBasic?.[r.employeeId]?.[m] || 0;
       if (posted) return `<span class="payroll-amount">${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
       const future = m > thisMonth;
-      return `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}${future ? ' placeholder="From payroll"' : ''}>${fromPayroll ? `<small class="share-state">+ ${fmtAmount(fromPayroll)} payroll</small>` : ''}`;
+      return `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}${future ? ' placeholder="From payroll"' : ''}>`;
     }), `<strong class="th-total">${fmtAmount(r.totalBasic)}</strong><small class="share-state">13th month ${fmtAmount(r.accrued)}</small>`];
-    shell(heading(`${year} 13th Month Pay`, 'PD 851: total basic salary earned in the calendar year ÷ 12. Months before the system went live are encoded below; months with posted payroll are counted from payroll.') +
-      `<div class="actions"><button class="small" data-nav="payroll">← Payroll</button></div>
-      <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
+    shell(heading(`${year} 13th Month Pay`, '', '<button class="small" data-nav="payroll">← Payroll</button>') +
+      `      <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
 
       <section class="panel"><div class="panel-head"><div class="th-head"><span class="legend">Basic salary actually earned each month (after absences and unpaid leave; exclude overtime, holiday premiums and allowances). Leave blank to clear.</span></div></div>
         <div class="th-year-band">YEAR ${esc(year)}</div>
-        <div class="table-wrap">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), 'Total'], L.map(gridRow), 'No employees.')}</div>
+        <div class="table-wrap th-grid">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), 'Total'], L.map(gridRow), 'No employees.')}</div>
         ${editable ? '<div class="panel-foot"><span></span><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
       ${finalPanel()}`);
     const content = document.querySelector('.content');
     content.addEventListener('click', onClick);
+    content.addEventListener('change', e => {
+      const dd = e.target.closest('.leave-dropdown'); if (!dd) return;
+      const picked = [...dd.querySelectorAll('input:checked')].map(i => i.dataset.leaveName);
+      dd.querySelector('[data-leave-summary]').textContent = picked.join(', ') || 'None';
+    });
     content.querySelector('#fp-form')?.addEventListener('submit', onCompute);
   }
 
@@ -63,7 +67,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
         <label class="field">Last day / separation date<input type="date" name="separationDate" required value="${today()}"></label>
         <label class="field">Unpaid days worked (optional)<input type="number" name="unpaidDays" min="0" step="0.5"><small>Blank: scheduled workdays after the last paid cutoff.</small></label>
         <label class="field">Separation pay<select name="separationCause"><option value="none">None (resignation, end of contract, just cause)</option><option value="redundancy">Redundancy / labor-saving devices (1 month per year)</option><option value="retrenchment">Retrenchment / closure / disease (½ month per year)</option></select></label>
-        <fieldset class="field full"><legend>Convert unused leave to cash</legend>${finalData.leaveTypes.map(t => `<label class="check"><input type="checkbox" name="convertLeave" value="${esc(t.id)}"${/service incentive|\bsil\b/i.test(t.name) ? ' checked' : ''}> ${esc(t.name)}</label>`).join('') || '<small>No leave types configured.</small>'}<small>Service Incentive Leave is convertible by law; other leave only if company policy says so.</small></fieldset>
+        <div class="field full"><span>Convert unused leave to cash</span>${finalData.leaveTypes.length ? `<details class="leave-dropdown"><summary data-leave-summary>${esc(finalData.leaveTypes.filter(t => /service incentive|\bsil\b/i.test(t.name)).map(t => t.name).join(', ') || 'None')}</summary><div class="leave-options">${finalData.leaveTypes.map(t => `<label class="check"><input type="checkbox" name="convertLeave" value="${esc(t.id)}" data-leave-name="${esc(t.name)}"${/service incentive|\bsil\b/i.test(t.name) ? ' checked' : ''}> ${esc(t.name)}</label>`).join('')}</div></details>` : '<small>No leave types configured.</small>'}<small>Service Incentive Leave is convertible by law; other leave only if company policy says so.</small></div>
         <label class="check"><input type="checkbox" name="deductLoans" checked> Deduct outstanding loans</label>
         <label class="field">Other earnings<input type="number" name="otherEarnings" min="0" step="0.01" value="0"></label>
         <label class="field">Other earnings note<input name="otherEarningsNote" maxlength="500"></label>
