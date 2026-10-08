@@ -9,7 +9,7 @@ import { ruleOn } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 
 const APPROVERS = ['admin', 'payroll', 'hr'];
-const TYPES = ['SSS Loan', 'Pag-IBIG Loan', 'Salary Loan', 'Other Company Loan'];
+const TYPES = ['Salary Loan', 'Emergency Loan', 'Medical Loan', 'Educational Loan', 'Housing Loan', 'Vehicle Loan', 'Calamity Loan', 'SSS Loan', 'Pag-IBIG Loan', 'Other Company Loan'];
 const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const apps = (store, where = '', ...args) => store.db.prepare(`SELECT data FROM loan_applications ${where} ORDER BY rowid DESC`).all(...args).map(r => JSON.parse(r.data));
 const write = (store, a) => store.db.prepare('INSERT INTO loan_applications(id,employee_id,status,data) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, data=excluded.data').run(a.id, a.employeeId, a.status, JSON.stringify(a));
