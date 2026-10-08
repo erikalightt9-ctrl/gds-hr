@@ -1,6 +1,6 @@
 // 13th Month Pay page: the annual ledger (posted payroll + salary encoded for months before the system),
 // the encoding grid for those earlier months, and the final pay computation for separated employees.
-export function createThirteenthPage({ api, esc, money, table, badge, toast, openDialog, dialog, shell, heading, today, downloads }) {
+export function createThirteenthPage({ api, esc, money, table, badge, toast, openDialog, dialog, shell, heading, today, downloads, tabs = () => '' }) {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const fmt = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
   const card = (label, value, foot, featured = false) => `<div class="card${featured ? ' featured' : ''}"><div class="card-label">${esc(label)}</div><div class="card-value">${value}</div><div class="card-foot">${esc(foot)}</div></div>`;
@@ -19,7 +19,7 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     // This year, every year with records, and the years added ahead with "+ Add year".
     const last = Math.max(Number(thisYear), current.lastYear || 0), years = [...new Set([...Array.from({ length: last - Number(thisYear) + 1 }, (_, i) => String(Number(thisYear) + i)), ...current.years])].sort();
     const accrued = r => money(r.ledger.reduce((s, x) => s + x.accrued, 0));
-    shell(heading('13th month pay', 'Choose a year to see each employee\'s basic salary, the 13th month earned and the balance to pay.') +
+    shell(heading('Payroll & 13th Month', 'Choose a year to see each employee\'s basic salary, the 13th month earned and the balance to pay.') + tabs() +
       `<div class="year-cards">${years.map(y => `<button class="year-card${y === thisYear ? ' current' : ''}" data-th-open="${esc(y)}"><strong>${esc(y)}</strong><span>13th Month Pay</span><small>${y === thisYear ? `Earned so far ${accrued(current)}` : y > thisYear ? 'Fills in from payroll' : 'Past year'}</small></button>`).join('')}${current.canEncode ? `<button class="year-card add-year" data-th-add><strong>＋</strong><span>Add year</span><small>Adds ${last + 1}</small></button>` : ''}</div>`);
     document.querySelector('.content').onclick = async e => {
       if (e.target.closest('[data-th-add]')) { try { await api('/thirteenth/years', {}); await chooser(); } catch (err) { toast(err.message); } return; }
@@ -39,7 +39,7 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
       const future = m > thisMonth;
       return `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}${future ? ' placeholder="From payroll"' : ''}>${fromPayroll ? `<small class="share-state">+ ${fmtAmount(fromPayroll)} payroll</small>` : ''}`;
     }), `<button class="small" data-prior-detail="${esc(r.employeeId)}">Details</button>`];
-    shell(heading(`${year} 13th Month Pay`, 'PD 851: total basic salary earned in the calendar year ÷ 12. Months before the system went live are encoded below; months with posted payroll are counted from payroll.') +
+    shell(heading(`${year} 13th Month Pay`, 'PD 851: total basic salary earned in the calendar year ÷ 12. Months before the system went live are encoded below; months with posted payroll are counted from payroll.') + tabs() +
       `<div class="actions"><button class="small" data-th-back>← All years</button></div>
       <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
       <section class="panel"><div class="panel-head"><h2>Annual 13th month ledger</h2>${downloads('thirteenth')}<span class="legend">To pay out, choose “Pay accrued balance” when computing payroll.</span></div>${table(['Employee', 'From payroll', 'Encoded (months)', 'Total basic', 'Accrued ÷ 12', 'Paid', 'Balance', 'Coverage'], L.map(r => [esc(r.name), money(r.postedBasic), `${money(r.priorBasic)}<small>${r.priorMonths.length} month${r.priorMonths.length === 1 ? '' : 's'}</small>`, money(r.totalBasic), money(r.accrued), money(r.paid), `<strong>${money(r.balance)}</strong>`, badge(r.covered13th ? 'Covered' : 'Excluded', r.covered13th ? '' : 'neutral')]), 'No employees.')}</section>

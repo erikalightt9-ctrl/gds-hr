@@ -113,7 +113,7 @@ Object.assign(navigationIcons, {
 const PAY_GROUP = { id: 'payroll-attendance', label: 'Payroll & Attendance', icon: 'payroll' };
 function navGroups() {
   const role = auth.user.role, legacy = LEGACY.includes(role);
-  const payItems = legacy ? [...(['admin', 'hr'].includes(role) ? [['live', 'Live Attendance']] : []), ['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll'], ['loans', 'Employee Loans'], ['deductions', 'Deductions'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['annual', '13th Month Pay'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
+  const payItems = legacy ? [...(['admin', 'hr'].includes(role) ? [['live', 'Live Attendance']] : []), ['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Loans & Deductions'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
     ['', [['dashboard', 'Dashboard']]],
     ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ['trainings', 'Trainings']]],
@@ -121,7 +121,11 @@ function navGroups() {
     ['Administration', [['reports', 'Reports'], ...(legacy || role === 'maker' ? [['audit', 'Audit trail']] : []), ...(role === 'admin' ? [['settings', 'Settings']] : [])]],
   ];
 }
-const groupOf = id => navGroups().find(g => g[2] && g[1].some(([key]) => key === id))?.[2] || null;
+const groupOf = id => navGroups().find(g => g[2] && g[1].some(([key]) => key === ({ deductions: 'loans', annual: 'payroll' }[id] || id)))?.[2] || null;
+// Payroll & 13th Month and Loans & Deductions: one menu item each, two tabs.
+const payTabs = current => `<div class="tabs"><button data-nav="payroll" class="${current === 'payroll' ? 'active' : ''}">🧾 Payroll</button><button data-nav="annual" class="${current === 'annual' ? 'active' : ''}">🎁 13th Month Pay</button></div>`;
+// Loans & Deductions: one menu item, two tabs.
+const moneyTabs = current => `<div class="tabs"><button data-nav="loans" class="${current === 'loans' ? 'active' : ''}">💳 Loans</button><button data-nav="deductions" class="${current === 'deductions' ? 'active' : ''}">➖ Deductions</button></div>`;
 let payGroupOpen = (() => { try { return localStorage.getItem('hr-nav-pay') === 'open'; } catch { return false; } })();
 let mobileDrawer = false;
 let sidebarCollapsed = (() => { try { return localStorage.getItem('hr-sidebar') === 'collapsed'; } catch { return false; } })();
@@ -134,7 +138,7 @@ function shell(content) {
   const icon = id => `<span class="symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">${navigationIcons[id] || ''}</svg></span>`;
   app.innerHTML = `<div class="shell ${sidebarCollapsed ? 'collapsed' : ''} ${mobileDrawer ? 'drawer-open' : ''}"><div class="drawer-backdrop" data-close-drawer aria-hidden="true"></div><aside class="sidebar" id="main-menu" aria-label="Main menu"><div class="brand"><img class="brand-logo" src="${brandLogo}" alt="${esc(company.name)} logo" width="661" height="245"><span>${esc(company.name)}</span></div>
     <nav class="nav" aria-label="HR navigation">${groups.map(([label, items, group]) => {
-      const item = ([id, name], sub = false) => `<button data-nav="${id}" class="${sub ? 'nav-child ' : ''}${page === id || (id === 'files' && page === 'employee201') ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''} title="${esc(name)}">${icon(id)}<span class="nav-text">${esc(name)}</span></button>`;
+      const item = ([id, name], sub = false) => `<button data-nav="${id}" class="${sub ? 'nav-child ' : ''}${page === id || (id === 'files' && page === 'employee201') || (id === 'loans' && page === 'deductions') || (id === 'payroll' && page === 'annual') ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''} title="${esc(name)}">${icon(id)}<span class="nav-text">${esc(name)}</span></button>`;
       if (!group) return `${label ? `<div class="nav-label">${esc(label)}</div>` : ''}${items.map(i => item(i)).join('')}`;
       const childActive = items.some(([id]) => id === page);
       return `<div class="nav-group ${payGroupOpen ? 'open' : ''}"><button class="nav-parent ${childActive ? 'has-active' : ''}" data-nav-group="${group.id}" aria-expanded="${payGroupOpen}" aria-controls="nav-${group.id}" title="${esc(group.label)}">${icon(group.icon)}<span class="nav-text">${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true"></span></button><div class="nav-sub" id="nav-${group.id}" role="group" aria-label="${esc(group.label)}"><div class="nav-sub-inner">${items.map(i => item(i, true)).join('')}</div></div></div>`;
@@ -228,8 +232,8 @@ const breakdown = createBreakdown({ esc, money, table, openDialog, dialog, actio
     if (key === 'loans') { dialog.close(); goTo({ page: 'loans' }); }
   },
 } });
-const loansUi = createLoansPage({ ...hrCtx, canEdit: kind => canEdit(kind), editButton: (k, id) => editButton(k, id), addButton: (k, label) => addButton(k, label), downloads: k => downloads(k) });
-const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(k) });
+const loansUi = createLoansPage({ ...hrCtx, tabs: () => moneyTabs('loans'), canEdit: kind => canEdit(kind), editButton: (k, id) => editButton(k, id), addButton: (k, label) => addButton(k, label), downloads: k => downloads(k) });
+const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(k), tabs: () => payTabs('annual') });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
@@ -303,7 +307,7 @@ function cutoffDefaults() {
 }
 function payrollPage() {
   const run = currentRun, period = run || cutoffDefaults();
-  let html = heading('Payroll', 'From hours worked to take-home pay. Every amount has a story.', `${run?.id ? `<a class="export-link" href="/api/runs/${run.id}.xlsx" download>Download Excel ↗</a><a class="export-link" href="/api/runs/${run.id}.pdf" download>Download PDF ↗</a>` : ''}`);
+  let html = heading('Payroll', 'From hours worked to take-home pay. Every amount has a story.', `${run?.id ? `<a class="export-link" href="/api/runs/${run.id}.xlsx" download>Download Excel ↗</a><a class="export-link" href="/api/runs/${run.id}.pdf" download>Download PDF ↗</a>` : ''}`) + payTabs('payroll');
   html += `<div class="cards cards-5">${card('Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${card('Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${card('Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${card('Employees', run?.rows.length || 0, 'In this payroll cutoff')}${card('Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="panel-head"><div><h2>Payroll computation</h2><p>Click a salary to inspect its calculation and source records.</p></div>${badge(run?.status === 'posted' ? 'Posted' : 'Draft preview', run?.status === 'posted' ? '' : 'pending')}</div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee"><option value="">All employees</option>${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label><label>13th month payout<select name="pay13th"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Generate payroll</button></form>`;
   if (run?.employeeIds?.length) html += `<div class="notice" role="status">Showing payroll for <strong>${run.employeeIds.map(id => esc(state.employees.find(e => e.id === id)?.name || id)).join(', ')}</strong> only. ${run.id ? 'This posting covers only this employee.' : 'Posting will cover only this employee; others can be posted separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
   // Simple view: what was earned, what was deducted, what is paid. Click any amount for the full computation.
@@ -327,7 +331,7 @@ const SCHEDULE_LABEL = Object.fromEntries([['every-cutoff', 'Every payroll cutof
 function deductionsPage() {
   const list = filtered(state.deductions || []).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
   const active = (state.deductions || []).filter(d => d.active);
-  return heading('Deductions', 'Company deductions you define: any name, any amount, deducted on the schedule you choose. They print on the payslip under their own name.', addButton('deductions', 'Add deduction')) +
+  return heading('Loans & Deductions', 'Company deductions you define: any name, any amount, deducted on the schedule you choose. They print on the payslip under their own name.', addButton('deductions', 'Add deduction')) + moneyTabs('deductions') +
     `<div class="cards">${card('Active deductions', active.length, 'Applied by payroll automatically', true)}${card('Employees with deductions', new Set(active.map(d => d.employeeId)).size, 'At least one active deduction')}${card('Per-cutoff total (every cutoff)', money(active.filter(d => d.schedule === 'every-cutoff').reduce((s, d) => s + d.amount, 0)), 'Recurring each payroll')}${card('Paused', (state.deductions || []).length - active.length, 'Kept but not deducted')}</div>` +
     `<section class="panel"><div class="panel-head"><h2>All deductions</h2>${downloads('deductions')}<span class="legend">SSS, PhilHealth and Pag-IBIG amounts are set per employee under Employee profile → Payroll. Loans with balances stay under Employee loans.</span></div>${searchToolbar()}${table(['Employee', 'Deduction', 'Amount', 'When', 'From', 'Until', 'Status', ''], list.map(d => [employee(d.employeeId), `${esc(d.name)}${d.notes ? `<small>${esc(d.notes)}</small>` : ''}`, money(d.amount), SCHEDULE_LABEL[d.schedule], d.startDate, d.endDate || '—', badge(d.active ? 'Active' : 'Paused', d.active ? '' : 'neutral'), editButton('deductions', d.id)]), 'No company deductions yet. Add one to deduct it automatically in payroll.')}</section>`;
 }
