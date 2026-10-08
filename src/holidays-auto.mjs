@@ -3,7 +3,7 @@
 // Eid'l Fitr and Eid'l Adha depend on the Islamic calendar and a proclamation each year, so HR adds them when
 // announced. Every auto-added date says so in its basis, to be checked against that year's official proclamation.
 import { randomUUID } from 'node:crypto';
-import { saveRecord } from './service.mjs';
+import { saveRecord, permit } from './service.mjs';
 
 const pad = n => String(n).padStart(2, '0');
 const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
@@ -56,4 +56,13 @@ export function ensureHolidayYears(store, today = new Intl.DateTimeFormat('en-CA
     added.push(year);
   }
   return added;
+}
+// "+ Add year" on the holiday calendar: fills in the year after the latest one already in the calendar.
+export function addNextHolidayYear(store, actor) {
+  permit(actor, ['admin', 'hr']);
+  const years = store.read().holidays.map(h => Number(h.date.slice(0, 4)));
+  const year = Math.max(Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()).slice(0, 4)), ...years) + 1;
+  store.transaction(() => { for (const h of holidaysFor(year)) saveRecord(store, actor, 'holidays', { id: randomUUID(), ...h }); });
+  store.log(actor, 'add-holiday-year', 'holidays', String(year), null, { year });
+  return { year, added: holidaysFor(year).length };
 }

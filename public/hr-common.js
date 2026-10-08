@@ -23,6 +23,8 @@ const SECTIONS = ctx => [
     ['employment.supervisor', 'Immediate supervisor'], ['employment.workLocation', 'Work location'], ['employment.employmentType', 'Employment type', 'select', { options: ['', 'Full-Time', 'Part-Time', 'Other'] }], ['employment.jobLevel', 'Job level', 'text', { placeholder: 'e.g. 1, Rank and file, Supervisor' }], ['employment.status', 'Status', 'select', { options: ['Active', 'Inactive', 'On Leave'] }],
     ['employment.classification', 'Employment classification', 'select', { required: true, options: ['', ...ctx.classifications] }], ['employment.contractStart', 'Contract start', 'date'], ['employment.contractEnd', 'Contract end', 'date'],
     ['employment.probationEnd', 'Probation end (reminder only)', 'date'], ['employment.reviewDate', 'Performance review date (reminder only)', 'date'], ['employeeNumber', 'Employee ID', 'text', { placeholder: 'e.g. 2026-1003 (blank = generated number)' }],
+    ['schedule.start', 'Work schedule · time in', 'time'], ['schedule.end', 'Work schedule · time out', 'time'], ['schedule.hoursPerDay', 'Regular hours per day', 'number', { placeholder: 'e.g. 8' }], ['schedule.mealBreakMinutes', 'Meal break (minutes)', 'number', { placeholder: 'e.g. 60' }],
+    ['schedule.restDays', 'Rest days', 'days'], ['schedule.arrangement', 'Work arrangement', 'select', { options: ['Office', 'WFH', 'Hybrid'] }],
   ]],
   ...(ctx.can.sensitiveIds ? [['Government identifiers (restricted)', [['government.tin', 'TIN'], ['government.sss', 'SSS number'], ['government.philHealth', 'PhilHealth number'], ['government.pagIbig', 'Pag-IBIG MID']]]] : []),
 ];
@@ -32,6 +34,7 @@ export function employeeFormHtml(ctx, esc, values = {}, { isNew = true, only = n
   const control = ([path, title, type = 'text', opt = {}]) => {
     const id = `ef-${path.replace('.', '-')}`, v = get(values, path), req = opt.required ? 'required' : '', star = opt.required ? ' <span class="req">*</span>' : '';
     let input;
+    if (type === 'days') { const days = Array.isArray(v) ? v : []; return `<fieldset class="field full rest-days"><legend>${esc(title)}</legend>${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => `<label class="inline-check"><input type="checkbox" name="${path}" value="${i}" ${days.includes(i) ? 'checked' : ''}> ${d}</label>`).join('')}</fieldset>`; }
     if (type === 'select') input = `<select id="${id}" name="${path}" ${req}>${opt.options.map(o => `<option value="${esc(o)}" ${o === v ? 'selected' : ''}>${esc(o || '—')}</option>`).join('')}</select>`;
     else if (type === 'textarea') input = `<textarea id="${id}" name="${path}" rows="2" maxlength="500">${esc(v)}</textarea>${opt.same ? '<label class="inline-check"><input type="checkbox" data-same-address> Same as current address</label>' : ''}`;
     else if (type === 'list') { const listId = `${id}-list`; lists.push(`<datalist id="${listId}">${opt.list.map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist>`); input = `<input id="${id}" name="${path}" list="${listId}" value="${esc(v)}" maxlength="120" ${req} autocomplete="off">`; }
@@ -47,8 +50,9 @@ export function employeeFormHtml(ctx, esc, values = {}, { isNew = true, only = n
   </div><div class="dialog-foot"><button type="button" data-ef-cancel>Cancel</button><button class="primary" type="submit">Save employee</button></div></form>`;
 }
 function collect(form) {
-  const out = { personal: {}, contact: {}, emergency: {}, employment: {}, government: { tin: '', sss: '', philHealth: '', pagIbig: '' }, employeeNumber: '' };
+  const out = { personal: {}, contact: {}, emergency: {}, employment: {}, government: { tin: '', sss: '', philHealth: '', pagIbig: '' }, employeeNumber: '', schedule: { restDays: [] } };
   for (const el of form.querySelectorAll('[name]')) {
+    if (el.name === 'schedule.restDays') { if (el.checked) out.schedule.restDays.push(Number(el.value)); continue; }
     const [group, key] = el.name.split('.');
     if (!key) out[group] = el.value.trim(); else out[group][key] = el.value.trim();
   }

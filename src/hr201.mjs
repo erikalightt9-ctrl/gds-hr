@@ -7,7 +7,7 @@ import { HR_MANAGERS, HR_TEAM, DIRECTORY, DASHBOARD, SENSITIVE_IDS } from './rol
 import { personalNames, titleCase } from './names.mjs';
 import { leaveBalance } from './engine.mjs';
 import { assertMakerCanChange, lockedFields } from './field-locks.mjs';
-import { scheduleOf } from './work-schedule.mjs';
+import { scheduleOf, applyScheduleFromForm } from './work-schedule.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
@@ -141,6 +141,7 @@ export const employeeFormSchema = z.object({
   employment: z.object({ dateHired: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date hired is required.'), department: field(120).pipe(z.string().min(1, 'Department is required.')), position: field(120).pipe(z.string().min(1, 'Position is required.')), supervisor: field(200), workLocation: field(200), status: z.enum(['Active', 'Inactive', 'On Leave']).default('Active'), classification: field(60).pipe(z.string().min(1, 'Employment classification is required.')), contractStart: optionalDate, contractEnd: optionalDate, probationEnd: optionalDate, reviewDate: optionalDate, employmentType: z.enum(['', 'Full-Time', 'Part-Time', 'Other']).default(''), jobLevel: field(40) }).strict(),
   government: z.object({ tin: field(30), sss: field(30), philHealth: field(30), pagIbig: field(30) }).strict().default({ tin: '', sss: '', philHealth: '', pagIbig: '' }),
   employeeNumber: field(40),
+  schedule: z.object({ start: field(5), end: field(5), hoursPerDay: z.union([z.string(), z.number()]).default(''), mealBreakMinutes: z.union([z.string(), z.number()]).default(''), restDays: z.array(z.coerce.number()).max(6).default([]), arrangement: field(10) }).partial().optional(),
   confirmDuplicate: z.boolean().default(false),
 }).strict();
 const emailOk = v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -184,6 +185,7 @@ export function createEmployee(store, actor, input) {
     const id = nextEmployeeNumber(store, v.employment.dateHired);
     saveRecord(store, actor, 'employees', { id, name: fullName(v.personal), draft: true, department: v.employment.department, monthlySalary: null, startDate: v.employment.dateHired, endDate: '', active: false, restDays: [0], scheduleStart: '', coveredOT: false, coveredNSD: false, coveredHoliday: false, covered13th: false, leaveEligibility: [], employeeNumber: v.employeeNumber, archived: false }, { trusted: true });
     writeSections(store, actor, id, v);
+    applyScheduleFromForm(store, actor, id, v.schedule);
     return { duplicates: [], created: { id, number: v.employeeNumber || id, name: fullName(v.personal) } };
   });
 }
@@ -201,6 +203,7 @@ export function updateEmployee(store, actor, id, input) {
       saveRecord(store, actor, 'employees', { ...master, department: v.employment.department, startDate: v.employment.dateHired, employeeNumber: v.employeeNumber }, { trusted: true });
     }
     writeSections(store, actor, id, v, existing);
+    applyScheduleFromForm(store, actor, id, v.schedule);
     return { id };
   });
 }
@@ -218,6 +221,7 @@ export function employeeForm(store, actor, id) {
     id, schedule: scheduleOf(store, e), locked: actor.role === 'maker' ? lockedFields(store, id) : [], number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
     form: {
       employeeNumber: e.employeeNumber || '',
+      schedule: (({ start, end, hoursPerDay, mealBreakMinutes, restDays, arrangement }) => ({ start, end, hoursPerDay: hoursPerDay ?? '', mealBreakMinutes: mealBreakMinutes ?? '', restDays, arrangement }))(scheduleOf(store, e)),
       personal: { firstName: p.firstName || '', middleName: p.middleName || '', lastName: p.lastName || '', suffix: p.suffix || '', preferredName: p.preferredName || '', sex: hrView ? p.sex || '' : '', birthDate: hrView ? p.birthDate || '' : '', birthPlace: hrView ? p.birthPlace || '' : '', civilStatus: hrView ? p.civilStatus || '' : '', bloodType: HR_MANAGERS.includes(actor.role) ? p.bloodType || '' : '', nationality: hrView ? p.nationality || '' : '' },
       contact: { workEmail: j.businessEmail || '', personalEmail: hrView ? p.personalEmail || '' : '', mobile: hrView ? p.mobile || '' : '', currentAddress: hrView ? p.address || '' : '', permanentAddress: hrView ? p.permanentAddress || '' : '' },
       emergency: hrView ? { name: m.name || '', relationship: m.relationship || '', contact: m.contact || '' } : { name: '', relationship: '', contact: '' },

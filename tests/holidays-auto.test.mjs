@@ -26,3 +26,14 @@ test('next year is added automatically once; a year HR already set is left alone
     assert.equal(store.read().holidays.filter(h => h.date.startsWith('2026-')).length, 1, '2026 untouched');
   } finally { store.close(); }
 });
+
+test('+ Add year fills in the year after the latest one in the calendar', async () => {
+  const { addNextHolidayYear } = await import('../src/holidays-auto.mjs');
+  const { admin } = await import('./helpers.mjs');
+  const store = new Store(':memory:'); const s = completeState(); s.holidays = [{ id: 'h', date: '2027-01-01', name: "New Year's Day", kind: 'regular', basis: 'x' }]; store.write(s);
+  try {
+    const r = addNextHolidayYear(store, admin);
+    assert.ok(r.year >= 2028);
+    assert.ok(store.read().holidays.some(h => h.date === `${r.year}-12-25`));
+  } finally { store.close(); }
+});
