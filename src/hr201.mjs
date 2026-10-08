@@ -7,6 +7,7 @@ import { HR_MANAGERS, HR_TEAM, DIRECTORY, DASHBOARD, SENSITIVE_IDS } from './rol
 import { personalNames, titleCase } from './names.mjs';
 import { leaveBalance } from './engine.mjs';
 import { assertMakerCanChange, lockedFields } from './field-locks.mjs';
+import { scheduleOf } from './work-schedule.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
@@ -126,7 +127,7 @@ export function directory(store, actor) {
   const people = scopeEmployees(store, actor);
   return people.map(e => {
     const job = profileOf(store, e.id, 'employment'), personal = profileOf(store, e.id, 'personal');
-    return { id: e.id, number: displayNumber(e), name: e.name, department: e.department, position: job.position || '', classification: job.employmentStatus || '', status: activity(e, job), employeeStatus: job.employeeStatus || '', dateHired: e.startDate, workEmail: job.businessEmail || '', supervisor: job.supervisor || '', probationEnd: job.probationEnd || '', reviewDate: job.reviewDate || '', archived: !!e.archived, draft: !!e.draft, ...(HR_TEAM.includes(actor.role) ? { personalEmail: personal.personalEmail || '' } : {}) };
+    return { id: e.id, schedule: scheduleOf(store, e).text, number: displayNumber(e), name: e.name, department: e.department, position: job.position || '', classification: job.employmentStatus || '', status: activity(e, job), employeeStatus: job.employeeStatus || '', dateHired: e.startDate, workEmail: job.businessEmail || '', supervisor: job.supervisor || '', probationEnd: job.probationEnd || '', reviewDate: job.reviewDate || '', archived: !!e.archived, draft: !!e.draft, ...(HR_TEAM.includes(actor.role) ? { personalEmail: personal.personalEmail || '' } : {}) };
   });
 }
 
@@ -214,7 +215,7 @@ export function employeeForm(store, actor, id) {
   const showIds = SENSITIVE_IDS.includes(actor.role) || own, mask = v => (v ? (showIds ? v : `•••• ${String(v).slice(-3)}`) : '');
   const hrView = HR_TEAM.includes(actor.role) || (actor.role === 'employee' && actor.employeeId === id);   // employees: their own record only
   return {
-    id, locked: actor.role === 'maker' ? lockedFields(store, id) : [], number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
+    id, schedule: scheduleOf(store, e), locked: actor.role === 'maker' ? lockedFields(store, id) : [], number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
     form: {
       employeeNumber: e.employeeNumber || '',
       personal: { firstName: p.firstName || '', middleName: p.middleName || '', lastName: p.lastName || '', suffix: p.suffix || '', preferredName: p.preferredName || '', sex: hrView ? p.sex || '' : '', birthDate: hrView ? p.birthDate || '' : '', birthPlace: hrView ? p.birthPlace || '' : '', civilStatus: hrView ? p.civilStatus || '' : '', bloodType: HR_MANAGERS.includes(actor.role) ? p.bloodType || '' : '', nationality: hrView ? p.nationality || '' : '' },

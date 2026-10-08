@@ -49,10 +49,10 @@ export function createFiles(ctx) {
         <button class="small" data-reset>Reset filters</button>
       </div>
       ${docFilterLabel ? `<div class="notice compact">Showing employees ${docFilterLabel}. <button class="small" data-reset>Show everyone</button></div>` : ''}
-      <div class="directory-wrap">${table([head('name', 'Employee'), head('position', 'Position'), head('dateHired', 'Date hired'), ...(can().manage ? ['201 completion'] : [])],
+      <div class="directory-wrap">${table([head('name', 'Employee'), head('position', 'Position'), 'Work schedule', head('dateHired', 'Date hired'), ...(can().manage ? ['201 completion'] : [])],
         rows.map(p => [
           `<button class="emp-cell" data-open="${esc(p.id)}" aria-label="Open ${esc(p.name)}"><span class="hr-avatar small" aria-hidden="true"><img src="/api/hr/employees/${encodeURIComponent(p.id)}/photo" alt="" loading="lazy" data-dir-photo>${esc(initials(p.name))}</span><span class="emp-text"><strong>${esc(p.name)}</strong><small>${esc(p.number)}</small></span></button>`,
-          esc(p.position || '—'), fmtDate(p.dateHired),
+          esc(p.position || '—'), `<span class="sched-cell">${esc(p.schedule || 'Not set')}</span>`, fmtDate(p.dateHired),
           ...(can().manage ? [p.documents ? `<div class="completion">${progress(p.documents.percent, `${p.documents.verified}/${p.documents.required} verified`)}${p.documents.missing ? `<small class="completion-missing">${p.documents.missing} missing</small>` : ''}</div>` : '—'] : [])]),
         query.q || query.department || query.position || query.status || query.classification || query.docs ? 'No employees match these filters.' : 'No employees yet. Add your first employee to start their 201 file.')}</div>
       <div class="pager"><span>${list.length} employee${list.length === 1 ? '' : 's'}${pages > 1 ? ` · page ${pageNo} of ${pages}` : ''}</span>${pages > 1 ? `<button class="small" data-page="${pageNo - 1}" ${pageNo === 1 ? 'disabled' : ''}>‹ Previous</button><button class="small" data-page="${pageNo + 1}" ${pageNo === pages ? 'disabled' : ''}>Next ›</button>` : ''}</div></section>`;
@@ -127,6 +127,29 @@ export function createFiles(ctx) {
   const sectionCard = (icon, title, body, action = '') => sharedCard(esc, icon, title, body, action);
   const emergencyRows = f => [['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]];
   const block = (icon, title, body, action = '') => sectionCard(icon, title, body, action);
+  // Work schedule: the same schedule attendance and payroll use (late, overtime, undertime, rest days).
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const scheduleCard = record => { const s = record.schedule || {}; return block('🕘', 'Work schedule', dl([['Time in', s.start || 'Not set'], ['Time out', s.end || 'Not set'], ['Regular hours', s.hoursPerDay ? `${s.hoursPerDay} h per day` : 'Not set'], ['Meal break', s.mealBreakMinutes === null || s.mealBreakMinutes === undefined ? 'Not set' : `${s.mealBreakMinutes} min`], ['Rest days', (s.restDays || []).length ? s.restDays.map(d => DAYS[d]).join(', ') : 'None'], ['Arrangement', s.arrangement || 'Office']]), record.canEdit && !record.archived ? '<button class="small" data-edit-schedule>Edit schedule</button>' : ''); };
+  function scheduleDialog(id, record, after) {
+    const s = record.schedule || {};
+    openDialog(`Work schedule · ${record.name}`, `<form id="schedule-form" class="dialog-body form-grid">
+      <label class="field">Time in<input type="time" name="start" required value="${esc(s.start || '09:00')}"></label>
+      <label class="field">Time out<input type="time" name="end" required value="${esc(s.end || '18:00')}"></label>
+      <label class="field">Regular hours per day<input type="number" name="hoursPerDay" min="1" max="16" step="0.5" required value="${esc(s.hoursPerDay ?? 8)}"></label>
+      <label class="field">Meal break (minutes)<input type="number" name="mealBreakMinutes" min="0" max="240" step="5" required value="${esc(s.mealBreakMinutes ?? 60)}"></label>
+      <fieldset class="field full rest-days"><legend>Rest days</legend>${DAYS.map((d, i) => `<label class="inline-check"><input type="checkbox" name="restDays" value="${i}" ${(s.restDays || []).includes(i) ? 'checked' : ''}> ${d}</label>`).join('')}</fieldset>
+      <label class="field">Arrangement<select name="arrangement">${['Office', 'WFH', 'Hybrid'].map(a => `<option ${a === (s.arrangement || 'Office') ? 'selected' : ''}>${a}</option>`).join('')}</select></label>
+      <p class="legend full">Attendance and payroll use this schedule: lateness from the time in, overtime and undertime from the regular hours, and rest days.</p>
+      <p class="form-error full hidden" role="alert" data-schedule-error></p>
+      <div class="full"><button class="primary">Save schedule</button></div></form>`);
+    dialog.querySelector('#schedule-form').onsubmit = async event => {
+      event.preventDefault(); const f = new FormData(event.target);
+      try {
+        await api(`/hr/employees/${encodeURIComponent(id)}/schedule`, { start: f.get('start'), end: f.get('end'), hoursPerDay: Number(f.get('hoursPerDay')), mealBreakMinutes: Number(f.get('mealBreakMinutes')), restDays: f.getAll('restDays').map(Number), arrangement: f.get('arrangement') });
+        dialog.close(); toast('Work schedule saved. Attendance and payroll now use it.'); await after();
+      } catch (error) { const e = dialog.querySelector('[data-schedule-error]'); e.textContent = error.message; e.classList.remove('hidden'); }
+    };
+  }
   const editBtn = (section, canEdit) => (canEdit ? ` <button class="small" data-edit-section="${section}">Edit</button>` : '');
   const formBtn = (part, canEdit) => (canEdit ? ` <button class="small" data-edit-part="${part}">Edit</button>` : '');
   function personalRows(f) { return [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ...(f.personal.bloodType ? [['Blood type', f.personal.bloodType]] : []), ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]; }
@@ -144,6 +167,7 @@ export function createFiles(ctx) {
         ${sectionCard('👤', 'Personal Information', boxes(personalRows(f)))}
         ${sectionCard('📞', 'Emergency Contact', boxes(emergencyRows(f)))}
         ${block('💼', 'Employment information', dl(employmentRows(record)))}
+        ${scheduleCard(record)}
         <p class="legend">Overview is read-only. To change details, open the Personal, Employment or other tabs.</p>
         ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
@@ -252,6 +276,7 @@ export function createFiles(ctx) {
       if (b.hasAttribute('data-edit-leave')) { leaveDialog(id, extras.leave); return; }
       if (b.hasAttribute('data-back')) { ctx.setPage('files'); await directory(); return; }
       if (b.hasAttribute('data-edit-self')) { editEmployee(id, drawProfile); return; }
+      if (b.hasAttribute('data-edit-schedule')) { scheduleDialog(id, record, drawProfile); return; }
       if (b.dataset.archive) { archive(b.dataset.archive); return; }
       if (b.dataset.restore) { try { await api(`/hr/employees/${encodeURIComponent(b.dataset.restore)}/restore`, {}); toast('Employee restored.'); await drawProfile(); } catch (e) { toast(e.message); } return; }
       if (b.dataset.legacyProfile) { ctx.openLegacyProfile(b.dataset.legacyProfile); return; }

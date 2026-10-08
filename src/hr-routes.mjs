@@ -10,6 +10,7 @@ import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './rol
 import { celebrationsOn, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 import { fileOvertime, cancelOvertime, myOvertime } from './overtime.mjs';
+import { saveSchedule } from './work-schedule.mjs';
 
 const BIG = 28_500_000;
 const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="document"; filename*=UTF-8''${encodeURIComponent(meta.name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
@@ -118,6 +119,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if (method === 'POST') { send(200, updateEmployee(store, actor, id, await readBody(req))); return true; }
   }
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/(archive|restore)$/)) && method === 'POST') { const id = decodeURIComponent(p[1]); send(200, p[2] === 'archive' ? archiveEmployee(store, actor, id, await readBody(req)) : restoreEmployee(store, actor, id)); return true; }
+  if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/schedule$/)) && method === 'POST') { send(200, saveSchedule(store, actor, decodeURIComponent(p[1]), await readBody(req))); return true; }
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/leave$/)) && method === 'GET') { send(200, leaveCredits(store, actor, decodeURIComponent(p[1]), Number(url.searchParams.get('year')) || undefined)); return true; }
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/leave$/)) && method === 'POST') { send(200, saveLeaveCredits(store, actor, decodeURIComponent(p[1]), await readBody(req))); return true; }
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/extras$/)) && method === 'GET') { send(200, profileExtras(store, actor, decodeURIComponent(p[1]))); return true; }

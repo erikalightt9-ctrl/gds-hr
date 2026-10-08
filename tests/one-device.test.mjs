@@ -53,3 +53,18 @@ test('a Maker can fill empty details and record government numbers, but not chan
     assert.doesNotThrow(() => assertMakerCanChange(store, hr, id, { contact: { mobile: '09179999999' } }), 'HR can still change it');
   } finally { store.close(); }
 });
+
+test('work schedule: HR or Maker sets it on the 201 profile and attendance uses it (start time, rest days, hours)', async () => {
+  const { saveSchedule, scheduleOf } = await import('../src/work-schedule.mjs');
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    const id = store.read().employees[0].id, maker = { username: 'mk', role: 'maker' };
+    const s = saveSchedule(store, maker, id, { start: '07:00', end: '19:00', hoursPerDay: 12, mealBreakMinutes: 0, restDays: [6], arrangement: 'Office' });
+    assert.equal(s.text, '07:00–19:00 · 12 h · Sat off');
+    const e = store.read().employees.find(x => x.id === id);
+    assert.equal(e.scheduleStart, '07:00'); assert.deepEqual(e.restDays, [6]);
+    assert.equal(scheduleOf(store, e).hoursPerDay, 12);
+    assert.throws(() => saveSchedule(store, maker, id, { start: '09:00', end: '12:00', hoursPerDay: 8, mealBreakMinutes: 60, restDays: [0] }), /does not fit/);
+    assert.throws(() => saveSchedule(store, { username: 'v', role: 'viewer' }, id, { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, restDays: [0] }), /permission/i);
+  } finally { store.close(); }
+});

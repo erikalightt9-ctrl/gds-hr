@@ -37,7 +37,7 @@ export const profileSchemas = {
 const hr = ['admin', 'hr'], hrTeam = ['admin', 'hr', 'hr_staff', 'maker'], finance = ['admin', 'hr', 'payroll'];
 const privateRead = { family: hrTeam, education: hrTeam, history: hrTeam, personal: hrTeam, government: [...finance, 'maker'], emergency: hrTeam, bank: finance, contributions: finance, payroll: ['admin', 'hr', 'payroll', 'viewer'], leave: ['admin', 'hr', 'payroll', 'viewer', 'maker'], attendance: ['admin', 'hr', 'hr_staff', 'maker', 'payroll', 'viewer'] };
 export function canReadSection(actor, section) { return !privateRead[section] || privateRead[section].includes(actor.role); }
-export function canWriteSection(actor, section) { return (section === 'leave' ? [...hr, 'maker'] : section === 'contributions' ? finance : ['payroll', 'bank'].includes(section) ? ['admin', 'payroll'] : ['personal', 'employment', 'emergency', 'family', 'education', 'history'].includes(section) ? hrTeam : section === 'government' ? [...hr, 'maker'] : hr).includes(actor.role); }
+export function canWriteSection(actor, section) { return (section === 'leave' ? [...hr, 'maker'] : section === 'contributions' ? finance : ['payroll', 'bank'].includes(section) ? ['admin', 'payroll'] : ['personal', 'employment', 'emergency', 'family', 'education', 'history'].includes(section) ? hrTeam : ['government', 'attendance'].includes(section) ? [...hr, 'maker'] : hr).includes(actor.role); }
 function findEmployee(store, id) { const e = store.read().employees.find(e => e.id === id); if (!e) throw new AppError('Employee not found.', 404); return e; }
 function personalName(employee) {
   const parts = employee.name.split(',');
