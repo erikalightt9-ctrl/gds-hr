@@ -38,13 +38,13 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       if (posted) return `<span class="payroll-amount">${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
       const future = m > thisMonth;
       return `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}>`;
-    }), `<strong class="th-total">${fmtAmount(r.totalBasic)}</strong><small class="share-state">13th month ${fmtAmount(r.accrued)}</small>`];
+    }), `<strong class="th-total">${fmtAmount(r.totalBasic)}</strong>`, `<strong class="th-total th-13">${fmtAmount(r.accrued)}</strong>`];
     shell(heading(`${year} 13th Month Pay`, '', '<button class="small" data-nav="payroll">← Payroll</button>') +
       `      <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
 
       <section class="panel"><div class="panel-head"><div class="th-head"><span class="legend">Basic salary actually earned each month (after absences and unpaid leave; exclude overtime, holiday premiums and allowances). Leave blank to clear.</span></div></div>
         <div class="th-year-band">YEAR ${esc(year)}</div>
-        <div class="table-wrap th-grid">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), 'Total'], L.map(gridRow), 'No employees.')}</div>
+        <div class="table-wrap th-grid">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), 'Total earned', '13th month pay'], L.map(gridRow), 'No employees.')}</div>
         ${editable ? '<div class="panel-foot"><span></span><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
       ${finalPanel()}`);
     const content = document.querySelector('.content');

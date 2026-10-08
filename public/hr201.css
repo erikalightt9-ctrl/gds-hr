@@ -771,7 +771,9 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .th-grid table { table-layout: fixed; width: 100%; }
 .th-grid th, .th-grid td { padding: 8px 3px; white-space: normal; }
 .th-grid th:first-child, .th-grid td:first-child { width: 12%; padding-left: 10px; font-size: 11.5px; }
-.th-grid th:last-child, .th-grid td:last-child { width: 9%; padding-right: 10px; }
+.th-grid th:nth-last-child(-n+2), .th-grid td:nth-last-child(-n+2) { width: 8%; text-align: right; }
+.th-grid th:last-child, .th-grid td:last-child { padding-right: 10px; }
+.th-grid .th-13 { color: var(--red-700, #8f1420); }
 .th-grid th { text-align: center; font-size: 9.5px; letter-spacing: .02em; }
 .th-grid input.share-input { display: block; width: 100%; min-width: 0; padding: 6px 3px; font-size: 11px; text-align: right; border-radius: 6px; }
 .th-grid .payroll-amount { font-size: 11px; text-align: right; padding: 6px 3px 0; }
