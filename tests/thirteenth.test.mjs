@@ -124,6 +124,9 @@ test('final pay: a finalized payroll paid after the last day is paid with the fi
     assert.ok(!r.items.some(i => i.label === 'Unpaid salary'), 'no extra days after the paid cutoff');
     const ledger = thirteenthLedger(store, payroll, '2026')[0];
     assert.equal(r.items.find(i => i.label === 'Pro-rated 13th month pay').amount, Math.round((ledger.totalBasic / 12 - ledger.paid) * 100) / 100, '13th month = Total earned ÷ 12');
+    const s = store.read(); s.employees = s.employees.map(x => x.id === 'EMP-001' ? { ...x, endDate: '2026-09-15' } : x); store.write(s);
+    assert.equal(computeFinalPay(store, payroll, { employeeId: 'EMP-001', separationDate: '2026-10-08' }).separationDate, '2026-09-15', 'never past the resignation date on record');
+    s.employees = s.employees.map(x => x.id === 'EMP-001' ? { ...x, endDate: undefined } : x); store.write(s);
     const later = computeFinalPay(store, payroll, { employeeId: 'EMP-001', separationDate: '2026-09-25' });
     assert.ok(!later.items.some(i => i.label.startsWith('Unpaid salary 2026-09-01')), 'already paid on 2026-09-22');
   } finally { store.close(); }

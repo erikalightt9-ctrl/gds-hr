@@ -104,8 +104,10 @@ const finalSchema = z.object({
 }).strict();
 export function computeFinalPay(store, actor, input) {
   permit(actor, PAY);
-  const v = finalSchema.parse(input), state = store.read(), e = state.employees.find(x => x.id === v.employeeId);
+  const parsed = finalSchema.parse(input), state = store.read(), e = state.employees.find(x => x.id === parsed.employeeId);
   if (!e) throw new AppError('Employee not found.', 404);
+  // Nothing is computed past the resignation / separation date on the employee's record.
+  const v = e.endDate && parsed.separationDate > e.endDate ? { ...parsed, separationDate: e.endDate } : parsed;
   if (!e.startDate || v.separationDate < e.startDate) throw new AppError('The separation date is before the employee\'s start date.');
   const rule = ruleOn(state, v.separationDate) || state.rules[0];
   if (!rule) throw new AppError('Configure and approve Rules & rates first.');
