@@ -39,7 +39,7 @@ export function createFiles(ctx) {
     const rows = list.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE);
     const head = (key, text) => `<button class="sort-head" data-sort="${key}" aria-label="Sort by ${text}">${text}${sort.key === key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
     const docFilterLabel = { missing: 'with missing requirements', review: 'with documents to review', expired: 'with expired documents', newhires: 'hired in the last 30 days' }[query.docs];
-    return heading('Employee 201 Files', 'Every employee record, document and history in one place.', can().manage ? '<button class="primary" data-hr-add-employee>＋ Add employee</button>' : '') +
+    return heading('Employee 201 Files', '', can().manage ? '<button class="primary" data-hr-add-employee>＋ Add employee</button>' : '') +
       `<section class="panel"><div class="toolbar hr-filters">
         <label class="search">Search<input type="search" data-q value="${esc(query.q)}" placeholder="Search by name, employee no., department or position"></label>
         <label>Department<select data-f="department">${options(people.map(p => p.department), query.department, 'All departments')}</select></label>
