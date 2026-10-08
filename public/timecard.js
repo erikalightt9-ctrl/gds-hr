@@ -22,7 +22,7 @@ export function createTimecard(ctx) {
     const people = state.employees.filter(e => !e.draft);
     if (!view.employeeId || !people.some(e => e.id === view.employeeId)) view.employeeId = people[0]?.id || '';
     if (!view.start) Object.assign(view, cutoffDefaults());
-    return `<form class="toolbar" id="timecard-form"><label>Employee<select name="employeeId">${people.map(e => `<option value="${esc(e.id)}" ${e.id === view.employeeId ? 'selected' : ''}>${esc(e.name)} (${esc(e.id)})</option>`).join('')}</select></label><label>Cutoff start<input type="date" name="start" value="${view.start}" required></label><label>Cutoff end<input type="date" name="end" value="${view.end}" required></label><button class="primary" type="submit">Show timecard</button></form>`;
+    return `<form class="toolbar" id="timecard-form"><label>Employee<select name="employeeId">${people.map(e => `<option value="${esc(e.id)}" ${e.id === view.employeeId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label><label>Cutoff start<input type="date" name="start" value="${view.start}" required></label><label>Cutoff end<input type="date" name="end" value="${view.end}" required></label><button class="primary" type="submit">Show timecard</button></form>`;
   }
 
   function panel(state) {

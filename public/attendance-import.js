@@ -59,7 +59,7 @@ export function createAttendanceImport({ api, esc, table, badge, toast, openDial
   }
   function drawPreview() {
     const p = lastPreview, c = p.counts, employees = getState().employees.filter(e => !e.draft);
-    const assign = key => `<select data-ai-assign="${esc(key)}"><option value="">Choose employee…</option>${employees.map(e => `<option value="${esc(e.id)}" ${settings.assignments[key] === e.id ? 'selected' : ''}>${esc(e.name)} · ${esc(e.id)}</option>`).join('')}</select>`;
+    const assign = key => `<select data-ai-assign="${esc(key)}"><option value="">Choose employee…</option>${employees.map(e => `<option value="${esc(e.id)}" ${settings.assignments[key] === e.id ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>`;
     const toSave = c.ready + c.replace, skipped = p.rows.length - toSave;
     const rows = [...p.rows].sort((a, b) => order(a) - order(b) || a.line - b.line);
     dialog.querySelector('#ai-preview').innerHTML = `<hr><h3>3. Review before saving</h3>

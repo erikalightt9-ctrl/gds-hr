@@ -33,7 +33,7 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
   function addDialog(listed, refresh) {
     const choices = employees().filter(e => e.draft && !e.archived && !listed.includes(e.id)).sort((a, b) => a.name.localeCompare(b.name));
     openDialog('Add employee for manual encoding', `<form class="dialog-body form-grid" id="contrib-add-form">
-      <label class="field full">Employee<select name="employeeId"><option value="">New person (not registered)</option>${choices.map(e => `<option value="${esc(e.id)}">${esc(e.name)} · ${esc(e.id)}</option>`).join('')}</select><small>Only people who are not paid through payroll are listed. They are added as “Remittance only”.</small></label>
+      <label class="field full">Employee<select name="employeeId"><option value="">New person (not registered)</option>${choices.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select><small>Only people who are not paid through payroll are listed. They are added as “Remittance only”.</small></label>
       <label class="field" data-new>Last name<input name="lastName" maxlength="120"></label>
       <label class="field" data-new>First name<input name="firstName" maxlength="120"></label>
       <label class="field" data-new>Middle name<input name="middleName" maxlength="120"></label>
