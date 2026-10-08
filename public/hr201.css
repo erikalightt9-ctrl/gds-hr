@@ -763,3 +763,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .hol-years { display: flex; align-items: flex-end; gap: 10px; padding: 12px 16px 0; }
 .hol-year-pick { margin: 0; min-width: 120px; }
 .hol-years .add-hol-year { height: 38px; }
+.th-year-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.th-year-pick .field { margin: 0; min-width: 120px; }

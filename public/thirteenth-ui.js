@@ -19,11 +19,11 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     const last = Math.max(Number(thisYear), current.lastYear || 0), years = [...new Set([...Array.from({ length: last - Number(thisYear) + 1 }, (_, i) => String(Number(thisYear) + i)), ...current.years])].sort();
     const accrued = money(current.ledger.reduce((s, x) => s + x.accrued, 0));
     const box = document.createElement('section'); box.className = 'panel';
-    const draw = () => { box.innerHTML = `<div class="panel-head"><div><h2>🎁 13th Month Pay</h2><p>Basic salary earned in the year ÷ 12. Choose a year to see each employee, the salary records and final pay.</p></div></div><div class="panel-body"><div class="year-cards">${years.map(y => `<button class="year-card${y === thisYear ? ' current' : ''}" data-th-open="${esc(y)}"><strong>${esc(y)}</strong><span>13th Month Pay</span><small>${y === thisYear ? `Earned so far ${accrued}` : y > thisYear ? 'Fills in from payroll' : 'Past year'}</small></button>`).join('')}${current.canEncode ? `<button class="year-card add-year" data-th-add><strong>＋</strong><span>Add year</span><small>Adds ${Math.max(Number(thisYear), current.lastYear || 0) + 1}</small></button>` : ''}</div></div>`; };
+    const draw = () => { box.innerHTML = `<div class="panel-head"><div><h2>🎁 13th Month Pay</h2><p>Basic salary earned in the year ÷ 12. Choose a year to see each employee, the salary records and final pay.</p></div></div><div class="panel-body th-year-pick"><label class="field">Year<select id="th-year-select" aria-label="Year">${years.map(y => `<option ${y === thisYear ? 'selected' : ''}>${esc(y)}</option>`).join('')}</select></label><button class="primary" data-th-open-selected>Open 13th month pay</button>${current.canEncode ? `<button class="add-hol-year" data-th-add>＋ Add year</button>` : ''}<span class="legend">${thisYear} earned so far: <strong>${accrued}</strong></span></div>`; };
     draw();
     box.onclick = async e => {
-      if (e.target.closest('[data-th-add]')) { try { const r = await api('/thirteenth/years', {}); years.push(String(r.lastYear)); current.lastYear = r.lastYear; draw(); } catch (err) { toast(err.message); } return; }
-      const b = e.target.closest('[data-th-open]'); if (b) openYear(b.dataset.thOpen);
+      if (e.target.closest('[data-th-add]')) { try { const r = await api('/thirteenth/years', {}); years.push(String(r.lastYear)); current.lastYear = r.lastYear; draw(); box.querySelector('#th-year-select').value = String(r.lastYear); } catch (err) { toast(err.message); } return; }
+      if (e.target.closest('[data-th-open-selected]')) openYear(box.querySelector('#th-year-select').value);
     };
     return box;
   }
