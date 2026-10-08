@@ -253,7 +253,7 @@ function employeesPage() {
 }
 function attendancePage() {
   const views = `<div class="tabs"><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily records · all employees</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Employee timecard · check against pay</button></div>`;
-  const top = heading('Attendance', 'Record actual work and approved exceptions. Night hours are calculated automatically.', (canEdit('attendance') ? '<button data-attendance-import>⇪ Upload from Excel</button>' : '') + addButton('attendance', 'Record attendance')) + views;
+  const top = heading('Attendance', '') + views;
   if (attendanceView === 'timecard') return top + timecard.panel(state);
   const list = filtered(state.attendance).sort((a, b) => b.date.localeCompare(a.date));
   return top + `<section class="panel"><div class="panel-head"><h2>Daily records</h2>${downloads('attendance')}<span class="legend">Times use Asia/Manila · unpaid breaks are excluded</span></div>${searchToolbar()}${table(['Employee', 'Date', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], list.map(a => [employee(a.employeeId), a.date, a.scheduledIn, a.status === 'present' ? `${a.timeIn} → ${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '—', badge(a.status, 'neutral'), `${a.offsetMinutes} min${a.exception ? '<br><small>Approved exception</small>' : ''}`, badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('attendance', a.id)]))}</section>`;
