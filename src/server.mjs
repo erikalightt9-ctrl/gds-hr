@@ -18,6 +18,7 @@ import { decideLoanApplication, loanDashboard } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOverview } from './thirteenth.mjs';
 import { contributionOverview } from './contribution-report.mjs';
+import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
 import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
@@ -25,7 +26,7 @@ import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory } from './portal.mjs';
+import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, reviewOutOfOffice } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -94,6 +95,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const mutation = req.method !== 'GET';
       if (mutation && req.headers.origin !== origin) throw new AppError('Request origin is not allowed.', 403);
       const client = req.socket.remoteAddress || 'unknown';
+      // The visitor's public address: from Cloudflare when the request comes through the local tunnel, else the socket.
+      const visitorIp = /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(client) && req.headers['cf-connecting-ip'] ? String(req.headers['cf-connecting-ip']) : client;
       if (pathname === '/api/branding' && req.method === 'GET') { send(200, publicBranding(store)); return; }
       // Interface version: every open tab compares this to the version it loaded and offers a safe refresh when it changes.
       if (pathname === '/api/version' && req.method === 'GET') { send(200, { version: interfaceVersion() }); return; }
@@ -156,9 +159,9 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (await handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody })) return;
       if (pathname.startsWith('/api/me/')) {
         permit(auth.user, ['employee']);
-        if (pathname === '/api/me/dashboard' && req.method === 'GET') { send(200, employeeDashboard(store, auth.user)); return; }
+        if (pathname === '/api/me/dashboard' && req.method === 'GET') { send(200, { ...employeeDashboard(store, auth.user), network: networkStatus(store, visitorIp) }); return; }
         if (pathname === '/api/me/history' && req.method === 'GET') { send(200, earlierHistory(store, auth.user, url.searchParams.get('before') || '')); return; }
-        if (pathname === '/api/me/clock' && req.method === 'POST') { checkLimit(store, `clock:${auth.user.id}`); send(200, punch(store, auth.user, await readBody(req))); return; }
+        if (pathname === '/api/me/clock' && req.method === 'POST') { checkLimit(store, `clock:${auth.user.id}`); send(200, punch(store, auth.user, await readBody(req), new Date(), { ip: visitorIp })); return; }
         if (pathname === '/api/me/leaves' && req.method === 'POST') { send(201, applyLeave(store, auth.user, await readBody(req))); return; }
         const cancellation = pathname.match(/^\/api\/me\/leaves\/([a-zA-Z0-9_-]+)\/cancel$/);
         if (cancellation && req.method === 'POST') { send(200, cancelLeave(store, auth.user, cancellation[1])); return; }
@@ -204,6 +207,10 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
+      if (pathname === '/api/office-networks' && req.method === 'GET') { permit(auth.user, ['admin', 'hr']); send(200, { networks: officeNetworks(store), current: visitorIp.replace(/^::ffff:/, '') }); return; }
+      if (pathname === '/api/office-networks' && req.method === 'POST') { send(200, changeOfficeNetworks(store, auth.user, await readBody(req), visitorIp)); return; }
+      const oofReview = pathname.match(/^\/api\/clock\/([a-f0-9-]+)\/review$/);
+      if (oofReview && req.method === 'POST') { send(200, reviewOutOfOffice(store, auth.user, oofReview[1], await readBody(req))); return; }
       const releaseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/release$/);
       if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1])); return; }
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);

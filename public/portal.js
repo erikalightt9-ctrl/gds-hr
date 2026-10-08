@@ -85,7 +85,11 @@ export function createPortal(ctx) {
   // Time in / Time out comes first, right after sign-in.
   function clockSection(data) {
     const t = data.today;
-    return `${t.late ? `<div class="late-reminder"><strong>⚠ LATE ATTENDANCE · ${t.late} minutes</strong><p>Scheduled: ${t.scheduledIn}. Recorded: ${t.actualIn}. Submit an explanation for HR review.</p><button data-portal-tab="explanations">Submit explanation</button></div>` : ''}<section class="panel clock-panel"><div><span class="eyebrow">TODAY · ${t.date}</span><h2>${esc(t.status)}</h2><p>Work schedule ${t.scheduledIn || '—'} — ${t.scheduledOut || '—'}${t.arrangement === 'WFH' ? ' · Work from home' : t.arrangement === 'Hybrid' ? ' · Hybrid' : ''}</p><span class="sync-label" id="portal-sync">● Connected · updated ${stamp(data.serverTime)}</span></div><div class="clock-actions"><button class="primary" data-clock="${t.open ? 'out' : 'in'}" ${data.employee.draft || (t.actualOut && t.date === today()) ? 'disabled' : ''}>${t.open ? 'Time out' : 'Time in'}</button><small>Captures your current device location.<br>Allow location access when your browser asks.</small>${data.employee.draft ? '' : '<button class="small" data-file-unpaid>File leave/absence</button>'}</div></section><div class="cards">${card('Actual time in', t.actualIn || '—')}${card('Actual time out', t.actualOut || '—')}${card('Working hours', `${t.hours} h`)}${card('Undertime', `${t.undertime} min`)}</div>`;
+    return `${t.late ? `<div class="late-reminder"><strong>⚠ LATE ATTENDANCE · ${t.late} minutes</strong><p>Scheduled: ${t.scheduledIn}. Recorded: ${t.actualIn}. Submit an explanation for HR review.</p><button data-portal-tab="explanations">Submit explanation</button></div>` : ''}<section class="panel clock-panel"><div><span class="eyebrow">TODAY · ${t.date}</span><h2>${esc(t.status)}</h2><p>Work schedule ${t.scheduledIn || '—'} — ${t.scheduledOut || '—'}${t.arrangement === 'WFH' ? ' · Work from home' : t.arrangement === 'Hybrid' ? ' · Hybrid' : ''}</p><span class="sync-label" id="portal-sync">● Connected · updated ${stamp(data.serverTime)}</span></div><div class="clock-actions">${(() => {
+        const kind = t.open ? 'out' : 'in', done = data.employee.draft || (t.actualOut && t.date === today()), net = data.network || {}, away = net.configured && !net.office;
+        const status = net.configured ? `<p class="net-status ${net.office ? 'ok' : 'away'}">${net.office ? '📶 Connected to the office Wi-Fi' : '⚠ Not connected to the office Wi-Fi'}</p>` : '';
+        return `${status}<button class="primary" data-clock="${kind}" ${done || away ? 'disabled' : ''}>${t.open ? 'Time out' : 'Time in'}</button>${done ? '' : `<button class="clock-outside" data-clock-outside="${kind}">🏃 Out of office time ${kind}</button>`}<small>${away ? 'Connect to the office Wi-Fi to time ' + kind + ', or use Out of office (needs HR approval).' : 'Captures your current device location.<br>Allow location access when your browser asks.'}</small>`;
+      })()}${data.employee.draft ? '' : '<button class="small" data-file-unpaid>File leave/absence</button>'}</div></section><div class="cards">${card('Actual time in', t.actualIn || '—')}${card('Actual time out', t.actualOut || '—')}${card('Working hours', `${t.hours} h`)}${card('Undertime', `${t.undertime} min`)}</div>`;
   }
   function draw(data, auth) {
     if (!data) return;
@@ -172,17 +176,17 @@ export function createPortal(ctx) {
       .catch(error => error?.code === 3 ? read({ enableHighAccuracy: false, maximumAge: 0, timeout: 15000 }) : Promise.reject(error))
       .catch(error => Promise.reject(fail(error)));
   }
-  async function clock(kind, button) {
+  async function clock(kind, button, extra = { mode: 'office', reason: '' }) {
     button.disabled = true; button.textContent = 'Getting your location…'; dirty = true;
     try {
       if (!navigator.geolocation) throw new Error('This browser does not support location capture. Contact HR.');
-      if (!pendingClock || pendingClock.kind !== kind) {
+      if (!pendingClock || pendingClock.kind !== kind || pendingClock.mode !== extra.mode) {
         const location = await capturePosition();
-        pendingClock = { kind, requestId: crypto.randomUUID(), latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: location.coords.accuracy, capturedAt: new Date(location.timestamp).toISOString() };
+        pendingClock = { kind, ...extra, requestId: crypto.randomUUID(), latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: location.coords.accuracy, capturedAt: new Date(location.timestamp).toISOString() };
       }
       const recordedAt = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date());
       await api('/me/clock', pendingClock); pendingClock = null; dirty = false; await refresh(); render();
-      confirmBox(`Time ${kind} submitted`, `Your <strong>time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location and sent to HR.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
+      confirmBox(`Time ${kind} submitted`, `Your <strong>${extra.mode === 'outside' ? 'out-of-office ' : ''}time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location and sent to HR${extra.mode === 'outside' ? ' for approval' : ''}.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
     } catch (error) { if (!/fetch|network|connect/i.test(error.message)) pendingClock = null; dirty = false; toast(error.message); button.disabled = false; button.textContent = `Retry time ${kind}`; }
   }
   function map(event) {
@@ -201,7 +205,9 @@ export function createPortal(ctx) {
     const statuses = ['All', 'Present', 'Late', 'Absent', 'On leave', 'Missing time out', 'Attendance exceptions'];
     const filtered = data.employees.filter(e => liveFilter === 'All' || (liveFilter === 'Attendance exceptions' ? e.exceptions.length : e.status === liveFilter));
     const html = `<section class="panel live-panel"><div class="panel-head"><div><h2>Today · live attendance</h2><p>Updates automatically · ${stamp(data.serverTime)}</p></div><span class="sync-label">● Live</span></div><div class="live-counts">${statuses.map(s => `<button data-live-filter="${s}" class="${s === liveFilter ? 'active' : ''}"><strong>${s === 'All' ? data.employees.length : data.employees.filter(e => s === 'Attendance exceptions' ? e.exceptions.length : e.status === s).length}</strong>${s}</button>`).join('')}</div>${table(['Employee', 'Status', 'In / out', 'Location', 'Review'], filtered.map(e => [`<button class="employee-link" data-profile="${esc(e.employeeId)}">${esc(e.name)}<small>${esc(e.employeeId)}</small></button>`, `${esc(e.status)}${e.exceptions.length ? '<small>⚠ Attendance exception</small>' : ''}`, `${e.actualIn || '—'} / ${e.actualOut || '—'}`, gpsCell(e.clockOut || e.clockIn), e.recordId ? `<button class="small" data-edit="attendance" data-id="${esc(e.recordId)}">Review attendance</button>` : e.open ? `<button class="small" data-correct-clock="${esc(e.employeeId)}" data-date="${e.date}">Correct missing time out</button>` : '']))}</section><section class="panel"><div class="panel-head"><h2>Attendance explanations</h2></div>${table(['Employee / date', 'Reason / explanation', 'Offset requested', 'Status', ''], data.explanations.map(e => [esc(e.employeeId) + '<br>' + e.date, `${esc(e.reason)}<small>${esc(e.explanation)}</small>${e.documentId ? `<a href="/api/documents/${esc(e.documentId)}/content">Supporting document</a>` : ''}`, `${e.requestedOffset} minutes`, esc(e.status), e.status === 'pending' ? `<button class="small" data-review-explanation="${esc(e.id)}">Review</button>` : esc(e.reviewedBy)]))}</section><section class="panel"><div class="panel-head"><h2>Original attendance events</h2><span class="legend">Immutable event history · Latest 200</span></div>${table(['Employee', 'Date / time', 'Event', 'Location'], data.history.map(e => [esc(e.employeeId), `${e.workDate} ${e.time}`, esc(e.correctedBy ? 'HR correction' : `Time ${e.kind}`), gpsCell(e)]))}</section>${notificationList(data.notifications)}`;
-    if (!countsOnly) return html;
+    // Out-of-office time records waiting for HR / Admin, shown above the day's table.
+    const oof = (data.outOfOffice || []).length ? `<section class="panel oof-panel"><div class="panel-head"><h2>Out of office · awaiting approval</h2><span class="legend">${data.outOfOffice.length} to review</span></div>${table(['Employee', 'Time', 'Reason', 'Location', ''], data.outOfOffice.map(e => [`${esc(e.employeeName)}<small>${esc(e.employeeId)}</small>`, `Time ${esc(e.kind)} · ${esc(e.workDate)} ${esc(e.time)}`, `<span class="wrap">${esc(e.reason)}</span>`, gpsCell(e), `<span class="download-links"><button class="small primary" data-oof-review="approve" data-id="${esc(e.id)}">Approve</button><button class="small" data-oof-review="reject" data-id="${esc(e.id)}">Reject</button></span>`]))}</section>` : '';
+    if (!countsOnly) return oof + html;
     const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => s === 'Attendance exceptions' ? e.exceptions.length : e.status === s).length);
     return `<section class="panel live-panel"><div class="panel-head"><div><h2>Today · live attendance</h2><p>Updates automatically · ${stamp(data.serverTime)}</p></div><button class="small" data-nav="live">Open live attendance →</button></div><div class="live-counts">${statuses.map(s => `<button data-nav="live" title="Open live attendance"><strong>${count(s)}</strong>${s}</button>`).join('')}</div></section>`;
   }
@@ -224,6 +230,24 @@ export function createPortal(ctx) {
     if (button.dataset.attendanceJump) { attendanceView = button.dataset.attendanceJump; dirty = false; render(); }
     if (button.hasAttribute('data-file-unpaid')) { tab = 'leave'; dirty = false; render(); preselectLeave(''); /* opens the leave form; the employee picks the leave type */ }
     if (button.dataset.clock) await clock(button.dataset.clock, button);
+    if (button.dataset.oofReview) {
+      const decision = button.dataset.oofReview, note = decision === 'reject' ? window.prompt('Reason for rejecting this out-of-office time record:', '') : '';
+      if (note === null) return;
+      try { await api(`/clock/${button.dataset.id}/review`, { decision, note }); toast(decision === 'approve' ? 'Approved. The employee was notified.' : 'Rejected. The employee was notified.'); await refresh(); render(); } catch (error) { toast(error.message); }
+      return;
+    }
+    if (button.dataset.clockOutside) {
+      // Out of office: the reason goes to HR / Admin for approval with the time and location.
+      const kind = button.dataset.clockOutside;
+      openDialog(`Out of office time ${kind}`, `<form class="dialog-body" id="oof-form"><p>You are timing ${kind} outside the office. HR or Admin will review it.</p><label class="field">Reason<textarea name="reason" required minlength="5" maxlength="500" placeholder="e.g. Client meeting in Makati; field work; bank errand for the company"></textarea></label><button class="primary" type="submit">Submit time ${kind}</button></form>`);
+      dialog.querySelector('#oof-form').onsubmit = async event => {
+        event.preventDefault();
+        const reason = String(new FormData(event.target).get('reason') || '').trim();
+        const submit = event.target.querySelector('button[type="submit"]');
+        dialog.close();
+        await clock(kind, document.querySelector(`[data-clock-outside="${kind}"]`) || submit, { mode: 'outside', reason });
+      };
+    }
     if (button.dataset.cancelLeave) { await api(`/me/leaves/${button.dataset.cancelLeave}/cancel`, {}); await refresh(); render(); confirmBox('Leave request cancelled', 'Your pending leave request was cancelled. No leave credits were used.'); }
     if (button.dataset.ownPayslip) { currentPayslip = await api(`/me/payslips/${button.dataset.ownPayslip}`); render(); }
     if (button.dataset.location) { const event = [...(historyOverride || employeeData?.history || []), ...(liveData?.history || [])].find(e => e.id === button.dataset.location); if (event) map(event); }

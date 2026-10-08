@@ -89,6 +89,7 @@ export function createAdmin(ctx) {
       <section class="panel"><div class="panel-head"><h2>User roles</h2><button type="button" class="small" data-accounts>Manage accounts →</button></div><div class="panel-body">${table(['Role', 'Can do'], [['System Administrator', 'Everything, including Settings, accounts and role assignment'], ['HR Manager', 'Employee records, document requirements and reviews, approvals, memos, trainings, reports'], ['HR Staff', 'Add and update employees, upload and review non-restricted documents, draft memos, manage trainings; no settings, government numbers or restricted documents'], ['Department Manager', 'View their own department’s employees, memo acknowledgements and trainings (account linked to their employee record)'], ['Management', 'Dashboards and summary reports'], ['Payroll', 'Payroll, loans, deductions and contributions'], ['Employee', 'Own profile, data sheet, memos and trainings']].map(([r, d]) => [`<strong>${r}</strong>`, d]))}</div></section>
       <div class="sticky-save"><button class="primary">Save settings</button></div></form>`);
     const form = document.querySelector('#settings-form');
+    officeWifi(form);
     form.addEventListener('click', event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-add-req')) { collectReqs(); settings.documentRequirements.push({ id: '', name: '', category: 'Other', required: true, expires: false, restricted: false, providedBy: 'employee', dueDays: null, departments: [], classifications: [] }); drawSettings(); }
@@ -111,6 +112,29 @@ export function createAdmin(ctx) {
       };
       try { settings = await api('/hr/settings', next); toast('Settings saved.'); await ctx.reloadContext(); drawSettings(); } catch (error) { toast(error.message); }
     };
+  }
+  // Office Wi-Fi for time in / out: recognised by the office's internet address. Add it while on the office Wi-Fi.
+  async function officeWifi(form) {
+    const box = document.createElement('section'); box.className = 'panel'; form.before(box);
+    const draw = d => {
+      const here = d.networks.some(n => n.ip === d.current);
+      box.innerHTML = `<div class="panel-head"><h2>📶 Office Wi-Fi for time in / out</h2></div><div class="panel-body">
+        <p class="legend">Employees can time in and out only from the office Wi-Fi. Anywhere else they use <strong>Out of office</strong> with a reason, which HR or Admin approves on Live attendance. Open this page while connected to the office Wi-Fi and click <strong>Add this network</strong>. If the office internet address changes (for example after the router restarts), add it again.</p>
+        <p>This device's network address: <strong>${ctx.esc(d.current || 'unknown')}</strong> ${here ? '<span class="badge">✓ Office Wi-Fi</span>' : ''}</p>
+        ${d.networks.length ? `<ul class="plain-list office-net-list">${d.networks.map(n => `<li><span><strong>${ctx.esc(n.label)}</strong> · ${ctx.esc(n.ip)} <small>added by ${ctx.esc(n.addedBy)}</small></span><button type="button" class="small danger" data-net-remove="${ctx.esc(n.ip)}">Remove</button></li>`).join('')}</ul>` : '<p class="notice">No office network saved yet, so time in / out is not limited to the office Wi-Fi.</p>'}
+        ${here ? '' : '<button type="button" class="primary" data-net-add>Add this network as the office Wi-Fi</button>'}
+        <p class="form-error hidden" role="alert" data-net-error></p></div>`;
+    };
+    const show = async body => {
+      try { draw(await ctx.api('/office-networks', body)); }
+      catch (error) { const e = box.querySelector('[data-net-error]'); if (e) { e.textContent = error.message; e.classList.remove('hidden'); } else ctx.toast(error.message); }
+    };
+    box.addEventListener('click', event => {
+      const b = event.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-net-add')) show({ action: 'add-current', label: 'Office Wi-Fi' });
+      if (b.dataset.netRemove && window.confirm(`Remove ${b.dataset.netRemove}? Time in from that network will need Out of office.`)) show({ action: 'remove', ip: b.dataset.netRemove });
+    });
+    await show();
   }
   function collectReqs() {
     const slug = s => s.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'requirement';

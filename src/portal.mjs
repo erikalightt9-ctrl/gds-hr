@@ -5,10 +5,11 @@ import { AppError, permit, saveRecord } from './service.mjs';
 import { date, schemas } from './schema.mjs';
 import { leaveBalance, leaveDates, ruleOn, isRest, attendanceMinutes, scheduleOn } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
+import { networkStatus } from './office-network.mjs';
 import { payDateFor, payslipReleased } from './paydays.mjs';
 const localDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
-export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime() }).strict();
+export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default('') }).strict();
 const note = z.string().trim().min(3).max(2000);
 const documentId = z.string().max(80).default('');
 const local = now => new Date(now.getTime() + 8 * 3600000).toISOString();
@@ -39,8 +40,12 @@ export function geofence(reading, workplace) {
   const status = distance + reading.accuracy <= workplace.radiusMeters ? 'Within' : distance - reading.accuracy > workplace.radiusMeters ? 'Outside' : 'Uncertain';
   return { status, distance: Math.round(distance), radius: workplace.radiusMeters, poorAccuracy: reading.accuracy > Math.min(100, workplace.radiusMeters) };
 }
-export function punch(store, actor, input, now = new Date()) {
+export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
+  // Office Wi-Fi rule: time in / out from the office network; anywhere else it is "Out of office" with a reason for HR.
+  const network = networkStatus(store, ip);
+  if (value.mode === 'office' && network.configured && !network.office) throw new AppError('You are not connected to the office Wi-Fi. Connect to it, or choose Out of office and give a reason for HR approval.');
+  if (value.mode === 'outside' && value.reason.length < 5) throw new AppError('Give the reason you are out of the office (at least 5 characters).');
   return store.transaction(() => {
     const retry = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(value.requestId);
     if (retry) { if (retry.employee_id !== employee.id || JSON.parse(retry.data).kind !== value.kind) throw new AppError('Clock request does not belong to this employee.', 403); return JSON.parse(retry.data); }
@@ -62,7 +67,7 @@ export function punch(store, actor, input, now = new Date()) {
     }
     const workDate = clockIn?.workDate || day;
     if (state.runs.some(r => r.start <= workDate && r.end >= workDate && r.rows.some(row => row.employeeId === employee.id))) throw new AppError('This attendance belongs to posted payroll. Contact HR.');
-    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), approvedLocation: workplace.approvedLocation || '', address: null, clockInId: clockIn?.id || null };
+    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason, approval: 'pending' } : {}), approvedLocation: workplace.approvedLocation || '', address: null, clockInId: clockIn?.id || null };
     if (clockIn) {
       if (state.attendance.some(a => a.employeeId === employee.id && a.date === workDate)) throw new AppError('HR has already entered a record for this day. Ask HR to reconcile it.');
       const approvedExplanation = rows(store, 'attendance_explanations', employee.id).find(e => e.date === workDate && e.status === 'approved');
@@ -72,7 +77,7 @@ export function punch(store, actor, input, now = new Date()) {
       store.log(actor, 'create-from-clock', 'attendance', record.id, null, record);
     }
     store.db.prepare('INSERT INTO clock_events VALUES(?,?,?,?,?)').run(event.id, employee.id, value.kind, workDate, JSON.stringify(event));
-    store.notify(null, `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
+    store.notify(null, value.mode === 'outside' ? `${employee.id}: OUT OF OFFICE time ${value.kind} at ${event.time} needs approval. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
     store.log(actor, `time-${value.kind}`, 'clock', event.id, null, event);
     return event;
   });
@@ -225,7 +230,7 @@ export function liveDashboard(store, actor, now = new Date()) {
   const employees = state.employees.filter(e => !e.draft && !e.archived && (!e.endDate || e.endDate >= local(now).slice(0, 10))).map(e => ({ employeeId: e.id, name: e.name, ...todayAttendance(store, e, now) }));
   const explanations = store.db.prepare('SELECT data FROM attendance_explanations ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
   const history = store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
-  return { employees, explanations, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
+  return { employees, outOfOffice: pendingOutOfOffice(store, state), explanations, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
 }
 export function correctClock(store, actor, input) {
   permit(actor, ['admin', 'hr']);
@@ -311,4 +316,32 @@ export function staffPayslip(store, actor, runId, employeeId) {
 }
 export function payslipPdf(payslip, { draft = payslip.draft } = {}) {
   return renderPayslipPdf(payslip, { draft, designation: payslip.designation });
+}
+
+// HR / Admin decision on an out-of-office time in or time out. Clock events are immutable, so the decision is kept
+// in its own table (one per event); the employee is notified and the decision is audited.
+const ensureReviews = store => store.db.exec('CREATE TABLE IF NOT EXISTS clock_reviews(event_id TEXT PRIMARY KEY, data TEXT NOT NULL)');
+export function outOfOfficeReview(store, eventId) { ensureReviews(store); const r = store.db.prepare('SELECT data FROM clock_reviews WHERE event_id=?').get(eventId); return r ? JSON.parse(r.data) : null; }
+export function reviewOutOfOffice(store, actor, eventId, input) {
+  permit(actor, ['admin', 'hr']);
+  const { decision, note } = z.object({ decision: z.enum(['approve', 'reject']), note: z.string().trim().max(500).default('') }).strict().parse(input);
+  return store.transaction(() => {
+    const row = store.db.prepare('SELECT data FROM clock_events WHERE id=?').get(eventId);
+    if (!row) throw new AppError('Time record not found.', 404);
+    const event = JSON.parse(row.data);
+    if (!event.outOfOffice) throw new AppError('This time record was made from the office and needs no approval.');
+    if (outOfOfficeReview(store, eventId)) throw new AppError('This out-of-office time record was already reviewed.');
+    if (decision === 'reject' && note.length < 3) throw new AppError('Give a reason for rejecting.');
+    const review = { eventId, approval: decision === 'approve' ? 'approved' : 'rejected', reviewedBy: actor.username, reviewedAt: new Date().toISOString(), reviewNote: note };
+    store.db.prepare('INSERT INTO clock_reviews(event_id,data) VALUES(?,?)').run(eventId, JSON.stringify(review));
+    store.notify(event.employeeId, `Your out-of-office time ${event.kind} on ${event.workDate} at ${event.time} was ${review.approval}${note ? `: ${note}` : ''}.`);
+    store.log(actor, `out-of-office-${review.approval}`, 'clock', eventId, null, review);
+    return { ...event, ...review };
+  });
+}
+// Out-of-office time records still waiting for HR / Admin (newest first).
+export function pendingOutOfOffice(store, state = store.read()) {
+  const names = Object.fromEntries(state.employees.map(e => [e.id, e.name]));
+  return store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 500').all().map(r => JSON.parse(r.data))
+    .filter(e => e.outOfOffice && !outOfOfficeReview(store, e.id)).map(e => ({ ...e, employeeName: names[e.employeeId] || e.employeeId }));
 }
