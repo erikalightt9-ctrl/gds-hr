@@ -11,4 +11,4 @@ export function payDateFor(start, end) {
   const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
   return `${ny}-${pad(nm)}-${pad(PAY_DAY_SECOND_CUTOFF)}`;
 }
-export const payslipReleased = (run, today) => run.status === 'posted' && payDateFor(run.start, run.end) <= today;
+export const payslipReleased = (run, today) => run.status === 'posted' && (!!run.releasedAt || payDateFor(run.start, run.end) <= today);

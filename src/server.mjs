@@ -13,7 +13,7 @@ import { publicBranding, readSettings } from './hr201.mjs';
 import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
-import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll } from './service.mjs';
+import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
 import { decideLoanApplication, loanDashboard } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOverview } from './thirteenth.mjs';
@@ -204,6 +204,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
+      const releaseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/release$/);
+      if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1])); return; }
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);
       if (reverseRun && req.method === 'POST') { send(200, reversePayroll(store, auth.user, reverseRun[1], await readBody(req))); return; }
       const leaveDecision = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/decision$/);

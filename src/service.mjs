@@ -145,6 +145,27 @@ export function deleteRecord(store, actor, kind, id) {
     store.write(state); store.log(actor, 'delete', kind, id, value, null);
   });
 }
+// Send a finalized payroll's payslips to the employees now (before salary day if needed): each employee gets the
+// payslip in My payslips and a notice in their bell. Sending again only re-notifies those not yet told.
+export function releasePayslips(store, actor, runId) {
+  permit(actor, ['admin', 'payroll']);
+  return store.transaction(() => {
+    const state = store.read(), run = state.runs.find(r => r.id === runId);
+    if (!run) throw new AppError('Payroll not found.', 404);
+    if (run.status !== 'posted') throw new AppError('Finalize this payroll first; only final payslips can be sent.');
+    if (!run.releasedAt) { run.releasedAt = new Date().toISOString(); run.releasedBy = actor.username; state.version++; store.write(state); }
+    let notified = 0;
+    for (const row of run.rows) {
+      const key = `payslip-notice:${run.id}:${row.employeeId}`;
+      if (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(key)) continue;
+      store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run(key);
+      store.notify(row.employeeId, `Your payslip for ${run.start} to ${run.end} is now available in My payslips.`);
+      notified++;
+    }
+    store.log(actor, 'release-payslips', 'runs', run.id, null, { start: run.start, end: run.end, notified });
+    return { id: run.id, releasedAt: run.releasedAt, releasedBy: run.releasedBy, employees: run.rows.length, notified };
+  });
+}
 // Reverse a posted payroll: the run is kept (status "reversed") for the audit trail, its loan repayments are
 // undone so balances and remaining terms return to their pre-posting values, and the cutoff can be posted again.
 export function reversePayroll(store, actor, runId, input) {

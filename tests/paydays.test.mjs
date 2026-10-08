@@ -30,3 +30,23 @@ test('a finalized payslip shows in the employee account only from salary day, wi
     assert.equal(notices(), 1); employeeDashboard(store, worker); assert.equal(notices(), 1, 'announced once');
   } finally { store.close(); }
 });
+
+test('Send payslips releases a finalized payroll before salary day and notifies each employee once', async () => {
+  const { releasePayslips } = await import('../src/service.mjs');
+  const { admin } = await import('./helpers.mjs');
+  const store = new Store(':memory:'), s = completeState();
+  const row = { employeeId: 'EMP-001', employeeName: 'Sample Employee', net: 1000, gross: 1000, totalDeductions: 0, earnings: {}, deductions: {}, loanDeductions: [], trace: [] };
+  s.runs = [{ id: 'run-future', status: 'posted', start: '2099-01-01', end: '2099-01-15', rows: [row], totals: {} }, { id: 'run-draft', status: 'reversed', start: '2099-02-01', end: '2099-02-15', rows: [row], totals: {} }];
+  store.write(s);
+  try {
+    assert.throws(() => ownPayslip(store, worker, 'run-future'), /salary day/);
+    const sent = releasePayslips(store, admin, 'run-future');
+    assert.equal(sent.notified, 1);
+    assert.equal(ownPayslip(store, worker, 'run-future').id, 'run-future', 'visible to the employee now');
+    assert.ok(employeeDashboard(store, worker).payslips.some(p => p.id === 'run-future'));
+    const notices = () => store.db.prepare("SELECT COUNT(*) n FROM notifications WHERE employee_id='EMP-001' AND message LIKE '%now available%'").get().n;
+    assert.equal(notices(), 1); releasePayslips(store, admin, 'run-future'); assert.equal(notices(), 1, 'notified once');
+    assert.throws(() => releasePayslips(store, admin, 'run-draft'), /Finalize/);
+    assert.throws(() => releasePayslips(store, worker, 'run-future'), /permission/i);
+  } finally { store.close(); }
+});
