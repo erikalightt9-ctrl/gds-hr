@@ -249,10 +249,11 @@ export function createPortal(ctx) {
     if (button.dataset.clockOutside) {
       // Out of office: the reason goes to HR / Admin for approval with the time and location.
       const kind = button.dataset.clockOutside;
-      openDialog(`Out of office time ${kind}`, `<form class="dialog-body" id="oof-form"><p>You are timing ${kind} outside the office. HR or Admin will review it.</p><label class="field">Reason<textarea name="reason" required minlength="5" maxlength="500" placeholder="e.g. Client meeting in Makati; field work; bank errand for the company"></textarea></label><button class="primary" type="submit">Submit time ${kind}</button></form>`);
+      const PURPOSES = ['Client meeting', 'Field work / site visit', 'Bank or government errand', 'Delivery or pick-up', 'Training or seminar', 'Work from home (approved)', 'Company event', 'Other'];
+      openDialog(`Out of office time ${kind}`, `<form class="dialog-body form-grid" id="oof-form"><p class="full">You are timing ${kind} outside the office. HR or Admin will review it.</p><label class="field full">Purpose<select name="purpose" required><option value="">Choose the purpose…</option>${PURPOSES.map(x => `<option>${x}</option>`).join('')}</select></label><label class="field full">Reason / details<textarea name="details" required minlength="3" maxlength="450" placeholder="e.g. Meeting with ABC Corp. in Makati until 3 PM"></textarea></label><button class="primary full" type="submit">Submit time ${kind}</button></form>`);
       dialog.querySelector('#oof-form').onsubmit = async event => {
         event.preventDefault();
-        const reason = String(new FormData(event.target).get('reason') || '').trim();
+        const f = new FormData(event.target), reason = `${String(f.get('purpose') || '').trim()} — ${String(f.get('details') || '').trim()}`;   // e.g. "Client meeting — ABC Corp. in Makati"
         const submit = event.target.querySelector('button[type="submit"]');
         dialog.close();
         await clock(kind, document.querySelector(`[data-clock-outside="${kind}"]`) || submit, { mode: 'outside', reason });
