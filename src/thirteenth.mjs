@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
 import { ruleOn, leaveBalance, dates, isRest, priorBasicFor, fullyPostedMonths } from './engine.mjs';
 import { localToday } from './profiles.mjs';
+import { payDateFor } from './paydays.mjs';
 
 const PAY = ['admin', 'payroll', 'hr'];
 const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
@@ -85,7 +86,7 @@ export function thirteenthLedger(store, actor, year) {
     const missing = []; for (let m = first; m <= lastMonth; m++) { const key = `${year}-${String(m).padStart(2, '0')}`; if (!covered.has(key) && (!e.endDate || key <= e.endDate.slice(0, 7))) missing.push(key); }
     const computedTotal = r2(postedBasic + prior.basic), ov = edited.get(e.id) || {};
     const totalBasic = ov.totalBasic ?? computedTotal, computedAccrued = e.covered13th ? r2(totalBasic / 12) : 0, accrued = ov.thirteenth ?? computedAccrued, paid = r2(postedPaid + prior.thirteenthPaid);
-    return { employeeId: e.id, name: e.name, covered13th: e.covered13th, postedBasic, priorBasic: prior.basic, priorMonths: prior.months, totalBasic, accrued, computedTotal, computedAccrued, totalEdited: ov.totalBasic != null, thirteenthEdited: ov.thirteenth != null, paid, balance: Math.max(0, r2(accrued - paid)), missingMonths: missing };
+    return { employeeId: e.id, name: e.name, endDate: e.endDate || '', covered13th: e.covered13th, postedBasic, priorBasic: prior.basic, priorMonths: prior.months, totalBasic, accrued, computedTotal, computedAccrued, totalEdited: ov.totalBasic != null, thirteenthEdited: ov.thirteenth != null, paid, balance: Math.max(0, r2(accrued - paid)), missingMonths: missing };
   });
 }
 
@@ -119,11 +120,17 @@ export function computeFinalPay(store, actor, input) {
   const from = paidThrough ? new Date(Date.parse(paidThrough) + 86400000).toISOString().slice(0, 10) : e.startDate;
   const workdays = from <= v.separationDate ? dates(from, v.separationDate).filter(d => !isRest(e, d)).length : 0;
   const days = v.unpaidDays ?? workdays, unpaidSalary = r2(days * daily);
+  // Finalized payroll whose salary day falls after the last day was not received before leaving: it is paid with the final pay (net, as on the payslip).
+  for (const r of state.runs.filter(r => r.status === 'posted' && payDateFor(r.start, r.end) > v.separationDate).sort((a, b) => a.start.localeCompare(b.start))) {
+    const row = r.rows.find(x => x.employeeId === e.id);
+    if (row) add('earnings', `Unpaid salary ${r.start} to ${r.end}`, row.net, `Finalized payroll (net pay on the payslip), salary day ${payDateFor(r.start, r.end)} is after the last day; pay it with the final pay, not separately`);
+  }
   add('earnings', 'Unpaid salary', unpaidSalary, `${days} day${days === 1 ? '' : 's'} × ${daily} daily rate (${from} to ${v.separationDate}${v.unpaidDays !== null ? ', days entered by HR' : `, ${workdays} scheduled workdays`}; paid through ${paidThrough || 'none recorded'})`);
 
   // 2. Pro-rated 13th month: basic earned this year (payroll + encoded months + unpaid salary) ÷ 12, less paid.
   const ledger = thirteenthLedger(store, { role: 'admin' }, year).find(x => x.employeeId === e.id);
-  const basicYear = r2((ledger?.totalBasic || 0) + unpaidSalary), accrued = e.covered13th ? r2(basicYear / 12) : 0, paid13 = ledger?.paid || 0;
+  const basicYear = r2((ledger?.totalBasic || 0) + unpaidSalary), paid13 = ledger?.paid || 0;
+  const accrued = !e.covered13th ? 0 : ledger?.thirteenthEdited && !unpaidSalary ? ledger.accrued : r2(basicYear / 12);   // a 13th month typed on the 13th month page is used as is
   add('earnings', 'Pro-rated 13th month pay', Math.max(0, r2(accrued - paid13)), e.covered13th ? `${basicYear} basic earned in ${year} ÷ 12 = ${accrued}, less ${paid13} already paid` : 'Not covered (per employee record)');
 
   // 3. Cash conversion of unused leave (SIL is convertible by law; other types per company policy, chosen by HR).

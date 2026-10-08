@@ -112,3 +112,19 @@ test('HR can type a different Total earned or 13th month pay for a year; blank g
     assert.throws(() => saveThirteenthOverrides(store, { username: 'v', role: 'viewer' }, { year: '2026', entries: [{ employeeId: 'EMP-001', totalBasic: 1 }] }));
   } finally { store.close(); }
 });
+
+test('final pay: a finalized payroll paid after the last day is paid with the final pay (net), not as extra days', () => {
+  const store = fixture();
+  try {
+    encode(store, JAN_AUG, 30000);
+    const { run } = postSeptFirstHalf(store), row = run.rows[0];
+    const r = computeFinalPay(store, payroll, { employeeId: 'EMP-001', separationDate: '2026-09-15' });
+    const unpaid = r.items.find(i => i.label === 'Unpaid salary 2026-09-01 to 2026-09-15');
+    assert.equal(unpaid.amount, row.net, 'salary day 2026-09-22 is after the last day');
+    assert.ok(!r.items.some(i => i.label === 'Unpaid salary'), 'no extra days after the paid cutoff');
+    const ledger = thirteenthLedger(store, payroll, '2026')[0];
+    assert.equal(r.items.find(i => i.label === 'Pro-rated 13th month pay').amount, Math.round((ledger.totalBasic / 12 - ledger.paid) * 100) / 100, '13th month = Total earned ÷ 12');
+    const later = computeFinalPay(store, payroll, { employeeId: 'EMP-001', separationDate: '2026-09-25' });
+    assert.ok(!later.items.some(i => i.label.startsWith('Unpaid salary 2026-09-01')), 'already paid on 2026-09-22');
+  } finally { store.close(); }
+});
