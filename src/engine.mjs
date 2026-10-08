@@ -342,18 +342,24 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     for (const d of (state.deductions || []).filter(d => d.employeeId === e.id && d.active && deductionApplies(d, start, end))) {
       add(deductions, 'other', d.amount, d.name, { id: d.id, sourceKind: 'deductions' }, end);
     }
-    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && round(l.balance + (l.interestBalance || 0)) > 0 && l.startDate <= end && l.endDate >= start)) {
+    // A loan with a balance keeps being deducted after its planned last date (e.g. after skipped cutoffs).
+    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && round(l.balance + (l.interestBalance || 0)) > 0 && l.startDate <= end)) {
+      if ((loan.skipCutoffs || []).includes(start)) {
+        trace.push({ component: 'loans', side: 'deductions', amount: 0, formula: `${loan.type} ${loan.reference}: not deducted this cutoff (skipped at the employee's request)`, sourceKind: 'loans', sourceId: loan.id, date: end });
+        continue;
+      }
       if (!loan.remainingTerms) { blockers.push(`${prefix}: loan ${loan.reference} has a balance but no remaining terms.`); continue; }
       const alreadyDeducted = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 7) === start.slice(0, 7)).flatMap(run => run.rows).flatMap(row => row.loanDeductions).filter(l => l.loanId === loan.id).reduce((sum, l) => sum + l.amount, 0);
       // Total due = principal + any interest; the final deduction never exceeds it. Interest is taken pro rata, so
       // only the principal portion reduces the principal balance.
       const interestDue = loan.interestBalance || 0, due = round(loan.balance + interestDue);
-      const amount = round(Math.min(due, loan.perPayroll, Math.max(0, loan.monthlyAmortization - alreadyDeducted)));
+      const monthlyLeft = loan.monthlyAmortization > 0 ? Math.max(0, loan.monthlyAmortization - alreadyDeducted) : Infinity;
+      const amount = round(Math.min(due, loan.perPayroll, monthlyLeft));
       if (!amount) continue;
       const interest = due ? round(amount * interestDue / due) : 0, principal = round(amount - interest);
       loanDeductions.push({ loanId: loan.id, type: loan.type, reference: loan.reference, amount, principal, interest, previousBalance: loan.balance, remainingBalance: round(loan.balance - principal), previousInterest: interestDue, remainingInterest: round(interestDue - interest), startDate: loan.startDate, endDate: loan.endDate, terms: loan.terms, previousTerms: loan.remainingTerms, remainingTerms: amount >= due ? 0 : loan.remainingTerms - 1 });
       deductions.loans = round(deductions.loans + amount);
-      trace.push({ component: 'loans', side: 'deductions', amount, formula: `${loan.type} ${loan.reference}: min(${due} due, ${loan.perPayroll} per payroll, ${round(loan.monthlyAmortization - alreadyDeducted)} monthly amount remaining)${interest ? ` = ${principal} principal + ${interest} interest` : ''}`, sourceKind: 'loans', sourceId: loan.id, date: end });
+      trace.push({ component: 'loans', side: 'deductions', amount, formula: `${loan.type} ${loan.reference}: min(${due} due, ${loan.perPayroll} per payroll${loan.monthlyAmortization > 0 ? `, ${round(loan.monthlyAmortization - alreadyDeducted)} monthly amount remaining` : ''})${interest ? ` = ${principal} principal + ${interest} interest` : ''}`, sourceKind: 'loans', sourceId: loan.id, date: end });
     }
     // Manual overrides replace a computed amount; the original stays in the trace and on the row for review.
     const overrides = [];

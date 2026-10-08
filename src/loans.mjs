@@ -89,9 +89,26 @@ function nextDeduction(state, loan, today = localToday()) {
     const end = rule?.cutoff === 'monthly' ? (i % 2 ? null : `${ym}-${last}`) : i % 2 ? `${ym}-${last}` : `${ym}-15`;
     if (!end || end < from) continue;
     const posted = state.runs.some(r => r.status === 'posted' && r.end === end && r.rows.some(row => row.employeeId === loan.employeeId));
-    if (!posted && end <= loan.endDate) return end;
+    const start = end.endsWith('-15') ? `${end.slice(0, 7)}-01` : rule?.cutoff === 'monthly' ? `${end.slice(0, 7)}-01` : `${end.slice(0, 7)}-16`;
+    if (!posted && !(loan.skipCutoffs || []).includes(start)) return end;
   }
   return '';
+}
+// Cutoffs (start dates) where this loan is not deducted, at the employee's request. Posted cutoffs cannot change.
+const skipSchema = z.object({ cutoffs: z.array(z.string().regex(/^\d{4}-\d{2}-(01|16)$/, 'Choose cutoff start dates (the 1st or the 16th).')).max(500) }).strict();
+export function setLoanSkips(store, actor, loanId, input) {
+  permit(actor, APPROVERS);
+  const { cutoffs } = skipSchema.parse(input);
+  return store.transaction(() => {
+    const state = store.read(), loan = state.loans.find(l => l.id === loanId);
+    if (!loan) throw new AppError('Loan not found.', 404);
+    const posted = c => state.runs.some(r => r.status === 'posted' && r.start === c && r.rows.some(row => row.employeeId === loan.employeeId));
+    const before = new Set(loan.skipCutoffs || []), after = new Set(cutoffs);
+    for (const c of new Set([...before, ...after])) if (before.has(c) !== after.has(c) && posted(c)) throw new AppError(`The ${c} cutoff is already final for this employee and cannot change.`);
+    const skipCutoffs = [...after].sort();
+    saveRecord(store, actor, 'loans', { ...loan, skipCutoffs }, { trusted: true });
+    return { id: loan.id, skipCutoffs };
+  });
 }
 export const loanStatus = loan => (!loan.authorized ? 'Not authorized' : r2(loan.balance + (loan.interestBalance || 0)) <= 0 ? 'Fully paid' : 'Active');
 export function loanDashboard(store, actor) {

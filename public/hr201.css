@@ -657,3 +657,4 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .oof-panel { border-color: #e7a5ab; }
 .office-net-list { display: grid; gap: 8px; margin: 10px 0; }
 .office-net-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.skip-list { display: grid; gap: 4px; margin-top: 10px; }

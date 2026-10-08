@@ -58,8 +58,8 @@ export const REPORTS = {
   },
   loans: {
     title: 'Employee loans', roles: STAFF,
-    headers: ['Employee ID', 'Name', 'Type', 'Reference', 'Original', 'Balance', 'Monthly amortization', 'Per payroll', 'Start', 'End', 'Terms left', 'Authorized'],
-    rows: state => { const name = nameOf(state); return state.loans.map(l => [l.employeeId, name(l.employeeId), l.type, l.reference, money(l.original), money(l.balance), money(l.monthlyAmortization), money(l.perPayroll), l.startDate, l.endDate, `${l.remainingTerms} / ${l.terms}`, yesNo(l.authorized)]); },
+    headers: ['Employee ID', 'Name', 'Type', 'Reference', 'Loan date', 'Original', 'Balance', 'Per payroll', 'Start', 'End', 'Terms left', 'Authorized'],
+    rows: state => { const name = nameOf(state); return state.loans.map(l => [l.employeeId, name(l.employeeId), l.type, l.reference, l.loanDate || '', money(l.original), money(l.balance), money(l.perPayroll), l.startDate, l.endDate, `${l.remainingTerms} / ${l.terms}`, yesNo(l.authorized)]); },
   },
   adjustments: {
     title: 'Additional earnings and deductions', roles: STAFF,
