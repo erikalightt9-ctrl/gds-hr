@@ -401,7 +401,7 @@ function renderForcedPassword() {
     event.preventDefault(); const f = new FormData(event.target);
     if (f.get('newPassword') !== f.get('confirm')) { toast('The new passwords do not match.'); return; }
     if (f.get('newPassword') === f.get('currentPassword')) { toast('Choose a password different from the default.'); return; }
-    try { await api('/password', { currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') }); auth = { user: null }; renderLogin(); toast('Password saved. Sign in with your new password.'); } catch (error) { toast(error.message); }
+    try { await api('/password', { currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') }); auth = { user: null }; renderLogin(); passwordSaved(); } catch (error) { toast(error.message); }
   };
 }
 function render() {
@@ -860,6 +860,10 @@ function renderLogin() {
   const resetLink = /^#reset=([a-f0-9]{64})$/.exec(location.hash);
   if (resetLink) { history.replaceState(null, '', location.pathname); portal.recovery(resetLink[1]); }
 }
+// Clear confirmation after a password change (every session is signed out, so the next step is signing in).
+function passwordSaved() {
+  openDialog('Password saved', '<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p><strong>Your new password is saved.</strong></p><p>For your security you were signed out. Sign in again with your <strong>new password</strong>.</p></div>', '<div class="dialog-foot"><button class="primary" data-close>OK, sign in</button></div>');
+}
 // My account: profile (the employee record this account belongs to) and change password.
 async function myAccount() {
   const me = await api('/me/account'), roleLabel = hrContext?.roleLabel || auth.user.role;
@@ -869,7 +873,7 @@ async function myAccount() {
     <hr><h3>Change your password</h3><form id="password-form" class="form-grid"><label class="field">Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label><label class="field">New password<input type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="200" required></label><button class="primary" type="submit">Save new password</button></form>
     <p class="form-error hidden" role="alert" data-my-error></p></div>`);
   const fail = message => { const e = dialog.querySelector('[data-my-error]'); e.textContent = message; e.classList.remove('hidden'); };
-  dialog.querySelector('#password-form').onsubmit = async event => { event.preventDefault(); try { await api('/password', Object.fromEntries(new FormData(event.target))); dialog.close(); auth = { user: null }; renderLogin(); toast('Password updated. Please sign in again.'); } catch (e) { fail(e.message); } };
+  dialog.querySelector('#password-form').onsubmit = async event => { event.preventDefault(); try { await api('/password', Object.fromEntries(new FormData(event.target))); dialog.close(); auth = { user: null }; renderLogin(); passwordSaved(); } catch (e) { fail(e.message); } };
   dialog.querySelector('[data-my-201]')?.addEventListener('click', b => { dialog.close(); goTo({ page: 'employee201', id: b.currentTarget.dataset.my201 }); });
 }
 async function account() {
