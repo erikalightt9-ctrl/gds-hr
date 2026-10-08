@@ -863,16 +863,13 @@ function renderLogin() {
 // My account: profile (the employee record this account belongs to) and change password.
 async function myAccount() {
   const me = await api('/me/account'), roleLabel = hrContext?.roleLabel || auth.user.role;
-  const people = state.employees.filter(e => !e.archived).sort((a, b) => a.name.localeCompare(b.name));
   openDialog('My account', `<div class="dialog-body">
     <section class="my-profile"><span class="hr-avatar large">${esc((me.employeeName || me.username).split(/[ ,]+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase())}</span><div><h3>${esc(me.employeeName || me.username)}</h3><p class="sub">${esc(me.username)} · ${esc(roleLabel)}${me.email ? ` · ${esc(me.email)}` : ''}</p>
-      ${me.employeeId ? `<div class="actions"><button class="small primary" data-my-201="${esc(me.employeeId)}">Open my 201 file</button><button class="small" data-my-unlink>Change linked record</button></div>` : `<form id="my-link" class="dept-add"><select name="employeeId" required aria-label="My employee record"><option value="">Choose your employee record…</option>${people.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select><button class="primary">Link</button></form><p class="legend">Link this account to your own employee record to have a profile (201 file).</p>`}</div></section>
+      ${me.employeeId ? `<div class="actions"><button class="small primary" data-my-201="${esc(me.employeeId)}">Open my 201 file</button></div>` : ''}</div></section>
     <hr><h3>Change your password</h3><form id="password-form" class="form-grid"><label class="field">Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label><label class="field">New password<input type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="200" required></label><button class="primary" type="submit">Save new password</button></form>
     <p class="form-error hidden" role="alert" data-my-error></p></div>`);
   const fail = message => { const e = dialog.querySelector('[data-my-error]'); e.textContent = message; e.classList.remove('hidden'); };
   dialog.querySelector('#password-form').onsubmit = async event => { event.preventDefault(); try { await api('/password', Object.fromEntries(new FormData(event.target))); dialog.close(); auth = { user: null }; renderLogin(); toast('Password updated. Please sign in again.'); } catch (e) { fail(e.message); } };
-  dialog.querySelector('#my-link')?.addEventListener('submit', async event => { event.preventDefault(); try { await api('/me/account/link', { employeeId: new FormData(event.target).get('employeeId') }); await myAccount(); } catch (e) { fail(e.message); } });
-  dialog.querySelector('[data-my-unlink]')?.addEventListener('click', async () => { try { await api('/me/account/link', { employeeId: '' }); await myAccount(); } catch (e) { fail(e.message); } });
   dialog.querySelector('[data-my-201]')?.addEventListener('click', b => { dialog.close(); goTo({ page: 'employee201', id: b.currentTarget.dataset.my201 }); });
 }
 async function account() {
