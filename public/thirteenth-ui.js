@@ -17,9 +17,8 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
   async function section(openYear) {
     const thisYear = today().slice(0, 4), current = await api(`/thirteenth?year=${thisYear}`);
     const last = Math.max(Number(thisYear), current.lastYear || 0), years = [...new Set([...Array.from({ length: last - Number(thisYear) + 1 }, (_, i) => String(Number(thisYear) + i)), ...current.years])].sort();
-    const accrued = money(current.ledger.reduce((s, x) => s + x.accrued, 0));
     const box = document.createElement('section'); box.className = 'panel';
-    const draw = () => { box.innerHTML = `<div class="panel-head"><div><h2>🎁 13th Month Pay</h2><p>Basic salary earned in the year ÷ 12. Choose a year to see each employee, the salary records and final pay.</p></div></div><div class="panel-body th-year-pick"><label class="field">Year<input id="th-year-select" type="text" inputmode="numeric" maxlength="4" placeholder="YYYY" value="${esc(thisYear)}" aria-label="Year (YYYY)"></label><button class="primary" data-th-open-selected>Open 13th month pay</button><span class="legend">${thisYear} earned so far: <strong>${accrued}</strong></span></div>`; };
+    const draw = () => { box.innerHTML = `<div class="panel-head"><div><h2>🎁 13th Month Pay</h2><p>Basic salary earned in the year ÷ 12. Choose a year to see each employee, the salary records and final pay.</p></div></div><div class="panel-body th-year-pick"><label class="field">Year<input id="th-year-select" type="text" inputmode="numeric" maxlength="4" placeholder="YYYY" value="${esc(thisYear)}" aria-label="Year (YYYY)"></label><button class="primary" data-th-open-selected>Open 13th month pay</button></div>`; };
     draw();
     box.onclick = async e => {
       if (e.target.closest('[data-th-add]')) { try { const r = await api('/thirteenth/years', {}); years.push(String(r.lastYear)); current.lastYear = r.lastYear; draw(); box.querySelector('#th-year-select').value = String(r.lastYear); } catch (err) { toast(err.message); } return; }
