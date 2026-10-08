@@ -44,7 +44,7 @@ test('a month only partly in posted payroll keeps its encoded record (the other 
     assert.doesNotThrow(() => encode(store, ['09']));
     encode(store, ['01']); encode(store, ['01'], null);
     assert.deepEqual(thirteenthLedger(store, payroll, '2026')[0].priorMonths, ['2026-09'], 'January cleared; September kept');
-    assert.throws(() => savePriorEarnings(store, payroll, { entries: [{ employeeId: 'EMP-001', month: '2099-01', basic: 1 }] }), /future/);
+    assert.equal(savePriorEarnings(store, payroll, { entries: [{ employeeId: 'EMP-001', month: '2026-12', basic: 1 }] }).saved, 1, 'months ahead (e.g. November, December) can be typed too');
     assert.throws(() => savePriorEarnings(store, payroll, { entries: [{ employeeId: 'NOPE', month: '2026-01', basic: 1 }] }), /Unknown employee/);
     assert.throws(() => savePriorEarnings(store, { username: 'x', role: 'hr_staff' }, { entries: [{ employeeId: 'EMP-001', month: '2026-01', basic: 1 }] }), /permission/);
     assert.throws(() => savePriorEarnings(store, payroll, { entries: [{ employeeId: 'EMP-001', month: '2026-13', basic: 1 }] }));

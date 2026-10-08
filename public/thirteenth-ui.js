@@ -74,7 +74,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     if (!year) year = today().slice(0, 4);
     shell(heading('13th month & final pay', 'Loading…') + '<div class="loading">Loading the ledger…</div>');
     [data, finalData] = await Promise.all([api(`/thirteenth?year=${year}`), api('/final-pay').catch(() => null)]);
-    const L = data.ledger, editable = data.canEncode, thisMonth = today().slice(0, 7);
+    const L = data.ledger, editable = data.canEncode;
     const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     const prior = new Map(data.prior.map(p => [`${p.employeeId}:${p.month}`, p]));
     // Total earned and 13th month pay: computed, but HR can type a different amount (blank = back to the computation).
@@ -82,10 +82,9 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     const gridRow = r => [esc(r.name), ...months.map(m => {
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`), fromPayroll = data.postedBasic?.[r.employeeId]?.[m] || 0;
       if (posted) return `<span class="payroll-amount">₱${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
-      const future = m > thisMonth;
       // Part typed before the system + part from finalized payroll: one box with the month's total; click to see or change the typed part.
       if (fromPayroll) return `<input type="hidden" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"><button type="button" class="share-input th-month-total" data-th-split="${esc(r.employeeId)}|${m}" title="Typed ${p ? fmtAmount(p.basic) : '0.00'} + payroll ${fmtAmount(fromPayroll)}">₱${fmtAmount((p?.basic || 0) + fromPayroll)}</button>`;
-      return `<span class="th-peso"><input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}></span>`;
+      return `<span class="th-peso"><input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable ? '' : ' disabled'}></span>`;
     }), ovBox(r, 'total', r.totalBasic, r.computedTotal, r.totalEdited), ovBox(r, '13th', r.accrued, r.computedAccrued, r.thirteenthEdited)];
     shell(heading(`${year} 13th Month Pay`, '', '<button class="small" data-nav="payroll">← Payroll</button>') +
       `      <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>

@@ -21,12 +21,10 @@ const entrySchema = z.object({ employeeId: z.string().min(1).max(80), month, bas
 export function savePriorEarnings(store, actor, input) {
   permit(actor, PAY);
   const { entries } = z.object({ entries: z.array(entrySchema).min(1).max(2000) }).strict().parse(input);
-  const thisMonth = localToday().slice(0, 7);
   return store.transaction(() => {
     const state = store.read(); let saved = 0, removed = 0;
     for (const e of entries) {
       if (!state.employees.some(x => x.id === e.employeeId)) throw new AppError(`Unknown employee ${e.employeeId}.`);
-      if (e.month > thisMonth) throw new AppError(`${e.month} is in the future.`);
       const posted = fullyPostedMonths(state, e.employeeId).has(e.month);   // part-month payroll: the encoded record holds the other cutoff
       const before = store.db.prepare('SELECT data FROM prior_earnings WHERE employee_id=? AND month=?').get(e.employeeId, e.month);
       if (e.basic === null) {   // blank clears the entry
