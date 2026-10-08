@@ -56,7 +56,8 @@ export function checkLimit(store, key, maximum = 10) {
   if (row && row.attempts >= maximum) throw new AppError('Too many sign-in attempts. Try again in 15 minutes.', 429);
   store.db.prepare('INSERT INTO login_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1').run(key, now + 900000);
 }
-export async function login(store, username, password, key, otp = '') {
+export const SIGNED_IN_ELSEWHERE = 'This account is already signed in on another device. Sign out there first. If that device is lost or not with you, ask HR to sign it out (Account & access → Sign out device).';
+export async function login(store, username, password, key, otp = '', { currentTokenHash = '' } = {}) {
   checkLimit(store, key, 100);
   const accountKey = `account-login:${username.toLowerCase()}`; checkLimit(store, accountKey);
   let user = store.db.prepare('SELECT * FROM users WHERE username=? OR employee_id=? COLLATE NOCASE').get(username, username);
@@ -69,8 +70,13 @@ export async function login(store, username, password, key, otp = '') {
     store.db.prepare('UPDATE users SET mfa_last_step=? WHERE id=?').run(step, user.id);
   }
   store.db.prepare('DELETE FROM login_limits WHERE key=?').run(accountKey);
-  const token = randomBytes(32).toString('hex'), csrf = randomBytes(32).toString('hex');
   store.db.prepare('DELETE FROM sessions WHERE expires < ?').run(Date.now());
+  if (user.role !== 'admin') {
+    const elsewhere = store.db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE user_id=? AND token_hash<>?').get(user.id, currentTokenHash || '').n;
+    if (elsewhere) { store.log({ username: user.username, role: user.role }, 'login-blocked-other-device', 'users', user.id, null, null); throw new AppError(SIGNED_IN_ELSEWHERE, 409); }
+  }
+  if (currentTokenHash) store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(currentTokenHash);   // same device signing in again
+  const token = randomBytes(32).toString('hex'), csrf = randomBytes(32).toString('hex');
   store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + 8 * 3600000);
   return { token, csrf, user: { id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret, mustChangePassword: !!user.must_change_password } };
 }
@@ -264,3 +270,13 @@ export async function configureMfa(store, user, input) {
   return { ok: true, signInAgain: true };
   });
 }
+// HR / Admin: end every session of an account (e.g. a lost phone) so the employee can sign in on another device.
+export function signOutEverywhere(store, actor, userId) {
+  if (!actor || !['admin', 'hr'].includes(actor.role)) throw new AppError('You do not have permission for this action.', 403);
+  const user = store.db.prepare('SELECT id, username FROM users WHERE id=?').get(userId);
+  if (!user) throw new AppError('Account not found.', 404);
+  const n = store.db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId).changes;
+  store.log(actor, 'sign-out-devices', 'users', userId, null, { username: user.username, sessions: n });
+  return { signedOut: n };
+}
+export const activeSessionUsers = store => new Set(store.db.prepare('SELECT DISTINCT user_id FROM sessions WHERE expires > ?').all(Date.now()).map(r => r.user_id));

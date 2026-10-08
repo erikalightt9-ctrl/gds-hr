@@ -20,7 +20,7 @@ import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOvervie
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
-import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts } from './auth.mjs';
+import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -113,7 +113,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       if (pathname === '/api/login' && req.method === 'POST') {
         const body = loginSchema.parse(await readBody(req));
-        const auth = await login(store, body.username, body.password, `login:${client}`, body.otp);
+        const auth = await login(store, body.username, body.password, `login:${client}`, body.otp, { currentTokenHash: session(store, req.headers.cookie)?.tokenHash || '' });
         res.setHeader('Set-Cookie', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
         send(200, { user: auth.user, csrf: auth.csrf, demo }); return;
       }
@@ -275,9 +275,11 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         if (req.method === 'POST' && !documentRoute[2]) { send(200, updateDocument(store, auth.user, documentRoute[1], await readBody(req))); return; }
       }
       if (pathname === '/api/users/employee-accounts' && req.method === 'POST') { permit(auth.user, ['admin']); const v = z.object({ password: z.string().max(200) }).strict().parse(await readBody(req)); send(200, await createEmployeeAccounts(store, auth.user, v.password)); return; }
+      const signOutUser = pathname.match(/^\/api\/users\/([A-Za-z0-9-]+)\/sign-out$/);
+      if (signOutUser && req.method === 'POST') { send(200, signOutEverywhere(store, auth.user, signOutUser[1])); return; }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
-        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
+        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
         if (req.method === 'POST') { send(201, { user: await addUser(store, await readBody(req), auth.user) }); return; }
       }
       if (pathname.startsWith('/api/records/')) {
