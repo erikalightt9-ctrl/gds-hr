@@ -14,7 +14,7 @@ function wrap(text, width, size) {
   return lines.length ? lines : [''];
 }
 
-export function renderFinalPayPdf(record, { designation = '', startDate = '' } = {}) {
+export function renderFinalPayPdf(record, { designation = '', startDate = '', preparedBy = record.computedBy } = {}) {
   const p = new Page(), image = logo();
   let y = H - 40;
   p.stroke(LEFT, 40, WIDTH, H - 80, COLOR.gold);
@@ -66,7 +66,7 @@ export function renderFinalPayPdf(record, { designation = '', startDate = '' } =
   const sign = Math.min(150, y - 40);
   for (const l of wrap(`I acknowledge receipt of PHP ${amount(record.net)} from GDS CAPITAL INC. as my final pay, computed as shown above.`, WIDTH - 24, 8.5)) { p.text(l, LEFT + 12, sign + 66, { size: 8.5, italic: true }); }
   const line = (x, label, name) => { p.line(x, sign + 20, x + 150, sign + 20, COLOR.ink); if (name) p.text(name, x + 75, sign + 24, { size: 8.5, align: 'center' }); p.text(label, x + 75, sign + 9, { size: 7.5, color: COLOR.muted, align: 'center' }); };
-  line(LEFT + 12, 'Prepared by', record.computedBy); line(W / 2 - 75, 'Checked / approved by'); line(RIGHT - 162, 'Received by (employee) / date', String(record.name || ''));
+  line(LEFT + 12, 'Prepared by', preparedBy); line(W / 2 - 75, 'Checked / approved by'); line(RIGHT - 162, 'Received by (employee) / date', String(record.name || ''));
   p.text(`Final pay ${String(record.id || '').slice(0, 8)} | Labor Advisory 06-2020: final pay is released within 30 days from separation.`, W / 2, 50, { size: 7, color: COLOR.muted, align: 'center' });
   return assemblePdf(p, image);
 }

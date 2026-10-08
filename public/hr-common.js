@@ -142,3 +142,8 @@ export function celebrationsHtml(esc, data) {
 export function bindCelebrationPhotos(root) {
   root.querySelectorAll('[data-celebrant-photo]').forEach(img => { img.addEventListener('error', () => img.remove()); });
 }
+
+// Full names for usernames ("gds.erika" -> "Erika Lima Hernando"); loaded once after sign-in. Unknown names stay as they are.
+let staffNameMap = {};
+export const setStaffNames = map => { staffNameMap = map || {}; };
+export const who = value => { const text = String(value ?? ''), m = text.match(/^(\S+)(.*)$/); return m && staffNameMap[m[1]] ? `${staffNameMap[m[1]]}${m[2]}` : text; };

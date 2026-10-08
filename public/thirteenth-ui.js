@@ -1,5 +1,6 @@
 // 13th Month Pay page: the annual ledger (posted payroll + salary encoded for months before the system),
 // the encoding grid for those earlier months, and the final pay computation for separated employees.
+import { who } from './hr-common.js';
 export function createThirteenthPage({ api, esc, money, table, toast, openDialog, dialog, shell, heading, today }) {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const fmt = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
@@ -139,7 +140,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
         <label class="field">Notes<input name="notes" maxlength="2000"></label>
         <div class="full"><button class="primary">Compute final pay</button></div>
       </form><div id="fp-result"></div>
-      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(r.computedBy)]), 'No saved final pay computations yet.')}</section>`;
+      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(who(r.computedBy))]), 'No saved final pay computations yet.')}</section>`;
   }
 
   const resultHtml = r => `<div class="panel-body"><h3>${esc(r.name)} · final pay as of ${fmt(r.separationDate)}</h3><p class="legend">Daily rate ${money(r.dailyRate)} · monthly ${money(r.monthlySalary)} · ${r.yearsOfService} year${r.yearsOfService === 1 ? '' : 's'} of service (counted) · release due ${fmt(r.releaseDue)}</p>
@@ -217,7 +218,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     const r = data.ledger.find(x => x.employeeId === employeeId), lastMonth = year === today().slice(0, 4) ? Number(today().slice(5, 7)) : 12;   // details: months up to now
     const rows = Array.from({ length: lastMonth }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`).map(m => {
       const p = data.prior.find(x => x.employeeId === employeeId && x.month === m), posted = data.postedMonths[employeeId]?.includes(m);
-      return [MONTHS[Number(m.slice(5)) - 1], posted ? '<span class="share-state">From posted payroll</span>' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="basic-${m}" value="${p ? fmtAmount(p.basic) : ''}" aria-label="Basic ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="paid-${m}" value="${p?.thirteenthPaid ? fmtAmount(p.thirteenthPaid) : ''}" aria-label="13th month paid ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input name="notes-${m}" maxlength="500" value="${esc(p?.notes || '')}" aria-label="Notes ${m}"${data.canEncode ? '' : ' disabled'}>`, p ? `<small>${esc(p.enteredBy)} · ${fmt(p.enteredAt)}</small>` : ''];
+      return [MONTHS[Number(m.slice(5)) - 1], posted ? '<span class="share-state">From posted payroll</span>' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="basic-${m}" value="${p ? fmtAmount(p.basic) : ''}" aria-label="Basic ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input class="share-input" type="text" inputmode="decimal" data-amount name="paid-${m}" value="${p?.thirteenthPaid ? fmtAmount(p.thirteenthPaid) : ''}" aria-label="13th month paid ${m}"${data.canEncode ? '' : ' disabled'}>`, posted ? '' : `<input name="notes-${m}" maxlength="500" value="${esc(p?.notes || '')}" aria-label="Notes ${m}"${data.canEncode ? '' : ' disabled'}>`, p ? `<small>${esc(who(p.enteredBy))} · ${fmt(p.enteredAt)}</small>` : ''];
     });
     openDialog(`Salary records · ${r.name}`, `<form id="prior-detail"><div class="dialog-body"><p class="sub">Basic salary earned and any 13th month already paid (advance or partial) for each month before the system.</p>${table(['Month', 'Basic salary earned', '13th month paid', 'Notes', 'Encoded by'], rows)}</div>
       <div class="dialog-foot"><button type="button" data-close>Close</button>${data.canEncode ? '<button class="primary">Save</button>' : ''}</div></form>`);

@@ -17,6 +17,7 @@ import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entit
 import { decideLoanApplication, loanDashboard, setLoanSkips } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
+import { staffNames, fullNameOf } from './staff-names.mjs';
 import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayRecord, finalPayOverview, addThirteenthYear } from './thirteenth.mjs';
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
@@ -210,13 +211,14 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/thirteenth/years' && req.method === 'POST') { send(200, addThirteenthYear(store, auth.user)); return; }
       if (pathname === '/api/thirteenth/prior' && req.method === 'POST') { send(200, savePriorEarnings(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/thirteenth/overrides' && req.method === 'POST') { send(200, saveThirteenthOverrides(store, auth.user, await readBody(req))); return; }
+      if (pathname === '/api/staff-names' && req.method === 'GET') { send(200, staffNames(store, { staffOnly: auth.user.role === 'employee' })); return; }
       if (pathname === '/api/final-pay' && req.method === 'GET') { send(200, finalPayOverview(store, auth.user)); return; }
       const finalPdf = pathname.match(/^\/api\/final-pay\/([a-f0-9-]+)\.pdf$/);
       if (finalPdf && req.method === 'GET') {
         const record = finalPayRecord(store, auth.user, finalPdf[1]), employee = store.read().employees.find(x => x.id === record.employeeId);
         store.log(auth.user, 'export', 'final-pay', record.id, null, { format: 'pdf' });
         res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="final-pay-${record.employeeId}-${record.separationDate}.pdf"` });
-        res.end(renderFinalPayPdf(record, { designation: designationOf(store, record.employeeId), startDate: employee?.startDate || '' })); return;
+        res.end(renderFinalPayPdf(record, { designation: designationOf(store, record.employeeId), startDate: employee?.startDate || '', preparedBy: fullNameOf(store, record.computedBy) })); return;
       }
       if (pathname === '/api/final-pay/compute' && req.method === 'POST') { send(200, computeFinalPay(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }
@@ -332,12 +334,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         if (pathname.endsWith('.xlsx')) {
           store.log(auth.user, 'export', 'runs', run.id, null, { format: 'xlsx' });
           res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="payroll-${run.start}-${run.end}.xlsx"` });
-          res.end(payrollWorkbook(run)); return;
+          res.end(payrollWorkbook({ ...run, postedBy: fullNameOf(store, run.postedBy) })); return;
         }
         if (pathname.endsWith('.pdf')) {
           store.log(auth.user, 'export', 'runs', run.id, null, { format: 'pdf' });
           res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('view') ? 'inline' : 'attachment'}; filename="payroll-${run.start}-${run.end}.pdf"` });   // ?view=1 opens it in the browser for printing
-          res.end(payrollRunPdf(run)); return;
+          res.end(payrollRunPdf({ ...run, postedBy: fullNameOf(store, run.postedBy) })); return;
         }
         send(200, run); return;
       }

@@ -1,5 +1,5 @@
 // Data sheet review (HR) and Settings (System Administrator).
-import { fmtDateTime } from './hr-common.js';
+import { fmtDateTime, who } from './hr-common.js';
 
 export function createAdmin(ctx) {
   const { api, esc, table, badge, toast, openDialog, dialog, shell, heading } = ctx;
@@ -12,7 +12,7 @@ export function createAdmin(ctx) {
     const list = await api('/hr/datasheets'), open = list.filter(s => ['submitted', 'under-review'].includes(s.status));
     shell(heading('Data Sheet Submissions', 'Employees submit their information from their own account. Nothing changes in the employee record until HR approves it.') +
       `<section class="panel"><div class="panel-head"><h2>Waiting for review (${open.length})</h2></div>${table(['Employee', 'Department', 'Submitted', 'Status', ''], open.map(s => [esc(s.name), esc(s.department || '—'), fmtDateTime(s.submittedAt), badge(...SHEET[s.status]), `<button class="small primary" data-sheet="${s.id}">Review</button>`]), 'No data sheets waiting for review.')}</section>
-      <section class="panel"><div class="panel-head"><h2>History</h2></div>${table(['Employee', 'Submitted', 'Decision', 'By', 'When', ''], list.filter(s => !open.includes(s)).map(s => [esc(s.name), fmtDateTime(s.submittedAt), badge(...SHEET[s.status]), esc(s.reviewedBy || '—'), fmtDateTime(s.reviewedAt), `<button class="small" data-sheet="${s.id}">View</button>`]), 'No decisions yet.')}</section>
+      <section class="panel"><div class="panel-head"><h2>History</h2></div>${table(['Employee', 'Submitted', 'Decision', 'By', 'When', ''], list.filter(s => !open.includes(s)).map(s => [esc(s.name), fmtDateTime(s.submittedAt), badge(...SHEET[s.status]), esc(who(s.reviewedBy) || '—'), fmtDateTime(s.reviewedAt), `<button class="small" data-sheet="${s.id}">View</button>`]), 'No decisions yet.')}</section>
       <p class="legend">Employees open <strong>My data sheet</strong> in their portal. New hires need an employee login first (Account &amp; access).</p>`);
     document.querySelector('.content').addEventListener('click', event => { const b = event.target.closest('[data-sheet]'); if (b) sheet(b.dataset.sheet); });
   }

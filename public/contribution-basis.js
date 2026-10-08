@@ -1,5 +1,6 @@
 // Per-employee SSS / PhilHealth / Pag-IBIG review: contribution basis per agency (kept apart from the salary),
 // optional fixed shares, a required reason and the full change history. HR and Admin changes apply on save.
+import { who } from './hr-common.js';
 const AGENCIES = ['SSS', 'PhilHealth', 'Pag-IBIG'];
 // Agency badges in each agency's colours (official logo files can replace these: drop them in public/agency/).
 const AGENCY_BADGE = { SSS: ['SSS', 'sss'], PhilHealth: ['PH', 'philhealth'], 'Pag-IBIG': ['PI', 'pagibig'] };
@@ -76,7 +77,7 @@ export function createContributionEditor({ api, esc, money, table, badge, toast,
   function draw() {
     const d = data, e = d.employee;
     const history = table(['Effective', 'By', 'Change (monthly)', 'Status', ''], d.changes.map(ch => [
-      ch.effectiveDate, `${esc(ch.requestedBy)}<small>${esc(ch.requestedAt.slice(0, 16).replace('T', ' '))}</small>`,
+      ch.effectiveDate, `${esc(who(ch.requestedBy))}<small>${esc(ch.requestedAt.slice(0, 16).replace('T', ' '))}</small>`,
       `<span class="wrap">${AGENCIES.filter(n => JSON.stringify(ch.before[n]) !== JSON.stringify(ch.after[n])).map(n => `${n}: salary ${money(ch.before[n].basis)} → ${money(ch.after[n].basis)}, EE ${money(ch.before[n].employee)} → ${money(ch.after[n].employee)}, ER ${money(ch.before[n].employer)} → ${money(ch.after[n].employer)}`).join('<br>') || 'No amount change'}</span>`,
       badge(...STATUS[ch.status]),
       !d.canApprove ? '' : ch.status === 'pending' ? `<button class="small primary" data-cb-review="approve" data-id="${esc(ch.id)}">Apply</button> <button class="small" data-cb-review="reject" data-id="${esc(ch.id)}">Reject</button>` : ch.status === 'approved' ? `<button class="small" data-cb-review="remove" data-id="${esc(ch.id)}">Remove</button>` : '']), 'No adjustments yet.');
