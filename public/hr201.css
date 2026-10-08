@@ -686,3 +686,21 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .accounts-fold { margin: 12px 0; }
 .accounts-fold summary { cursor: pointer; font-weight: 700; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf8; }
 .accounts-fold[open] summary { margin-bottom: 8px; }
+.user-meta { background: none; border: 0; padding: 4px 8px; border-radius: 10px; cursor: pointer; text-align: right; display: grid; color: inherit; }
+.user-meta:hover { background: rgb(0 0 0 / .05); }
+.my-profile { display: flex; gap: 16px; align-items: flex-start; }
+.my-profile h3 { margin: 4px 0 2px; font-size: 18px; }
+/* Account & access / My account: one clickable box per task; details open inside the box. */
+.acc-boxes { display: grid; gap: 10px; margin: 6px 0; }
+.acc-box { border: 1px solid var(--line); border-radius: 14px; background: #fffdf8; }
+.acc-box > summary { list-style: none; display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
+.acc-box > summary::-webkit-details-marker { display: none; }
+.acc-box > summary::after { content: '›'; margin-left: auto; font-size: 22px; color: var(--muted); transition: transform .15s; }
+.acc-box[open] > summary::after { transform: rotate(90deg); }
+.acc-box > summary:hover { background: rgb(0 0 0 / .03); border-radius: 14px; }
+.acc-box > summary strong { display: block; font-size: 15px; }
+.acc-box > summary small { color: var(--muted); font-size: 12px; }
+.acc-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: #f8e9c4; font-size: 18px; flex: none; }
+.acc-box[open] { border-color: #e9c46a; }
+.acc-box > :not(summary) { margin: 0 16px 14px; }
+.portal-account-tools { margin-top: 10px; }

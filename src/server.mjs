@@ -20,7 +20,7 @@ import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOvervie
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
-import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers } from './auth.mjs';
+import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -144,6 +144,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.setHeader('Set-Cookie', `hr_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? '; Secure' : ''}`);
         send(200, { ok: true }); return;
       }
+      if (pathname === '/api/me/account' && req.method === 'GET') { send(200, myAccount(store, auth.user, store.read().employees)); return; }
+      if (pathname === '/api/me/account/link' && req.method === 'POST') { const b = z.object({ employeeId: z.string().max(40) }).strict().parse(await readBody(req)); send(200, linkMyAccount(store, auth.user, b.employeeId, store.read().employees)); return; }
       if (pathname === '/api/password' && req.method === 'POST') {
         checkLimit(store, `password:${auth.user.id}`);
         const body = z.object({ currentPassword: z.string().max(200), newPassword: z.string().min(12).max(200) }).strict().parse(await readBody(req));

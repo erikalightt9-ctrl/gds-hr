@@ -280,3 +280,20 @@ export function signOutEverywhere(store, actor, userId) {
   return { signedOut: n };
 }
 export const activeSessionUsers = store => new Set(store.db.prepare('SELECT DISTINCT user_id FROM sessions WHERE expires > ?').all(Date.now()).map(r => r.user_id));
+// My account (staff): who is signed in and which employee record (201 file) the account belongs to.
+export function myAccount(store, actor, employees) {
+  const row = store.db.prepare('SELECT username, role, employee_id, email FROM users WHERE id=?').get(actor.id);
+  if (!row) throw new AppError('Account not found.', 404);
+  const e = row.employee_id ? employees.find(x => x.id === row.employee_id) : null;
+  return { username: row.username, role: row.role, employeeId: row.employee_id || '', employeeName: e?.name || '', email: row.email || '' };
+}
+// A staff account (admin, HR, payroll…) can be linked to its own employee record so it has a profile too.
+export function linkMyAccount(store, actor, employeeId, employees) {
+  if (!actor || actor.role === 'employee') throw new AppError('Employee accounts are already linked to their record.', 403);
+  const id = String(employeeId || '').trim();
+  if (id && !employees.some(e => e.id === id)) throw new AppError('Employee not found.', 404);
+  if (id) { const other = store.db.prepare('SELECT username FROM users WHERE employee_id=? AND id<>?').get(id, actor.id); if (other) throw new AppError(`That employee record already belongs to the account ${other.username}.`); }
+  store.db.prepare('UPDATE users SET employee_id=? WHERE id=?').run(id || null, actor.id);
+  store.log(actor, 'link-own-record', 'users', actor.id, null, { employeeId: id || null });
+  return myAccount(store, actor, employees);
+}

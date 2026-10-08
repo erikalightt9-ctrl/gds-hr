@@ -24,3 +24,16 @@ test('an account signed in on one device cannot sign in on another until signed 
     assert.ok((await login(store, 'boss2', 'Admin-pass-2026!!', 'k6')).token, 'administrators are not limited');
   } finally { store.close(); }
 });
+
+test('a staff account can link itself to its own employee record (My account); employee accounts cannot change theirs', async () => {
+  const { myAccount, linkMyAccount } = await import('../src/auth.mjs');
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    const admin = await addUser(store, { username: 'boss3', password: 'Admin-pass-2026!!', role: 'admin' }, { username: 'setup', role: 'admin' });
+    const employees = store.read().employees, id = employees[0].id;
+    assert.equal(myAccount(store, admin, employees).employeeId, '');
+    assert.equal(linkMyAccount(store, admin, id, employees).employeeName, employees[0].name);
+    assert.equal(linkMyAccount(store, admin, '', employees).employeeId, '', 'unlinked again');
+    assert.throws(() => linkMyAccount(store, { id: 'x', role: 'employee' }, id, employees), /already linked/);
+  } finally { store.close(); }
+});
