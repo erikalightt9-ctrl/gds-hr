@@ -84,7 +84,7 @@ export function createFiles(ctx) {
   }
   function addEmployee() { openEmployeeForm({ ...ctx, context: ctx.context() }, { title: 'Add employee', values: { employment: { dateHired: ctx.today(), status: 'Active' } }, onSaved: id => openProfile(id) }); }
   async function editEmployee(id, after, only = null, label = '') {
-    try { const data = await api(`/hr/employees/${encodeURIComponent(id)}`); openEmployeeForm({ ...ctx, context: ctx.context() }, { id, title: `Edit ${label ? `${label} · ` : ''}${data.name}`, values: data.form, only, onSaved: () => after() }); } catch (e) { toast(e.message); }
+    try { const data = await api(`/hr/employees/${encodeURIComponent(id)}`); openEmployeeForm({ ...ctx, context: ctx.context() }, { id, title: `Edit ${label ? `${label} · ` : ''}${data.name}`, values: data.form, only, locked: data.locked || [], onSaved: () => after() }); } catch (e) { toast(e.message); }
   }
   function archive(id) {
     const person = people.find(p => p.id === id);

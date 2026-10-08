@@ -738,3 +738,6 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 /* The eye button keeps its own size everywhere (the sign-in page styles every button full width). */
 .pw-wrap .pw-eye, .login-form .pw-wrap .pw-eye { width: 34px; height: 34px; margin: 0; padding: 0; right: 6px; left: auto; box-shadow: none; background: transparent; }
 .login-form .pw-wrap { margin: 0; }
+.locked-field { background: #f3efe6 !important; color: #5a4e34; pointer-events: none; }
+.locked-note { display: block; color: #8a6d1e; font-size: 11px; font-weight: 600; margin-top: 2px; }
+.missing-details { border-color: #e9c46a; }

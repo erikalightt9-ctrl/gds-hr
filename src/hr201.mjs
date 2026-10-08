@@ -6,6 +6,7 @@ import { saveProfile, localToday } from './profiles.mjs';
 import { HR_MANAGERS, HR_TEAM, DIRECTORY, DASHBOARD, SENSITIVE_IDS } from './roles.mjs';
 import { personalNames, titleCase } from './names.mjs';
 import { leaveBalance } from './engine.mjs';
+import { assertMakerCanChange, lockedFields } from './field-locks.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
@@ -193,6 +194,7 @@ export function updateEmployee(store, actor, id, input) {
     const state = store.read(), master = state.employees.find(e => e.id === id);
     if (!master) throw new AppError('Employee not found.', 404);
     if (v.employeeNumber && state.employees.some(e => e.id !== id && [e.id, e.employeeNumber].includes(v.employeeNumber))) throw new AppError('That employee number is already used.');
+    assertMakerCanChange(store, actor, id, v);
     const existing = Object.fromEntries(['personal', 'employment', 'emergency', 'government'].map(s => [s, profileOf(store, id, s)]));
     if (master.department !== v.employment.department || master.startDate !== v.employment.dateHired || (master.employeeNumber || '') !== v.employeeNumber) {
       saveRecord(store, actor, 'employees', { ...master, department: v.employment.department, startDate: v.employment.dateHired, employeeNumber: v.employeeNumber }, { trusted: true });
@@ -212,7 +214,7 @@ export function employeeForm(store, actor, id) {
   const showIds = SENSITIVE_IDS.includes(actor.role) || own, mask = v => (v ? (showIds ? v : `•••• ${String(v).slice(-3)}`) : '');
   const hrView = HR_TEAM.includes(actor.role) || (actor.role === 'employee' && actor.employeeId === id);   // employees: their own record only
   return {
-    id, number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
+    id, locked: actor.role === 'maker' ? lockedFields(store, id) : [], number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
     form: {
       employeeNumber: e.employeeNumber || '',
       personal: { firstName: p.firstName || '', middleName: p.middleName || '', lastName: p.lastName || '', suffix: p.suffix || '', preferredName: p.preferredName || '', sex: hrView ? p.sex || '' : '', birthDate: hrView ? p.birthDate || '' : '', birthPlace: hrView ? p.birthPlace || '' : '', civilStatus: hrView ? p.civilStatus || '' : '', bloodType: HR_MANAGERS.includes(actor.role) ? p.bloodType || '' : '', nationality: hrView ? p.nationality || '' : '' },

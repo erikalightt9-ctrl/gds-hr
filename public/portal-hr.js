@@ -140,6 +140,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   const statusText = i => (i.numberOnly ? (i.status === 'Verified' ? 'Complied — number on file' : 'Not complied — enter the number in My data sheet') : STATUS_TEXT[i.status] || i.status);
   const STATUS_TEXT = { Missing: 'Not complied — upload required', Rejected: 'Rejected — upload again', Expired: 'Expired — upload a renewed copy', Submitted: 'Submitted — waiting for HR review', 'Under Review': 'Under HR review', Verified: 'Complied', 'Not Applicable': 'Not applicable' };
   async function compliance(app, onDashboard) {
+    if (onDashboard) missingNotice(app).catch(() => {});
     try {
       const list = await api('/hr/me/documents'), due = toComply(list);
       const tabButton = app.querySelector('[data-portal-tab="files201"]');
@@ -171,6 +172,16 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       const file = input.files[0]; if (!file) return;
       try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); documents(box, await api('/hr/me/documents')); } catch (error) { toast(error.message); }
     };
+  }
+  // Employee dashboard: details still missing from their record, with a button to fill them in (data sheet).
+  async function missingNotice(app) {
+    const main = app.querySelector('.employee-main'); if (!main || main.querySelector('.missing-details')) return;
+    const sheet = await api('/hr/me/datasheet');
+    if (!sheet.missing?.length || ['submitted', 'under-review'].includes(sheet.current?.status)) return;
+    const box = document.createElement('section'); box.className = 'compliance-alert missing-details'; box.setAttribute('role', 'status');
+    box.innerHTML = `<div><strong>📝 Please complete your details (${sheet.missing.length})</strong><ol class="comply-list">${sheet.missing.map(x => `<li>${esc(x)}</li>`).join('')}</ol><p class="legend">Fill them in on your data sheet and submit it to HR.</p></div><button class="primary" data-portal-tab="datasheet">Fill in now</button>`;
+    const anchor = main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
+    if (anchor) anchor.after(box); else main.prepend(box);
   }
   // Shown at the top of the employee's dashboard on celebration days.
   async function celebrations(main) {

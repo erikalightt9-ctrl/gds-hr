@@ -22,7 +22,7 @@ const SECTIONS = ctx => [
     ['employment.dateHired', 'Date hired', 'date', { required: true }], ['employment.department', 'Subsidiary', 'list', { required: true, list: ctx.departments }], ['employment.position', 'Position', 'list', { required: true, list: ctx.positions }],
     ['employment.supervisor', 'Immediate supervisor'], ['employment.workLocation', 'Work location'], ['employment.employmentType', 'Employment type', 'select', { options: ['', 'Full-Time', 'Part-Time', 'Other'] }], ['employment.jobLevel', 'Job level', 'text', { placeholder: 'e.g. 1, Rank and file, Supervisor' }], ['employment.status', 'Status', 'select', { options: ['Active', 'Inactive', 'On Leave'] }],
     ['employment.classification', 'Employment classification', 'select', { required: true, options: ['', ...ctx.classifications] }], ['employment.contractStart', 'Contract start', 'date'], ['employment.contractEnd', 'Contract end', 'date'],
-    ['employment.probationEnd', 'Probation end (reminder only)', 'date'], ['employment.reviewDate', 'Performance review date (reminder only)', 'date'], ['employeeNumber', 'Displayed employee number (optional)', 'text', { placeholder: 'Leave blank to use the generated number' }],
+    ['employment.probationEnd', 'Probation end (reminder only)', 'date'], ['employment.reviewDate', 'Performance review date (reminder only)', 'date'], ['employeeNumber', 'Employee ID', 'text', { placeholder: 'e.g. 2026-1003 (blank = generated number)' }],
   ]],
   ...(ctx.can.sensitiveIds ? [['Government identifiers (restricted)', [['government.tin', 'TIN'], ['government.sss', 'SSS number'], ['government.philHealth', 'PhilHealth number'], ['government.pagIbig', 'Pag-IBIG MID']]]] : []),
 ];
@@ -68,10 +68,17 @@ function clientErrors(v) {
   return errors;
 }
 // Opens the form; resolves after a successful save with the saved employee id.
-export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context }, { id = null, values = {}, title = 'Add employee', onSaved, only = null }) {
+export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context }, { id = null, values = {}, title = 'Add employee', onSaved, only = null, locked = [] }) {
   openDialog(title, employeeFormHtml(context, esc, values, { isNew: !id, only }));
   dialog.classList.add('wide-dialog');
   const form = dialog.querySelector('#employee-form');
+  // Details the employee provided (approved by HR): read-only here; only HR can change them.
+  for (const path of locked) {
+    const input = form.querySelector(`[name="${path}"]`); if (!input) continue;
+    input.readOnly = true; input.classList.add('locked-field'); input.setAttribute('aria-readonly', 'true'); input.tabIndex = -1;
+    input.closest('label')?.insertAdjacentHTML('beforeend', '<small class="locked-note">🔒 Provided by the employee · only HR can change</small>');
+  }
+  if (locked.length) form.insertAdjacentHTML('afterbegin', `<p class="notice compact">🔒 ${locked.length} detail${locked.length === 1 ? ' was' : 's were'} provided by the employee and approved by HR, so ${locked.length === 1 ? 'it is' : 'they are'} read-only. You can fill in anything still empty.</p>`);
   let dirty = false, photo = null;
   form.addEventListener('input', () => { dirty = true; });
   const same = form.querySelector('[data-same-address]');

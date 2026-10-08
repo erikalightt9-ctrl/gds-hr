@@ -7,6 +7,7 @@ import { AppError, permit } from './service.mjs';
 import { saveProfile, localToday } from './profiles.mjs';
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
 import { personalNames, titleCase } from './names.mjs';
+import { lockFields, missingDetails } from './field-locks.mjs';
 
 const f = (max = 200) => z.string().trim().max(max).default('');
 const date = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default('');
@@ -36,7 +37,7 @@ export function mySheet(store, actor) {
   permit(actor, ['employee']);
   const sheets = all(store, 'WHERE employee_id=? ORDER BY rowid DESC', actor.employeeId);
   const open = sheets.find(s => OPEN.includes(s.status));
-  return { current: open || { id: null, status: 'new', fields: currentValues(store, actor.employeeId), history: [] }, past: sheets.filter(s => s !== open).map(s => ({ id: s.id, status: s.status, submittedAt: s.submittedAt, reviewedBy: s.reviewedBy, reviewNote: s.reviewNote })) };
+  return { missing: missingDetails(store, actor.employeeId), current: open || { id: null, status: 'new', fields: currentValues(store, actor.employeeId), history: [] }, past: sheets.filter(s => s !== open).map(s => ({ id: s.id, status: s.status, submittedAt: s.submittedAt, reviewedBy: s.reviewedBy, reviewNote: s.reviewNote })) };
 }
 export function saveMySheet(store, actor, input, submit = false) {
   permit(actor, ['employee']);
@@ -90,6 +91,7 @@ export function reviewSheet(store, actor, id, input) {
       saveProfile(store, actor, sheet.employeeId, 'personal', { ...personal, ...filled(v.personal), ...filled({ personalEmail: v.contact.personalEmail, mobile: v.contact.mobile, address: v.contact.currentAddress, permanentAddress: v.contact.permanentAddress }) });
       if (Object.values(v.emergency).some(Boolean)) saveProfile(store, actor, sheet.employeeId, 'emergency', { ...profileOf(store, sheet.employeeId, 'emergency'), ...filled(v.emergency) });
       if (Object.values(v.government).some(Boolean)) saveProfile(store, actor, sheet.employeeId, 'government', { ...profileOf(store, sheet.employeeId, 'government'), ...filled(v.government) });
+      lockFields(store, actor, sheet.employeeId, ['personal', 'contact', 'emergency', 'government'].flatMap(g => Object.entries(v[g] || {}).filter(([, x]) => x !== '').map(([k]) => `${g}.${k}`)));
     }
     const status = { 'under-review': 'under-review', approve: 'approved', return: 'returned', reject: 'rejected' }[decision];
     const updated = { ...sheet, status, reviewedBy: actor.username, reviewedAt: new Date().toISOString(), reviewNote: note, history: [...sheet.history, event(actor, status, note)] };

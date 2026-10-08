@@ -37,3 +37,19 @@ test('a staff account can link itself to its own employee record (My account); e
     assert.throws(() => linkMyAccount(store, { id: 'x', role: 'employee' }, id, employees), /already linked/);
   } finally { store.close(); }
 });
+
+test('a Maker can fill empty details and record government numbers, but not change details the employee provided (approved by HR)', async () => {
+  const { lockFields, assertMakerCanChange, missingDetails } = await import('../src/field-locks.mjs');
+  const { saveProfile } = await import('../src/profiles.mjs');
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    const id = store.read().employees[0].id, maker = { username: 'mk', role: 'maker' }, hr = { username: 'hr1', role: 'hr' };
+    saveProfile(store, maker, id, 'government', { sss: '34-1234567-8' });   // was refused before
+    saveProfile(store, hr, id, 'personal', { firstName: 'Ana', lastName: 'Cruz', mobile: '09170000000' });
+    assert.ok(missingDetails(store, id).includes('Date of birth'));
+    lockFields(store, hr, id, ['contact.mobile']);
+    assert.throws(() => assertMakerCanChange(store, maker, id, { contact: { mobile: '09179999999' } }), /provided by the employee/);
+    assert.doesNotThrow(() => assertMakerCanChange(store, maker, id, { contact: { mobile: '09170000000' }, personal: { birthDate: '1990-01-01' } }), 'unchanged locked detail and an empty one are fine');
+    assert.doesNotThrow(() => assertMakerCanChange(store, hr, id, { contact: { mobile: '09179999999' } }), 'HR can still change it');
+  } finally { store.close(); }
+});
