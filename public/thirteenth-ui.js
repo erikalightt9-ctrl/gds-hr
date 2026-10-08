@@ -7,6 +7,38 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
   // Amounts show as 1,000.00 in the boxes; commas are removed before saving.
   const fmtAmount = v => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
+  // Undo / redo for the salary records grid, like Excel: each finished edit (and the 13th month it recalculated) is one step.
+  const history = { undo: [], redo: [] };
+  let snapshot = null;
+  const cellKey = el => (el.dataset.thOv ? `ov|${el.dataset.thOv}|${el.dataset.emp}` : `m|${el.dataset.prior}|${el.dataset.month}`);
+  const gridCells = () => [...document.querySelectorAll('.th-grid [data-th-ov], .th-grid [data-prior]')];
+  const readGrid = () => new Map(gridCells().map(el => [cellKey(el), el.value]));
+  const cellOf = key => gridCells().find(el => cellKey(el) === key);
+  function recordStep() {
+    if (!snapshot) return;
+    const now = readGrid(), step = [...now].filter(([k, v]) => snapshot.has(k) && snapshot.get(k) !== v).map(([k, v]) => ({ key: k, before: snapshot.get(k), after: v }));
+    snapshot = now;
+    if (step.length) { history.undo.push(step); history.redo = []; syncUndo(); }
+  }
+  function applyStep(from, to, side) {
+    recordStep();
+    const step = from.pop(); if (!step) return;
+    for (const c of step) { const el = cellOf(c.key); if (el) el.value = c[side]; }
+    to.push(step); snapshot = readGrid(); syncUndo();
+    toast(`${side === 'before' ? 'Undone' : 'Redone'}. Click Save salary records to keep it.`);
+  }
+  function syncUndo() {
+    const u = document.querySelector('#th-undo'), r = document.querySelector('#th-redo');
+    if (u) u.disabled = !history.undo.length; if (r) r.disabled = !history.redo.length;
+  }
+  document.addEventListener('keydown', e => {
+    if (!document.querySelector('.th-grid') || !(e.ctrlKey || e.metaKey) || document.querySelector('dialog[open]')) return;
+    const key = e.key.toLowerCase(), typing = e.target.matches?.('input, textarea');
+    // Inside a box the browser undoes the typing of that box; once you leave it, Ctrl+Z / Ctrl+Y undo whole edits.
+    if (typing && snapshot && cellOf(cellKey(e.target)) === e.target && e.target.value !== snapshot.get(cellKey(e.target))) return;
+    if (key === 'z' && !e.shiftKey) { e.preventDefault(); applyStep(history.undo, history.redo, 'before'); }
+    else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); applyStep(history.redo, history.undo, 'after'); }
+  });
   const parseAmount = v => { const s = String(v ?? '').replace(/,/g, '').trim(); return s === '' ? '' : s; };
   // Leaving an amount box shows it as 1,000.00 (text that is not a number is left for the user to correct).
   document.addEventListener('focusout', e => { if (e.target.matches?.('[data-amount]')) { const v = parseAmount(e.target.value); if (v !== '' && !Number.isNaN(Number(v))) e.target.value = fmtAmount(v); } });
@@ -50,10 +82,12 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       <section class="panel"><div class="panel-head"><div class="th-head"><span class="legend">Basic salary actually earned each month (after absences and unpaid leave; exclude overtime, holiday premiums and allowances). Leave blank to clear.</span></div></div>
         <div class="th-year-band">YEAR ${esc(year)}</div>
         <div class="table-wrap th-grid">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), 'Total earned', '13th month pay'], L.map(gridRow), 'No employees.')}</div>
-        ${editable ? '<div class="panel-foot"><span></span><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
+        ${editable ? '<div class="panel-foot"><div class="actions"><button class="small" id="th-undo" title="Undo (Ctrl+Z)" disabled>↶ Undo</button><button class="small" id="th-redo" title="Redo (Ctrl+Y)" disabled>↷ Redo</button></div><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
       ${finalPanel()}`);
     const content = document.querySelector('.content');
     content.addEventListener('click', onClick);
+    snapshot = readGrid(); syncUndo();
+    content.addEventListener('change', e => { if (e.target.closest('.th-grid')) recordStep(); });
     // Typing a Total earned updates that row's 13th month pay (÷ 12) unless the 13th month was edited separately.
     content.addEventListener('input', e => {
       if (e.target.dataset.thOv !== 'total') return;
@@ -108,7 +142,10 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
   async function onClick(event) {
     const b = event.target.closest('button'); if (!b) return;
     try {
+      if (b.id === 'th-undo') { applyStep(history.undo, history.redo, 'before'); return; }
+      if (b.id === 'th-redo') { applyStep(history.redo, history.undo, 'after'); return; }
       if (b.id === 'th-save') {
+        recordStep();
         const bad = [...document.querySelectorAll('[data-prior]')].find(i => parseAmount(i.value) !== '' && (Number.isNaN(Number(parseAmount(i.value))) || Number(parseAmount(i.value)) < 0));
         if (bad) { bad.focus(); toast(`Check the amount “${bad.value}”: enter a number such as 1,000.00.`); return; }
         const entries = [...document.querySelectorAll('[data-prior]')].flatMap(input => {
