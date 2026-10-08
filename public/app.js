@@ -1014,15 +1014,17 @@ document.addEventListener('input', event => {
 document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } if (event.target.id === 'records-date' && event.target.value) { recordsDate = event.target.value; render(); } });
 setupInstall();
 // Show / hide password: every password box gets an eye button (sign-in, account and first-time password forms).
+const EYE_OPEN = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.7 17.7 0 0 1-3.2 4.2M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
 const enhancePasswords = root => root.querySelectorAll?.('input[type="password"]:not([data-eye])').forEach(input => {
   input.dataset.eye = '1';
   const wrap = document.createElement('span'); wrap.className = 'pw-wrap';
   input.parentNode.insertBefore(wrap, input); wrap.append(input);
   const eye = document.createElement('button');
-  eye.type = 'button'; eye.className = 'pw-eye'; eye.textContent = '👁'; eye.setAttribute('aria-label', 'Show password'); eye.title = 'Show password';
+  eye.type = 'button'; eye.className = 'pw-eye'; eye.innerHTML = EYE_OPEN; eye.setAttribute('aria-label', 'Show password'); eye.title = 'Show password';
   eye.addEventListener('click', () => {
     const show = input.type === 'password';
-    input.type = show ? 'text' : 'password'; eye.textContent = show ? '🙈' : '👁';
+    input.type = show ? 'text' : 'password'; eye.innerHTML = show ? EYE_OFF : EYE_OPEN;
     eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); eye.title = show ? 'Hide password' : 'Show password';
     input.focus();
   });
