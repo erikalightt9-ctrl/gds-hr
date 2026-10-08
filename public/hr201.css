@@ -752,3 +752,11 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .hol-month li .dot { margin-top: 5px; }
 .hol-name { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .hol-edit { flex: none; margin-left: auto; }
+/* Government Contributions: month buttons */
+.month-picker { display: grid; gap: 8px; }
+.month-year { display: flex; align-items: center; gap: 10px; }
+.month-year strong { font-size: 18px; min-width: 48px; text-align: center; }
+.month-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.month-buttons button { min-width: 52px; }
+.month-buttons button.active { background: linear-gradient(180deg, #c32a37, #96131f); color: #fff; border-color: #96131f; }
+.month-buttons button.now:not(.active) { border-color: #e9c46a; font-weight: 700; }
