@@ -37,6 +37,7 @@ let employeeStatusFilter = 'All Employees';
 let attendanceView = 'records'; // 'records' (all employees) or 'timecard' (one employee beside pay)
 let payrollEmployee = '';
 let computationContext = null; // the payroll computation being reviewed, reopened after an adjustment is saved // '' = all employees; otherwise the one Employee ID being calculated
+let recordsDate = '';   // Attendance → Daily records: the date shown (blank = today)
 let employeeData = null, liveData = null, eventStream = null, liveTimer = null, liveUser = null, refreshTimer = null;
 const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, portalHr: createPortalHr({ api, esc, table: (h, r, empty = 'Nothing to show yet.') => table(h, r, empty), toast, confirm: (title, message) => openDialog(title, `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${message}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>') }), onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
 const contributionEditor = createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog });
@@ -255,8 +256,23 @@ function attendancePage() {
   const views = `<div class="tabs"><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily records · all employees</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Employee timecard · check against pay</button></div>`;
   const top = heading('Attendance', '') + views;
   if (attendanceView === 'timecard') return top + timecard.panel(state);
-  const list = filtered(state.attendance).sort((a, b) => b.date.localeCompare(a.date));
-  return top + `<section class="panel"><div class="panel-head"><h2>Daily records</h2>${downloads('attendance')}<span class="legend">Times use Asia/Manila · unpaid breaks are excluded</span></div>${searchToolbar()}${table(['Employee', 'Date', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], list.map(a => [employee(a.employeeId), a.date, a.scheduledIn, a.status === 'present' ? `${a.timeIn} → ${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '—', badge(a.status, 'neutral'), `${a.offsetMinutes} min${a.exception ? '<br><small>Approved exception</small>' : ''}`, badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('attendance', a.id)]))}</section>`;
+  // One date at a time: every employee for the chosen day (finished record, timed in, on leave, rest day or no time in).
+  const day = recordsDate || today(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+  const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= day && (!e.endDate || e.endDate >= day))
+    .filter(e => !filter || `${e.name} ${e.id}`.toLowerCase().includes(filter.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
+  const rows = people.map(e => {
+    const a = state.attendance.find(x => x.employeeId === e.id && x.date === day);
+    if (a) return [employee(e.id), a.scheduledIn, a.status === 'present' ? `${a.timeIn} → ${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '—', badge(a.status === 'present' ? 'Present' : a.status, 'neutral'), `${a.offsetMinutes} min${a.exception ? '<br><small>Approved exception</small>' : ''}`, badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('attendance', a.id)];
+    const open = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === day);
+    const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && (l.countedDates || []).includes(day));
+    const status = open ? badge('Timed in · no time out yet', 'pending') : leave ? badge('On leave', '') : (e.restDays || []).includes(weekday) ? badge('Rest day', 'neutral') : badge(day > today() ? '—' : 'No time in', day > today() ? 'neutral' : 'rejected');
+    return [employee(e.id), e.scheduleStart || '—', open ? `${open.time} → —` : '—', status, '—', '—', ''];
+  });
+  const shift = n => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const label = new Date(`${day}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  return top + `<section class="panel"><div class="panel-head"><div><h2>Daily records · ${esc(label)}</h2><p>${rows.length} employee${rows.length === 1 ? '' : 's'} · times use Asia/Manila</p></div>${downloads('attendance')}</div>
+    <div class="toolbar records-day"><button class="small" data-records-day="${shift(-1)}">‹ Previous day</button><label>Date<input type="date" id="records-date" value="${day}"></label><button class="small" data-records-day="${shift(1)}">Next day ›</button>${day !== today() ? `<button class="small" data-records-day="${today()}">Today</button>` : ''}<input class="search" id="search" placeholder="Search employee" value="${esc(filter)}" aria-label="Search employee"></div>
+    ${table(['Employee', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], rows, 'No employees for this date.')}</section>`;
 }
 // Proof (e.g. a medical certificate) uploaded by the employee: HR opens it, then confirms or asks for a new one.
 const proofBadges = { required: ['Waiting for employee', 'pending'], submitted: ['Ready to review', 'pending'], verified: ['Confirmed', ''], rejected: ['New proof requested', 'rejected'] };
@@ -883,6 +899,7 @@ document.addEventListener('click', async event => {
     if (b.dataset.attendanceView) { attendanceView = b.dataset.attendanceView; render(); }
     if (b.dataset.add) edit(b.dataset.add);
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
+    if (b.dataset.recordsDay) { recordsDate = b.dataset.recordsDay; render(); return; }
     if (b.dataset.releaseRun) {
       const run = state.runs.find(r => r.id === b.dataset.releaseRun);
       if (!window.confirm(`Send the payslips for ${run?.start} to ${run?.end} to ${run?.rows.length} employees now? They will see them in My payslips and get a notification.`)) return;
@@ -986,7 +1003,7 @@ document.addEventListener('input', event => {
   const panel = event.target.closest('[data-contribution-rule]'), rule = state.rules.find(r => r.id === panel.dataset.contributionRule);
   panel.querySelector('[data-contribution-result]').innerHTML = event.target.value === '' ? '' : renderCalculation(rule, Number(event.target.value), { table });
 });
-document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } });
+document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } if (event.target.id === 'records-date' && event.target.value) { recordsDate = event.target.value; render(); } });
 setupInstall();
 // Show / hide password: every password box gets an eye button (sign-in, account and first-time password forms).
 const enhancePasswords = root => root.querySelectorAll?.('input[type="password"]:not([data-eye])').forEach(input => {
