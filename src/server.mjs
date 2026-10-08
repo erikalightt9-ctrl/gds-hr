@@ -174,7 +174,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         const payslip = pathname.match(/^\/api\/me\/payslips\/([a-f0-9-]+)(\.pdf)?$/);
         if (payslip && req.method === 'GET') {
           const data = ownPayslip(store, auth.user, payslip[1]);
-          if (payslip[2]) { store.log(auth.user, 'download-payslip', 'payslip', data.id, null, { employeeId: auth.user.employeeId }); res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="payslip-${data.start}-${data.end}.pdf"` }); res.end(payslipPdf(data)); return; }
+          if (payslip[2]) { store.log(auth.user, 'download-payslip', 'payslip', data.id, null, { employeeId: auth.user.employeeId }); res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('view') ? 'inline' : 'attachment'}; filename="payslip-${data.start}-${data.end}.pdf"` }); res.end(payslipPdf(data)); return; }
           send(200, data); return;
         }
         throw new AppError('Not found.', 404);
