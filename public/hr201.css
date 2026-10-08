@@ -734,3 +734,7 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .dot.kind-regular { background: #c32a37; }
 .dot.kind-special { background: #e0a526; }
 .dot.kind-ordinary { background: #9a9a9a; }
+.hol-years { padding: 12px 16px 0; margin: 0; }
+/* The eye button keeps its own size everywhere (the sign-in page styles every button full width). */
+.pw-wrap .pw-eye, .login-form .pw-wrap .pw-eye { width: 34px; height: 34px; margin: 0; padding: 0; right: 6px; left: auto; box-shadow: none; background: transparent; }
+.login-form .pw-wrap { margin: 0; }

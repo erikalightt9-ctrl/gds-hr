@@ -28,6 +28,7 @@ import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
 import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, reviewOutOfOffice } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
+import { ensureHolidayYears } from './holidays-auto.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
@@ -351,6 +352,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const store = new Store(path.join(data, 'hr.sqlite'));
   const migrated = runMigrations(store);
   if (Object.values(migrated).some(Boolean)) console.log(`One-time updates applied: ${JSON.stringify(migrated)} (see the audit trail).`);
+  // Holiday calendar: this year and next year are filled in automatically (checked at start and twice a day).
+  const holidayCheck = () => { try { const added = ensureHolidayYears(store); if (added.length) console.log(`Holidays added automatically for ${added.join(', ')}.`); } catch (error) { console.error('Automatic holiday calendar:', error.message); } };
+  holidayCheck(); setInterval(holidayCheck, 12 * 3600000).unref();
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });
