@@ -130,6 +130,18 @@ export function finalPayRecords(store, actor) {
   permit(actor, PAY);
   return store.db.prepare('SELECT data FROM final_pay ORDER BY rowid DESC').all().map(r => JSON.parse(r.data));
 }
+// Years added ahead on the 13th Month page ("+ Add year"): the latest one is kept in hr_counters.
+const YEAR_KEY = 'thirteenth:last-year';
+export const lastAddedYear = store => store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(YEAR_KEY)?.value || 0;
+export function addThirteenthYear(store, actor) {
+  permit(actor, PAY);
+  return store.transaction(() => {
+    const next = Math.max(Number(localToday().slice(0, 4)), lastAddedYear(store)) + 1;
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(YEAR_KEY, next);
+    store.log(actor, 'add-year', 'thirteenth', String(next), null, { year: next });
+    return { lastYear: next };
+  });
+}
 // Everything the 13th Month page needs in one call.
 export function thirteenthOverview(store, actor, year) {
   permit(actor, [...PAY, 'viewer']);
@@ -143,7 +155,7 @@ export function thirteenthOverview(store, actor, year) {
     byMonth[m] = r2((byMonth[m] || 0) + (row.applicableBasic || 0));
   }
   return {
-    year, ledger: thirteenthLedger(store, actor, year), postedMonths, postedBasic, canEncode: PAY.includes(actor.role),
+    year, lastYear: lastAddedYear(store), ledger: thirteenthLedger(store, actor, year), postedMonths, postedBasic, canEncode: PAY.includes(actor.role),
     prior: state.priorEarnings.filter(p => p.month.startsWith(`${year}-`)),
     years: [...new Set([...state.runs.map(r => r.start.slice(0, 4)), ...state.priorEarnings.map(p => p.month.slice(0, 4))])],
   };

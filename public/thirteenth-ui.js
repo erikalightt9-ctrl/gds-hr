@@ -16,11 +16,15 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
   async function chooser() {
     shell(heading('13th month pay', 'Loading…') + '<div class="loading">Loading…</div>');
     const thisYear = today().slice(0, 4), current = await api(`/thirteenth?year=${thisYear}`);
-    const years = [...new Set([...Array.from({ length: 6 }, (_, i) => String(Number(thisYear) + i)), ...current.years])].sort();
+    // This year, every year with records, and the years added ahead with "+ Add year".
+    const last = Math.max(Number(thisYear), current.lastYear || 0), years = [...new Set([...Array.from({ length: last - Number(thisYear) + 1 }, (_, i) => String(Number(thisYear) + i)), ...current.years])].sort();
     const accrued = r => money(r.ledger.reduce((s, x) => s + x.accrued, 0));
     shell(heading('13th month pay', 'Choose a year to see each employee\'s basic salary, the 13th month earned and the balance to pay.') +
-      `<div class="year-cards">${years.map(y => `<button class="year-card${y === thisYear ? ' current' : ''}" data-th-open="${esc(y)}"><strong>${esc(y)}</strong><span>13th Month Pay</span><small>${y === thisYear ? `Earned so far ${accrued(current)}` : y > thisYear ? 'Fills in from payroll' : 'Past year'}</small></button>`).join('')}</div>`);
-    document.querySelector('.content').onclick = e => { const b = e.target.closest('[data-th-open]'); if (b) { year = b.dataset.thOpen; render().catch(err => toast(err.message)); } };
+      `<div class="year-cards">${years.map(y => `<button class="year-card${y === thisYear ? ' current' : ''}" data-th-open="${esc(y)}"><strong>${esc(y)}</strong><span>13th Month Pay</span><small>${y === thisYear ? `Earned so far ${accrued(current)}` : y > thisYear ? 'Fills in from payroll' : 'Past year'}</small></button>`).join('')}${current.canEncode ? `<button class="year-card add-year" data-th-add><strong>＋</strong><span>Add year</span><small>Adds ${last + 1}</small></button>` : ''}</div>`);
+    document.querySelector('.content').onclick = async e => {
+      if (e.target.closest('[data-th-add]')) { try { await api('/thirteenth/years', {}); await chooser(); } catch (err) { toast(err.message); } return; }
+      const b = e.target.closest('[data-th-open]'); if (b) { year = b.dataset.thOpen; render().catch(err => toast(err.message)); }
+    };
   }
   async function render() {
     if (!year) return chooser();
