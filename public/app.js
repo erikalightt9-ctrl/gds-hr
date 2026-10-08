@@ -942,7 +942,18 @@ document.addEventListener('click', async event => {
       dialog.querySelector('#confirm-post').onclick = async event => {
         event.target.disabled = true;
         try { currentRun = await api('/payroll/post', { start: run.start, end: run.end, pay13th: run.pay13th, fingerprint: run.fingerprint, ...(run.employeeIds ? { employeeIds: run.employeeIds } : {}) }); await refresh(); dialog.close(); render(); openDialog('Payroll finalized', `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">🔒</p><p>Payroll for <strong>${esc(currentRun.start)} — ${esc(currentRun.end)}</strong> is final.<br>Finalized on ${esc(new Date(currentRun.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }))} by ${esc(currentRun.postedBy)}. It can no longer be edited.</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>'); }
-        catch (e) { toast(e.message); event.target.disabled = false; }
+        catch (e) {
+          // Errors show inside this dialog (a toast would sit behind it). Changed records: recalculate and ask again.
+          let message = e.message;
+          if (/Records changed after preview/i.test(message)) {
+            try { currentRun = await api('/payroll/preview', { start: run.start, end: run.end, pay13th: run.pay13th, ...(run.employeeIds ? { employeeIds: run.employeeIds } : {}) }); render(); message = `Records changed since this payroll was generated, so it was recalculated. Net payroll is now ${money(currentRun.totals.net)}${currentRun.blockers.length ? ` and ${currentRun.blockers.length} item(s) must be resolved first` : ''}. Close this window, review, then click Finalize payroll again.`; }
+            catch (again) { message = again.message; }
+          }
+          const box = dialog.querySelector('[data-post-error]') || Object.assign(document.createElement('p'), { className: 'form-error' });
+          box.setAttribute('data-post-error', ''); box.setAttribute('role', 'alert'); box.textContent = message;
+          dialog.querySelector('.dialog-body')?.append(box);
+          event.target.disabled = /recalculated/.test(message);
+        }
       };
     }
   } catch (e) { toast(e.message); }
