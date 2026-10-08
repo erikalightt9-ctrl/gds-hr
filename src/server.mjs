@@ -16,7 +16,7 @@ import { contributionReview, submitContributionChange, reviewContributionChange,
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
 import { decideLoanApplication, loanDashboard, setLoanSkips } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
-import { thirteenthOverview, savePriorEarnings, computeFinalPay, finalPayOverview, addThirteenthYear } from './thirteenth.mjs';
+import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayOverview, addThirteenthYear } from './thirteenth.mjs';
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
@@ -208,6 +208,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/holidays/add-year' && req.method === 'POST') { send(200, addNextHolidayYear(store, auth.user)); return; }
       if (pathname === '/api/thirteenth/years' && req.method === 'POST') { send(200, addThirteenthYear(store, auth.user)); return; }
       if (pathname === '/api/thirteenth/prior' && req.method === 'POST') { send(200, savePriorEarnings(store, auth.user, await readBody(req))); return; }
+      if (pathname === '/api/thirteenth/overrides' && req.method === 'POST') { send(200, saveThirteenthOverrides(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/final-pay' && req.method === 'GET') { send(200, finalPayOverview(store, auth.user)); return; }
       if (pathname === '/api/final-pay/compute' && req.method === 'POST') { send(200, computeFinalPay(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }

@@ -787,3 +787,8 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .leave-dropdown[open] summary::after { content: '\25B4'; }
 .leave-options { position: absolute; z-index: 5; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; box-shadow: 0 10px 30px #0000001f; padding: 6px 10px; max-height: 260px; overflow: auto; }
 .leave-options label.check { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-weight: 500; }
+.th-grid button.th-month-total { display: block; width: 100%; padding: 6px 3px; font-size: 11px; text-align: right; color: inherit; font-weight: 600; cursor: pointer; border-radius: 6px; }
+.th-grid button.th-month-total:hover { border-color: var(--brand, #b51f2b); background: #fffaf0; }
+.th-grid input.th-ov { font-weight: 700; }
+.th-grid input.th-13 { color: var(--red-700, #8f1420); }
+.th-grid input.th-edited { border-color: var(--brand, #b51f2b); background: #fff6f6; }

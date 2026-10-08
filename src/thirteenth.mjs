@@ -42,10 +42,40 @@ export function savePriorEarnings(store, actor, input) {
     return { saved, removed };
   });
 }
+// ---------- Edited yearly totals ----------
+// HR can type an employee's Total earned and/or 13th month pay for a year; blank (or the computed amount) goes back to the computation.
+const ensureOverrides = store => store.db.exec('CREATE TABLE IF NOT EXISTS thirteenth_overrides(employee_id TEXT NOT NULL, year TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, year))');
+const overrideAmount = z.number().min(0).max(100_000_000).nullable().default(null);
+const overrideSchema = z.object({ year: z.string().regex(/^\d{4}$/), entries: z.array(z.object({ employeeId: z.string().min(1).max(80), totalBasic: overrideAmount, thirteenth: overrideAmount }).strict()).min(1).max(2000) }).strict();
+function overridesFor(store, year) {
+  ensureOverrides(store);
+  return new Map(store.db.prepare('SELECT employee_id, data FROM thirteenth_overrides WHERE year=?').all(year).map(r => [r.employee_id, JSON.parse(r.data)]));
+}
+export function saveThirteenthOverrides(store, actor, input) {
+  permit(actor, PAY);
+  const { year, entries } = overrideSchema.parse(input);
+  ensureOverrides(store);
+  return store.transaction(() => {
+    const state = store.read(); let saved = 0;
+    for (const e of entries) {
+      if (!state.employees.some(x => x.id === e.employeeId)) throw new AppError(`Unknown employee ${e.employeeId}.`);
+      const before = store.db.prepare('SELECT data FROM thirteenth_overrides WHERE employee_id=? AND year=?').get(e.employeeId, year);
+      if (e.totalBasic === null && e.thirteenth === null) {
+        if (before) { store.db.prepare('DELETE FROM thirteenth_overrides WHERE employee_id=? AND year=?').run(e.employeeId, year); store.log(actor, 'delete', 'thirteenth-overrides', `${e.employeeId}:${year}`, JSON.parse(before.data), null); saved++; }
+        continue;
+      }
+      const value = { totalBasic: e.totalBasic === null ? null : r2(e.totalBasic), thirteenth: e.thirteenth === null ? null : r2(e.thirteenth), enteredBy: actor.username, enteredAt: new Date().toISOString() };
+      store.db.prepare('INSERT INTO thirteenth_overrides(employee_id,year,data) VALUES(?,?,?) ON CONFLICT(employee_id,year) DO UPDATE SET data=excluded.data').run(e.employeeId, year, JSON.stringify(value));
+      store.log(actor, before ? 'update' : 'create', 'thirteenth-overrides', `${e.employeeId}:${year}`, before ? JSON.parse(before.data) : null, value);
+      saved++;
+    }
+    return { saved };
+  });
+}
 // ---------- 13th month ledger ----------
 export function thirteenthLedger(store, actor, year) {
   permit(actor, [...PAY, 'viewer']);
-  const state = store.read(), thisMonth = localToday().slice(0, 7);
+  const state = store.read(), thisMonth = localToday().slice(0, 7), edited = overridesFor(store, String(year));
   // Remittance-only people (e.g. the CEO) are not paid through payroll and have no 13th month here.
   const remittanceOnly = new Set((state.employeeProfiles || []).filter(p => p.section === 'payroll' && p.status === 'Remittance only').map(p => p.employeeId));
   return state.employees.filter(e => (!e.draft || e.startDate) && !remittanceOnly.has(e.id)).map(e => {
@@ -55,8 +85,9 @@ export function thirteenthLedger(store, actor, year) {
     const covered = new Set([...runs.map(x => x.run.start.slice(0, 7)), ...prior.months]);
     const lastMonth = year === thisMonth.slice(0, 4) ? Number(thisMonth.slice(5)) : 12, first = e.startDate && e.startDate.startsWith(year) ? Number(e.startDate.slice(5, 7)) : 1;
     const missing = []; for (let m = first; m <= lastMonth; m++) { const key = `${year}-${String(m).padStart(2, '0')}`; if (!covered.has(key) && (!e.endDate || key <= e.endDate.slice(0, 7))) missing.push(key); }
-    const totalBasic = r2(postedBasic + prior.basic), accrued = e.covered13th ? r2(totalBasic / 12) : 0, paid = r2(postedPaid + prior.thirteenthPaid);
-    return { employeeId: e.id, name: e.name, covered13th: e.covered13th, postedBasic, priorBasic: prior.basic, priorMonths: prior.months, totalBasic, accrued, paid, balance: Math.max(0, r2(accrued - paid)), missingMonths: missing };
+    const computedTotal = r2(postedBasic + prior.basic), ov = edited.get(e.id) || {};
+    const totalBasic = ov.totalBasic ?? computedTotal, computedAccrued = e.covered13th ? r2(totalBasic / 12) : 0, accrued = ov.thirteenth ?? computedAccrued, paid = r2(postedPaid + prior.thirteenthPaid);
+    return { employeeId: e.id, name: e.name, covered13th: e.covered13th, postedBasic, priorBasic: prior.basic, priorMonths: prior.months, totalBasic, accrued, computedTotal, computedAccrued, totalEdited: ov.totalBasic != null, thirteenthEdited: ov.thirteenth != null, paid, balance: Math.max(0, r2(accrued - paid)), missingMonths: missing };
   });
 }
 
@@ -149,13 +180,14 @@ export function thirteenthOverview(store, actor, year) {
   const state = store.read(), postedMonths = {};
   for (const e of state.employees) { const full = [...fullyPostedMonths(state, e.id)].filter(m => m.startsWith(year)); if (full.length) postedMonths[e.id] = full; }
   // Basic pay counted from finalized payroll, by month: shown on the page as soon as a payroll is final.
-  const postedBasic = {};
+  const postedBasic = {}, postedCutoffs = {};
   for (const run of state.runs.filter(r => r.status === 'posted' && r.start.startsWith(year))) for (const row of run.rows) {
     const byMonth = (postedBasic[row.employeeId] ||= {}), m = run.start.slice(0, 7);
     byMonth[m] = r2((byMonth[m] || 0) + (row.applicableBasic || 0));
+    ((postedCutoffs[row.employeeId] ||= {})[m] ||= []).push({ start: run.start, end: run.end, basic: r2(row.applicableBasic || 0) });
   }
   return {
-    year, lastYear: lastAddedYear(store), ledger: thirteenthLedger(store, actor, year), postedMonths, postedBasic, canEncode: PAY.includes(actor.role),
+    year, lastYear: lastAddedYear(store), ledger: thirteenthLedger(store, actor, year), postedMonths, postedBasic, postedCutoffs, canEncode: PAY.includes(actor.role),
     prior: state.priorEarnings.filter(p => p.month.startsWith(`${year}-`)),
     years: [...new Set([...state.runs.map(r => r.start.slice(0, 4)), ...state.priorEarnings.map(p => p.month.slice(0, 4))])],
   };

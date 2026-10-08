@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { preview, postPayroll } from '../src/service.mjs';
-import { savePriorEarnings, thirteenthLedger, computeFinalPay, finalPayOverview, thirteenthOverview } from '../src/thirteenth.mjs';
+import { savePriorEarnings, saveThirteenthOverrides, thirteenthLedger, computeFinalPay, finalPayOverview, thirteenthOverview } from '../src/thirteenth.mjs';
 import { dates, isRest } from '../src/engine.mjs';
 import { completeState, admin } from './helpers.mjs';
 
@@ -92,5 +92,23 @@ test('basic pay from a finalized payroll appears on the 13th month page by month
     const amount = thirteenthOverview(store, payroll, '2026').postedBasic['EMP-001']['2026-09'];
     assert.equal(amount, posted.rows[0].applicableBasic);
     assert.ok(amount > 0);
+  } finally { store.close(); }
+});
+
+test('HR can type a different Total earned or 13th month pay for a year; blank goes back to the computation', () => {
+  const store = fixture();
+  try {
+    encode(store, JAN_AUG, 30000);
+    saveThirteenthOverrides(store, payroll, { year: '2026', entries: [{ employeeId: 'EMP-001', totalBasic: 250000, thirteenth: null }] });
+    let l = thirteenthLedger(store, payroll, '2026')[0];
+    assert.equal(l.totalBasic, 250000); assert.equal(l.computedTotal, 240000); assert.equal(l.accrued, 20833.33, '13th follows the typed total'); assert.ok(l.totalEdited);
+    saveThirteenthOverrides(store, payroll, { year: '2026', entries: [{ employeeId: 'EMP-001', totalBasic: 250000, thirteenth: 21000 }] });
+    l = thirteenthLedger(store, payroll, '2026')[0];
+    assert.equal(l.accrued, 21000); assert.ok(l.thirteenthEdited);
+    saveThirteenthOverrides(store, payroll, { year: '2026', entries: [{ employeeId: 'EMP-001', totalBasic: null, thirteenth: null }] });
+    l = thirteenthLedger(store, payroll, '2026')[0];
+    assert.equal(l.totalBasic, 240000); assert.equal(l.accrued, 20000); assert.ok(!l.totalEdited && !l.thirteenthEdited);
+    assert.equal(store.db.prepare("SELECT COUNT(*) n FROM audit WHERE kind='thirteenth-overrides'").get().n, 3);
+    assert.throws(() => saveThirteenthOverrides(store, { username: 'v', role: 'viewer' }, { year: '2026', entries: [{ employeeId: 'EMP-001', totalBasic: 1 }] }));
   } finally { store.close(); }
 });

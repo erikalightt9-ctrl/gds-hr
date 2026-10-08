@@ -6,6 +6,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
   const card = (label, value, foot, featured = false) => `<div class="card${featured ? ' featured' : ''}"><div class="card-label">${esc(label)}</div><div class="card-value">${value}</div><div class="card-foot">${esc(foot)}</div></div>`;
   // Amounts show as 1,000.00 in the boxes; commas are removed before saving.
   const fmtAmount = v => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
   const parseAmount = v => { const s = String(v ?? '').replace(/,/g, '').trim(); return s === '' ? '' : s; };
   // Leaving an amount box shows it as 1,000.00 (text that is not a number is left for the user to correct).
   document.addEventListener('focusout', e => { if (e.target.matches?.('[data-amount]')) { const v = parseAmount(e.target.value); if (v !== '' && !Number.isNaN(Number(v))) e.target.value = fmtAmount(v); } });
@@ -33,12 +34,16 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     const L = data.ledger, editable = data.canEncode, thisMonth = today().slice(0, 7);
     const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     const prior = new Map(data.prior.map(p => [`${p.employeeId}:${p.month}`, p]));
+    // Total earned and 13th month pay: computed, but HR can type a different amount (blank = back to the computation).
+    const ovBox = (r, kind, value, computed, edited) => `<input class="share-input th-ov${kind === '13th' ? ' th-13' : ''}${edited ? ' th-edited' : ''}" type="text" inputmode="decimal" data-amount data-th-ov="${kind}" data-emp="${esc(r.employeeId)}" value="${fmtAmount(value)}" aria-label="${esc(r.name)} ${kind === '13th' ? '13th month pay' : 'total earned'}" title="${edited ? `Edited · computed ${fmtAmount(computed)}` : 'Computed'}"${editable ? '' : ' disabled'}>`;
     const gridRow = r => [esc(r.name), ...months.map(m => {
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`), fromPayroll = data.postedBasic?.[r.employeeId]?.[m] || 0;
       if (posted) return `<span class="payroll-amount">${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
       const future = m > thisMonth;
+      // Part typed before the system + part from finalized payroll: one box with the month's total; click to see or change the typed part.
+      if (fromPayroll) return `<input type="hidden" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"><button type="button" class="share-input th-month-total" data-th-split="${esc(r.employeeId)}|${m}" title="Typed ${p ? fmtAmount(p.basic) : '0.00'} + payroll ${fmtAmount(fromPayroll)}">${fmtAmount((p?.basic || 0) + fromPayroll)}</button>`;
       return `<input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable && !future ? '' : ' disabled'}>`;
-    }), `<strong class="th-total">${fmtAmount(r.totalBasic)}</strong>`, `<strong class="th-total th-13">${fmtAmount(r.accrued)}</strong>`];
+    }), ovBox(r, 'total', r.totalBasic, r.computedTotal, r.totalEdited), ovBox(r, '13th', r.accrued, r.computedAccrued, r.thirteenthEdited)];
     shell(heading(`${year} 13th Month Pay`, '', '<button class="small" data-nav="payroll">← Payroll</button>') +
       `      <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
 
@@ -49,6 +54,14 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       ${finalPanel()}`);
     const content = document.querySelector('.content');
     content.addEventListener('click', onClick);
+    // Typing a Total earned updates that row's 13th month pay (÷ 12) unless the 13th month was edited separately.
+    content.addEventListener('input', e => {
+      if (e.target.dataset.thOv !== 'total') return;
+      const row = data.ledger.find(x => x.employeeId === e.target.dataset.emp), th = content.querySelector(`[data-th-ov="13th"][data-emp="${CSS.escape(e.target.dataset.emp)}"]`);
+      const raw = parseAmount(e.target.value), v = raw === '' ? row?.computedTotal : Number(raw);
+      if (!row?.covered13th || !th || row.thirteenthEdited || Number.isNaN(v)) return;
+      th.value = fmtAmount(r2(v / 12));
+    });
     content.addEventListener('change', e => {
       const dd = e.target.closest('.leave-dropdown'); if (!dd) return;
       const picked = [...dd.querySelectorAll('input:checked')].map(i => i.dataset.leaveName);
@@ -104,10 +117,22 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
           if (p && value !== '' && Number(value) === p.basic) return [];
           return [{ employeeId: input.dataset.prior, month: input.dataset.month, basic: value === '' ? null : Number(value), thirteenthPaid: p?.thirteenthPaid || 0, notes: p?.notes || '' }];
         });
-        if (!entries.length) { toast('No changes to save.'); return; }
+        const badOv = [...document.querySelectorAll('[data-th-ov]')].find(i => parseAmount(i.value) !== '' && (Number.isNaN(Number(parseAmount(i.value))) || Number(parseAmount(i.value)) < 0));
+        if (badOv) { badOv.focus(); toast(`Check the amount “${badOv.value}”: enter a number such as 1,000.00.`); return; }
+        const overrides = data.ledger.flatMap(row => {
+          const box = kind => document.querySelector(`[data-th-ov="${kind}"][data-emp="${CSS.escape(row.employeeId)}"]`);
+          const read = (el, computed) => { const v = parseAmount(el?.value); return v === '' || Number(v) === computed ? null : Number(v); };
+          const totalBasic = read(box('total'), row.computedTotal), thirteenth = read(box('13th'), row.covered13th ? r2((totalBasic ?? row.computedTotal) / 12) : 0);
+          const was = { totalBasic: row.totalEdited ? row.totalBasic : null, thirteenth: row.thirteenthEdited ? row.accrued : null };
+          return totalBasic === was.totalBasic && thirteenth === was.thirteenth ? [] : [{ employeeId: row.employeeId, totalBasic, thirteenth }];
+        });
+        if (!entries.length && !overrides.length) { toast('No changes to save.'); return; }
+        if (overrides.length) await api('/thirteenth/overrides', { year, entries: overrides });
+        if (!entries.length) { toast('Saved. Totals updated.'); await render(); return; }
         const r = await api('/thirteenth/prior', { entries }); toast(`Saved ${r.saved} month${r.saved === 1 ? '' : 's'}${r.removed ? `, cleared ${r.removed}` : ''}. The 13th month was recalculated.`); await render();
       }
       if (b.dataset.priorDetail) detail(b.dataset.priorDetail);
+      if (b.dataset.thSplit) { const [id, m] = b.dataset.thSplit.split('|'); splitMonth(id, m); }
       if (b.hasAttribute('data-final-save')) {
         await api('/final-pay/compute', { ...lastInput, save: true }); toast('Final pay computation saved.'); await render();
       }
@@ -118,6 +143,26 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     } catch (error) { toast(error.message); }
   }
 
+  // A month made of a typed part and finalized payroll: shows both parts (by cutoff) and lets HR change the typed part.
+  function splitMonth(employeeId, m) {
+    const r = data.ledger.find(x => x.employeeId === employeeId), p = data.prior.find(x => x.employeeId === employeeId && x.month === m);
+    const cutoffs = data.postedCutoffs?.[employeeId]?.[m] || [], day = d => Number(d.slice(8));
+    const mon = MONTHS[Number(m.slice(5)) - 1], typedPart = cutoffs.length && cutoffs.every(c => day(c.start) === 16) ? `${mon} 1–15` : cutoffs.length && cutoffs.every(c => day(c.start) === 1) ? `${mon} 16–${new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5)), 0)).getUTCDate()}` : 'Typed (before the system)';
+    const payroll = cutoffs.reduce((s, c) => s + c.basic, 0);
+    openDialog(`${mon} ${year} · ${r.name}`, `<form id="th-split-form"><div class="dialog-body">${table(['Period', 'Basic salary', ''], [
+      [esc(typedPart), `<input class="share-input" type="text" inputmode="decimal" data-amount name="basic" value="${p ? fmtAmount(p.basic) : ''}" aria-label="${esc(typedPart)} basic salary"${data.canEncode ? '' : ' disabled'}>`, '<small>Typed</small>'],
+      ...cutoffs.map(c => [`${mon} ${day(c.start)}–${day(c.end)}`, `<strong>${fmtAmount(c.basic)}</strong>`, '<small>Finalized payroll</small>']),
+      ['<strong>Total</strong>', `<strong id="th-split-total">${fmtAmount((p?.basic || 0) + payroll)}</strong>`, '']])}</div>
+      <div class="dialog-foot"><button type="button" data-close>Close</button>${data.canEncode ? '<button class="primary">Save</button>' : ''}</div></form>`);
+    const form = dialog.querySelector('#th-split-form'), input = form.querySelector('[name=basic]');
+    input.oninput = () => { const v = Number(parseAmount(input.value) || 0); form.querySelector('#th-split-total').textContent = fmtAmount((Number.isNaN(v) ? 0 : v) + payroll); input.setCustomValidity(''); };
+    form.onsubmit = async ev => {
+      ev.preventDefault(); const value = parseAmount(input.value);
+      if (value !== '' && (Number.isNaN(Number(value)) || Number(value) < 0)) { input.setCustomValidity('Enter a number such as 1,000.00.'); input.reportValidity(); return; }
+      if ((value === '' && !p) || (p && value !== '' && Number(value) === p.basic)) { dialog.close(); return; }
+      try { await api('/thirteenth/prior', { entries: [{ employeeId, month: m, basic: value === '' ? null : Number(value), thirteenthPaid: p?.thirteenthPaid || 0, notes: p?.notes || '' }] }); dialog.close(); toast('Saved. The 13th month was recalculated.'); await render(); } catch (error) { toast(error.message); }
+    };
+  }
   // Per-employee detail: basic, 13th month already paid and notes per month.
   function detail(employeeId) {
     const r = data.ledger.find(x => x.employeeId === employeeId), lastMonth = year === today().slice(0, 4) ? Number(today().slice(5, 7)) : 12;   // details: months up to now
