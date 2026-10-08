@@ -670,3 +670,12 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .year-card.add-year strong { font-size: 30px; }
 /* Employee 201 directory: name, position, date hired, 201 completion (clicking the name opens the 201 file). */
 .directory-wrap table { min-width: 0 !important; }
+.dept-list { display: grid; gap: 6px; margin: 12px 0; }
+.dept-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf8; }
+.dept-add { display: flex; gap: 8px; }
+.dept-add input { flex: 1; }
+/* Show / hide password eye button inside password boxes */
+.pw-wrap { position: relative; display: block; }
+.pw-wrap input { width: 100%; padding-right: 44px; }
+.pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; padding: 6px 8px; font-size: 16px; line-height: 1; cursor: pointer; }
+.pw-eye:hover { background: rgb(0 0 0 / .05); border-radius: 8px; }

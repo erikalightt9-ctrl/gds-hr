@@ -987,3 +987,20 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } });
 setupInstall();
+// Show / hide password: every password box gets an eye button (sign-in, account and first-time password forms).
+const enhancePasswords = root => root.querySelectorAll?.('input[type="password"]:not([data-eye])').forEach(input => {
+  input.dataset.eye = '1';
+  const wrap = document.createElement('span'); wrap.className = 'pw-wrap';
+  input.parentNode.insertBefore(wrap, input); wrap.append(input);
+  const eye = document.createElement('button');
+  eye.type = 'button'; eye.className = 'pw-eye'; eye.textContent = '👁'; eye.setAttribute('aria-label', 'Show password'); eye.title = 'Show password';
+  eye.addEventListener('click', () => {
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password'; eye.textContent = show ? '🙈' : '👁';
+    eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); eye.title = show ? 'Hide password' : 'Show password';
+    input.focus();
+  });
+  wrap.append(eye);
+});
+enhancePasswords(document);
+new MutationObserver(changes => { for (const c of changes) for (const n of c.addedNodes) if (n.nodeType === 1) enhancePasswords(n.matches?.('input[type="password"]') ? n.parentNode : n); }).observe(document.body, { childList: true, subtree: true });

@@ -274,7 +274,10 @@ const addDays = (d, n) => new Date(Date.parse(d) + n * 86400000).toISOString().s
 export function dashboard(store, actor, extras = {}) {
   permit(actor, DASHBOARD);
   const today = localToday(), settings = readSettings(store), people = directory(store, actor).filter(p => !p.archived);
-  const byDept = Object.entries(people.reduce((m, p) => ({ ...m, [p.department || 'Unassigned']: (m[p.department || 'Unassigned'] || 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
+  // Every department / company set up in Settings (even with no employees yet), plus any in use, with head counts.
+  const counted = people.reduce((m, p) => ({ ...m, [p.department || 'Unassigned']: (m[p.department || 'Unassigned'] || 0) + 1 }), {});
+  for (const d of settings.departments || []) counted[d] = counted[d] || 0;
+  const byDept = Object.entries(counted).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const byClass = Object.entries(people.reduce((m, p) => ({ ...m, [p.classification || 'Not set']: (m[p.classification || 'Not set'] || 0) + 1 }), {}));
   const upcoming = (field, days) => people.filter(p => p.status === 'Active' && p[field] && p[field] >= today && p[field] <= addDays(today, days)).map(p => ({ id: p.id, name: p.name, date: p[field] }));
   return {
