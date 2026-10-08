@@ -668,3 +668,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .year-card:hover { border-color: var(--red-600, #b51f2b); }
 .year-card.add-year { border-style: dashed; align-content: center; text-align: center; }
 .year-card.add-year strong { font-size: 30px; }
+/* Employee 201 directory: name, position, date hired, 201 completion (clicking the name opens the 201 file). */
+.directory-wrap table { min-width: 0 !important; }
