@@ -56,7 +56,7 @@ export function checkLimit(store, key, maximum = 10) {
   if (row && row.attempts >= maximum) throw new AppError('Too many sign-in attempts. Try again in 15 minutes.', 429);
   store.db.prepare('INSERT INTO login_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1').run(key, now + 900000);
 }
-export const SIGNED_IN_ELSEWHERE = 'This account is already signed in on another device. Sign out there first. If that device is lost or not with you, ask HR to sign it out (Account & access → Sign out device).';
+export const SIGNED_IN_ELSEWHERE = 'This account is already signed in on another device. Sign out there first. If that device is lost or not with you, ask HR to reset your password (that signs the other device out).';
 export async function login(store, username, password, key, otp = '', { currentTokenHash = '' } = {}) {
   checkLimit(store, key, 100);
   const accountKey = `account-login:${username.toLowerCase()}`; checkLimit(store, accountKey);
