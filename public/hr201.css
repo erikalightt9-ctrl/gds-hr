@@ -760,3 +760,6 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .month-buttons button { min-width: 52px; }
 .month-buttons button.active { background: linear-gradient(180deg, #c32a37, #96131f); color: #fff; border-color: #96131f; }
 .month-buttons button.now:not(.active) { border-color: #e9c46a; font-weight: 700; }
+.hol-years { display: flex; align-items: flex-end; gap: 10px; padding: 12px 16px 0; }
+.hol-year-pick { margin: 0; min-width: 120px; }
+.hol-years .add-hol-year { height: 38px; }
