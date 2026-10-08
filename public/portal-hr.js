@@ -5,6 +5,15 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
   const SHEET = { new: 'Not started', draft: 'Draft (only you can see it)', submitted: 'Submitted to HR', 'under-review': 'HR is reviewing', returned: 'Returned for correction', approved: 'Approved', rejected: 'Rejected' };
 
+  // My 201 file: documents and the data sheet under one menu item, one sub-tab at a time.
+  let fileView = 'documents';
+  const showDatasheet = () => { fileView = 'datasheet'; };
+  async function file201(box) {
+    box.innerHTML = `<div class="tabs sub-tabs"><button data-file-view="documents" class="${fileView === 'documents' ? 'active' : ''}">📁 Documents</button><button data-file-view="datasheet" class="${fileView === 'datasheet' ? 'active' : ''}">🗂️ Data sheet</button></div><div id="file201-view"><div class="loading">Loading…</div></div>`;
+    box.querySelector('.sub-tabs').onclick = e => { const b = e.target.closest('[data-file-view]'); if (b && b.dataset.fileView !== fileView) { fileView = b.dataset.fileView; file201(box); } };
+    const view = box.querySelector('#file201-view');
+    return fileView === 'datasheet' ? datasheet(view, await api('/hr/me/datasheet')) : documents(view, await api('/hr/me/documents'));
+  }
   async function fill(tab, box) {
     try {
       if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
@@ -12,8 +21,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
       if (tab === 'memos') return memos(box, await api('/hr/me/memos'));
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
-      if (tab === 'datasheet') return datasheet(box, await api('/hr/me/datasheet'));
-      if (tab === 'files201') return documents(box, await api('/hr/me/documents'));
+      if (tab === 'files201') return file201(box);
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
@@ -160,7 +168,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     box.onchange = async event => {
       const input = event.target.closest('[data-up]'); if (!input) return;
       const file = input.files[0]; if (!file) return;
-      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); await fill('files201', box); } catch (error) { toast(error.message); }
+      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); documents(box, await api('/hr/me/documents')); } catch (error) { toast(error.message); }
     };
   }
   // Shown at the top of the employee's dashboard on celebration days.
@@ -175,5 +183,5 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['datasheet', 'My data sheet', '🗂️'], ['files201', 'My 201 documents', '📁']] };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['files201', 'My 201 file', '📁']], showDatasheet, showDocuments: () => { fileView = 'documents'; } };
 }

@@ -3,7 +3,7 @@ const ROLE_NAMES = { admin: 'System Administrator', hr: 'HR Manager', hr_staff: 
 // Common reasons for an attendance explanation (late, undertime, missed clock-in/out). "Other" lets the employee type one.
 const EXPLANATION_REASONS = ['Traffic / transportation delay', 'Medical / health reason', 'Family emergency', 'Official business / client meeting', 'Work from home / field work', 'Forgot to time in or time out', 'System or device problem (GPS / app / internet)', 'Weather / natural calamity', 'Approved schedule change'];
 // Employee menu order: me first, then time, pay and company items.
-const MENU_GROUPS = [['', ['dashboard', 'profile201', 'datasheet', 'files201']], ['Time &amp; attendance', ['attendance', 'overtime201', 'leave']], ['Pay', ['payslips', 'loans201']], ['Company', ['memos', 'trainings']]];
+const MENU_GROUPS = [['', ['dashboard', 'profile201', 'files201']], ['Time &amp; attendance', ['attendance', 'overtime201', 'leave']], ['Pay', ['payslips', 'loans201']], ['Company', ['memos', 'trainings']]];
 export function createPortal(ctx) {
   const { api, esc, money, toast, openDialog, dialog, refresh, render, app, today } = ctx;
   const table = (headers, rows, empty = 'Nothing to show yet.') => ctx.table(headers, rows, empty);
@@ -224,7 +224,10 @@ export function createPortal(ctx) {
       // Older links point at the merged sections; open the Attendance tab at that section.
       const section = ['explanations', 'documents'].includes(button.dataset.portalTab) ? button.dataset.portalTab : null;
       if (section) attendanceView = section; else if (button.dataset.portalTab === 'attendance') attendanceView = 'history';
-      tab = section ? 'attendance' : button.dataset.portalTab; dirty = false; render(); window.scrollTo({ top: 0 });
+      // My 201 file opens on Documents; "Enter number" / data sheet links open its Data sheet sub-tab.
+      let target = button.dataset.portalTab;
+      if (target === 'datasheet') { ctx.portalHr?.showDatasheet?.(); target = 'files201'; } else if (target === 'files201') ctx.portalHr?.showDocuments?.();
+      tab = section ? 'attendance' : target; dirty = false; render(); window.scrollTo({ top: 0 });
     }
     if (button.dataset.attendanceView) { attendanceView = button.dataset.attendanceView; dirty = false; render(); }
     if (button.dataset.attendanceJump) { attendanceView = button.dataset.attendanceJump; dirty = false; render(); }
