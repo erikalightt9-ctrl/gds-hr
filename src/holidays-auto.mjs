@@ -3,7 +3,7 @@
 // Eid'l Fitr and Eid'l Adha depend on the Islamic calendar and a proclamation each year, so HR adds them when
 // announced. Every auto-added date says so in its basis, to be checked against that year's official proclamation.
 import { randomUUID } from 'node:crypto';
-import { saveRecord, permit } from './service.mjs';
+import { saveRecord, permit, AppError } from './service.mjs';
 
 const pad = n => String(n).padStart(2, '0');
 const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
@@ -65,4 +65,14 @@ export function addNextHolidayYear(store, actor) {
   store.transaction(() => { for (const h of holidaysFor(year)) saveRecord(store, actor, 'holidays', { id: randomUUID(), ...h }); });
   store.log(actor, 'add-holiday-year', 'holidays', String(year), null, { year });
   return { year, added: holidaysFor(year).length };
+}
+// Holiday calendar year box: a typed year that has no dates yet is filled in with the fixed and calculated holidays.
+export function ensureHolidayYear(store, actor, year) {
+  permit(actor, ['admin', 'hr']);
+  const y = Number(year);
+  if (!Number.isInteger(y) || y < 2000 || y > 2100) throw new AppError('Type a year from 2000 to 2100, e.g. 2028.');
+  if (store.read().holidays.some(h => h.date.startsWith(`${y}-`))) return { year: y, added: 0 };
+  store.transaction(() => { for (const h of holidaysFor(y)) saveRecord(store, actor, 'holidays', { id: randomUUID(), ...h }); });
+  store.log(actor, 'add-holiday-year', 'holidays', String(y), null, { year: y });
+  return { year: y, added: holidaysFor(y).length };
 }
