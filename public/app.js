@@ -1065,7 +1065,11 @@ document.addEventListener('submit', async event => {
   if (event.target.id !== 'cutoff-form') return;
   event.preventDefault(); const form = event.target, button = form.querySelector('button'); button.disabled = true;
   payrollEmployee = form.elements.employee.value; computationContext = null;
-  try { currentRun = await api('/payroll/preview', { start: form.elements.start.value, end: form.elements.end.value, pay13th: form.elements.pay13th.value === 'true', ...(payrollEmployee ? { employeeIds: [payrollEmployee] } : {}) }); render(); }
+  // A cutoff that is already finalized opens as it was posted (read-only), not as a new draft to edit.
+  const start = form.elements.start.value, end = form.elements.end.value;
+  const posted = state.runs.find(r => r.status === 'posted' && r.start === start && r.end === end && (!payrollEmployee || r.rows.some(row => row.employeeId === payrollEmployee)));
+  if (posted) { currentRun = posted; render(); toast(`${start} — ${end} is already finalized. It is shown as posted and can no longer be edited.`); return; }
+  try { currentRun = await api('/payroll/preview', { start, end, pay13th: form.elements.pay13th.value === 'true', ...(payrollEmployee ? { employeeIds: [payrollEmployee] } : {}) }); render(); }
   catch (e) { toast(e.message); button.disabled = false; }
 });
 document.addEventListener('input', event => {
