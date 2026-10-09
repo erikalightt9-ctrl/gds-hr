@@ -5,8 +5,9 @@ export const displayName = name => { const [last, first] = String(name || '').sp
 
 export function staffNames(store, { staffOnly = false } = {}) {
   const employees = new Map(store.read().employees.map(e => [e.id, e.name]));
-  const rows = store.db.prepare(`SELECT username, role, employee_id FROM users WHERE employee_id IS NOT NULL${staffOnly ? " AND role <> 'employee'" : ''}`).all();
-  return Object.fromEntries(rows.filter(r => employees.has(r.employee_id)).map(r => [r.username, displayName(employees.get(r.employee_id))]));
+  // A login's own display name (e.g. the admin login shown as "GDS Capital Inc") comes first, then the linked employee's name.
+  const rows = store.db.prepare(`SELECT username, role, employee_id, display_name FROM users WHERE (employee_id IS NOT NULL OR display_name IS NOT NULL)${staffOnly ? " AND role <> 'employee'" : ''}`).all();
+  return Object.fromEntries(rows.map(r => [r.username, r.display_name || (employees.has(r.employee_id) ? displayName(employees.get(r.employee_id)) : null)]).filter(([, name]) => name));
 }
 // "gds.erika" or "gds.erika (note)" -> "Erika Lima Hernando" / "Erika Lima Hernando (note)".
 export function fullNameOf(store, who, names = staffNames(store)) {

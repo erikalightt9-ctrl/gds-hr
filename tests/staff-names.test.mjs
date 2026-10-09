@@ -19,5 +19,7 @@ test('usernames show as the full name of the linked employee record (staff and e
     assert.equal(fullNameOf(store, 'plain.admin'), 'plain.admin');
     assert.ok(!('worker' in staffNames(store, { staffOnly: true })), 'employees only see staff names');
     assert.equal(displayName('Hernando, Erika Lima'), 'Erika Lima Hernando');
+    store.db.prepare("UPDATE users SET display_name='GDS Capital Inc' WHERE username='plain.admin'").run();
+    assert.equal(fullNameOf(store, 'plain.admin'), 'GDS Capital Inc', 'a login display name');
   } finally { store.close(); }
 });

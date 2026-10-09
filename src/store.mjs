@@ -43,7 +43,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS location_addresses (event_id TEXT PRIMARY KEY, address TEXT NOT NULL, fetched_at TEXT NOT NULL);
     `);
     const columns = new Set(this.db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
-    for (const [name, definition] of [['employee_id', 'TEXT'], ['disabled', 'INTEGER NOT NULL DEFAULT 0'], ['mfa_secret', 'TEXT'], ['mfa_pending', 'TEXT'], ['mfa_last_step', 'INTEGER'], ['email', 'TEXT'], ['must_change_password', 'INTEGER NOT NULL DEFAULT 0']]) if (!columns.has(name)) this.db.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+    for (const [name, definition] of [['employee_id', 'TEXT'], ['display_name', 'TEXT'], ['disabled', 'INTEGER NOT NULL DEFAULT 0'], ['mfa_secret', 'TEXT'], ['mfa_pending', 'TEXT'], ['mfa_last_step', 'INTEGER'], ['email', 'TEXT'], ['must_change_password', 'INTEGER NOT NULL DEFAULT 0']]) if (!columns.has(name)) this.db.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
     // One employee login per employee record; staff logins linked to their own record (for their name) are not counted.
     if (!/role IN/.test(this.db.prepare("SELECT sql FROM sqlite_master WHERE name='user_employee'").get()?.sql || '')) this.db.exec('DROP INDEX IF EXISTS user_employee');
     this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS user_employee ON users(employee_id) WHERE employee_id IS NOT NULL AND role IN ('employee','dept_manager')");
