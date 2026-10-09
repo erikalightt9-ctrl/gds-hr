@@ -50,13 +50,14 @@ test('accounts for all registered employees: existing ones untouched, default pa
   const { createEmployeeAccounts } = await import('../src/auth.mjs');
   const db = new Store(':memory:');
   try {
-    const s = completeState(); s.employees.push({ ...s.employees[0], id: 'EMP-002', name: 'Second Employee' }, { ...s.employees[0], id: 'EMP-003', name: 'Archived Employee', archived: true }); db.write(s);
+    const s = completeState(); s.employees.push({ ...s.employees[0], id: 'EMP-002', name: 'Second Employee' }, { ...s.employees[0], id: 'EMP-003', name: 'Archived Employee', archived: true }, { ...s.employees[0], id: 'EMP-004', name: 'Resigned Employee', endDate: '2020-01-31' }, { ...s.employees[0], id: 'EMP-005', name: 'Draft Employee', draft: true }); db.write(s);
     const me = await addUser(db, { username: 'owner.admin', password: 'initial-password-123', role: 'admin' });
     await addUser(db, { username: 'EMP-001', password: 'existing-password-1', role: 'employee', employeeId: 'EMP-001' }, me);
     await assert.rejects(() => createEmployeeAccounts(db, me, 'short'), /9–200/);
     await assert.rejects(() => createEmployeeAccounts(db, { ...me, role: 'hr' }, 'default-pass-123'), /permission/);
     const r = await createEmployeeAccounts(db, me, 'default-pass-123');
     assert.deepEqual(r.created.map(c => c.username), ['EMP-002']); assert.equal(r.alreadyHadAccount, 1);
+    assert.deepEqual(r.skipped.map(x => x.employeeId).sort(), ['EMP-004', 'EMP-005'], 'no login for someone who has left or a draft record');
     assert.equal((await createEmployeeAccounts(db, me, 'default-pass-123')).created.length, 0, 'running again creates nothing');
     const first = await login(db, 'EMP-002', 'default-pass-123', 'test');
     assert.equal(first.user.mustChangePassword, true);

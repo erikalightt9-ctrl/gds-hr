@@ -883,7 +883,7 @@ async function account() {
     if (password === null) return;
     try {
       const r = await api('/users/employee-accounts', { password });
-      toast(`${r.created.length} account${r.created.length === 1 ? '' : 's'} created · ${r.alreadyHadAccount} already had one${r.skipped.length ? ` · ${r.skipped.length} skipped (username taken: ${r.skipped.map(s => s.name).join(', ')})` : ''}.`);
+      toast(`${r.created.length} account${r.created.length === 1 ? '' : 's'} created · ${r.alreadyHadAccount} already had one${r.skipped.length ? ` · ${r.skipped.length} skipped (${r.skipped.map(s => `${s.name}: ${s.reason}`).join('; ')})` : ''}.`);
       await account();
     } catch (error) { toast(error.message); }
   });

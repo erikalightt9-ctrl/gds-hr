@@ -33,8 +33,11 @@ export async function createEmployeeAccounts(store, actor, defaultPassword) {
   const password = String(defaultPassword || '');
   if (password.length < 9 || password.length > 200) throw new AppError('Use a default password of 9–200 characters.');
   const linked = new Set(store.db.prepare('SELECT employee_id FROM users WHERE employee_id IS NOT NULL').all().map(r => r.employee_id));
-  const pending = store.read().employees.filter(e => !e.archived && !linked.has(e.id));
-  const created = [], skipped = [];
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  const all = store.read().employees.filter(e => !e.archived && !linked.has(e.id));
+  // No login for someone who has already left (past their resignation / separation date) or whose record is still a draft.
+  const pending = all.filter(e => !e.draft && !(e.endDate && e.endDate < today));
+  const created = [], skipped = all.filter(e => !pending.includes(e)).map(e => ({ employeeId: e.id, name: e.name, reason: e.draft ? 'Record is still a draft' : `Left on ${e.endDate}` }));
   for (const e of pending) {
     const username = String(e.employeeNumber || e.id).trim();
     if (!/^[A-Za-z0-9_.@-]{3,80}$/.test(username) || store.db.prepare('SELECT id FROM users WHERE username=? COLLATE NOCASE').get(username)) { skipped.push({ employeeId: e.id, name: e.name, reason: 'Username already taken or invalid' }); continue; }
@@ -47,7 +50,7 @@ export async function createEmployeeAccounts(store, actor, defaultPassword) {
       created.push({ username, name: e.name });
     });
   }
-  return { created, skipped, alreadyHadAccount: store.read().employees.filter(e => !e.archived).length - pending.length };
+  return { created, skipped, alreadyHadAccount: store.read().employees.filter(e => !e.archived).length - all.length };
 }
 export function checkLimit(store, key, maximum = 10) {
   const now = Date.now();
