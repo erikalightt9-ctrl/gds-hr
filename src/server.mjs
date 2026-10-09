@@ -125,7 +125,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         send(200, { message: requestRecovery(store, body.identifier, { mailer, origin }).message }); return;
       }
       if (pathname === '/api/recovery/reset' && req.method === 'POST') {
-        checkLimit(store, `reset:${client}`); const body = z.object({ token: z.string().max(64), password: z.string().min(12).max(200) }).strict().parse(await readBody(req));
+        checkLimit(store, `reset:${client}`); const body = z.object({ token: z.string().max(64), password: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         send(200, await redeemPasswordReset(store, body.token, body.password)); return;
       }
       const auth = session(store, req.headers.cookie);
@@ -151,7 +151,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/me/account/link' && req.method === 'POST') { const b = z.object({ employeeId: z.string().max(40) }).strict().parse(await readBody(req)); send(200, linkMyAccount(store, auth.user, b.employeeId, store.read().employees)); return; }
       if (pathname === '/api/password' && req.method === 'POST') {
         checkLimit(store, `password:${auth.user.id}`);
-        const body = z.object({ currentPassword: z.string().max(200), newPassword: z.string().min(12).max(200) }).strict().parse(await readBody(req));
+        const body = z.object({ currentPassword: z.string().max(200), newPassword: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         await changePassword(store, auth.user, body.currentPassword, body.newPassword); send(200, { ok: true }); return;
       }
       if (pathname === '/api/mfa' && req.method === 'POST') {

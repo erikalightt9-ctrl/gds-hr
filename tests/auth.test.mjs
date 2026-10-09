@@ -13,7 +13,8 @@ test('password changes revoke sessions; bad passwords and expired cookies cannot
     assert.ok(session(db, `hr_session=${signed.token}`));
     assert.equal(session(db, 'hr_session=invalid'), null);
     await assert.rejects(() => changePassword(db, user, 'incorrect', 'replacement-pass-123'), /incorrect/);
-    await assert.rejects(() => changePassword(db, user, 'initial-password-123', 'short'), /12/);
+    await assert.rejects(() => changePassword(db, user, 'initial-password-123', 'short'), /9–200/);
+    await assert.rejects(() => changePassword(db, user, 'initial-password-123', 'eightch8'), /9–200/, '8 characters is too short');
     await changePassword(db, user, 'initial-password-123', 'replacement-pass-123');
     assert.equal(session(db, `hr_session=${signed.token}`), null);
     const again = await login(db, 'admin', 'replacement-pass-123', 'test');
@@ -52,7 +53,7 @@ test('accounts for all registered employees: existing ones untouched, default pa
     const s = completeState(); s.employees.push({ ...s.employees[0], id: 'EMP-002', name: 'Second Employee' }, { ...s.employees[0], id: 'EMP-003', name: 'Archived Employee', archived: true }); db.write(s);
     const me = await addUser(db, { username: 'owner.admin', password: 'initial-password-123', role: 'admin' });
     await addUser(db, { username: 'EMP-001', password: 'existing-password-1', role: 'employee', employeeId: 'EMP-001' }, me);
-    await assert.rejects(() => createEmployeeAccounts(db, me, 'short'), /12/);
+    await assert.rejects(() => createEmployeeAccounts(db, me, 'short'), /9–200/);
     await assert.rejects(() => createEmployeeAccounts(db, { ...me, role: 'hr' }, 'default-pass-123'), /permission/);
     const r = await createEmployeeAccounts(db, me, 'default-pass-123');
     assert.deepEqual(r.created.map(c => c.username), ['EMP-002']); assert.equal(r.alreadyHadAccount, 1);

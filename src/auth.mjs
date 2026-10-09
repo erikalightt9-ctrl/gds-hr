@@ -31,7 +31,7 @@ export async function addUser(store, input, actor = null) {
 export async function createEmployeeAccounts(store, actor, defaultPassword) {
   permit(actor, ['admin']);
   const password = String(defaultPassword || '');
-  if (password.length < 12 || password.length > 200) throw new AppError('Use a default password of 12–200 characters.');
+  if (password.length < 9 || password.length > 200) throw new AppError('Use a default password of 9–200 characters.');
   const linked = new Set(store.db.prepare('SELECT employee_id FROM users WHERE employee_id IS NOT NULL').all().map(r => r.employee_id));
   const pending = store.read().employees.filter(e => !e.archived && !linked.has(e.id));
   const created = [], skipped = [];
@@ -91,7 +91,7 @@ export async function changePassword(store, user, currentPassword, newPassword) 
   const row = store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id);
   const computed = await passwordHash(currentPassword, row.password_hash.split(':')[0]);
   if (!timingSafeEqual(Buffer.from(row.password_hash), Buffer.from(computed))) throw new AppError('Current password is incorrect.', 401);
-  if (newPassword.length < 12 || newPassword.length > 200) throw new AppError('Use a password of 12–200 characters.');
+  if (newPassword.length < 9 || newPassword.length > 200) throw new AppError('Use a password of 9–200 characters.');
   const hash = await passwordHash(newPassword);
   store.transaction(() => {
     if (store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id)?.password_hash !== row.password_hash) throw new AppError('Account changed during this request. Sign in again.', 409);
@@ -191,7 +191,7 @@ export function issuePasswordReset(store, actor, userId, resetMfa = false) {
   return { token, expires, message: 'Give this one-time code directly to the employee after verifying their identity. It expires in 15 minutes.' };
 }
 export async function redeemPasswordReset(store, token, password) {
-  if (!/^[a-f0-9]{64}$/.test(token) || password.length < 12 || password.length > 200) throw new AppError('Invalid reset code or password.');
+  if (!/^[a-f0-9]{64}$/.test(token) || password.length < 9 || password.length > 200) throw new AppError('Invalid reset code or password.');
   const hash = await passwordHash(password);
   return store.transaction(() => {
     const reset = store.db.prepare('SELECT * FROM password_resets WHERE token_hash=?').get(hashToken(token));

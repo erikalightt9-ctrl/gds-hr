@@ -12,7 +12,7 @@ Requires Node.js **24.14 or later** and the repository's installed dependencies 
 npm run dev
 ```
 
-Open **http://127.0.0.1:3400**. On the first run, the terminal prints a one-time setup code. Enter it in the setup screen and create an administrator with a unique password of at least 12 characters. There is no default production password. Setup stops accepting new initial administrators once the first account exists.
+Open **http://127.0.0.1:3400**. On the first run, the terminal prints a one-time setup code. Enter it in the setup screen and create an administrator with a unique password of at least 9 characters. There is no default production password. Setup stops accepting new initial administrators once the first account exists.
 
 Records persist in `data/hr.sqlite`. SQLite WAL/SHM files may accompany it. This folder is Git-ignored and must never be copied into `public/` or committed.
 
