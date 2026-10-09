@@ -6,7 +6,7 @@ import { addUser } from '../src/auth.mjs';
 import { messageContacts, unreadMessages, conversation, sendMessage, onChat } from '../src/messages.mjs';
 
 test('users message each other one-to-one; only the two people can read it; unread counts and live notices', async () => {
-  const store = new Store(':memory:'); store.write(completeState());
+  const store = new Store(':memory:'), s = completeState(); s.employees.push({ ...s.employees[0], id: 'EMP-002', name: 'Second, Employee' }); store.write(s);
   try {
     const setup = { username: 'setup', role: 'admin' };
     const a = await addUser(store, { username: 'anna', password: 'Anna-pass-2026', role: 'hr' }, setup);
@@ -31,6 +31,13 @@ test('users message each other one-to-one; only the two people can read it; unre
     store.db.prepare('UPDATE users SET disabled=1 WHERE id=?').run(c.id);
     assert.throws(() => sendMessage(store, a, c.id, { body: 'hi' }), /not a user/, 'disabled logins cannot be messaged');
     assert.equal(store.db.prepare("SELECT COUNT(*) n FROM audit WHERE after_json LIKE '%Hello Ben%'").get().n, 0, 'content is not copied into the audit trail');
+    const d = await addUser(store, { username: 'dina', password: 'Dina-pass-2026', role: 'employee', employeeId: 'EMP-002' }, setup);
+    assert.ok(!messageContacts(store, b).contacts.some(x => x.id === d.id), 'employees do not see other employees');
+    assert.throws(() => sendMessage(store, b, d.id, { body: 'hi' }), /not a user/, 'employee to employee is not allowed');
+    assert.ok(messageContacts(store, a).contacts.some(x => x.id === d.id), 'HR sees every employee');
+    const mk = await addUser(store, { username: 'mike', password: 'Mike-pass-2026', role: 'maker' }, setup);
+    assert.ok(messageContacts(store, b).contacts.some(x => x.id === mk.id), 'an employee can message Maker');
+    assert.ok(sendMessage(store, b, a.id, { body: 'Thanks HR' }).id, 'an employee can message HR');
     stop();
   } finally { store.close(); }
 });

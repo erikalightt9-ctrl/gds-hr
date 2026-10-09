@@ -195,6 +195,13 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.end(file.body); return;
       }
       if (pathname === '/api/audit' && req.method === 'GET' && auth.user.role === 'maker') { send(200, visibleAudit(store, auth.user)); return; }
+      // Messages between users (one-to-one) and display names: open to every signed-in user, employees included.
+      if (pathname === '/api/messages' && req.method === 'GET') { send(200, messageContacts(store, auth.user)); return; }
+      if (pathname === '/api/messages/unread' && req.method === 'GET') { send(200, unreadMessages(store, auth.user)); return; }
+      const chat = pathname.match(/^\/api\/messages\/([a-f0-9-]{36})$/);
+      if (chat && req.method === 'GET') { send(200, conversation(store, auth.user, chat[1])); return; }
+      if (chat && req.method === 'POST') { send(201, sendMessage(store, auth.user, chat[1], await readBody(req))); return; }
+      if (pathname === '/api/staff-names' && req.method === 'GET') { send(200, staffNames(store, { staffOnly: auth.user.role === 'employee' })); return; }
       // Fail closed: employee sessions can never reach staff records, audits, exports or account management.
       if (!LEGACY_WORKSPACE.includes(auth.user.role)) throw new AppError('This area is restricted to authorized staff.', 403);
       if (pathname === '/api/live' && req.method === 'GET') { send(200, liveDashboard(store, auth.user)); return; }
@@ -213,13 +220,6 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/thirteenth/years' && req.method === 'POST') { send(200, addThirteenthYear(store, auth.user)); return; }
       if (pathname === '/api/thirteenth/prior' && req.method === 'POST') { send(200, savePriorEarnings(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/thirteenth/overrides' && req.method === 'POST') { send(200, saveThirteenthOverrides(store, auth.user, await readBody(req))); return; }
-      // Messages between users (one-to-one).
-      if (pathname === '/api/messages' && req.method === 'GET') { send(200, messageContacts(store, auth.user)); return; }
-      if (pathname === '/api/messages/unread' && req.method === 'GET') { send(200, unreadMessages(store, auth.user)); return; }
-      const chat = pathname.match(/^\/api\/messages\/([a-f0-9-]{36})$/);
-      if (chat && req.method === 'GET') { send(200, conversation(store, auth.user, chat[1])); return; }
-      if (chat && req.method === 'POST') { send(201, sendMessage(store, auth.user, chat[1], await readBody(req))); return; }
-      if (pathname === '/api/staff-names' && req.method === 'GET') { send(200, staffNames(store, { staffOnly: auth.user.role === 'employee' })); return; }
       if (pathname === '/api/final-pay' && req.method === 'GET') { send(200, finalPayOverview(store, auth.user)); return; }
       const finalPdf = pathname.match(/^\/api\/final-pay\/([a-f0-9-]+)\.pdf$/);
       if (finalPdf && req.method === 'GET') {

@@ -1,4 +1,5 @@
-// Messages between the people who use this system (one-to-one). Anyone with an enabled login can message any other.
+// Messages between the people who use this system (one-to-one). Staff can message anyone; an employee can message
+// HR, Maker and the administrator only (employee to employee is not allowed).
 // Only the two people in a conversation can read it; administrators cannot open other people's conversations.
 // The content is not copied into the audit trail.
 import { randomUUID } from 'node:crypto';
@@ -7,6 +8,8 @@ import { AppError } from './service.mjs';
 import { staffNames } from './staff-names.mjs';
 import { ROLE_LABELS } from './roles.mjs';
 
+// Roles an employee may message.
+const EMPLOYEE_CAN_MESSAGE = ['admin', 'hr', 'hr_staff', 'maker'];
 const MAX_LENGTH = 2000, PER_MINUTE = 30, HISTORY = 300;
 const ensure = store => store.db.exec(`CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, from_user TEXT NOT NULL, to_user TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, read_at TEXT);
   CREATE INDEX IF NOT EXISTS messages_pair ON messages(from_user, to_user, created_at);
@@ -26,6 +29,7 @@ function guard(userId) {
 function people(store, actor) {
   const names = staffNames(store);
   return store.db.prepare('SELECT id, username, role FROM users WHERE disabled=0 AND id<>? ORDER BY username').all(actor.id)
+    .filter(u => actor.role !== 'employee' || EMPLOYEE_CAN_MESSAGE.includes(u.role))
     .map(u => ({ id: u.id, name: names[u.username] || u.username, username: u.username, role: ROLE_LABELS[u.role] || u.role }));
 }
 const contact = (store, actor, id) => {
