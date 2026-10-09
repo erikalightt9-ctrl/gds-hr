@@ -60,7 +60,8 @@ async function api(path, body, method = body ? 'POST' : 'GET') {
   return data;
 }
 let toastTimer;
-function toast(text) { const node = document.querySelector('#toast'); node.textContent = text; node.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('visible'), 6000); }
+// Messages show above an open window: the message box moves into the open dialog (dialogs sit above the page), and back after.
+function toast(text) { const node = document.querySelector('#toast'), open = document.querySelector('dialog[open]'); if (node.parentElement !== (open || document.body)) (open || document.body).append(node); node.textContent = text; node.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('visible'), 6000); }
 async function refresh() {
   try { setStaffNames(await api('/staff-names')); } catch { /* names are a convenience; usernames still show */ }
   const user = auth?.user; if (!user || user.mustChangePassword) return;   // nothing loads until a default password is replaced
