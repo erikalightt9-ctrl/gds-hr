@@ -796,3 +796,38 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .th-grid .th-peso { position: relative; display: block; }
 .th-grid .th-peso::before { content: '₱'; position: absolute; left: 5px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 600; color: var(--ink-soft, #5a4e34); pointer-events: none; }
 .th-grid .th-peso input.share-input { padding-left: 14px; }
+/* Messages: 💬 button beside the bell and the side panel */
+.msg-wrap { position: relative; display: inline-flex; }
+.msg-button { position: relative; font-size: 17px; }
+.employee-top-actions .msg-button { width: 44px; height: 44px; border-radius: 999px; padding: 0; }
+.msg-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 60; width: min(380px, 100vw); display: flex; flex-direction: column; background: #fffdf8; border-left: 1px solid #ead9b0; box-shadow: -18px 0 50px #00000024; }
+.msg-panel[hidden] { display: none; }
+.msg-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #f0e3c4; background: linear-gradient(180deg, #fff8e6, #fdf1d6); }
+.msg-head > strong { font-size: 16px; margin-right: auto; }
+.msg-title { display: grid; margin-right: auto; min-width: 0; }
+.msg-title strong { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-title small { color: var(--muted); font-size: 11px; }
+.msg-search { padding: 10px 14px; border-bottom: 1px solid #f3e8cf; }
+.msg-search input { width: 100%; }
+.msg-list { overflow-y: auto; flex: 1; }
+.msg-person { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #f3ead6; border-radius: 0; background: transparent; padding: 11px 14px; color: inherit; font-weight: 400; }
+.msg-person:hover { background: #fff6e2; }
+.msg-person[hidden] { display: none; }
+.msg-avatar { flex: 0 0 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: #f6e3b4; color: #8f1420; font-weight: 700; font-size: 13px; }
+.msg-who { display: grid; min-width: 0; flex: 1; }
+.msg-who strong { font-size: 13.5px; color: #262626; }
+.msg-who small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-person.unread .msg-who small { color: #262626; font-weight: 600; }
+.msg-meta { display: grid; justify-items: end; gap: 4px; }
+.msg-meta small { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+.msg-unread { min-width: 19px; height: 19px; padding: 0 6px; border-radius: 999px; background: #c4283a; color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.msg-thread { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 6px; background: #fbf7ee; }
+.msg-day { align-self: center; font-size: 10.5px; color: var(--muted); margin: 8px 0 2px; }
+.msg-bubble { max-width: 80%; padding: 8px 11px; border-radius: 14px; box-shadow: 0 1px 2px #0000000f; }
+.msg-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.45; }
+.msg-bubble small { display: block; margin-top: 3px; font-size: 10px; opacity: .75; text-align: right; }
+.msg-bubble.mine { align-self: flex-end; background: linear-gradient(180deg, #c32a37, #a31b28); color: #fff; border-bottom-right-radius: 4px; }
+.msg-bubble.theirs { align-self: flex-start; background: #fff; border: 1px solid #efe2c4; border-bottom-left-radius: 4px; }
+.msg-empty { text-align: center; padding: 30px 16px; }
+.msg-compose { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid #f0e3c4; background: #fff; }
+.msg-compose textarea { flex: 1; min-height: 44px; max-height: 140px; resize: vertical; font-size: 13.5px; }

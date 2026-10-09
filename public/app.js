@@ -1,6 +1,7 @@
 const brandLogo = '/gds-logo.png'; // 菲龍集團 GDS Capital logo (white background)
 import { createProfileView } from './profiles.js';
 import { setStaffNames, who } from './hr-common.js';
+import { initMessages, messagesButton, messagesChanged, messagesSignedIn, messagesSignedOut } from './messages.js';
 import { createPortal } from './portal.js';
 import { contributionsSection, renderCalculation } from './contributions.js';
 import { setupInstall, offerInstall } from './install.js';
@@ -42,6 +43,7 @@ let holidayYear = '';   // Holiday calendar: year shown (blank = this year)
 let annualYear = null;   // the year to open on the 13th Month Pay details page
 let recordsDate = '';   // Attendance → Daily records: the date shown (blank = today)
 let employeeData = null, liveData = null, eventStream = null, liveTimer = null, liveUser = null, refreshTimer = null;
+initMessages({ api, esc, toast });
 const portal = createPortal({ api, esc, money, table, toast, openDialog, dialog, refresh, render, app, today, brandLogo, portalHr: createPortalHr({ api, esc, table: (h, r, empty = 'Nothing to show yet.') => table(h, r, empty), toast, confirm: (title, message) => openDialog(title, `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${message}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>') }), onSecurityReset: () => { auth = { user: null }; dialog.close(); renderLogin(); }, reloadAccount: account });
 const contributionEditor = createContributionEditor({ api, esc, money, table, badge, toast, openDialog, dialog });
 const attendanceImport = createAttendanceImport({ api, esc, table, badge, toast, openDialog, dialog, refresh, render: () => render(), getState: () => state });
@@ -99,6 +101,7 @@ function toast(text) {
   toastTimer = setTimeout(() => { node.classList.remove('visible'); try { node.hidePopover?.(); } catch { /* already hidden */ } }, 6000);
 }
 async function refresh() {
+  messagesSignedIn();
   try { setStaffNames(await api('/staff-names')); } catch { /* names are a convenience; usernames still show */ }
   const user = auth?.user; if (!user || user.mustChangePassword) return;   // nothing loads until a default password is replaced
   if (user.role === 'employee') { api('/branding').then(b => applyTheme(b.theme)).catch(() => {}); const data = await api('/me/dashboard'); if (auth?.user?.id === user.id) employeeData = data; return; }
@@ -122,6 +125,7 @@ function startLive() {
   };
   eventStream = new EventSource('/api/events');
   eventStream.addEventListener('change', () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(update, 120); });
+  eventStream.addEventListener('chat', () => messagesChanged());
   eventStream.addEventListener('ready', () => { document.querySelectorAll('.sync-label').forEach(indicator => { indicator.textContent = '● Connected to live updates'; }); });
   eventStream.addEventListener('error', () => { document.querySelectorAll('.sync-label').forEach(indicator => { indicator.textContent = 'Connection interrupted · reconnecting…'; }); });
   liveTimer = setInterval(update, 20000);
@@ -182,7 +186,7 @@ function shell(content) {
     }).join('')}</nav>
     <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button><button class="signout-button sidebar-signout" data-signout>Sign out</button></div></aside>
     <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong></span></span>
-      <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span><span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
+      <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span>${messagesButton()}<span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
       <span class="topbar-divider" aria-hidden="true"></span><button class="user-meta" data-my-account title="My account: profile and password"><strong>${esc(who(auth.user.username))}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></button></span></header>
     <div class="content">${content}</div></main></div>`;
   loadBell();
@@ -880,6 +884,7 @@ function edit(kind, id, preset = {}) {
   };
 }
 function renderLogin() {
+  messagesSignedOut();
   document.documentElement.dataset.theme = 'gds';   // the sign-in screen keeps its approved red-and-gold design
   page = 'dashboard'; currentRun = null;
   stopLive(); portal.reset(); document.querySelector('.install-banner')?.remove();
