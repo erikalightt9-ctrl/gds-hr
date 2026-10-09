@@ -155,3 +155,13 @@ test('a finalized payroll is locked: no manual entries, overrides or adjustments
     assert.equal(store.read().runs.filter(r => r.status === 'posted').length, 1);
   } finally { store.close(); }
 });
+
+test('payslip names a typed "Other deductions" amount by its reason, or "Other deductions", not the audit note', async () => {
+  const { payslipFromRow } = await import('../src/portal.mjs');
+  const row = { employeeId: 'E1', employeeName: 'A', deductions: { SSS: 0, other: 1510 }, trace: [
+    { component: 'other', side: 'deductions', amount: 1010, formula: 'Manual override by gds.erika: 0 calculated → 1010' },
+    { component: 'other', side: 'deductions', amount: 500, formula: 'Manual override by gds.erika: 0 calculated → 500 (Uniform)' }] };
+  const labels = payslipFromRow({ id: 'r', status: 'posted', start: '2026-09-16', end: '2026-09-30' }, row).deductionItems.map(i => i.label);
+  assert.ok(labels.includes('Other deductions') && labels.includes('Uniform'));
+  assert.ok(!labels.some(l => /Manual override/.test(l)));
+});

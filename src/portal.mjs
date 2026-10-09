@@ -283,7 +283,9 @@ export function payslipFromRow(run, row, { designation = '' } = {}) {
   for (const [key, label] of Object.entries(TYPED)) if (row.deductions[key]) deductionItems.push({ label, amount: row.deductions[key] });
   for (const type of ['Salary Loan', 'SSS Loan', 'Pag-IBIG Loan']) if (!loans.some(l => l.type === type) && !deductionItems.some(i => i.label === type)) deductionItems.push({ label: type, amount: 0 });
   const otherItems = computation.filter(t => t.side === 'deductions' && t.component === 'other');
-  deductionItems.push(...otherItems.map(t => ({ label: t.formula, amount: t.amount })));
+  // An amount typed by HR in "Other deductions" is named by its reason (or "Other deductions"), never by the audit note.
+  const otherLabel = f => { const m = String(f || '').match(/^Manual override by .*?→ [-\d.]+(?: \((.*)\))?$/); return m ? (m[1] || 'Other deductions') : f; };
+  deductionItems.push(...otherItems.map(t => ({ label: otherLabel(t.formula), amount: t.amount })));
   const residual = (total, items) => Math.round((total - items.reduce((sum, item) => sum + item.amount, 0)) * 100) / 100;
   const loanRemainder = residual(row.deductions.loans || 0, loans), otherRemainder = residual(row.deductions.other || 0, otherItems);
   if (loanRemainder) deductionItems.push({ label: 'Other loan deductions (detail unavailable)', amount: loanRemainder });
