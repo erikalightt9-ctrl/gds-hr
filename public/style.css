@@ -31,3 +31,6 @@
 .topbar button[data-signout]{margin-left:10px}
 .employee-top-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
 .employee-top>.employee-top-actions{flex-direction:row;gap:8px}
+
+/* The message box as a popover (top layer): keep its corner position, no popover frame. */
+#toast[popover]{inset:auto 24px 24px auto;margin:0;border:0;overflow:visible}#toast[popover]:popover-open{display:block}

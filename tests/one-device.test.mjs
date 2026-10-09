@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 
 const hash = t => createHash('sha256').update(t).digest('hex');
 
-test('an account signed in on one device cannot sign in on another until signed out (admins exempt)', async () => {
+test('an account signed in on one device cannot sign in on another until signed out (administrators too)', async () => {
   const store = new Store(':memory:'); store.write(completeState());
   try {
     const admin = { username: 'boss', role: 'admin' };
@@ -21,7 +21,7 @@ test('an account signed in on one device cannot sign in on another until signed 
     assert.ok((await login(store, 'worker1', 'Worker-pass-2026!', 'k4')).token, 'signs in on the new device after HR signs the old one out');
     await addUser(store, { username: 'boss2', password: 'Admin-pass-2026!!', role: 'admin' }, admin);
     await login(store, 'boss2', 'Admin-pass-2026!!', 'k5');
-    assert.ok((await login(store, 'boss2', 'Admin-pass-2026!!', 'k6')).token, 'administrators are not limited');
+    await assert.rejects(login(store, 'boss2', 'Admin-pass-2026!!', 'k6'), /already signed in on another device/, 'administrators too');
   } finally { store.close(); }
 });
 
@@ -66,5 +66,35 @@ test('work schedule: HR or Maker sets it on the 201 profile and attendance uses 
     assert.equal(scheduleOf(store, e).hoursPerDay, 12);
     assert.throws(() => saveSchedule(store, maker, id, { start: '09:00', end: '12:00', hoursPerDay: 8, mealBreakMinutes: 60, restDays: [0] }), /does not fit/);
     assert.throws(() => saveSchedule(store, { username: 'v', role: 'viewer' }, id, { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, restDays: [0] }), /permission/i);
+  } finally { store.close(); }
+});
+
+test('a session ends after 5 minutes without use; active use keeps it going; the other device can then sign in', async () => {
+  const { session } = await import('../src/auth.mjs');
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    await addUser(store, { username: 'worker2', password: 'Worker-pass-2026!', role: 'employee', employeeId: 'EMP-001' }, { username: 'boss', role: 'admin' });
+    const first = await login(store, 'worker2', 'Worker-pass-2026!', 'a1'), cookie = `hr_session=${first.token}`;
+    const expires = () => store.db.prepare('SELECT expires FROM sessions').get().expires;
+    const left = expires() - Date.now();
+    assert.ok(left > 4.9 * 60000 && left <= 5 * 60000, 'five minutes');
+    store.db.prepare('UPDATE sessions SET expires=?').run(Date.now() + 60000);
+    session(store, cookie); assert.ok(expires() - Date.now() < 61000, 'a background check does not extend it');
+    session(store, cookie, { active: true }); assert.ok(expires() - Date.now() > 4.9 * 60000, 'active use extends it to five minutes again');
+    store.db.prepare('UPDATE sessions SET expires=?').run(Date.now() - 1);
+    assert.equal(session(store, cookie, { active: true }), null, 'signed out after 5 minutes unused');
+    assert.ok((await login(store, 'worker2', 'Worker-pass-2026!', 'a2')).token, 'another device can sign in once the unused one has timed out');
+  } finally { store.close(); }
+});
+
+test('a staff member linked to their own record can still get one employee login', async () => {
+  const { linkMyAccount } = await import('../src/auth.mjs');
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    const setup = { username: 'setup', role: 'admin' }, employees = store.read().employees, id = employees[0].id;
+    const boss = await addUser(store, { username: 'boss9', password: 'Admin-pass-2026!!', role: 'admin' }, setup);
+    linkMyAccount(store, boss, id, employees);
+    assert.ok(await addUser(store, { username: 'boss9.emp', password: 'Employee-pass-26', role: 'employee', employeeId: id }, setup), 'admin link does not block the employee login');
+    await assert.rejects(addUser(store, { username: 'boss9.emp2', password: 'Employee-pass-26', role: 'employee', employeeId: id }, setup), /already has an employee login: boss9.emp/);
   } finally { store.close(); }
 });

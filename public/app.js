@@ -50,8 +50,31 @@ const profiles = createProfileView({ api, esc, money, table, shell, heading, toa
 const names = { basic: 'Basic salary', regularOT: 'Regular OT', restDay: 'Rest day pay', restOT: 'Rest day OT', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday OT', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Regular / double holiday OT', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday OT', thirteenth: '13th month paid', absence: 'Unpaid leave / absence', loans: 'Loan deductions', sssLoan: 'SSS loan', pagibigLoan: 'Pag-IBIG loan', salaryDeduction: 'Salary deduction', tax: 'Withholding tax', other: 'Other authorized deductions' };
 Object.assign(names, { SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' });
 const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'], deductions: ['admin', 'hr'] })[kind]?.includes(auth.user.role);
+// Automatic sign-out after 5 minutes without use (mouse, keyboard, touch, scrolling). The last activity is shared by
+// every tab on this device, so working in one tab keeps the others signed in too.
+const IDLE_MS = 5 * 60000, ACTIVE_MS = 60000;
+let lastActivity = Date.now(), lastPing = 0;
+const readActivity = () => { try { return Math.max(lastActivity, Number(localStorage.getItem('hr-active-at')) || 0); } catch { return lastActivity; } };
+const isActive = () => Date.now() - readActivity() < ACTIVE_MS;
+function noteActivity() {
+  const now = Date.now(); if (now - lastActivity < 5000) return;
+  lastActivity = now; try { localStorage.setItem('hr-active-at', String(now)); } catch { /* this tab still counts */ }
+}
+for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll']) window.addEventListener(type, noteActivity, { passive: true, capture: true });
+setInterval(async () => {
+  if (!auth?.user) return;
+  const idle = Date.now() - readActivity();
+  if (idle >= IDLE_MS) {
+    try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrf || '' }, body: '{}' }); } catch { /* the server also ends it */ }
+    if (dialog?.open) dialog.close();
+    auth = { user: null }; state = null; renderLogin(); toast('Signed out after 5 minutes without activity. Sign in again to continue.');
+    return;
+  }
+  // Someone reading a page (moving the mouse, scrolling) makes no requests: keep the session going for them.
+  if (isActive() && Date.now() - lastPing > ACTIVE_MS) { lastPing = Date.now(); try { await api('/session'); } catch { /* next check retries */ } }
+}, 15000);
 async function api(path, body, method = body ? 'POST' : 'GET') {
-  const res = await fetch(`/api${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth?.csrf || '' }, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(`/api${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth?.csrf || '', 'X-HR-Active': isActive() ? '1' : '0' }, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json();
   if (!res.ok) {
     if (res.status === 401 && path !== '/login') { auth = { user: null }; renderLogin(); }
@@ -61,7 +84,20 @@ async function api(path, body, method = body ? 'POST' : 'GET') {
 }
 let toastTimer;
 // Messages show above an open window: the message box moves into the open dialog (dialogs sit above the page), and back after.
-function toast(text) { const node = document.querySelector('#toast'), open = document.querySelector('dialog[open]'); if (node.parentElement !== (open || document.body)) (open || document.body).append(node); node.textContent = text; node.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('visible'), 6000); }
+// A window that redraws its contents takes the box with it, so it is recreated when missing.
+// "Last, First Middle" -> "First Middle Last".
+const fullName = name => { const [last, first] = String(name || '').split(',').map(x => x.trim()); return first ? `${first} ${last}` : String(name || ''); };
+// Messages always show on top, even over an open window: the message box is a popover, which the browser keeps
+// above dialogs. It stays in the page body, so a window redrawing its contents cannot remove it.
+function toast(text) {
+  let node = document.querySelector('#toast');
+  if (!node) { node = document.createElement('div'); node.id = 'toast'; node.setAttribute('role', 'status'); node.setAttribute('aria-live', 'polite'); document.body.append(node); }
+  if (node.parentElement !== document.body) document.body.append(node);
+  node.textContent = text; node.classList.add('visible');
+  if (node.showPopover) { node.setAttribute('popover', 'manual'); try { node.hidePopover(); } catch { /* not shown yet */ } node.showPopover(); }
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.classList.remove('visible'); try { node.hidePopover?.(); } catch { /* already hidden */ } }, 6000);
+}
 async function refresh() {
   try { setStaffNames(await api('/staff-names')); } catch { /* names are a convenience; usernames still show */ }
   const user = auth?.user; if (!user || user.mustChangePassword) return;   // nothing loads until a default password is replaced
@@ -147,7 +183,7 @@ function shell(content) {
     <div class="sidebar-bottom"><button class="small" data-account>Account &amp; access</button><button class="signout-button sidebar-signout" data-signout>Sign out</button></div></aside>
     <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong></span></span>
       <span class="topbar-user"><span class="optional">${esc(today())} · Asia/Manila</span><span class="bell-wrap"><button class="small icon-button" data-bell aria-label="Notifications" aria-haspopup="true">🔔<span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
-      <span class="topbar-divider" aria-hidden="true"></span><button class="user-meta" data-my-account title="My account: profile and password"><strong>${esc(auth.user.username)}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></button></span></header>
+      <span class="topbar-divider" aria-hidden="true"></span><button class="user-meta" data-my-account title="My account: profile and password"><strong>${esc(who(auth.user.username))}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></button></span></header>
     <div class="content">${content}</div></main></div>`;
   loadBell();
   syncRoute();
@@ -877,7 +913,7 @@ async function myAccount() {
 }
 async function account() {
   const users = auth.user.role === 'admin' ? await api('/users') : [];
-  openDialog(auth.user.role === 'employee' ? 'Account & security' : 'Account & access', `<div class="dialog-body">${auth.user.role === 'admin' ? `<div class="acc-boxes"><details class="acc-box"><summary><span class="acc-icon">➕</span><span><strong>Add user</strong><small>Create a login</small></span></summary><form id="user-form" class="form-grid"><label class="field">Username<input name="username" minlength="3" required autocomplete="off"></label><label class="field">Role<select name="role"><option value="employee">Employee — own records only</option><option value="hr_staff">HR Staff — day-to-day 201 work</option><option value="maker">Maker — all non-salary employee records</option><option value="hr">HR Manager — people, approvals, attendance &amp; leave</option><option value="dept_manager">Department Manager — own department, view only</option><option value="payroll">Payroll — loans &amp; posting</option><option value="viewer">Management — dashboards &amp; reports</option><option value="admin">System Administrator — all settings</option></select></label><label class="field">Linked employee (Employee and Department Manager)<select name="employeeId"><option value="">Choose employee</option>${state.employees.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select></label><label class="field">Initial password<input type="password" name="password" minlength="9" maxlength="200" autocomplete="new-password" required></label><button class="primary" type="submit">Add user</button></form></details><details class="acc-box"><summary><span class="acc-icon">👥</span><span><strong>User accounts</strong><small>${users.length} accounts · username and role</small></span></summary>${table(['Username', 'Role'], users.map(u => [esc(u.username), badge({ admin: 'System Administrator', hr: 'HR Manager', hr_staff: 'HR Staff', dept_manager: 'Department Manager', viewer: 'Management', payroll: 'Payroll', employee: 'Employee' }[u.role] || u.role, 'neutral')]))}</details><details class="acc-box"><summary><span class="acc-icon">⚡</span><span><strong>Create accounts for all employees</strong><small>One login for each employee without one</small></span></summary><p class="legend">Username = Employee ID. Everyone chooses their own password at first sign-in.</p><button class="primary" data-employee-accounts>Create accounts</button></details></div>` : ''}</div>`);
+  openDialog(auth.user.role === 'employee' ? 'Account & security' : 'Account & access', `<div class="dialog-body">${auth.user.role === 'admin' ? `<div class="acc-boxes"><details class="acc-box"><summary><span class="acc-icon">➕</span><span><strong>Add user</strong><small>Create a login</small></span></summary><form id="user-form" class="form-grid"><label class="field">Username<input name="username" minlength="3" required autocomplete="off"></label><label class="field">Role<select name="role"><option value="employee">Employee — own records only</option><option value="hr_staff">HR Staff — day-to-day 201 work</option><option value="maker">Maker — all non-salary employee records</option><option value="hr">HR Manager — people, approvals, attendance &amp; leave</option><option value="dept_manager">Department Manager — own department, view only</option><option value="payroll">Payroll — loans &amp; posting</option><option value="viewer">Management — dashboards &amp; reports</option><option value="admin">System Administrator — all settings</option></select></label><label class="field">Linked employee (Employee and Department Manager)<select name="employeeId"><option value="">Choose employee</option>${state.employees.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select></label><label class="field">Initial password<input type="password" name="password" minlength="9" maxlength="200" autocomplete="new-password" required></label><button class="primary" type="submit">Add user</button></form></details><details class="acc-box"><summary><span class="acc-icon">👥</span><span><strong>User accounts</strong><small>${users.length} accounts · employee name, username and role</small></span></summary><div data-acc-users>${table(['Employee name', 'Username', 'Role', ''], users.map(u => [u.name ? esc(fullName(u.name)) : '<span class="muted">—</span>', esc(u.username), esc({ admin: 'System Administrator', hr: 'HR Manager', hr_staff: 'HR Staff', maker: 'Maker', dept_manager: 'Department Manager', viewer: 'Management', payroll: 'Payroll', employee: 'Employee' }[u.role] || u.role), u.id === auth.user.id ? '<small class="muted">You</small>' : `<button class="small danger" data-acc-delete="${esc(u.id)}" data-username="${esc(u.username)}" data-name="${esc(u.name ? fullName(u.name) : '')}">Delete</button>`]))}</div></details><details class="acc-box"><summary><span class="acc-icon">⚡</span><span><strong>Create accounts for all employees</strong><small>One login for each employee without one</small></span></summary><p class="legend">Username = Employee ID. Everyone chooses their own password at first sign-in.</p><button class="primary" data-employee-accounts>Create accounts</button></details></div>` : ''}</div>`);
   dialog.querySelector('[data-logout]')?.addEventListener('click', signOut);
   dialog.querySelector('[data-employee-accounts]')?.addEventListener('click', async () => {
     const password = window.prompt('Default password for the new employee accounts (at least 9 characters). Employees must change it at first sign-in:');
@@ -887,6 +923,14 @@ async function account() {
       toast(`${r.created.length} account${r.created.length === 1 ? '' : 's'} created · ${r.alreadyHadAccount} already had one${r.skipped.length ? ` · ${r.skipped.length} skipped (${r.skipped.map(s => `${s.name}: ${s.reason}`).join('; ')})` : ''}.`);
       await account();
     } catch (error) { toast(error.message); }
+  });
+  // User accounts: Delete asks for confirmation first, then removes the login for good (employee records and the audit trail stay).
+  dialog.querySelector('[data-acc-users]')?.addEventListener('click', async event => {
+    const b = event.target.closest('[data-acc-delete]'); if (!b) return;
+    const who = b.dataset.name ? `${b.dataset.name} (${b.dataset.username})` : b.dataset.username;
+    if (!window.confirm(`Delete the login of ${who}?\n\nThis permanently removes the account; it cannot be undone. The employee's 201 file, payslips and the audit trail are kept.`)) return;
+    try { await api(`/users/${b.dataset.accDelete}/delete`, { confirm: b.dataset.username }); toast(`Login of ${who} deleted.`); await account(); }
+    catch (error) { toast(error.message); }
   });
   const userForm = dialog.querySelector('#user-form');
   if (userForm) userForm.onsubmit = async event => { event.preventDefault(); try { const values = Object.fromEntries(new FormData(userForm)); if (!['employee', 'dept_manager'].includes(values.role)) delete values.employeeId; await api('/users', values); await account(); toast('User created.'); } catch (e) { toast(e.message); } };

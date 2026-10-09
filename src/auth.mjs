@@ -21,8 +21,10 @@ export async function addUser(store, input, actor = null) {
     if (['employee', 'dept_manager'].includes(value.role)) {
       const emp = employees.find(e => e.id === value.employeeId);
       if (!emp) throw new AppError('Choose the linked employee.');
-      const taken = store.db.prepare('SELECT username FROM users WHERE employee_id=? OR username=?').get(value.employeeId, value.employeeId);
-      if (taken) throw new AppError(`${emp.name} already has a login: ${taken.username}. Each employee can have only one login.`);
+      // One employee login per person. A staff login (admin, HR…) linked for the person's name does not count, so a staff
+      // member can also have an employee login for their own records.
+      const taken = store.db.prepare("SELECT username FROM users WHERE (employee_id=? AND role IN ('employee','dept_manager')) OR username=?").get(value.employeeId, value.employeeId);
+      if (taken) throw new AppError(`${emp.name} already has an employee login: ${taken.username}. Each employee can have only one.`);
     }
     const user = { id: randomUUID(), username: value.username, role: value.role, employeeId: value.employeeId || null };
     store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id) VALUES(?,?,?,?,?)').run(user.id, user.username, hash, user.role, user.employeeId);
@@ -64,7 +66,11 @@ export function checkLimit(store, key, maximum = 10) {
   if (row && row.attempts >= maximum) throw new AppError('Too many sign-in attempts. Try again in 15 minutes.', 429);
   store.db.prepare('INSERT INTO login_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1').run(key, now + 900000);
 }
-export const SIGNED_IN_ELSEWHERE = 'This account is already signed in on another device. Sign out there first. If that device is lost or not with you, ask HR to reset your password (that signs the other device out).';
+export const SIGNED_IN_ELSEWHERE = 'This account is already signed in on another device. Sign out there first, or wait 5 minutes: an unused device is signed out automatically.';
+// A session ends after 5 minutes without use. Only requests made while the person is active extend it
+// (the browser marks them with X-HR-Active: 1); background checks from an unattended screen do not.
+export const IDLE_MINUTES = 5;
+const IDLE_MS = IDLE_MINUTES * 60000;
 export async function login(store, username, password, key, otp = '', { currentTokenHash = '' } = {}) {
   checkLimit(store, key, 100);
   const accountKey = `account-login:${username.toLowerCase()}`; checkLimit(store, accountKey);
@@ -79,20 +85,20 @@ export async function login(store, username, password, key, otp = '', { currentT
   }
   store.db.prepare('DELETE FROM login_limits WHERE key=?').run(accountKey);
   store.db.prepare('DELETE FROM sessions WHERE expires < ?').run(Date.now());
-  if (user.role !== 'admin') {
-    const elsewhere = store.db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE user_id=? AND token_hash<>?').get(user.id, currentTokenHash || '').n;
-    if (elsewhere) { store.log({ username: user.username, role: user.role }, 'login-blocked-other-device', 'users', user.id, null, null); throw new AppError(SIGNED_IN_ELSEWHERE, 409); }
-  }
+  // One device at a time for every account (tabs on the same device share one session).
+  const elsewhere = store.db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE user_id=? AND token_hash<>?').get(user.id, currentTokenHash || '').n;
+  if (elsewhere) { store.log({ username: user.username, role: user.role }, 'login-blocked-other-device', 'users', user.id, null, null); throw new AppError(SIGNED_IN_ELSEWHERE, 409); }
   if (currentTokenHash) store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(currentTokenHash);   // same device signing in again
   const token = randomBytes(32).toString('hex'), csrf = randomBytes(32).toString('hex');
-  store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + 8 * 3600000);
+  store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + IDLE_MS);
   return { token, csrf, user: { id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret, mustChangePassword: !!user.must_change_password } };
 }
-export function session(store, cookie = '') {
+export function session(store, cookie = '', { active = false } = {}) {
   const token = cookie.split(';').map(v => v.trim()).find(v => v.startsWith('hr_session='))?.slice(11);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
   if (!row || row.disabled || row.expires < Date.now()) return null;
+  if (active) store.db.prepare('UPDATE sessions SET expires=? WHERE token_hash=?').run(Date.now() + IDLE_MS, hashToken(token));
   return { user: { id: row.id, username: row.username, role: row.role, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
 }
 export async function changePassword(store, user, currentPassword, newPassword) {
@@ -124,10 +130,16 @@ export function registeredEmail(store, user) {
   return isEmailAddress(user.email) ? user.email : profileEmails(store, user.employee_id)[0] || null;
 }
 function findRecoveryAccount(store, identifier) {
-  const direct = store.db.prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE OR employee_id=? COLLATE NOCASE OR email=? COLLATE NOCASE').get(identifier, identifier, identifier);
-  if (direct || !isEmailAddress(identifier)) return direct;
+  // Username first, then an account's own email, then the employee login of an Employee ID (a staff login linked to the
+  // same person is reached by its username or email), then the employee profile's email.
+  const byUsername = store.db.prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE').get(identifier);
+  if (byUsername) return byUsername;
+  const byEmail = store.db.prepare('SELECT * FROM users WHERE email=? COLLATE NOCASE').get(identifier);
+  if (byEmail) return byEmail;
+  const byEmployee = store.db.prepare("SELECT * FROM users WHERE employee_id=? COLLATE NOCASE ORDER BY role IN ('employee','dept_manager') DESC").get(identifier);
+  if (byEmployee || !isEmailAddress(identifier)) return byEmployee || null;
   const wanted = identifier.toLowerCase();
-  return store.db.prepare('SELECT * FROM users WHERE employee_id IS NOT NULL').all().find(u => profileEmails(store, u.employee_id).some(e => e.toLowerCase() === wanted)) || null;
+  return store.db.prepare("SELECT * FROM users WHERE employee_id IS NOT NULL ORDER BY role IN ('employee','dept_manager') DESC").all().find(u => profileEmails(store, u.employee_id).some(e => e.toLowerCase() === wanted)) || null;
 }
 // Forgot password: emails a one-time reset link to the registered address, or queues an HR request when no email can be sent.
 // The reply is identical either way so it never reveals whether an account or address exists.
@@ -300,7 +312,7 @@ export function linkMyAccount(store, actor, employeeId, employees) {
   if (!actor || actor.role === 'employee') throw new AppError('Employee accounts are already linked to their record.', 403);
   const id = String(employeeId || '').trim();
   if (id && !employees.some(e => e.id === id)) throw new AppError('Employee not found.', 404);
-  if (id) { const other = store.db.prepare('SELECT username FROM users WHERE employee_id=? AND id<>?').get(id, actor.id); if (other) throw new AppError(`That employee record already belongs to the account ${other.username}.`); }
+  if (id) { const other = store.db.prepare("SELECT username FROM users WHERE employee_id=? AND id<>? AND role NOT IN ('employee','dept_manager')").get(id, actor.id); if (other) throw new AppError(`That employee record already belongs to the account ${other.username}.`); }
   store.db.prepare('UPDATE users SET employee_id=? WHERE id=?').run(id || null, actor.id);
   store.log(actor, 'link-own-record', 'users', actor.id, null, { employeeId: id || null });
   return myAccount(store, actor, employees);
