@@ -849,3 +849,68 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .expl-text { display: block; margin-top: 2px; white-space: normal; color: var(--muted); }
 /* Attendance page: the live panel's own 'Open live attendance' link is not needed there */
 [data-live-block] [data-nav="live"] { display: none; }
+/* Attendance → Monthly sheet */
+.am-sheet { padding: 16px; }
+.am-top { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: start; margin-bottom: 14px; }
+.am-months { display: grid; grid-template-columns: repeat(2, 54px); gap: 6px; }
+.am-months button { padding: 7px 0; font-size: 12.5px; font-weight: 700; border-radius: 8px; background: #172036; color: #fff; border: 0; }
+.am-months button.active { background: linear-gradient(180deg, #c32a37, #96131f); }
+.am-boxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; align-content: start; }
+.am-box { border-radius: 10px; overflow: hidden; border: 1px solid #c9d5ea; text-align: center; background: #fff; }
+.am-box span { display: block; background: #3f6fb5; color: #fff; font-size: 12px; font-weight: 700; padding: 5px 4px; }
+.am-box strong { display: block; padding: 6px 4px; font-size: 15px; }
+.am-summary { margin: 0; display: grid; gap: 4px; min-width: 230px; font-size: 12.5px; }
+.am-summary div { display: flex; justify-content: space-between; gap: 12px; background: #eef3fb; border-radius: 6px; padding: 5px 10px; }
+.am-summary dt { font-weight: 700; color: #233a63; } .am-summary dd { margin: 0; font-weight: 700; }
+.am-wrap { overflow-x: auto; border: 1px solid #e3d6b8; border-radius: 10px; }
+.am-table { border-collapse: collapse; width: 100%; font-size: 11.5px; white-space: nowrap; table-layout: auto; }
+.am-table th, .am-table td { padding: 4px 2px; text-align: center; border-bottom: 1px solid #f0e7d2; border-right: 1px solid #f6efe0; position: static; }
+.am-table thead th { background: #fbf4e2; color: #3b3324; font-size: 10.5px; letter-spacing: 0; text-transform: none; }
+.am-table .am-rate-row th { background: #233a63; color: #fff; font-size: 9.5px; padding: 3px 1px; }
+.am-table .am-rate-row th.am-label { background: #b51f2b; font-size: 11px; }
+.am-table th.am-date button { border: 0; background: none; padding: 2px 4px; font-size: 11px; font-weight: 700; color: inherit; border-radius: 6px; }
+.am-table th.am-date button:hover { background: #fff; color: #b51f2b; }
+.am-table th.am-today { box-shadow: inset 0 -3px 0 #b51f2b; }
+.am-table .am-id { text-align: left; padding-left: 8px; color: var(--muted); }
+.am-table .am-name { text-align: left; padding: 4px 10px; font-weight: 600; min-width: 170px; position: sticky; left: 0; background: #fffdf8; z-index: 1; }
+.am-table thead .am-name { background: #fbf4e2; z-index: 2; }
+.am-table .am-weekend { background: #f6dccb; }
+.am-table thead .am-weekend { background: #ecc9b1; }
+.am-table .am-rate-row .am-weekend { background: #3a3a3a; }
+.am-table .am-holiday { background: #e8e1f5; }
+.am-mark { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; font-size: 10px; font-weight: 800; color: #fff; }
+.am-present, .am-open { } .am-mark.am-present, .am-mark.am-open { background: #2e9a5a; }
+.am-mark.am-late { background: #e39b1b; }
+.am-mark.am-absent { background: #c8323e; }
+.am-mark.am-leave { background: #e8c25a; color: #6a4b00; }
+.am-table th.am-present { background: #2e9a5a; color: #fff; } .am-table th.am-absent { background: #e8a585; color: #4a1a10; } .am-table th.am-leave { background: #f3dc79; color: #4a3a00; } .am-table th.am-chart { background: #fff; }
+.am-num { font-weight: 700; min-width: 48px; } td.am-present { color: #2e9a5a; } td.am-absent { color: #c8323e; } td.am-leave { color: #a07a00; }
+.am-chart { min-width: 120px; text-align: left !important; padding-right: 8px !important; }
+.am-bar { display: inline-block; width: 72px; height: 12px; background: #233a63; vertical-align: middle; border-radius: 2px; overflow: hidden; margin-right: 6px; }
+.am-bar i { display: block; height: 100%; background: #9fd8b4; }
+.am-chart b { font-size: 11px; }
+.am-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 11.5px; color: var(--muted); margin: 10px 2px 0; }
+.am-key { display: inline-block; width: 16px; height: 12px; border-radius: 3px; border: 1px solid #e3d6b8; }
+.am-key.am-weekend { background: #f6dccb; } .am-key.am-holiday { background: #e8e1f5; }
+@media (max-width: 900px) { .am-top { grid-template-columns: 1fr; } .am-months { grid-template-columns: repeat(6, 1fr); } }
+.am-bar i.am-w0 { width: 0%; }
+.am-bar i.am-w5 { width: 5%; }
+.am-bar i.am-w10 { width: 10%; }
+.am-bar i.am-w15 { width: 15%; }
+.am-bar i.am-w20 { width: 20%; }
+.am-bar i.am-w25 { width: 25%; }
+.am-bar i.am-w30 { width: 30%; }
+.am-bar i.am-w35 { width: 35%; }
+.am-bar i.am-w40 { width: 40%; }
+.am-bar i.am-w45 { width: 45%; }
+.am-bar i.am-w50 { width: 50%; }
+.am-bar i.am-w55 { width: 55%; }
+.am-bar i.am-w60 { width: 60%; }
+.am-bar i.am-w65 { width: 65%; }
+.am-bar i.am-w70 { width: 70%; }
+.am-bar i.am-w75 { width: 75%; }
+.am-bar i.am-w80 { width: 80%; }
+.am-bar i.am-w85 { width: 85%; }
+.am-bar i.am-w90 { width: 90%; }
+.am-bar i.am-w95 { width: 95%; }
+.am-bar i.am-w100 { width: 100%; }

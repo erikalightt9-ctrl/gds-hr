@@ -18,6 +18,7 @@ import { createPortalHr } from './portal-hr.js';
 import { createBreakdown } from './payroll-breakdown.js';
 import { createLoansPage } from './loans-ui.js';
 import { createThirteenthPage } from './thirteenth-ui.js';
+import { monthSheet } from './attendance-month.js';
 import { createContributionsPage } from './contributions-ui.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 // Salary day of a cutoff: 1st-15th → the 22nd; 16th-end → the 8th of the next month (same rule as src/paydays.mjs).
@@ -36,7 +37,8 @@ const label = key => key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpper
 const uid = () => crypto.randomUUID();
 let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun = null, filter = '', subtab = 'requests';
 let employeeStatusFilter = 'All Employees';
-let attendanceView = 'records'; // 'records' (all employees) or 'timecard' (one employee beside pay)
+let attendanceView = 'month'; // 'month' (monthly sheet), 'records' (one day, all employees) or 'timecard' (one employee beside pay)
+let attendanceMonth = '';      // Attendance → Monthly: YYYY-MM shown (blank = this month)
 let payrollEmployee = '';
 let computationContext = null; // the payroll computation being reviewed, reopened after an adjustment is saved // '' = all employees; otherwise the one Employee ID being calculated
 let holidayYear = '';   // Holiday calendar: year shown (blank = this year)
@@ -275,9 +277,10 @@ function employeesPage() {
   return heading('Your people', 'Open an employee to view their complete, connected profile.', addButton('employees', 'Add employee')) + `${state.employees.some(e => e.draft) ? '<div class="notice">Draft profiles are excluded from payroll until salary, joining date, department, schedule, and benefit coverage are completed.</div>' : ''}<section class="panel"><div class="panel-head"><h2>Employee directory</h2>${downloads('employees')}${badge(`${list.length} employees`, 'neutral')}</div>${searchToolbar(`<label class="field">Employee filter<select id="employee-status-filter">${statuses.map(s => `<option ${s === employeeStatusFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></label>`)}${table(['Employee', 'Position', 'Monthly salary', 'Joined', 'Status', ''], list.map(e => [`<button class="employee-link" data-profile="${esc(e.id)}">${employee(e.id)}</button>`, esc(e.profile.position || 'Position required'), e.monthlySalary === null ? 'Not set' : money(e.monthlySalary), e.startDate || 'Not set', badge(e.draft ? 'Draft · needs details' : e.profile.employeeStatus || (e.active ? 'Active' : 'Inactive'), e.draft ? 'pending' : '') + `<small>${esc(e.profile.employmentStatus || '')}</small>`, `<button class="small" data-profile="${esc(e.id)}">Open profile</button>`]))}</section>`;
 }
 function attendancePage() {
-  const views = `<div class="tabs"><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily records · all employees</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Employee timecard · check against pay</button></div>`;
+  const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily records · all employees</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Employee timecard · check against pay</button></div>`;
   const top = heading('Attendance', '') + views;
   if (attendanceView === 'timecard') return top + timecard.panel(state);
+  if (attendanceView === 'month') return top + monthSheet({ state, esc, today: today(), month: attendanceMonth || today().slice(0, 7), search: filter });
   // One date at a time: every employee for the chosen day (finished record, timed in, on leave, rest day or no time in).
   const day = recordsDate || today(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
   const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= day && (!e.endDate || e.endDate >= day))
@@ -948,6 +951,8 @@ document.addEventListener('click', async event => {
     if (b.dataset.tab) { subtab = b.dataset.tab; filter = ''; render(); }
     if (b.hasAttribute('data-attendance-import')) { attendanceImport.open(); return; }
     if (b.dataset.attendanceView) { attendanceView = b.dataset.attendanceView; render(); }
+    if (b.dataset.amMonth) { attendanceMonth = b.dataset.amMonth; render(); }
+    if (b.dataset.amDay) { recordsDate = b.dataset.amDay; attendanceView = 'records'; render(); }
     if (b.dataset.add) edit(b.dataset.add);
     if (b.dataset.edit) edit(b.dataset.edit, b.dataset.id);
     if (b.dataset.holYear) { holidayYear = b.dataset.holYear; render(); return; }
