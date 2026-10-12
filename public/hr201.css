@@ -1234,3 +1234,30 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .shell.collapsed .sb-foot { flex-direction: column; }
 /* Wider sidebar so menu names fit on one line (desktop) */
 @media (min-width: 1151px) { .shell:not(.collapsed) { grid-template-columns: 272px minmax(0, 1fr); } }
+/* Employee loans (redesign) */
+.ln-ico { width: 20px; height: 20px; flex: none; }
+.ln-primary { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border: 0; border-radius: 10px; background: linear-gradient(180deg, #b51f2b, #8f1420); color: #fff; font-weight: 700; font-size: 15px; }
+.ln-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.ln-card { display: flex; gap: 16px; align-items: flex-start; padding: 20px; border: 1px solid #e7e4df; border-radius: 12px; background: #fff; }
+.ln-card-ico { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #f1efec; color: #4a4a4a; flex: none; }
+.ln-card span { display: block; font-size: 14px; color: #3d3d3d; } .ln-card strong { display: block; font-size: 28px; font-weight: 800; margin: 6px 0 4px; color: #1f1a14; font-variant-numeric: tabular-nums; } .ln-card small { color: var(--muted); font-size: 13px; }
+.ln-panel { border: 1px solid #e7e4df; border-radius: 12px; background: #fff; margin-bottom: 18px; overflow: hidden; }
+.ln-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 22px; border-bottom: 1px solid #efece7; }
+.ln-panel-head h2 { margin: 0; font-size: 20px; display: inline-flex; align-items: center; gap: 10px; }
+.ln-count { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 999px; background: #f1efec; font-size: 13px; font-weight: 600; color: #3d3d3d; }
+.ln-note { color: var(--muted); font-size: 13px; }
+.ln-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ln-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid #e0dcd5; border-radius: 9px; background: #fff; color: #3d3d3d; font-weight: 600; font-size: 13px; text-decoration: none; }
+.ln-table-wrap { overflow-x: auto; }
+.ln-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ln-table thead th { background: #faf9f7; color: #555; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 12px 22px; text-align: left; position: static; border-bottom: 1px solid #efece7; }
+.ln-table td { padding: 12px 22px; border-bottom: 1px solid #f2f0ec; vertical-align: middle; white-space: nowrap; }
+.ln-table td small { display: block; color: var(--muted); font-size: 12px; }
+.ln-wrap { white-space: normal !important; min-width: 200px; }
+.ln-empty { display: grid; justify-items: center; gap: 4px; padding: 26px 10px; text-align: center; white-space: normal; }
+.ln-empty-ico { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: #f1efec; color: #4a4a4a; margin-bottom: 6px; }
+.ln-empty strong { font-size: 15px; color: #1f1a14; } .ln-empty small { color: var(--muted); font-size: 13.5px; }
+.ln-empty .ln-btn { margin-top: 10px; }
+.ln-foot { padding: 12px 22px; font-size: 13px; color: #3d3d3d; }
+.ln-info { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin: 0 2px; }
+@media (max-width: 1100px) { .ln-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
