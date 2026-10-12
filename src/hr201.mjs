@@ -127,7 +127,7 @@ export function directory(store, actor) {
   const people = scopeEmployees(store, actor);
   return people.map(e => {
     const job = profileOf(store, e.id, 'employment'), personal = profileOf(store, e.id, 'personal');
-    return { id: e.id, schedule: scheduleOf(store, e).text, number: displayNumber(e), name: e.name, department: e.department, position: job.position || '', classification: job.employmentStatus || '', status: activity(e, job), employeeStatus: job.employeeStatus || '', dateHired: e.startDate, workEmail: job.businessEmail || '', supervisor: job.supervisor || '', probationEnd: job.probationEnd || '', reviewDate: job.reviewDate || '', archived: !!e.archived, draft: !!e.draft, ...(HR_TEAM.includes(actor.role) ? { personalEmail: personal.personalEmail || '' } : {}) };
+    return { id: e.id, schedule: scheduleOf(store, e).text, number: displayNumber(e), name: e.name, department: e.department, position: job.position || '', classification: job.employmentStatus || '', status: activity(e, job), employeeStatus: job.employeeStatus || '', dateHired: e.startDate, workEmail: job.businessEmail || '', supervisor: job.supervisor || '', probationEnd: job.probationEnd || '', reviewDate: job.reviewDate || '', employmentType: job.employmentType || '', workLocation: job.workLocation || '', archived: !!e.archived, draft: !!e.draft, ...(HR_TEAM.includes(actor.role) ? { personalEmail: personal.personalEmail || '', mobile: personal.mobile || profileOf(store, e.id, 'contact').mobile || '' } : {}) };
   });
 }
 

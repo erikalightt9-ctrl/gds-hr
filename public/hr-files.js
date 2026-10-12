@@ -2,7 +2,7 @@
 // digital 201 document checklist.
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who } from './hr-common.js';
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 const TABS = [['overview', 'Overview', '📊'], ['personal', 'Personal', '👤'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['government', 'Government IDs', '🪪'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Requirements', '✅'], ['documents', 'Documents', '📁'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅'], ['activity', 'Activity', '↺']];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
@@ -34,28 +34,65 @@ export function createFiles(ctx) {
     return list;
   }
   const options = (values, chosen, all) => `<option value="">${all}</option>${[...new Set(values.filter(Boolean))].sort().map(v => `<option ${v === chosen ? 'selected' : ''}>${esc(v)}</option>`).join('')}`;
+  // Employee Masterlist: count cards (click to filter), search + subsidiary + status, the employee table, and a profile
+  // preview on the right for the selected employee (tabs and links open the full 201 file).
+  const ICON = {
+    all: '<path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.7 0-6 1.3-6 3.5V19h12v-2.5C14 14.3 10.7 13 8 13Zm8 0c-.3 0-.7 0-1.1.1A4.4 4.4 0 0 1 16 16.5V19h6v-2.5c0-2.2-3.3-3.5-6-3.5Z"/>',
+    active: '<path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 4.5V21h10.3a6 6 0 0 1-.3-2 6 6 0 0 1 .6-2.6A13 13 0 0 0 12 14Zm8.3 1.3-3.6 3.6-1.6-1.6-1.1 1.1 2.7 2.7 4.7-4.7Z"/>',
+    inactive: '<path d="M10 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 4.5V21h16v-2.5c0-2.8-4.7-4.5-8-4.5Zm12.3-5.9-1.4-1.4-1.9 1.9-1.9-1.9-1.4 1.4 1.9 1.9-1.9 1.9 1.4 1.4 1.9-1.9 1.9 1.9 1.4-1.4-1.9-1.9Z"/>',
+    search: '<path d="M10 3a7 7 0 1 0 4.2 12.6l5.1 5.1 1.4-1.4-5.1-5.1A7 7 0 0 0 10 3Zm0 2a5 5 0 1 1-5 5 5 5 0 0 1 5-5Z"/>',
+    export: '<path d="M12 3 7 8l1.4 1.4L11 6.8V15h2V6.8l2.6 2.6L17 8Zm-7 13v4h14v-4h-2v2H7v-2Z"/>',
+    plus: '<path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/>',
+    check: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1.4 14.6-4.2-4.2 1.4-1.4 2.8 2.8 5.8-5.8 1.4 1.4Z"/>',
+    minus: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm5 11H7v-2h10Z"/>',
+    pen: '<path d="m15.2 4.2 4.6 4.6L8.6 20H4v-4.6Zm2.1-2.1 1-1a1.5 1.5 0 0 1 2.1 0l2.5 2.5a1.5 1.5 0 0 1 0 2.1l-1 1Z"/>',
+    building: '<path d="M4 21V5l8-3v19Zm2-2h4V5L6 6.5ZM14 21V9h6v12Zm2-2h2v-8h-2Z"/>',
+    bag: '<path d="M20 7h-4V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Zm-10-2h4v2h-4Zm10 14H4v-5h6v2h4v-2h6Zm0-7H4V9h16Z"/>',
+    calendar: '<path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3Zm12 8H5v9h14ZM5 8h14V6H5Z"/>',
+    doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM8 12h8v1.6H8Zm0 3.4h8V17H8Z"/>',
+    pin: '<path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 14.5 9 2.5 2.5 0 0 1 12 11.5Z"/>',
+    people: '<path d="M9 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3ZM9 13c-2.7 0-8 1.3-8 4v3h16v-3c0-2.7-5.3-4-8-4Zm8 0h-.8a5 5 0 0 1 2.8 4v3h4v-3c0-2.5-3.6-3.8-6-4Z"/>',
+    mail: '<path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2.4V17h16V7.4l-8 5.3Zm.9-.4L12 11.7 19.1 7Z"/>',
+    phone: '<path d="M6.6 10.8a15.2 15.2 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.2 11.4 11.4 0 0 0 3.6.6 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .6 3.6 1 1 0 0 1-.3 1Z"/>',
+    user: '<path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4 0-9 2-9 5v2h18v-2c0-3-5-5-9-5Z"/>',
+    chevron: '<path d="m9 6 6 6-6 6-1.4-1.4L12.2 12 7.6 7.4Z"/>',
+    left: '<path d="m15 6-6 6 6 6 1.4-1.4L11.8 12l4.6-4.6Z"/>',
+  };
+  const svg = (name, cls = '') => `<svg class="ml-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICON[name]}</svg>`;
+  const tone = p => (p.status === 'Active' ? 'active' : 'inactive');
+  const personName = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return first ? `${first} ${last}` : name; };
+  const avatar = (p, cls = '') => `<span class="ml-avatar ml-${tone(p)} ${cls}" aria-hidden="true"><img src="/api/hr/employees/${encodeURIComponent(p.id)}/photo" alt="" loading="lazy" data-dir-photo>${esc(initials(p.name))}</span>`;
+  const pill = p => `<span class="ml-pill ml-${tone(p)}">${svg(p.status === 'Active' ? 'check' : 'minus')}${esc(p.archived ? 'Archived' : p.status || '—')}</span>`;
+  let selectedId = null;
+  function previewHtml(p) {
+    if (!p) return '<aside class="ml-preview"><h2>Employee profile</h2><p class="muted">Choose an employee to see their profile.</p></aside>';
+    const info = (ic, label, value) => `<div class="ml-info">${svg(ic)}<span><small>${esc(label)}</small><strong>${esc(value || 'Not set')}</strong></span></div>`;
+    const link = (ic, label, tabId) => `<button class="ml-link" data-open="${esc(p.id)}" data-start-tab="${tabId}">${svg(ic)}<span>${esc(label)}</span>${svg('chevron', 'ml-chev')}</button>`;
+    return `<aside class="ml-preview"><h2>Employee profile</h2>
+      <div class="ml-pv-head">${avatar(p, 'ml-avatar-lg')}<div><strong class="ml-pv-name">${esc(personName(p.name))}</strong><span>${esc(p.position || '—')}</span><span>${esc(p.number)}</span>${pill(p)}</div>${can().manage ? `<button class="ml-btn" data-edit-emp="${esc(p.id)}">${svg('pen')}Edit profile</button>` : ''}</div>
+      <nav class="ml-tabs">${[['overview', 'Overview'], ['employment', 'Employment'], ['documents', 'Documents'], ['personal', 'More']].map(([id, label], i) => `<button class="${i === 0 ? 'active' : ''}" data-open="${esc(p.id)}" data-start-tab="${id}">${label}</button>`).join('')}</nav>
+      <section class="ml-block"><h3>Work information</h3><div class="ml-grid">${info('building', 'Subsidiary', p.department)}${info('bag', 'Position', p.position)}${info('calendar', 'Date hired', p.dateHired ? fmtDate(p.dateHired) : '')}${info('doc', 'Employment type', p.employmentType || p.classification)}${info('pin', 'Office location', p.workLocation)}${info('people', 'Reporting manager', p.supervisor)}</div></section>
+      <section class="ml-block"><h3>Contact information</h3><div class="ml-grid">${info('mail', 'Work email', p.workEmail)}${info('phone', 'Work phone', p.mobile)}</div></section>
+      <div class="ml-links">${link('user', 'Personal information', 'personal')}${link('people', 'Emergency contacts', 'personal')}${link('calendar', 'Leave & attendance', 'leave')}</div></aside>`;
+  }
   function directoryHtml() {
-    const list = filtered(), pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE)); pageNo = Math.min(pageNo, pages);
-    const rows = list.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE);
-    const head = (key, text) => `<button class="sort-head" data-sort="${key}" aria-label="Sort by ${text}">${text}${sort.key === key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`;
-    const docFilterLabel = { missing: 'with missing requirements', review: 'with documents to review', expired: 'with expired documents', newhires: 'hired in the last 30 days' }[query.docs];
-    return heading('Employee 201 Files', '', can().manage ? '<button class="primary" data-hr-add-employee>＋ Add employee</button>' : '') +
-      `<section class="panel"><div class="toolbar hr-filters">
-        <label class="search">Search<input type="search" data-q value="${esc(query.q)}" placeholder="Search by name, employee no., department or position"></label>
-        <label>Subsidiary<select data-f="department">${options(people.map(p => p.department), query.department, 'All subsidiaries')}</select></label>
-        <label>Position<select data-f="position">${options(people.map(p => p.position), query.position, 'All positions')}</select></label>
-        <label>Status<select data-f="status"><option value="">Active and inactive</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
-        <label>Classification<select data-f="classification">${options(people.map(p => p.classification), query.classification, 'All classifications')}</select></label>
-        <button class="small" data-reset>Reset filters</button>
-      </div>
-      ${docFilterLabel ? `<div class="notice compact">Showing employees ${docFilterLabel}. <button class="small" data-reset>Show everyone</button></div>` : ''}
-      <div class="directory-wrap">${table([head('name', 'Employee'), head('position', 'Position'), 'Work schedule', head('dateHired', 'Date hired'), ...(can().manage ? ['201 completion'] : [])],
-        rows.map(p => [
-          `<button class="emp-cell" data-open="${esc(p.id)}" aria-label="Open ${esc(p.name)}"><span class="hr-avatar small" aria-hidden="true"><img src="/api/hr/employees/${encodeURIComponent(p.id)}/photo" alt="" loading="lazy" data-dir-photo>${esc(initials(p.name))}</span><span class="emp-text"><strong>${esc(p.name)}</strong><small>${esc(p.number)}</small></span></button>`,
-          esc(p.position || '—'), `<span class="sched-cell">${esc(p.schedule || 'Not set')}</span>`, fmtDate(p.dateHired),
-          ...(can().manage ? [p.documents ? `<div class="completion">${progress(p.documents.percent, `${p.documents.verified}/${p.documents.required} verified`)}${p.documents.missing ? `<small class="completion-missing">${p.documents.missing} missing</small>` : ''}</div>` : '—'] : [])]),
-        query.q || query.department || query.position || query.status || query.classification || query.docs ? 'No employees match these filters.' : 'No employees yet. Add your first employee to start their 201 file.')}</div>
-      <div class="pager"><span>${list.length} employee${list.length === 1 ? '' : 's'}${pages > 1 ? ` · page ${pageNo} of ${pages}` : ''}</span>${pages > 1 ? `<button class="small" data-page="${pageNo - 1}" ${pageNo === 1 ? 'disabled' : ''}>‹ Previous</button><button class="small" data-page="${pageNo + 1}" ${pageNo === pages ? 'disabled' : ''}>Next ›</button>` : ''}</div></section>`;
+    const list = filtered(), size = PAGE_SIZE, pages = Math.max(1, Math.ceil(list.length / size)); pageNo = Math.min(pageNo, pages);
+    const rows = list.slice((pageNo - 1) * size, pageNo * size);
+    if (!selectedId || !people.some(p => p.id === selectedId)) selectedId = rows[0]?.id || null;
+    const current = people.filter(p => !p.archived), active = current.filter(p => p.status === 'Active').length;
+    const card = (key, ic, value, label) => `<button class="ml-card${(query.status || '') === key ? ' active' : ''}" data-ml-status="${key}"><span class="ml-card-ico ml-${ic}">${svg(ic)}</span><span><strong>${value}</strong><small>${label}</small></span></button>`;
+    const from = list.length ? (pageNo - 1) * size + 1 : 0, to = Math.min(pageNo * size, list.length);
+    return `<div class="ml-header"><div><h1>Employee Masterlist</h1><p>Manage employee profiles and employment records</p></div><div class="ml-header-tools"><a class="ml-btn" href="/api/reports/employees.xlsx" download>${svg('export')}Export</a>${can().manage ? `<button class="ml-btn primary" data-hr-add-employee>${svg('plus')}Add employee</button>` : ''}</div></div>
+      <div class="ml-layout"><section class="ml-main">
+        <div class="ml-cards">${card('', 'all', current.length, 'Total employees')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}</div>
+        <div class="ml-filters"><label class="ml-search">${svg('search')}<input type="search" data-q value="${esc(query.q)}" placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
+          <select data-f="department" aria-label="Subsidiary">${options(people.map(p => p.department), query.department, 'Subsidiary')}</select>
+          <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="ml-table-wrap"><table class="ml-table"><thead><tr><th>Employee</th><th>Subsidiary / Position</th><th>Status</th><th>Date hired</th><th>Action</th></tr></thead><tbody>
+          ${rows.map(p => `<tr class="${p.id === selectedId ? 'selected' : ''}" data-ml-row="${esc(p.id)}"><td><div class="ml-emp">${avatar(p)}<span><strong>${esc(personName(p.name))}</strong><small>${esc(p.number)}</small></span></div></td><td><span class="ml-two"><strong>${esc(p.department || '—')}</strong><small>${esc(p.position || '—')}</small></span></td><td>${pill(p)}</td><td>${p.dateHired ? fmtDate(p.dateHired) : '—'}</td><td><button class="ml-view" data-ml-select="${esc(p.id)}">View ${svg('chevron')}</button></td></tr>`).join('') || `<tr><td colspan="5" class="empty">${query.q || query.department || query.status ? 'No employees match these filters.' : 'No employees yet.'}</td></tr>`}
+        </tbody></table></div>
+        <div class="ml-pager"><span>Showing ${from}–${to} of ${list.length} employee${list.length === 1 ? '' : 's'}</span><span class="ml-pages"><button data-page="${pageNo - 1}" ${pageNo === 1 ? 'disabled' : ''} aria-label="Previous page">${svg('left')}</button>${Array.from({ length: pages }, (_, i) => `<button data-page="${i + 1}" class="${i + 1 === pageNo ? 'active' : ''}">${i + 1}</button>`).join('')}<button data-page="${pageNo + 1}" ${pageNo === pages ? 'disabled' : ''} aria-label="Next page">${svg('chevron')}</button></span></div>
+      </section>${previewHtml(people.find(p => p.id === selectedId))}</div>`;
   }
   async function directory(preset = null) {
     if (preset) { query = { q: '', department: '', position: '', status: '', classification: '', docs: '', ...preset }; pageNo = 1; }
@@ -70,12 +107,16 @@ export function createFiles(ctx) {
     root.querySelector('[data-q]').addEventListener('input', event => { query.q = event.target.value; pageNo = 1; const pos = event.target.selectionStart; draw(); const box = document.querySelector('[data-q]'); box.focus(); box.setSelectionRange(pos, pos); });
     root.addEventListener('change', event => { const f = event.target.dataset.f; if (f) { query[f] = event.target.value; pageNo = 1; draw(); } });
     root.addEventListener('click', onDirectoryClick);
+    // Clicking anywhere on a row shows that employee in the profile panel.
+    root.addEventListener('click', event => { const row = event.target.closest('[data-ml-row]'); if (row && !event.target.closest('button') && row.dataset.mlRow !== selectedId) { selectedId = row.dataset.mlRow; draw(); } });
   }
   async function onDirectoryClick(event) {
     const b = event.target.closest('button'); if (!b) return;
     if (b.dataset.sort) { sort = { key: b.dataset.sort, dir: sort.key === b.dataset.sort ? -sort.dir : 1 }; draw(); }
     if (b.hasAttribute('data-reset')) { query = { q: '', department: '', position: '', status: '', classification: '', docs: '' }; pageNo = 1; draw(); }
     if (b.dataset.page) { pageNo = Number(b.dataset.page); draw(); }
+    if (b.dataset.mlSelect) { selectedId = b.dataset.mlSelect; draw(); }
+    if (b.dataset.mlStatus !== undefined) { query.status = b.dataset.mlStatus; pageNo = 1; draw(); }
     if (b.dataset.open) await openProfile(b.dataset.open, b.dataset.startTab || 'overview');
     if (b.hasAttribute('data-hr-add-employee')) addEmployee();
     if (b.dataset.editEmp) editEmployee(b.dataset.editEmp, () => directory());
