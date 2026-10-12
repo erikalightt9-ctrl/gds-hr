@@ -831,3 +831,17 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .msg-empty { text-align: center; padding: 30px 16px; }
 .msg-compose { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid #f0e3c4; background: #fff; }
 .msg-compose textarea { flex: 1; min-height: 44px; max-height: 140px; resize: vertical; font-size: 13.5px; }
+/* Attendance explanations with HR / employee comments */
+.expl-list { display: grid; gap: 12px; }
+.expl-card { border: 1px solid #efe2c4; border-radius: 12px; padding: 12px 14px; background: #fffdf8; }
+.expl-card header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.expl-card header .badge { margin-left: auto; }
+.expl-card > p { margin: 8px 0; white-space: pre-wrap; }
+.expl-comment { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #fff; border-left: 3px solid #d9b85c; }
+.expl-comment.hr { border-left-color: #b51f2b; background: #fff6f6; }
+.expl-comment p { margin: 4px 0 0; white-space: pre-wrap; }
+.expl-reply { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
+.expl-reply textarea { flex: 1; min-height: 60px; }
+/* Sign-in: the logo sits at the top of the sign-in card, sized to fit inside it */
+.login-form .login-card-logo { display: block; width: 100%; max-width: 260px; height: auto; max-height: 96px; object-fit: contain; margin: 0 auto 18px; }
+.welcome-login .login-form h2, .welcome-login .login-form h2 + p { text-align: center; }

@@ -29,7 +29,7 @@ import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, reviewOutOfOffice } from './portal.mjs';
+import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, reviewOutOfOffice } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
@@ -58,6 +58,7 @@ export function employeeNotice(pathname, data = {}) {
     [/^\/api\/me\/leaves$/, () => `Leave request submitted${data.startDate ? ` for ${days(data.startDate, data.endDate)}` : ''}. Waiting for HR approval.`],
     [/^\/api\/me\/leaves\/[^/]+\/cancel$/, () => 'Leave request cancelled.'],
     [/^\/api\/me\/leaves\/[^/]+\/proof$/, () => 'Leave proof uploaded. Waiting for HR review.'],
+    [/^\/api\/me\/explanations\/[^/]+\/reply$/, () => `Your reply on the attendance explanation${data.date ? ` for ${data.date}` : ''} was sent to HR.`],
     [/^\/api\/me\/explanations$/, () => `Attendance explanation submitted${data.date ? ` for ${data.date}` : ''}. Waiting for HR review.`],
     [/^\/api\/me\/documents$/, () => `Supporting document uploaded${data.name ? `: ${data.name}` : ''}.`],
     [/^\/api\/hr\/me\/overtime$/, () => `Overtime filed for ${data.date} (${data.hours} h). Waiting for HR approval.`],
@@ -175,6 +176,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         const proofUpload = pathname.match(/^\/api\/me\/leaves\/([a-zA-Z0-9_-]+)\/proof$/);
         if (proofUpload && req.method === 'POST') { send(200, attachLeaveProof(store, auth.user, proofUpload[1], await readBody(req))); return; }
         if (pathname === '/api/me/explanations' && req.method === 'POST') { send(201, submitExplanation(store, auth.user, await readBody(req))); return; }
+        const explanationReply = pathname.match(/^\/api\/me\/explanations\/([a-f0-9-]+)\/reply$/);
+        if (explanationReply && req.method === 'POST') { send(200, replyExplanation(store, auth.user, explanationReply[1], await readBody(req))); return; }
         if (pathname === '/api/me/documents' && req.method === 'POST') { checkLimit(store, `upload:${auth.user.id}`); send(201, uploadDocument(store, auth.user, auth.user.employeeId, await readBody(req, 7100000))); return; }
         const document = pathname.match(/^\/api\/me\/documents\/([a-f0-9-]+)\/content$/);
         if (document && req.method === 'GET') { const doc = getDocument(store, auth.user, document[1]); res.writeHead(200, { 'Content-Type': doc.mime, 'Content-Disposition': `attachment; filename="supporting-document"; filename*=UTF-8''${encodeURIComponent(doc.name)}` }); res.end(Buffer.from(doc.content)); return; }
@@ -208,6 +211,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/live/correct' && req.method === 'POST') { send(200, correctClock(store, auth.user, await readBody(req))); return; }
       const explanationReview = pathname.match(/^\/api\/explanations\/([a-f0-9-]+)\/review$/);
       if (explanationReview && req.method === 'POST') { send(200, reviewExplanation(store, auth.user, explanationReview[1], await readBody(req))); return; }
+      const explanationReturn = pathname.match(/^\/api\/explanations\/([a-f0-9-]+)\/return$/);
+      if (explanationReturn && req.method === 'POST') { send(200, returnExplanation(store, auth.user, explanationReturn[1], await readBody(req))); return; }
       if (pathname === '/api/overtime-requests' && req.method === 'GET') { send(200, overtimeQueue(store, auth.user)); return; }
       if (pathname === '/api/overtime-requests' && req.method === 'POST') { send(201, fileOvertime(store, auth.user, await readBody(req))); return; }
       const otDecision = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/decision$/);

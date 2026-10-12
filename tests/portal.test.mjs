@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { completeState, admin } from './helpers.mjs';
-import { punch, employeeDashboard, applyLeave, cancelLeave, submitExplanation, reviewExplanation, liveDashboard, ownPayslip, geofence, correctClock, payslipPdf, locationAddress, earlierHistory } from '../src/portal.mjs';
+import { punch, employeeDashboard, applyLeave, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, ownPayslip, geofence, correctClock, payslipPdf, locationAddress, earlierHistory } from '../src/portal.mjs';
 import { addUser, login, issuePasswordReset, redeemPasswordReset, session, totpCode, configureMfa, setDisabled, requestRecovery } from '../src/auth.mjs';
 import { saveProfile } from '../src/profiles.mjs';
 import { saveRecord, preview, postPayroll } from '../src/service.mjs';
@@ -186,3 +186,36 @@ test('employee account binding and one-time password recovery revoke old session
   } finally { store.close(); }
 });
 
+
+test('HR can send an explanation back with a comment; the employee replies and it returns to HR review', () => {
+  const store = fixture();
+  try {
+    const e = submitExplanation(store, worker, { date: '2026-09-18', reason: 'Transit delay', explanation: 'Train service disruption', requestedOffset: 17, documentId: '' });
+    const notices = () => store.db.prepare('SELECT message FROM notifications WHERE employee_id=? ORDER BY created_at').all('EMP-001').map(r => r.message);
+    assert.throws(() => replyExplanation(store, worker, e.id, { comment: 'More details' }), /not sent this explanation back/);
+    assert.throws(() => returnExplanation(store, worker, e.id, { comment: 'Please attach proof' }), /permission/i);
+    const back = returnExplanation(store, admin, e.id, { comment: 'Please attach the train advisory' });
+    assert.equal(back.status, 'returned'); assert.equal(back.comments[0].side, 'hr');
+    assert.ok(notices().some(m => m.includes('sent back your attendance explanation') && m.includes('train advisory')), 'the employee is notified');
+    assert.throws(() => reviewExplanation(store, admin, e.id, { status: 'approved', approvedOffset: 17, note: 'Looks fine' }), /waiting for the employee/, 'waits for the employee');
+    assert.throws(() => replyExplanation(store, { ...worker, employeeId: 'EMP-404' }, e.id, { comment: 'Not mine' }));
+    const replied = replyExplanation(store, worker, e.id, { comment: 'Uploaded the advisory to my documents' });
+    assert.equal(replied.status, 'pending'); assert.deepEqual(replied.comments.map(c => c.side), ['hr', 'employee']);
+    assert.equal(reviewExplanation(store, admin, e.id, { status: 'approved', approvedOffset: 17, note: 'Verified' }).status, 'approved');
+    assert.equal(employeeDashboard(store, worker).explanations[0].comments.length, 2, 'the employee sees the comments');
+  } finally { store.close(); }
+});
+
+test('a forgotten time out from an earlier day does not block the next day time in; it stays open for HR to correct', () => {
+  const store = fixture();
+  try {
+    const { todayAttendance } = { todayAttendance: (s, e, n) => employeeDashboard(s, worker, n).today };
+    const friday = new Date('2026-10-09T01:01:00Z'), monday = new Date('2026-10-12T00:55:00Z');
+    punch(store, worker, reading('in', '33333333-3333-4333-8333-333333333333', friday), friday);
+    assert.equal(todayAttendance(store, null, new Date('2026-10-09T05:00:00Z')).open, true, 'same day: still open');
+    assert.equal(todayAttendance(store, null, monday).open, false, 'days later: today starts fresh');
+    assert.throws(() => punch(store, worker, reading('out', '44444444-4444-4444-8444-444444444444', monday), monday), /has no time out/);
+    const today = punch(store, worker, reading('in', '55555555-5555-4555-8555-555555555555', monday), monday);
+    assert.equal(today.workDate, '2026-10-12', 'time in for today works');
+  } finally { store.close(); }
+});

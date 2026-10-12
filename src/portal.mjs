@@ -56,11 +56,12 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     if (['Suspended', 'Resigned', 'Terminated', 'Inactive'].includes(employment.employeeStatus)) throw new AppError('Your employment status requires HR review before attendance can be recorded.');
     let clockIn;
     if (value.kind === 'in') {
-      if (latest?.kind === 'in') throw new AppError('You already have an open time-in. Time out or contact HR.');
+      if (latest?.kind === 'in' && !staleOpen(latest, day, now)) throw new AppError('You already have an open time-in. Time out or contact HR.');
       if (history.some(e => e.workDate === day && e.kind === 'in') || state.attendance.some(a => a.employeeId === employee.id && a.date === day)) throw new AppError('Attendance already exists for today. Ask HR for a correction.');
       if (state.leaves.some(l => l.employeeId === employee.id && l.status === 'approved' && (l.countedDates || []).includes(day))) throw new AppError('You are on approved leave today. Ask HR to review before clocking in.');
     } else {
       if (latest?.kind !== 'in') throw new AppError('Record time-in before time-out.');
+      if (staleOpen(latest, day, now)) throw new AppError(`Your time in on ${latest.workDate} has no time out. HR will correct it; time in for today instead.`);
       clockIn = latest;
       const duration = now.getTime() - Date.parse(clockIn.recordedAt);
       if (duration < 60000 || duration > 86400000) throw new AppError('Shift must last at least one minute and at most 24 hours. Ask HR to correct missing time-out.');
@@ -82,9 +83,13 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     return event;
   });
 }
+// A time in from an earlier day left open for more than 16 hours is a forgotten time out: it no longer blocks today's
+// time in. It stays open (missing time out) until HR records the correct time out.
+const STALE_OPEN_MS = 16 * 3600000;
+export const staleOpen = (event, day, now = new Date()) => event?.kind === 'in' && event.workDate < day && now.getTime() - Date.parse(event.recordedAt) > STALE_OPEN_MS;
 export function todayAttendance(store, employee, now = new Date()) {
   const state = store.read(), day = local(now).slice(0, 10), allEvents = rows(store, 'clock_events', employee.id);
-  const open = allEvents[0]?.kind === 'in' ? allEvents[0] : null;
+  const open = allEvents[0]?.kind === 'in' && !staleOpen(allEvents[0], day, now) ? allEvents[0] : null;
   const workDate = open?.workDate || day, events = allEvents.filter(e => e.workDate === workDate), clockIn = events.find(e => e.kind === 'in'), clockOut = events.find(e => e.kind === 'out');
   const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
   const schedule = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
@@ -190,6 +195,7 @@ export function reviewExplanation(store, actor, id, input) {
     const row = store.db.prepare('SELECT data FROM attendance_explanations WHERE id=?').get(id);
     if (!row) throw new AppError('Explanation not found.', 404);
     const before = JSON.parse(row.data);
+    if (before.status === 'returned') throw new AppError('This explanation was sent back to the employee and is waiting for the employee to reply.');
     if (before.status !== 'pending') throw new AppError('This explanation was already reviewed.');
     if (value.approvedOffset > before.requestedOffset) throw new AppError('Approved offset exceeds the requested minutes.');
     const state = store.read(), record = state.attendance.find(a => a.employeeId === before.employeeId && a.date === before.date);
@@ -204,6 +210,35 @@ export function reviewExplanation(store, actor, id, input) {
     store.db.prepare('UPDATE attendance_explanations SET data=? WHERE id=?').run(JSON.stringify(after), id);
     store.notify(before.employeeId, `Your attendance explanation for ${before.date} was ${after.status}.`);
     store.log(actor, 'review', 'explanations', id, before, after); return after;
+  });
+}
+// HR is not satisfied with an explanation: it goes back to the employee with HR's comment. The employee answers with a
+// comment of their own, which puts it back in HR's review list. Every comment is kept on the explanation.
+const comment = z.object({ comment: z.string().trim().min(3, 'Write a comment of at least 3 characters.').max(2000) }).strict();
+const loadExplanation = (store, id) => { const row = store.db.prepare('SELECT data FROM attendance_explanations WHERE id=?').get(id); if (!row) throw new AppError('Explanation not found.', 404); return JSON.parse(row.data); };
+export function returnExplanation(store, actor, id, input) {
+  permit(actor, ['admin', 'hr']);
+  const { comment: text } = comment.parse(input);
+  return store.transaction(() => {
+    const before = loadExplanation(store, id);
+    if (before.status !== 'pending') throw new AppError('Only an explanation waiting for HR review can be sent back.');
+    const after = { ...before, status: 'returned', comments: [...(before.comments || []), { side: 'hr', by: actor.username, text, at: new Date().toISOString() }] };
+    store.db.prepare('UPDATE attendance_explanations SET data=? WHERE id=?').run(JSON.stringify(after), id);
+    store.notify(before.employeeId, `HR sent back your attendance explanation for ${before.date}: "${text}". Open Attendance → Explanations to reply.`);
+    store.log(actor, 'return', 'explanations', id, before, after); return after;
+  });
+}
+export function replyExplanation(store, actor, id, input) {
+  const employee = ownEmployee(store, actor);
+  const { comment: text } = comment.parse(input);
+  return store.transaction(() => {
+    const before = loadExplanation(store, id);
+    if (before.employeeId !== employee.id) throw new AppError('Explanation not found.', 404);
+    if (before.status !== 'returned') throw new AppError('HR has not sent this explanation back to you.');
+    const after = { ...before, status: 'pending', comments: [...(before.comments || []), { side: 'employee', by: actor.username, text, at: new Date().toISOString() }] };
+    store.db.prepare('UPDATE attendance_explanations SET data=? WHERE id=?').run(JSON.stringify(after), id);
+    store.notify(null, `${employee.id}: replied to HR on the attendance explanation for ${before.date}; it awaits review again.`);
+    store.log(actor, 'reply', 'explanations', id, before, after); return after;
   });
 }
 export function employeeDashboard(store, actor, now = new Date()) {
