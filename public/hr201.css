@@ -1456,3 +1456,6 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .pm-loc-right { text-align: right; } .pm-loc-right strong { display: block; font-size: 18px; } .pm-loc-right code { font-size: 13px; color: #4a4a4a; }
 .pm-foot { text-align: center; color: var(--muted); font-size: 12px; padding: 10px 0 20px; border-top: 1px solid #ece5d8; }
 @media (max-width: 480px) { .pm-alert { grid-template-columns: auto 1fr; } .pm-alert .pm-link { grid-column: 2; justify-self: start; } .pm-details-body { flex-direction: column; align-items: stretch; } }
+.ml-pv-actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.ml-photo-btn { cursor: pointer; }
+.ml-avatar-lg img { object-position: top; }

@@ -61,15 +61,15 @@ export function createFiles(ctx) {
   const svg = (name, cls = '') => `<svg class="ml-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICON[name]}</svg>`;
   const tone = p => (p.status === 'Active' ? 'active' : 'inactive');
   const personName = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return first ? `${first} ${last}` : name; };
-  const avatar = (p, cls = '') => `<span class="ml-avatar ml-${tone(p)} ${cls}" aria-hidden="true"><img src="/api/hr/employees/${encodeURIComponent(p.id)}/photo" alt="" loading="lazy" data-dir-photo>${esc(initials(p.name))}</span>`;
+  const avatar = (p, cls = '') => `<span class="ml-avatar ml-${tone(p)} ${cls}" aria-hidden="true"><img src="/api/hr/employees/${encodeURIComponent(p.id)}/photo${photoStamp ? `?t=${photoStamp}` : ''}" alt="" loading="lazy" data-dir-photo>${esc(initials(p.name))}</span>`;
   const pill = p => `<span class="ml-pill ml-${tone(p)}">${svg(p.status === 'Active' ? 'check' : 'minus')}${esc(p.archived ? 'Archived' : p.status || '—')}</span>`;
-  let selectedId = null;
+  let selectedId = null, photoStamp = 0;
   function previewHtml(p) {
     if (!p) return '<aside class="ml-preview"><h2>Employee profile</h2><p class="muted">Choose an employee to see their profile.</p></aside>';
     const info = (ic, label, value) => `<div class="ml-info">${svg(ic)}<span><small>${esc(label)}</small><strong>${esc(value || 'Not set')}</strong></span></div>`;
     const link = (ic, label, tabId) => `<button class="ml-link" data-open="${esc(p.id)}" data-start-tab="${tabId}">${svg(ic)}<span>${esc(label)}</span>${svg('chevron', 'ml-chev')}</button>`;
     return `<aside class="ml-preview"><h2>Employee profile</h2>
-      <div class="ml-pv-head">${avatar(p, 'ml-avatar-lg')}<div><strong class="ml-pv-name">${esc(personName(p.name))}</strong><span>${esc(p.position || '—')}</span><span>${esc(p.number)}</span>${pill(p)}</div>${can().manage ? `<button class="ml-btn" data-edit-emp="${esc(p.id)}">${svg('pen')}Edit profile</button>` : ''}</div>
+      <div class="ml-pv-head">${avatar(p, 'ml-avatar-lg')}<div><strong class="ml-pv-name">${esc(personName(p.name))}</strong><span>${esc(p.position || '—')}</span><span>${esc(p.number)}</span>${pill(p)}</div>${can().manage ? `<span class="ml-pv-actions"><button class="ml-btn" data-edit-emp="${esc(p.id)}">${svg('pen')}Edit profile</button><label class="ml-btn ml-photo-btn">📷 Change photo<input type="file" accept="image/png,image/jpeg" data-ml-photo="${esc(p.id)}" hidden></label></span>` : ''}</div>
       <nav class="ml-tabs">${[['overview', 'Overview'], ['employment', 'Employment'], ['documents', 'Documents'], ['personal', 'More']].map(([id, label], i) => `<button class="${i === 0 ? 'active' : ''}" data-open="${esc(p.id)}" data-start-tab="${id}">${label}</button>`).join('')}</nav>
       <section class="ml-block"><h3>Work information</h3><div class="ml-grid">${info('building', 'Subsidiary', p.department)}${info('bag', 'Position', p.position)}${info('calendar', 'Date hired', p.dateHired ? fmtDate(p.dateHired) : '')}${info('doc', 'Employment type', p.employmentType || p.classification)}${info('pin', 'Office location', p.workLocation)}${info('people', 'Reporting manager', p.supervisor)}</div></section>
       <section class="ml-block"><h3>Contact information</h3><div class="ml-grid">${info('mail', 'Work email', p.workEmail)}${info('phone', 'Work phone', p.mobile)}</div></section>
@@ -107,6 +107,16 @@ export function createFiles(ctx) {
     root.querySelector('[data-q]').addEventListener('input', event => { query.q = event.target.value; pageNo = 1; const pos = event.target.selectionStart; draw(); const box = document.querySelector('[data-q]'); box.focus(); box.setSelectionRange(pos, pos); });
     root.addEventListener('change', event => { const f = event.target.dataset.f; if (f) { query[f] = event.target.value; pageNo = 1; draw(); } });
     root.addEventListener('click', onDirectoryClick);
+    // Change photo (profile panel): upload a JPG / PNG portrait for the selected employee.
+    root.addEventListener('change', async event => {
+      const input = event.target.closest('[data-ml-photo]'); if (!input) return;
+      const file = input.files[0]; input.value = ''; if (!file) return;
+      try {
+        if (!['image/png', 'image/jpeg'].includes(file.type)) throw new Error('Choose a JPG or PNG photo.');
+        await api(`/hr/employees/${encodeURIComponent(input.dataset.mlPhoto)}/photo`, { name: file.name, mime: file.type, data: await readFile(file) });
+        photoStamp = Date.now(); toast('Photo updated.'); draw();
+      } catch (error) { toast(error.message); }
+    });
     // Clicking anywhere on a row shows that employee in the profile panel.
     root.addEventListener('click', event => { const row = event.target.closest('[data-ml-row]'); if (row && !event.target.closest('button') && row.dataset.mlRow !== selectedId) { selectedId = row.dataset.mlRow; draw(); } });
   }
