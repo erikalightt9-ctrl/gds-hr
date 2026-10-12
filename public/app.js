@@ -281,23 +281,52 @@ function attendancePage() {
   const top = heading('Attendance', '') + views;
   if (attendanceView === 'timecard') return top + timecard.panel(state);
   if (attendanceView === 'month') return top + monthSheet({ state, esc, today: today(), month: attendanceMonth || today().slice(0, 7), search: filter });
-  // One date at a time: every employee for the chosen day (finished record, timed in, on leave, rest day or no time in).
+  // Daily attendance records: one date, every employee (with day / today navigation, search, status and record tabs).
   const day = recordsDate || today(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
-  const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= day && (!e.endDate || e.endDate >= day))
-    .filter(e => !filter || `${e.name} ${e.id}`.toLowerCase().includes(filter.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
-  const rows = people.map(e => {
+  const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= day && (!e.endDate || e.endDate >= day)).sort((a, b) => a.name.localeCompare(b.name));
+  const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+  const ICONS = { ok: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1.4 14.6-4.2-4.2 1.4-1.4 2.8 2.8 5.8-5.8 1.4 1.4Z"/>', clock: '<path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm0 16.2A7.2 7.2 0 1 1 19.2 12 7.2 7.2 0 0 1 12 19.2Zm.9-11.7h-1.8v5.1l4.4 2.6.9-1.5-3.5-2.1Z"/>', doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM8 12h8v1.6H8Zm0 3.4h8V17H8Z"/>', sheet: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM7 11h10v8H7Zm1.5 1.5v2h3v-2Zm4.5 0v2h3v-2Zm-4.5 3.5v2h3v-2Zm4.5 0v2h3v-2Z"/>', cal: '<path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3Zm12 8H5v9h14ZM5 8h14V6H5Z"/>', search: '<path d="M10 3a7 7 0 1 0 4.2 12.6l5.1 5.1 1.4-1.4-5.1-5.1A7 7 0 0 0 10 3Zm0 2a5 5 0 1 1-5 5 5 5 0 0 1 5-5Z"/>', left: '<path d="m15 6-6 6 6 6 1.4-1.4L11.8 12l4.6-4.6Z"/>', right: '<path d="m9 6 6 6-6 6-1.4-1.4L12.2 12 7.6 7.4Z"/>' };
+  const ic = name => `<svg class="dr-ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICONS[name]}</svg>`;
+  const ini = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return `${(first || '').charAt(0)}${(last || '').charAt(0)}`.toUpperCase(); };
+  const list = people.map(e => {
     const a = state.attendance.find(x => x.employeeId === e.id && x.date === day);
-    if (a) return [employee(e.id), a.scheduledIn, a.status === 'present' ? `${a.timeIn} → ${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '—', badge(a.status === 'present' ? 'Present' : a.status, 'neutral'), `${a.offsetMinutes} min${a.exception ? '<br><small>Approved exception</small>' : ''}`, badge(a.approved ? 'Approved' : 'Pending', a.approved ? '' : 'pending'), editButton('attendance', a.id)];
     const open = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === day);
     const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && (l.countedDates || []).includes(day));
-    const status = open ? badge('Timed in · no time out yet', 'pending') : leave ? badge('On leave', '') : (e.restDays || []).includes(weekday) ? badge('Rest day', 'neutral') : badge(day > today() ? '—' : 'No time in', day > today() ? 'neutral' : 'rejected');
-    return [employee(e.id), e.scheduleStart || '—', open ? `${open.time} → —` : '—', status, '—', '—', ''];
+    let look = 'idle', label = 'No time in', sub = '', icon = 'clock', clockIn = '—', clockOut = '—', sched = e.scheduleStart || '—', offset = '—', approval = '—', view = `data-profile="${esc(e.id)}"`, recorded = false;
+    if (a) {
+      recorded = true; sched = a.scheduledIn || sched; view = `data-edit="attendance" data-id="${esc(a.id)}"`;
+      if (a.status === 'present') {
+        clockIn = a.timeIn || '—'; clockOut = a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '—';
+        const late = mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? mins(a.timeIn) - mins(a.scheduledIn) - (a.offsetMinutes || 0) : 0;
+        if (late > 0) { look = 'late'; label = 'Late'; sub = `${late} min late`; } else { look = 'ok'; label = 'Present'; icon = 'ok'; }
+      } else { look = 'leave'; label = a.status.replace(/-/g, ' ').replace(/^./, c => c.toUpperCase()); icon = 'cal'; }
+      offset = a.offsetMinutes ? `${a.offsetMinutes} min` : '—';
+      approval = `<span class="dr-tag ${a.approved ? 'ok' : 'wait'}">${a.approved ? 'Approved' : 'Pending'}</span>`;
+    } else if (open) { recorded = true; look = 'ok'; label = 'Time in recorded'; sub = 'Time out pending'; icon = 'ok'; clockIn = open.time; }
+    else if (leave) { look = 'leave'; label = 'On leave'; icon = 'cal'; }
+    else if ((e.restDays || []).includes(weekday)) { look = 'rest'; label = 'Rest day'; icon = 'cal'; }
+    else if (day > today()) { look = 'rest'; label = 'Upcoming'; icon = 'cal'; }
+    const avatar = look === 'ok' ? 'ok' : look === 'late' ? 'late' : 'idle';
+    return { e, recorded, label, html: `<tr data-dr-row data-dr-name="${esc(`${e.name} ${e.id}`.toLowerCase())}" data-dr-status="${esc(label)}" data-dr-recorded="${recorded ? 'yes' : 'no'}">
+      <td><div class="dr-emp"><span class="dr-avatar dr-${avatar}">${esc(ini(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.id)}</small></span></div></td>
+      <td>${esc(sched)}</td><td>${esc(clockIn)}</td><td>${esc(clockOut)}</td>
+      <td><span class="dr-pill dr-${look}">${ic(icon)}${esc(label)}</span>${sub ? `<small class="dr-sub">${esc(sub)}</small>` : ''}</td>
+      <td>${esc(offset)}</td><td>${approval}</td>
+      <td><button class="dr-view" ${view}>${ic('doc')}View ${ic('right')}</button></td></tr>` };
   });
-  const label = new Date(`${day}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return top + `<section class="panel"><div class="panel-head"><div><h2>Daily records · ${esc(label)}</h2></div><span class="download-links" aria-label="Download"><a class="small download-link" href="/api/reports/daily-attendance.pdf?date=${esc(day)}&view=1" target="_blank" rel="noopener" title="Open this day as a PDF to print or save">🖨 PDF</a><a class="small download-link" href="/api/reports/daily-attendance.xlsx?date=${esc(day)}" download>Excel</a></span></div>
-    <div class="toolbar records-day"><label>Date<input type="date" id="records-date" value="${day}"></label><input class="search" id="search" placeholder="Search employee" value="${esc(filter)}" aria-label="Search employee"></div>
-    ${table(['Employee', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], rows, 'No employees for this date.')}</section>`;
+  const shift = n => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const long = new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const short = new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const tabs = [['all', 'All records'], ['yes', 'Time in recorded'], ['no', 'No time in']];
+  return top + `<section class="panel dr">
+    <div class="dr-head"><div><h2>Daily attendance records</h2><p>${esc(long)}</p></div><div class="dr-head-tools"><a class="dr-btn" href="/api/reports/daily-attendance.pdf?date=${esc(day)}&view=1" target="_blank" rel="noopener">${ic('doc')}Export PDF</a><a class="dr-btn" href="/api/reports/daily-attendance.xlsx?date=${esc(day)}" download>${ic('sheet')}Export Excel</a></div></div>
+    <div class="dr-tools"><div class="dr-nav"><button class="dr-sq" data-records-day="${shift(-1)}" aria-label="Previous day">${ic('left')}</button><label class="dr-date">${ic('cal')}<input type="date" id="records-date" value="${day}" aria-label="Date"></label><button class="dr-sq" data-records-day="${shift(1)}" aria-label="Next day">${ic('right')}</button><button class="dr-today" data-records-day="${today()}">Today</button></div>
+      <div class="dr-filters"><label class="dr-search">${ic('search')}<input type="search" data-dr-search placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label><select data-dr-status aria-label="Status"><option value="">Status</option>${[...new Set(list.map(r => r.label))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select></div></div>
+    <nav class="dr-tabs">${tabs.map(([id, label]) => `<button data-dr-tab="${id}" class="${id === 'all' ? 'active' : ''}">${label}</button>`).join('')}</nav>
+    <div class="dr-table-wrap"><table class="dr-table"><thead><tr><th>Employee</th><th>Scheduled start</th><th>Clock in</th><th>Clock out</th><th>Status</th><th>Offset</th><th>Approval</th><th>Action</th></tr></thead><tbody>${list.map(r => r.html).join('') || '<tr><td colspan="8" class="empty">No employees for this date.</td></tr>'}</tbody></table></div>
+    <p class="dr-foot">Daily records for ${esc(short)}</p></section>`;
 }
+
 // Proof (e.g. a medical certificate) uploaded by the employee: HR opens it, then confirms or asks for a new one.
 const proofBadges = { required: ['Waiting for employee', 'pending'], submitted: ['Ready to review', 'pending'], verified: ['Confirmed', ''], rejected: ['New proof requested', 'rejected'] };
 function proofReviewCell(l) {
@@ -1062,7 +1091,15 @@ document.addEventListener('input', event => {
   const panel = event.target.closest('[data-contribution-rule]'), rule = state.rules.find(r => r.id === panel.dataset.contributionRule);
   panel.querySelector('[data-contribution-result]').innerHTML = event.target.value === '' ? '' : renderCalculation(rule, Number(event.target.value), { table });
 });
-document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } if (event.target.id === 'records-date' && event.target.value) { recordsDate = event.target.value; render(); } if (event.target.id === 'hol-year') { const y = event.target.value.trim(); if (!/^\d{4}$/.test(y)) { toast('Type the year as YYYY, e.g. 2028.'); return; } const show = () => { holidayYear = y; render(); }; if (canEdit('holidays') && !state.holidays.some(h => h.date.startsWith(`${y}-`))) api('/holidays/year', { year: y }).then(async r => { await refresh(); show(); if (r.added) toast(`${y} holidays added (${r.added} dates). Add Eid'l Fitr and Eid'l Adha when proclaimed.`); }).catch(e => toast(e.message)); else show(); } });
+// Daily attendance records: search, status and tabs hide rows in place.
+function filterDaily() {
+  const box = document.querySelector('.dr'); if (!box) return;
+  const q = box.querySelector('[data-dr-search]').value.trim().toLowerCase(), st = box.querySelector('[data-dr-status]').value, tabSel = box.querySelector('[data-dr-tab].active')?.dataset.drTab || 'all';
+  for (const r of box.querySelectorAll('[data-dr-row]')) r.hidden = !((!q || r.dataset.drName.includes(q)) && (!st || r.dataset.drStatus === st) && (tabSel === 'all' || r.dataset.drRecorded === tabSel));
+}
+document.addEventListener('input', event => { if (event.target.matches?.('[data-dr-search]')) filterDaily(); });
+document.addEventListener('click', event => { const b = event.target.closest?.('[data-dr-tab]'); if (!b) return; b.parentElement.querySelectorAll('[data-dr-tab]').forEach(x => x.classList.toggle('active', x === b)); filterDaily(); });
+document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } if (event.target.matches?.('[data-dr-status]')) filterDaily(); if (event.target.id === 'records-date' && event.target.value) { recordsDate = event.target.value; render(); } if (event.target.id === 'hol-year') { const y = event.target.value.trim(); if (!/^\d{4}$/.test(y)) { toast('Type the year as YYYY, e.g. 2028.'); return; } const show = () => { holidayYear = y; render(); }; if (canEdit('holidays') && !state.holidays.some(h => h.date.startsWith(`${y}-`))) api('/holidays/year', { year: y }).then(async r => { await refresh(); show(); if (r.added) toast(`${y} holidays added (${r.added} dates). Add Eid'l Fitr and Eid'l Adha when proclaimed.`); }).catch(e => toast(e.message)); else show(); } });
 setupInstall();
 // Show / hide password: every password box gets an eye button (sign-in, account and first-time password forms).
 const EYE_OPEN = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
