@@ -847,3 +847,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .welcome-login .login-form h2, .welcome-login .login-form h2 + p { text-align: center; }
 .expl-reason { display: block; font-weight: 600; }
 .expl-text { display: block; margin-top: 2px; white-space: normal; color: var(--muted); }
+/* Attendance page: the live panel's own 'Open live attendance' link is not needed there */
+[data-live-block] [data-nav="live"] { display: none; }

@@ -158,7 +158,7 @@ Object.assign(navigationIcons, {
 const PAY_GROUP = { id: 'payroll-attendance', label: 'Payroll & Attendance', icon: 'payroll' };
 function navGroups() {
   const role = auth.user.role, legacy = LEGACY.includes(role);
-  const payItems = legacy ? [...(['admin', 'hr'].includes(role) ? [['live', 'Live Attendance']] : []), ['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
+  const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
     ['', [['dashboard', 'Dashboard']]],
     ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ['trainings', 'Trainings']]],
@@ -453,12 +453,17 @@ function render() {
   if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : [])].includes(page)) page = 'dashboard';
   const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
-  if (page === 'live') { shell(heading('Live attendance', 'Employee clock events and HR reviews synchronize automatically.') + (liveData ? portal.live(liveData) : '<div class="notice">This view is restricted to HR and administrators.</div>')); return; }
+  if (page === 'live') page = 'attendance';   // Live attendance is part of the Attendance page
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
   const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, holidays: holidaysPage, rules: rulesPage };
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   shell(views[page]());
+  // Attendance: today's live attendance comes first, above the requests and the records.
+  if (page === 'attendance' && liveData && ['admin', 'hr'].includes(auth.user.role)) {
+    const live = document.createElement('div'); live.dataset.liveBlock = ''; live.innerHTML = portal.live(liveData);
+    document.querySelector('.content .page-heading')?.after(live);
+  }
   if (page === 'attendance' && attendanceView === 'timecard') {
     timecard.bind((employeeId, date) => edit('attendance', null, newAttendanceFor(employeeId, date)), async (employeeId, start, end) => {
       payrollEmployee = employeeId; currentRun = await api('/payroll/preview', { start, end, pay13th: false, employeeIds: [employeeId] }); page = 'payroll'; render();
@@ -480,9 +485,9 @@ function render() {
           const oof = liveData?.outOfOffice || [], expl = (liveData?.explanations || []).filter(x => x.status === 'pending');
           const name = id => esc(state.employees.find(x => x.id === id)?.name || id);
           return `<div class="panel-body"><h3>Out of office time in / out · awaiting approval</h3>${table(['Employee', 'Time', 'Reason', ''], oof.map(o => [name(o.employeeId), `Time ${esc(o.kind)} · ${esc(o.workDate)} ${esc(o.time)}`, `<span class="wrap">${esc(o.reason)}</span>`, can ? `<span class="download-links"><button class="small primary" data-oof-review="approve" data-id="${esc(o.id)}">Approve</button><button class="small" data-oof-review="reject" data-id="${esc(o.id)}">Reject</button></span>` : '']), 'No out-of-office time records waiting.')}
-            <h3 class="spaced">Attendance explanations · awaiting review</h3>${table(['Employee', 'Date', 'Reason', ''], expl.map(x => [name(x.employeeId), esc(x.date), `<span class="wrap">${esc(x.reason)}${x.explanation ? `<small>${esc(x.explanation)}</small>` : ''}</span>`, '<button class="small" data-nav="live">Review →</button>']), 'No explanations waiting.')}</div>`;
+            <h3 class="spaced">Attendance explanations · awaiting review</h3>${table(['Employee', 'Date', 'Reason', ''], expl.map(x => [name(x.employeeId), esc(x.date), `<span class="wrap">${esc(x.reason)}${x.explanation ? `<small>${esc(x.explanation)}</small>` : ''}</span>`, `<button class="small" data-review-explanation="${esc(x.id)}">Review</button>`]), 'No explanations waiting.')}</div>`;
         })();
-      content.prepend(section);
+      const live = content.querySelector('[data-live-block]'); if (live) live.after(section); else content.querySelector('.page-heading')?.after(section) ?? content.prepend(section);
     }).catch(error => toast(error.message));
   }
   if (page === 'overview') {
