@@ -353,7 +353,7 @@ function leavePage() {
     const list = state.leaves.slice().sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.startDate.localeCompare(a.startDate));
     const rows = list.map(l => {
       const person = state.employees.find(e => e.id === l.employeeId), bal = balances.find(b => b.employeeId === l.employeeId && b.typeId === l.typeId), type = state.leaveTypes.find(t => t.id === l.typeId)?.name || l.typeId;
-      const dates = l.startDate === l.endDate ? `${nice(l.startDate)}<small>Single day</small>` : `${nice(l.startDate)} – ${nice(l.endDate)}<small>${l.days} days</small>`;
+      const dates = l.startDate === l.endDate ? nice(l.startDate) : `${nice(l.startDate)} – ${nice(l.endDate)}`;
       const decision = canDecide && l.status === 'pending' ? `<span class="row-actions"><button class="lm-btn primary" data-leave-decision="approve" data-id="${esc(l.id)}">Approve</button><button class="lm-btn" data-leave-decision="reject" data-id="${esc(l.id)}">Reject</button></span>` : canDecide && l.status === 'approved' ? `<button class="lm-btn" data-leave-decision="cancel" data-id="${esc(l.id)}">Cancel leave</button>` : '—';
       return `<tr data-lm-row data-lm-name="${esc(`${person?.name || ''} ${l.employeeId} ${type} ${l.reason || ''}`.toLowerCase())}" data-lm-status="${esc(l.status)}">
         <td><a class="lm-emp" href="/api/leaves/${esc(l.id)}.pdf" target="_blank" rel="noopener" title="Open the leave application PDF"><span class="lm-avatar">${esc(ini(person?.name || l.employeeId))}</span><span><strong>${esc(person?.name || l.employeeId)}</strong><small>${esc(l.employeeId)}</small></span></a></td>
