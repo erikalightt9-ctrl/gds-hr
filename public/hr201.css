@@ -1086,3 +1086,15 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ml-tabs button { flex: 1 1 auto; padding: 10px 8px; font-size: 13.5px; white-space: nowrap; }
 .ml-grid { grid-template-columns: 1fr 1fr; gap: 12px 10px; }
 .ml-info strong, .ml-info small { overflow-wrap: anywhere; }
+/* Top bar: a calmer everyday header (ivory #FFFDF7, sand #EADCC8, amber #F6A623) */
+.tb-ico { width: 22px; height: 22px; flex: none; }
+.topbar-user { gap: 12px !important; }
+.tb-pill { display: inline-flex; align-items: center; gap: 14px; padding: 8px 16px; background: #fffdf7; border: 1px solid #eadcc8; border-radius: 14px; color: #2b2116; font-size: 14px; font-weight: 500; box-shadow: 0 4px 14px -10px #6b4f2a55; }
+.tb-when { display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; }
+.tb-when .tb-ico { color: #7a6a58; width: 20px; height: 20px; }
+.tb-div { width: 1px; height: 22px; background: #eadcc8; }
+.tb-btn { position: relative; width: 44px; height: 44px; padding: 0 !important; display: grid !important; place-items: center; background: #fffdf7 !important; border: 1px solid #eadcc8 !important; border-radius: 14px !important; box-shadow: 0 4px 14px -10px #6b4f2a55; }
+.tb-btn:hover { border-color: #d9c4a3 !important; background: #fff !important; }
+.tb-chat { color: #8b7fc0 !important; }
+.tb-bell { color: #f6a623 !important; }
+.tb-btn .bell-count { top: -5px; right: -5px; min-width: 18px; height: 18px; font-size: 10px; background: #f6a623; color: #fff; border: 2px solid #fffdf7; }

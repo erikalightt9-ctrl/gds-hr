@@ -3,7 +3,7 @@
 // The panel lives outside the page area, so page refreshes do not close it.
 let ctx = null, panel = null, openWith = null, unread = 0, loading = false;
 
-export const messagesButton = () => `<span class="msg-wrap"><button class="small icon-button msg-button" data-msg-open aria-label="Messages" title="Messages">💬<span class="bell-count${unread ? '' : ' hidden'}" data-msg-count>${unread > 9 ? '9+' : unread || ''}</span></button></span>`;
+export const messagesButton = () => `<span class="msg-wrap"><button class="small icon-button msg-button tb-btn tb-chat" data-msg-open aria-label="Messages" title="Messages"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4c4.7 0 8.5 3 8.5 6.8s-3.8 6.8-8.5 6.8c-.9 0-1.8-.1-2.6-.3L5 19.5l1.2-3.6C4.5 14.7 3.5 12.9 3.5 10.8 3.5 7 7.3 4 12 4Z"/></svg><span class="bell-count${unread ? '' : ' hidden'}" data-msg-count>${unread > 9 ? '9+' : unread || ''}</span></button></span>`;
 
 const time = iso => {
   const d = new Date(iso), today = new Date().toDateString() === d.toDateString();
