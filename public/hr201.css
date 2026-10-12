@@ -1130,3 +1130,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .pr-13 .th-year-pick { display: flex; align-items: flex-end; gap: 12px; padding: 0; }
 @media (max-width: 1300px) { .pr-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .pr-cards { grid-template-columns: 1fr 1fr; } }
+.dr-emp { border: 0; background: none; padding: 0; text-align: left; color: inherit; font-weight: 400; }
+.dr-emp:hover strong { color: #b51f2b; text-decoration: underline; }

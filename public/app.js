@@ -308,11 +308,10 @@ function attendancePage() {
     else if (day > today()) { look = 'rest'; label = 'Upcoming'; icon = 'cal'; }
     const avatar = look === 'ok' ? 'ok' : look === 'late' ? 'late' : 'idle';
     return { e, recorded, label, html: `<tr data-dr-row data-dr-name="${esc(`${e.name} ${e.id}`.toLowerCase())}" data-dr-status="${esc(label)}" data-dr-recorded="${recorded ? 'yes' : 'no'}">
-      <td><div class="dr-emp"><span class="dr-avatar dr-${avatar}">${esc(ini(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.id)}</small></span></div></td>
+      <td><button class="dr-emp" ${view} title="Open this record"><span class="dr-avatar dr-${avatar}">${esc(ini(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.id)}</small></span></button></td>
       <td>${esc(sched)}</td><td>${esc(clockIn)}</td><td>${esc(clockOut)}</td>
       <td><span class="dr-pill dr-${look}">${ic(icon)}${esc(label)}</span>${sub ? `<small class="dr-sub">${esc(sub)}</small>` : ''}</td>
-      <td>${esc(offset)}</td><td>${approval}</td>
-      <td><button class="dr-view" ${view}>${ic('doc')}View ${ic('right')}</button></td></tr>` };
+      <td>${esc(offset)}</td><td>${approval}</td></tr>` };
   });
   const shift = n => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   const long = new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -323,7 +322,7 @@ function attendancePage() {
     <div class="dr-tools"><div class="dr-nav"><button class="dr-sq" data-records-day="${shift(-1)}" aria-label="Previous day">${ic('left')}</button><label class="dr-date">${ic('cal')}<input type="date" id="records-date" value="${day}" aria-label="Date"></label><button class="dr-sq" data-records-day="${shift(1)}" aria-label="Next day">${ic('right')}</button><button class="dr-today" data-records-day="${today()}">Today</button></div>
       <div class="dr-filters"><label class="dr-search">${ic('search')}<input type="search" data-dr-search placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label><select data-dr-status aria-label="Status"><option value="">Status</option>${[...new Set(list.map(r => r.label))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select></div></div>
     <nav class="dr-tabs">${tabs.map(([id, label]) => `<button data-dr-tab="${id}" class="${id === 'all' ? 'active' : ''}">${label}</button>`).join('')}</nav>
-    <div class="dr-table-wrap"><table class="dr-table"><thead><tr><th>Employee</th><th>Scheduled start</th><th>Clock in</th><th>Clock out</th><th>Status</th><th>Offset</th><th>Approval</th><th>Action</th></tr></thead><tbody>${list.map(r => r.html).join('') || '<tr><td colspan="8" class="empty">No employees for this date.</td></tr>'}</tbody></table></div>
+    <div class="dr-table-wrap"><table class="dr-table"><thead><tr><th>Employee</th><th>Scheduled start</th><th>Clock in</th><th>Clock out</th><th>Status</th><th>Offset</th><th>Approval</th></tr></thead><tbody>${list.map(r => r.html).join('') || '<tr><td colspan="7" class="empty">No employees for this date.</td></tr>'}</tbody></table></div>
     <p class="dr-foot">Daily records for ${esc(short)}</p></section>`;
 }
 
