@@ -197,6 +197,7 @@ const hrCtx = {
   editPay: id => edit('employees', id),
   reloadContext: async () => { hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme); },
   openAccounts: () => account(),
+  getState: () => state,   // attendance records for the dashboard analytics (HR workspace roles)
 };
 // New interface versions reach every account: the tab notices, then refreshes at the next safe moment
 // (page change) or when the user chooses, never while a dialog or unsaved form is open.

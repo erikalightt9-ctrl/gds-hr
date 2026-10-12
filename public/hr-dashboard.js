@@ -13,8 +13,48 @@ const ICONS = {
   trainings: '<path d="m2 9 10-5 10 5-10 5Z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5M22 9v6"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+// People analytics: attendance trend (present / late per day, from attendance records), workforce composition
+// (active / inactive) and document compliance. Every figure comes from the system's own records.
+const RANGES = [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days']];
+const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+function attendanceTrend(state, days, today) {
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(`${today}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - i); const date = d.toISOString().slice(0, 10);
+    const recs = (state?.attendance || []).filter(a => a.date === date && a.status === 'present');
+    const late = recs.filter(a => mins(a.timeIn) !== null && mins(a.scheduledIn) !== null && mins(a.timeIn) - mins(a.scheduledIn) > (a.offsetMinutes || 0)).length;
+    const open = (state?.openClockIns || []).filter(c => c.workDate === date).length;
+    out.push({ date, present: recs.length - late + open, late });
+  }
+  return out;
+}
+function trendChart(esc, data) {
+  const W = 560, H = 220, L = 34, B = 30, T = 10, max = Math.max(4, ...data.map(d => d.present + d.late)), top = Math.ceil(max / 4) * 4;
+  const slot = (W - L - 8) / data.length, bw = Math.max(2, Math.min(18, slot * 0.36)), y = v => T + (H - T - B) * (1 - v / top);
+  const step = data.length > 14 ? Math.ceil(data.length / 10) : 1, DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const grid = [0, top / 4, top / 2, (3 * top) / 4, top].map(v => `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" class="an-grid"/><text x="${L - 8}" y="${y(v) + 4}" class="an-axis" text-anchor="end">${v}</text>`).join('');
+  const bars = data.map((d, i) => { const x = L + i * slot + slot / 2; return `<g><title>${esc(d.date)}: ${d.present} present, ${d.late} late</title><rect x="${x - bw - 1}" y="${y(d.present)}" width="${bw}" height="${y(0) - y(d.present)}" rx="2" class="an-present"/><rect x="${x + 1}" y="${y(d.late)}" width="${bw}" height="${y(0) - y(d.late)}" rx="2" class="an-late"/>${i % step === 0 ? `<text x="${x}" y="${H - 8}" class="an-axis" text-anchor="middle">${data.length <= 7 ? DAY[new Date(`${d.date}T00:00:00Z`).getUTCDay()] : d.date.slice(5).replace('-', '/')}</text>` : ''}</g>`; }).join('');
+  return `<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Present and late employees per day">${grid}${bars}</svg>`;
+}
+function donut(active, inactive) {
+  const total = active + inactive || 1, r = 52, c = 2 * Math.PI * r, part = (active / total) * c;
+  return `<svg class="an-donut" viewBox="0 0 140 140" role="img" aria-label="${active} active, ${inactive} inactive"><circle cx="70" cy="70" r="${r}" class="an-ring-off"/><circle cx="70" cy="70" r="${r}" class="an-ring-on" stroke-dasharray="${part.toFixed(2)} ${(c - part).toFixed(2)}" transform="rotate(-90 70 70)"/><text x="70" y="68" text-anchor="middle" class="an-donut-num">${active + inactive}</text><text x="70" y="88" text-anchor="middle" class="an-donut-label">Employees</text></svg>`;
+}
+let analyticsRange = '7';
 export function createDashboard(ctx) {
   const { api, esc, table, shell, heading } = ctx;
+  function analyticsHtml(t) {
+    const state = ctx.getState?.(), trend = attendanceTrend(state, Number(analyticsRange), ctx.today());
+    const totalP = trend.reduce((s, d) => s + d.present, 0), totalL = trend.reduce((s, d) => s + d.late, 0);
+    const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 0);
+    const affected = pct(t.employeesMissing || 0, t.total || 0), bar = Math.round(affected / 5) * 5;
+    return `<div class="an-head"><div><h2>People analytics</h2><p>Workforce, attendance, and document insights</p></div><select data-an-range aria-label="Period">${RANGES.map(([v, l]) => `<option value="${v}" ${v === analyticsRange ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="an-grid3">
+        <section class="an-card"><h3>Attendance trends</h3><p>${totalP + totalL ? `${totalP} on time · ${totalL} late in the period` : 'No attendance recorded in this period'}</p>${trendChart(esc, trend)}<div class="an-legend"><span><i class="an-present"></i>Present</span><span><i class="an-late"></i>Late</span></div></section>
+        <section class="an-card"><h3>Workforce composition</h3><p>Current snapshot</p><div class="an-donut-wrap">${donut(t.active || 0, t.inactive || 0)}</div><ul class="an-key"><li><i class="an-on"></i>Active <span>${t.active || 0} · ${pct(t.active || 0, (t.active || 0) + (t.inactive || 0))}%</span></li><li><i class="an-off"></i>Inactive <span>${t.inactive || 0} · ${pct(t.inactive || 0, (t.active || 0) + (t.inactive || 0))}%</span></li></ul></section>
+        <section class="an-card"><h3>Document compliance</h3><p>Current snapshot</p>${t.missingDocuments === null ? '<p class="legend">Visible to HR.</p>' : `<strong class="an-big">${t.missingDocuments}</strong><span class="an-big-label">Missing requirements</span><div class="an-row"><span>Employees affected</span><span>${t.employeesMissing} of ${t.total} (${affected}%)</span></div><div class="an-bar"><i class="db-w${bar}"></i></div><p class="an-note">${t.employeesMissing && t.employeesMissing === t.total ? 'All employees have at least one missing requirement.' : t.employeesMissing ? `${t.total - t.employeesMissing} employee${t.total - t.employeesMissing === 1 ? ' is' : 's are'} complete.` : 'Every employee is complete.'}</p><button class="an-link" data-go="${esc(JSON.stringify({ page: 'files', docs: 'missing' }))}">Review requirements →</button>`}</section>
+      </div>`;
+  }
   async function render() {
     shell(heading('Dashboard', 'Loading…') + '<div class="loading">Loading dashboard…</div>');
     const [d, party] = await Promise.all([api('/hr/dashboard'), api('/hr/celebrations').catch(() => null)]), t = d.totals;
@@ -35,8 +75,10 @@ export function createDashboard(ctx) {
         ${card('trainings', t.upcomingTrainings, 'Upcoming trainings', { page: 'trainings' }, { sub: t.upcomingTrainings ? 'Scheduled sessions' : 'No upcoming sessions' })}
       </div>
       ${ctx.livePanel ? `<div id="dash-live">${ctx.livePanel()}</div>` : ''}
+      <section class="an" id="dash-analytics">${analyticsHtml(t)}</section>
       ${d.nextTrainings?.length ? `<section class="panel"><div class="panel-head"><h2>Upcoming trainings</h2></div>${table(['Training', 'Date', 'Participants', ''], d.nextTrainings.map(x => [esc(x.title) + (x.required ? ' <small>required</small>' : ''), `${fmtDate(x.date)}${x.startTime ? ` · ${x.startTime}` : ''}`, x.participants, `<button class="small" data-go="${esc(JSON.stringify({ page: 'trainings', id: x.id }))}">Open</button>`]))}</section>` : ''}`);
     bindCelebrationPhotos(document.querySelector('.content'));
+    document.querySelector('[data-an-range]')?.addEventListener('change', event => { analyticsRange = event.target.value; document.querySelector('#dash-analytics').innerHTML = analyticsHtml(t); });
     document.querySelector('.content').addEventListener('click', event => {
       const b = event.target.closest('[data-go],[data-quick]'); if (!b) return;
       if (b.dataset.quick) { ctx.quick(b.dataset.quick); return; }
