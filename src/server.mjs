@@ -107,7 +107,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       // Interface version: every open tab compares this to the version it loaded and offers a safe refresh when it changes.
       if (pathname === '/api/version' && req.method === 'GET') { send(200, { version: interfaceVersion() }); return; }
       if (pathname === '/api/session' && req.method === 'GET') {
-        const auth = session(store, req.headers.cookie, { active: req.headers['x-hr-active'] === '1' });
+        const auth = session(store, req.headers.cookie);
         send(200, { user: auth?.user || null, csrf: auth?.csrf || null, demo, setup: store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0 }); return;
       }
       if (pathname === '/api/setup' && req.method === 'POST') {
@@ -131,7 +131,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         checkLimit(store, `reset:${client}`); const body = z.object({ token: z.string().max(64), password: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         send(200, await redeemPasswordReset(store, body.token, body.password)); return;
       }
-      const auth = session(store, req.headers.cookie, { active: req.headers['x-hr-active'] === '1' });
+      const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };

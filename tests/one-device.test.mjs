@@ -69,24 +69,6 @@ test('work schedule: HR or Maker sets it on the 201 profile and attendance uses 
   } finally { store.close(); }
 });
 
-test('a session ends after 5 minutes without use; active use keeps it going; the other device can then sign in', async () => {
-  const { session } = await import('../src/auth.mjs');
-  const store = new Store(':memory:'); store.write(completeState());
-  try {
-    await addUser(store, { username: 'worker2', password: 'Worker-pass-2026!', role: 'employee', employeeId: 'EMP-001' }, { username: 'boss', role: 'admin' });
-    const first = await login(store, 'worker2', 'Worker-pass-2026!', 'a1'), cookie = `hr_session=${first.token}`;
-    const expires = () => store.db.prepare('SELECT expires FROM sessions').get().expires;
-    const left = expires() - Date.now();
-    assert.ok(left > 4.9 * 60000 && left <= 5 * 60000, 'five minutes');
-    store.db.prepare('UPDATE sessions SET expires=?').run(Date.now() + 60000);
-    session(store, cookie); assert.ok(expires() - Date.now() < 61000, 'a background check does not extend it');
-    session(store, cookie, { active: true }); assert.ok(expires() - Date.now() > 4.9 * 60000, 'active use extends it to five minutes again');
-    store.db.prepare('UPDATE sessions SET expires=?').run(Date.now() - 1);
-    assert.equal(session(store, cookie, { active: true }), null, 'signed out after 5 minutes unused');
-    assert.ok((await login(store, 'worker2', 'Worker-pass-2026!', 'a2')).token, 'another device can sign in once the unused one has timed out');
-  } finally { store.close(); }
-});
-
 test('a staff member linked to their own record can still get one employee login', async () => {
   const { linkMyAccount } = await import('../src/auth.mjs');
   const store = new Store(':memory:'); store.write(completeState());

@@ -52,31 +52,8 @@ const profiles = createProfileView({ api, esc, money, table, shell, heading, toa
 const names = { basic: 'Basic salary', regularOT: 'Regular OT', restDay: 'Rest day pay', restOT: 'Rest day OT', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday OT', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Regular / double holiday OT', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday OT', thirteenth: '13th month paid', absence: 'Unpaid leave / absence', loans: 'Loan deductions', sssLoan: 'SSS loan', pagibigLoan: 'Pag-IBIG loan', salaryDeduction: 'Salary deduction', tax: 'Withholding tax', other: 'Other authorized deductions' };
 Object.assign(names, { SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' });
 const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'], deductions: ['admin', 'hr'] })[kind]?.includes(auth.user.role);
-// Automatic sign-out after 5 minutes without use (mouse, keyboard, touch, scrolling). The last activity is shared by
-// every tab on this device, so working in one tab keeps the others signed in too.
-const IDLE_MS = 5 * 60000, ACTIVE_MS = 60000;
-let lastActivity = Date.now(), lastPing = 0;
-const readActivity = () => { try { return Math.max(lastActivity, Number(localStorage.getItem('hr-active-at')) || 0); } catch { return lastActivity; } };
-const isActive = () => Date.now() - readActivity() < ACTIVE_MS;
-function noteActivity() {
-  const now = Date.now(); if (now - lastActivity < 5000) return;
-  lastActivity = now; try { localStorage.setItem('hr-active-at', String(now)); } catch { /* this tab still counts */ }
-}
-for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll']) window.addEventListener(type, noteActivity, { passive: true, capture: true });
-setInterval(async () => {
-  if (!auth?.user) return;
-  const idle = Date.now() - readActivity();
-  if (idle >= IDLE_MS) {
-    try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrf || '' }, body: '{}' }); } catch { /* the server also ends it */ }
-    if (dialog?.open) dialog.close();
-    auth = { user: null }; state = null; renderLogin(); toast('Signed out after 5 minutes without activity. Sign in again to continue.');
-    return;
-  }
-  // Someone reading a page (moving the mouse, scrolling) makes no requests: keep the session going for them.
-  if (isActive() && Date.now() - lastPing > ACTIVE_MS) { lastPing = Date.now(); try { await api('/session'); } catch { /* next check retries */ } }
-}, 15000);
 async function api(path, body, method = body ? 'POST' : 'GET') {
-  const res = await fetch(`/api${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth?.csrf || '', 'X-HR-Active': isActive() ? '1' : '0' }, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(`/api${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth?.csrf || '' }, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json();
   if (!res.ok) {
     if (res.status === 401 && path !== '/login') { auth = { user: null }; renderLogin(); }

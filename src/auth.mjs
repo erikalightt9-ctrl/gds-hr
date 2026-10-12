@@ -66,11 +66,9 @@ export function checkLimit(store, key, maximum = 10) {
   if (row && row.attempts >= maximum) throw new AppError('Too many sign-in attempts. Try again in 15 minutes.', 429);
   store.db.prepare('INSERT INTO login_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1').run(key, now + 900000);
 }
-export const SIGNED_IN_ELSEWHERE = 'This account is already signed in on another device. Sign out there first, or wait 5 minutes: an unused device is signed out automatically.';
-// A session ends after 5 minutes without use. Only requests made while the person is active extend it
-// (the browser marks them with X-HR-Active: 1); background checks from an unattended screen do not.
-export const IDLE_MINUTES = 5;
-const IDLE_MS = IDLE_MINUTES * 60000;
+export const SIGNED_IN_ELSEWHERE = 'This account is already signed in on another device. Sign out there first. If that device is lost or not with you, ask HR to sign it out.';
+// A session lasts 8 hours from sign-in (no automatic sign-out for inactivity).
+const SESSION_MS = 8 * 3600000;
 export async function login(store, username, password, key, otp = '', { currentTokenHash = '' } = {}) {
   checkLimit(store, key, 100);
   const accountKey = `account-login:${username.toLowerCase()}`; checkLimit(store, accountKey);
@@ -90,15 +88,14 @@ export async function login(store, username, password, key, otp = '', { currentT
   if (elsewhere) { store.log({ username: user.username, role: user.role }, 'login-blocked-other-device', 'users', user.id, null, null); throw new AppError(SIGNED_IN_ELSEWHERE, 409); }
   if (currentTokenHash) store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(currentTokenHash);   // same device signing in again
   const token = randomBytes(32).toString('hex'), csrf = randomBytes(32).toString('hex');
-  store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + IDLE_MS);
+  store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + SESSION_MS);
   return { token, csrf, user: { id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret, mustChangePassword: !!user.must_change_password } };
 }
-export function session(store, cookie = '', { active = false } = {}) {
+export function session(store, cookie = '') {
   const token = cookie.split(';').map(v => v.trim()).find(v => v.startsWith('hr_session='))?.slice(11);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
   if (!row || row.disabled || row.expires < Date.now()) return null;
-  if (active) store.db.prepare('UPDATE sessions SET expires=? WHERE token_hash=?').run(Date.now() + IDLE_MS, hashToken(token));
   return { user: { id: row.id, username: row.username, role: row.role, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
 }
 export async function changePassword(store, user, currentPassword, newPassword) {
