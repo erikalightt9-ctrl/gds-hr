@@ -277,7 +277,10 @@ export function createPortal(ctx) {
       <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Request</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="6" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
       <p class="lv-foot" data-lv-count>${filtered.length} employee${filtered.length === 1 ? '' : 's'} total</p></section>`;
     if (!countsOnly) return html;
-    return `<section class="panel live-panel"><div class="panel-head"><div><h2>Today · live attendance</h2></div><button class="small" data-nav="live">Open live attendance →</button></div><div class="live-counts">${statuses.map(s => `<button data-nav="live" title="Open live attendance"><strong>${count(s)}</strong>${s}</button>`).join('')}</div></section>`;
+    // Dashboard: today's attendance at a glance.
+    const glance = { All: ['all', 'All'], Present: ['dot-green', 'Present'], Late: ['dot-amber', 'Late'], Absent: ['late', 'Absent'], 'On leave': ['leave', 'On leave'], 'Missing time out': ['missing', 'Missing time out'] };
+    const when = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric' });
+    return `<section class="panel db-live"><div class="db-live-head"><div><h2>Today's attendance <span class="lv-live"><i></i>Live</span></h2><p>Live attendance at a glance · ${esc(when)}</p></div><button class="db-open" data-nav="live">Open live attendance ↗</button></div><div class="db-live-stats">${statuses.map(s => { const [k, label] = glance[s]; return `<button data-nav="live" title="Open live attendance"><span class="db-live-label">${k.startsWith('dot') ? `<i class="db-dot ${k}"></i>` : icon(k)}${label}</span><strong>${count(s)}</strong></button>`; }).join('')}</div></section>`;
   }
   // Opens the leave form with a type chosen, e.g. the dashboard's unpaid leave / absence shortcut.
   function preselectLeave(typeId, attempts = 20) {

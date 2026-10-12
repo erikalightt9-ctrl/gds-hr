@@ -1261,3 +1261,36 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ln-foot { padding: 12px 22px; font-size: 13px; color: #3d3d3d; }
 .ln-info { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin: 0 2px; }
 @media (max-width: 1100px) { .ln-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Dashboard (redesign) */
+.db-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }
+.db-card { display: flex; flex-direction: column; align-items: stretch; gap: 10px; text-align: left; padding: 18px 20px; border: 1px solid #e7e4df; border-radius: 12px; background: #fff; color: inherit; font-weight: 400; box-shadow: 0 6px 18px -16px #3a2a1255; min-height: 128px; }
+.db-card:hover { border-color: #d6cfc3; }
+.db-card.alert { background: #fdf0f2; border-color: #f2c4ca; }
+.db-head { display: flex; align-items: center; gap: 14px; }
+.db-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; background: #f3f1ee; color: #4a4a4a; flex: none; }
+.db-ico svg { width: 22px; height: 22px; }
+.db-ico.red { background: #fbe9eb; color: #a31927; } .db-ico.green { background: #e6f4ea; color: #22764a; }
+.db-card.alert .db-ico { background: #fff; }
+.db-title { font-size: 14px; color: #3d3d3d; flex: 1; }
+.db-head em { font-style: normal; font-size: 11.5px; font-weight: 600; color: #a31927; background: #fff; border: 1px solid #f2c4ca; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.db-value { display: flex; align-items: baseline; gap: 14px; }
+.db-value strong { font-size: 32px; font-weight: 800; color: #1f1a14; line-height: 1; }
+.db-value small, .db-sub { color: var(--muted); font-size: 12.5px; }
+.db-link { color: #3d3d3d; font-size: 13px; margin-top: auto; }
+.db-card.alert .db-link { color: #a31927; font-weight: 600; }
+.db-section { font-size: 18px; font-weight: 700; margin: 0 0 12px; }
+.db-live { padding: 18px 22px; }
+.db-live-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid #efece7; }
+.db-live-head h2 { display: flex; align-items: center; gap: 14px; margin: 0; font-size: 19px; }
+.db-live-head h2 .lv-live { font-size: 13px; font-weight: 600; }
+.db-live-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.db-open { padding: 8px 14px; border: 1px solid #c97880; border-radius: 9px; background: #fff; color: #8f1420; font-weight: 600; }
+.db-live-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.db-live-stats button { display: grid; gap: 8px; justify-items: start; padding: 16px 20px; border: 0; border-right: 1px solid #efece7; border-radius: 0; background: none; color: inherit; font-weight: 400; text-align: left; }
+.db-live-stats button:last-child { border-right: 0; }
+.db-live-stats button:hover { background: #faf8f5; }
+.db-live-label { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: #3d3d3d; }
+.db-live-label .lv-ico { width: 18px; height: 18px; color: #555; }
+.db-live-stats strong { font-size: 28px; font-weight: 800; color: #1f1a14; }
+.db-dot { width: 10px; height: 10px; border-radius: 50%; } .db-dot.dot-green { background: #2e9a5a; } .db-dot.dot-amber { background: #e39b1b; }
+@media (max-width: 1100px) { .db-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .db-live-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
