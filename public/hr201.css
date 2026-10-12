@@ -1132,3 +1132,34 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 @media (max-width: 720px) { .pr-cards { grid-template-columns: 1fr 1fr; } }
 .dr-emp { border: 0; background: none; padding: 0; text-align: left; color: inherit; font-weight: 400; }
 .dr-emp:hover strong { color: #b51f2b; text-decoration: underline; }
+/* Employee timecard (redesign) */
+.tc-ico { width: 20px; height: 20px; flex: none; }
+.tc-title h2 { font-size: 30px; font-weight: 800; letter-spacing: -.8px; margin: 0; }
+.tc-title p { margin: 4px 0 16px; color: var(--muted); font-size: 15px; }
+.tc-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding: 16px 18px; border: 1px solid #efe2c8; border-radius: 14px; background: #fff; margin-bottom: 16px; }
+.tc-controls label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+.tc-controls select, .tc-controls input { height: 44px; min-width: 240px; padding: 0 12px; border-radius: 10px; border: 1px solid #e6dcc6; background: #fff; }
+.tc-show { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 22px; border-radius: 10px; }
+.tc-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.tc-card { display: flex; gap: 14px; align-items: flex-start; padding: 18px; border: 1px solid #efe2c8; border-radius: 14px; background: #fff; }
+.tc-card.alert { background: #fdeef0; border-color: #f2c4ca; }
+.tc-card-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #f4f1ec; color: #3d3d3d; flex: none; }
+.tc-card.alert .tc-card-ico { background: #f9d9de; color: #b51f2b; }
+.tc-card-title { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #3d3d3d; }
+.tc-card-title em { font-style: normal; font-size: 11px; font-weight: 600; color: #b51f2b; background: #fff; border: 1px solid #f2c4ca; border-radius: 999px; padding: 2px 8px; }
+.tc-card strong { display: block; font-size: 28px; font-weight: 800; margin: 6px 0; color: #1f1a14; font-variant-numeric: tabular-nums; }
+.tc-card small { display: block; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.tc-totals { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding: 16px 22px; border: 1px solid #efe2c8; border-radius: 14px; background: #fff; margin-bottom: 16px; font-size: 15px; color: #3d3d3d; }
+.tc-totals b { color: #1f1a14; margin-left: 4px; }
+.tc-sep { width: 1px; height: 30px; background: #efe2c8; }
+.tc-net strong { color: #b51f2b; font-size: 24px; font-weight: 800; margin-left: 10px; }
+.tc-open { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 1px solid #d99aa0; border-radius: 10px; background: #fff; color: #8f1420; font-weight: 600; }
+.tc-days { border: 1px solid #efe2c8; border-radius: 14px; background: #fff; overflow: hidden; }
+.tc-days-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; }
+.tc-days-head h3 { margin: 0; font-size: 18px; } .tc-days-head p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.tc-days-head > span { display: inline-flex; align-items: center; gap: 8px; color: #3d3d3d; font-size: 13.5px; }
+.tc-days table th { background: #f7f5f1; text-transform: none; letter-spacing: 0; font-size: 13px; color: #3d3d3d; position: static; }
+.tc-pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tc-pill.tc-ok { background: #def4e6; color: #22764a; } .tc-pill.tc-rejected { background: #fbe3e5; color: #a31927; } .tc-pill.tc-neutral { background: #ececec; color: #4a4a4a; } .tc-pill.tc-pending { background: #fdecd2; color: #a8640c; }
+.tc-add { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: #b51f2b; font-weight: 600; padding: 4px 0; }
+@media (max-width: 1100px) { .tc-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

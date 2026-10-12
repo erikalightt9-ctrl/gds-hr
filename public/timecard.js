@@ -9,6 +9,18 @@ function datesBetween(start, end) {
   for (let d = Date.parse(`${start}T00:00:00Z`); d <= Date.parse(`${end}T00:00:00Z`); d += 86400000) out.push(new Date(d).toISOString().slice(0, 10));
   return out.slice(0, 62);
 }
+// Outline icons for the timecard.
+const TC_ICON = {
+  cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
+  alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+  open: '<path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>',
+  plus: '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>',
+};
+const tcIcon = (name, cls = '') => `<svg class="tc-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${TC_ICON[name]}</svg>`;
+const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const periodLabel = (a, b) => { const [ya, ma, da] = a.split('-').map(Number), [yb, mb, db] = b.split('-').map(Number); return ya === yb && ma === mb ? `${MONTH[ma - 1]} ${da}–${db}, ${ya}` : `${MONTH[ma - 1]} ${da}, ${ya} – ${MONTH[mb - 1]} ${db}, ${yb}`; };
 const round = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const minutesBetween = (a, b) => { const [h1, m1] = a.split(':').map(Number), [h2, m2] = b.split(':').map(Number); return h2 * 60 + m2 - (h1 * 60 + m1); };
 
@@ -22,11 +34,11 @@ export function createTimecard(ctx) {
     const people = state.employees.filter(e => !e.draft);
     if (!view.employeeId || !people.some(e => e.id === view.employeeId)) view.employeeId = people[0]?.id || '';
     if (!view.start) Object.assign(view, cutoffDefaults());
-    return `<form class="toolbar" id="timecard-form"><label>Employee<select name="employeeId">${people.map(e => `<option value="${esc(e.id)}" ${e.id === view.employeeId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label><label>Cutoff start<input type="date" name="start" value="${view.start}" required></label><label>Cutoff end<input type="date" name="end" value="${view.end}" required></label><button class="primary" type="submit">Show timecard</button></form>`;
+    return `<form class="tc-controls" id="timecard-form"><label>Employee<select name="employeeId">${people.map(e => `<option value="${esc(e.id)}" ${e.id === view.employeeId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label><label>Cutoff start<input type="date" name="start" value="${view.start}" required></label><label>Cutoff end<input type="date" name="end" value="${view.end}" required></label><button class="primary tc-show" type="submit">${tcIcon('search')}Show timecard</button></form>`;
   }
 
   function panel(state) {
-    return `<section class="panel"><div class="panel-head"><div><h2>Employee timecard</h2><p>Each day beside what it does to pay. Figures match the payroll calculation exactly.</p></div></div>${controls(state)}<div id="timecard-body" class="panel-body"><p class="legend">Loading timecard…</p></div></section>`;
+    return `<section class="tc"><div class="tc-title"><h2>Employee timecard</h2><p>Attendance and payroll, in one view.</p></div>${controls(state)}<div id="timecard-body"><p class="legend">Loading timecard…</p></div></section>`;
   }
 
   // One row per calendar day, combining the attendance record, leave, holiday and the payroll trace.
@@ -61,7 +73,7 @@ export function createTimecard(ctx) {
         date, record, blocker, missing: employed && !record && !leave && !rest,
         cells: [
           `<strong>${WEEKDAYS[weekday]} ${esc(date.slice(5))}</strong>`,
-          badge(status, tone) + (blocker && !blocker.includes('Missing') ? `<small class="timecard-flag">${esc(blocker.replace(`${employee.id} ${employee.name}: `, ''))}</small>` : ''),
+          `<span class="tc-pill tc-${tone || 'ok'}">${esc(status)}</span>` + (blocker && !blocker.includes('Missing') ? `<small class="timecard-flag">${esc(blocker.replace(`${employee.id} ${employee.name}: `, ''))}</small>` : ''),
           record?.status === 'present' ? `${esc(record.timeIn)} → ${esc(record.timeOut)}${record.endNextDay ? ' (+1)' : ''}<small>Scheduled ${esc(record.scheduledIn)}</small>` : '—',
           breaks ? `${breaks} min` : '—',
           work.length ? `${round(work.filter(w => !w.overtime).reduce((s, w) => s + w.hours, 0))} h` : '—',
@@ -70,7 +82,7 @@ export function createTimecard(ctx) {
           work.some(w => w.overtime) ? `${round(work.filter(w => w.overtime).reduce((s, w) => s + w.hours, 0))} h${work.some(w => w.night) ? '<small>incl. night</small>' : ''}` : '—',
           deducted || earned ? `${earned ? `<span class="pay-plus">+${money(earned)}</span>` : ''}${deducted ? `<span class="pay-minus">−${money(deducted)}</span>` : ''}` : '<span class="legend">No change</span>',
           record ? badge(record.approved ? 'Approved' : 'Pending', record.approved ? '' : 'pending') : '—',
-          record ? editButton('attendance', record.id) : employed && !leave && !rest && canEdit('attendance') ? `<button class="small primary" data-timecard-add="${esc(date)}">Add record</button>` : '',
+          record ? editButton('attendance', record.id) : employed && !leave && !rest && canEdit('attendance') ? `<button class="tc-add" data-timecard-add="${esc(date)}">${tcIcon('plus')}Add record</button>` : '',
         ],
       };
     });
@@ -80,15 +92,15 @@ export function createTimecard(ctx) {
     const sum = (key, side) => round((row?.trace || []).filter(t => t.side === side && t.component === key).reduce((s, t) => s + t.amount, 0));
     const otHours = round((row?.workBreakdown || []).filter(w => w.overtime).reduce((s, w) => s + w.hours, 0));
     const missing = dayRows.filter(r => r.missing).length;
-    const card = (title, value, foot, alert) => `<div class="card ${alert ? 'featured' : ''}"><div class="card-label">${esc(title)}</div><div class="card-value">${value}</div><div class="card-foot">${foot}</div></div>`;
-    return `<div class="cards timecard-cards">
-      ${card('Days credited', row?.creditedDays ?? row?.daysPresent ?? 0, `${row?.daysPresent ?? 0} present of ${row?.workingDays ?? 0} scheduled${row?.lateDaysLost ? ` − ${row.lateDaysLost} day late` : ''}`)}
-      ${card('Missing records', missing, missing ? 'Add them before posting payroll' : 'Every scheduled day is accounted for', missing > 0)}
-      ${card('Late not offset', `${row?.lateMinutesUnoffset ?? 0} min`, `Lowers days credited · −${money(row?.lateReduction ?? 0)} basic · Undertime ${money(sum('undertime', 'deductions'))} · Absence ${money(sum('absence', 'deductions'))}`)}
-      ${card('Overtime', `${otHours} h`, `+${money((row?.earnings.regularOT || 0) + (row?.earnings.restOT || 0) + (row?.earnings.specialOT || 0) + (row?.earnings.regularHolidayOT || 0) + (row?.earnings.otherOT || 0) + (row?.earnings.nsd || 0))} incl. night differential`)}
+    const card = (ic, title, value, foot, alert) => `<div class="tc-card${alert ? ' alert' : ''}"><span class="tc-card-ico">${tcIcon(ic)}</span><div><span class="tc-card-title">${esc(title)}${alert ? '<em>Needs attention</em>' : ''}</span><strong>${value}</strong><small>${foot}</small></div></div>`;
+    return `<div class="tc-cards">
+      ${card('cal', 'Days credited', row?.creditedDays ?? row?.daysPresent ?? 0, `${row?.daysPresent ?? 0} present of ${row?.workingDays ?? 0} scheduled${row?.lateDaysLost ? `<br>${row.lateDaysLost} day late` : ''}`)}
+      ${card('alert', 'Missing records', missing, missing ? 'Add them before posting payroll.' : 'Every scheduled day is accounted for.', missing > 0)}
+      ${card('clock', 'Late not offset', `${row?.lateMinutesUnoffset ?? 0} min`, `Lowers days credited – ${money(row?.lateReduction ?? 0)} basic<br>Undertime ${money(sum('undertime', 'deductions'))} · Absence ${money(sum('absence', 'deductions'))}`)}
+      ${card('clock', 'Overtime', `${otHours} h`, `+${money((row?.earnings.regularOT || 0) + (row?.earnings.restOT || 0) + (row?.earnings.specialOT || 0) + (row?.earnings.regularHolidayOT || 0) + (row?.earnings.otherOT || 0) + (row?.earnings.nsd || 0))} incl. night differential`)}
     </div>
-    <div class="timecard-totals">${row ? `Basic ${money(row.earnings.basic)} · Gross <strong>${money(row.gross)}</strong> · Deductions ${money(row.totalDeductions)} · <strong>Net ${money(row.net)}</strong>` : 'Not included in payroll for this period.'}
-      <button class="small" data-timecard-payroll>Open in Payroll →</button></div>`;
+    <div class="tc-totals">${row ? `<span>Basic <b>${money(row.earnings.basic)}</b> · Gross <b>${money(row.gross)}</b></span><span class="tc-sep"></span><span>Deductions <b>${money(row.totalDeductions)}</b></span><span class="tc-sep"></span><span class="tc-net">Net pay <strong>${money(row.net)}</strong></span>` : '<span>Not included in payroll for this period.</span>'}
+      <button class="tc-open" data-timecard-payroll>${tcIcon('open')}Open in Payroll</button></div>`;
   }
 
   async function fill() {
@@ -102,7 +114,7 @@ export function createTimecard(ctx) {
       const other = run.blockers.filter(b => !dayRows.some(r => r.blocker === b));
       body.innerHTML = summary(row, dayRows)
         + (other.length ? `<div class="notice">${other.map(esc).join('<br>')}</div>` : '')
-        + `<div class="scroll-table timecard-table">${table(['Day', 'Status', 'In → out', 'Unpaid breaks', 'Regular hours', 'Late (offset / days lost)', 'Undertime', 'Overtime', 'Pay effect', 'Approval', ''], dayRows.map(r => r.cells))}</div>`
+        + `<section class="tc-days"><div class="tc-days-head"><div><h3>Daily breakdown</h3><p>${esc(periodLabel(view.start, view.end))}</p></div><span>${tcIcon('cal')}${esc(periodLabel(view.start, view.end))}</span></div><div class="scroll-table timecard-table">${table(['Day', 'Status', 'In → Out', 'Unpaid breaks', 'Regular hours', 'Late / days lost', 'Undertime', 'Overtime', 'Pay effect', 'Approval', ''], dayRows.map(r => r.cells))}</div></section>`
         + `<p class="legend">Rates: ${row ? `${money(row.dailyRate)} daily · ${money(row.hourlyRate)} hourly` : '—'}. Corrections require a reason; the original record, the change and who made it stay in the audit trail, and the employee is notified.</p>`;
     } catch (error) { body.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
