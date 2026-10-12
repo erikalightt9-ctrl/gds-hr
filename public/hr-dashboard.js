@@ -82,7 +82,7 @@ export function createDashboard(ctx) {
     const card = (key, value, text, nav, { sub = '', link = '', tone = '', alert = false } = {}) => `<button class="db-card${alert ? ' alert' : ''}" data-go="${esc(JSON.stringify(nav))}"><span class="db-head"><span class="db-ico ${tone}">${svg(key)}</span><span class="db-title">${text}</span>${alert ? '<em>Needs attention</em>' : ''}</span><span class="db-value"><strong>${value ?? '—'}</strong>${sub && !link ? `<small>${sub}</small>` : ''}</span>${link ? `${sub ? `<small class="db-sub">${sub}</small>` : ''}<span class="db-link">${link} →</span>` : ''}</button>`;
     const asOf = new Date(`${String(d.asOf).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     shell(heading('Dashboard', `${esc(ctx.context().company.name)} · Overview as of ${asOf}`) +
-      `${celebrationsHtml(esc, party)}<div class="db-grid db-grid8">
+      `${celebrationsHtml(esc, party)}<section class="an an-top" id="dash-analytics">${(spotCard = spot, analyticsHtml(t))}</section><div class="db-grid db-grid8">
         ${card('total', t.total, 'Total employees', { page: 'files' }, { tone: 'red', sub: t.archived ? `${t.archived} archived not counted` : '' })}
         ${card('active', t.active, 'Active employees', { page: 'files', status: 'Active' }, { tone: 'green' })}
         ${card('inactive', t.inactive, 'Inactive employees', { page: 'files', status: 'Inactive' }, { tone: 'red' })}
@@ -93,7 +93,7 @@ export function createDashboard(ctx) {
         ${card('trainings', t.upcomingTrainings, 'Upcoming trainings', { page: 'trainings' }, { sub: t.upcomingTrainings ? 'Scheduled sessions' : 'No upcoming sessions' })}
       </div>
       ${ctx.livePanel ? `<div id="dash-live">${ctx.livePanel()}</div>` : ''}
-      <section class="an" id="dash-analytics">${(spotCard = spot, analyticsHtml(t))}</section>`);
+      `);
     bindCelebrationPhotos(document.querySelector('.content'));
     const bindSpot = () => document.querySelectorAll('[data-sp-photo]').forEach(img => { img.addEventListener('error', () => img.remove()); img.addEventListener('load', () => img.closest('.sp-card')?.classList.add('has-photo')); });
     bindSpot();
