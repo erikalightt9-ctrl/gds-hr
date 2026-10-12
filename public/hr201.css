@@ -845,3 +845,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 /* Sign-in: the logo sits at the top of the sign-in card, sized to fit inside it */
 .login-form .login-card-logo { display: block; width: 100%; max-width: 260px; height: auto; max-height: 96px; object-fit: contain; margin: 0 auto 18px; }
 .welcome-login .login-form h2, .welcome-login .login-form h2 + p { text-align: center; }
+.expl-reason { display: block; font-weight: 600; }
+.expl-text { display: block; margin-top: 2px; white-space: normal; color: var(--muted); }
