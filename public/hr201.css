@@ -1076,3 +1076,13 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .dr-view { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #d99aa0; border-radius: 9px; background: #fff; color: #8f1420; font-weight: 600; }
 .dr-foot { margin: 12px 2px 0; color: var(--muted); font-size: 13px; }
 @media (max-width: 900px) { .dr-head { flex-direction: column; } .dr-filters { justify-content: stretch; } }
+/* Masterlist profile panel: no overlap in the narrow column */
+.ml-pv-head { grid-template-columns: auto 1fr; }
+.ml-pv-head .ml-btn { grid-column: 1 / -1; justify-self: start; padding: 8px 14px; }
+.ml-pv-name { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.ml-pv-head > div > span { font-size: 13.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.ml-avatar-lg { width: 76px; height: 76px; font-size: 24px; }
+.ml-tabs { gap: 0; overflow-x: auto; scrollbar-width: none; }
+.ml-tabs button { flex: 1 1 auto; padding: 10px 8px; font-size: 13.5px; white-space: nowrap; }
+.ml-grid { grid-template-columns: 1fr 1fr; gap: 12px 10px; }
+.ml-info strong, .ml-info small { overflow-wrap: anywhere; }
