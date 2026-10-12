@@ -17,6 +17,7 @@ import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entit
 import { decideLoanApplication, loanDashboard, setLoanSkips } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
+import { renderLeavePdf } from './leave-pdf.mjs';
 import { staffNames, fullNameOf } from './staff-names.mjs';
 import { messageContacts, unreadMessages, conversation, sendMessage, onChat } from './messages.mjs';
 import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayRecord, finalPayOverview, addThirteenthYear } from './thirteenth.mjs';
@@ -207,6 +208,18 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/staff-names' && req.method === 'GET') { send(200, staffNames(store, { staffOnly: auth.user.role === 'employee' })); return; }
       // Fail closed: employee sessions can never reach staff records, audits, exports or account management.
       if (!LEGACY_WORKSPACE.includes(auth.user.role)) throw new AppError('This area is restricted to authorized staff.', 403);
+      // One leave request as a formal leave application PDF (Leave Management: click the employee's name).
+      const leavePdf = pathname.match(/^\/api\/leaves\/([a-f0-9-]+)\.pdf$/);
+      if (leavePdf && req.method === 'GET') {
+        const s = store.read(), leave = s.leaves.find(l => l.id === leavePdf[1]);
+        if (!leave) throw new AppError('Leave request not found.', 404);
+        const employee = s.employees.find(e => e.id === leave.employeeId), type = s.leaveTypes.find(t => t.id === leave.typeId);
+        let available = '';
+        try { const b = employee && type && leaveBalance(s, employee, type, leave.startDate); if (b) available = b.perOccasion ? 'Per occasion' : `${b.available} day${b.available === 1 ? '' : 's'}`; } catch { /* not every leave type keeps a balance */ }
+        store.log(auth.user, 'export', 'leaves', leave.id, null, { format: 'pdf' });
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="leave-${leave.employeeId}-${leave.startDate}.pdf"` });
+        res.end(renderLeavePdf(leave, { employee, typeName: type?.name || '', designation: designationOf(store, leave.employeeId), available, decidedBy: leave.decidedBy ? fullNameOf(store, leave.decidedBy) : '' })); return;
+      }
       if (pathname === '/api/live' && req.method === 'GET') { send(200, liveDashboard(store, auth.user)); return; }
       if (pathname === '/api/live/correct' && req.method === 'POST') { send(200, correctClock(store, auth.user, await readBody(req))); return; }
       const explanationReview = pathname.match(/^\/api\/explanations\/([a-f0-9-]+)\/review$/);

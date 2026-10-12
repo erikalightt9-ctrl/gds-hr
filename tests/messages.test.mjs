@@ -54,3 +54,11 @@ test('daily attendance record prints one date as a PDF (and Excel) for staff', a
     assert.throws(() => buildReport(store, { username: 'e', role: 'employee' }, 'daily-attendance', 'pdf', { date: day }), /cannot download/);
   } finally { store.close(); }
 });
+
+test('a leave request prints as a formal leave application PDF', async () => {
+  const { renderLeavePdf } = await import('../src/leave-pdf.mjs');
+  const leave = { id: 'lv-1', employeeId: '2024-0930', typeId: 'vacation', startDate: '2026-10-14', endDate: '2026-10-14', days: 1, reason: 'Recognition ceremony of my sibling', status: 'approved', decidedAt: '2026-10-12T07:57:56Z', hrRemarks: '' };
+  const pdf = renderLeavePdf(leave, { employee: { name: 'Hernando, Albert Puyat', department: 'GDS Capital HQ' }, typeName: 'Vacation Leave', designation: 'Driver', available: '6 days', decidedBy: 'GDS Capital Inc' }).toString('latin1');
+  assert.ok(pdf.startsWith('%PDF-1.4'));
+  for (const text of ['LEAVE APPLICATION', 'HERNANDO, ALBERT PUYAT', 'Vacation Leave', 'October 14, 2026', 'Approved', 'GDS Capital Inc', 'Employee signature']) assert.ok(pdf.includes(text), text);
+});
