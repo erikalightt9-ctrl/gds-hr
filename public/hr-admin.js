@@ -43,40 +43,37 @@ export function createAdmin(ctx) {
     drawSettings();
   }
   const lines = list => esc(list.join('\n'));
+  const SI = { wifi: '<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.8 15.8a4.8 4.8 0 0 1 6.4 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor"/>', lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>', info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>', plus: '<path d="M12 5v14M5 12h14"/>', trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>' };
+  const sIcon = (k, cls = '') => `<svg class="st-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${SI[k]}</svg>`;
   function reqRow(r, i) {
     return `<tr data-row="${i}"><td><input data-k="name" value="${esc(r.name)}" maxlength="200" aria-label="Requirement name"></td><td><input data-k="category" value="${esc(r.category)}" maxlength="80" aria-label="Category"></td>
       <td><input type="checkbox" data-k="required" ${r.required ? 'checked' : ''} aria-label="Required"></td><td><input type="checkbox" data-k="expires" ${r.expires ? 'checked' : ''} aria-label="Has expiry"></td><td><select data-k="providedBy" aria-label="Provided by"><option value="employee"${r.providedBy !== 'company' ? ' selected' : ''}>Employee</option><option value="company"${r.providedBy === 'company' ? ' selected' : ''}>Company / HR</option></select></td><td><input type="checkbox" data-k="restricted" ${r.restricted ? 'checked' : ''} aria-label="Restricted"></td>
       <td><input type="number" min="0" max="365" data-k="dueDays" value="${r.dueDays ?? ''}" aria-label="Due days after hire" class="narrow"></td><td><input data-k="departments" value="${esc(r.departments.join(', '))}" placeholder="All" aria-label="Departments"></td><td><input data-k="classifications" value="${esc(r.classifications.join(', '))}" placeholder="All" aria-label="Classifications"></td>
-      <td><button type="button" class="small danger" data-del="${i}">Remove</button></td></tr>`;
+      <td><button type="button" class="st-trash" data-del="${i}" title="Remove requirement" aria-label="Remove requirement">${sIcon('trash')}</button></td></tr>`;
   }
   function drawSettings() {
     const s = settings, preview = `${[s.idFormat.prefix, s.idFormat.includeYear ? ctx.today().slice(0, 4) : ''].filter(Boolean).join('-')}${s.idFormat.prefix || s.idFormat.includeYear ? '-' : ''}${'1'.padStart(s.idFormat.digits, '0')}`;
-    shell(heading('Settings', 'Company branding, lists, numbering, document requirements and reminders. Only System Administrators can change these.') +
-      `<form id="settings-form">
-      <section class="panel"><div class="panel-head"><h2>Company branding</h2></div><div class="panel-body form-grid">
-        <label class="field">Company name<input name="company.name" required maxlength="120" value="${esc(s.company.name)}"></label>
-        <label class="field">System title<input name="company.systemTitle" required maxlength="120" value="${esc(s.company.systemTitle)}"></label>
-        <label class="field">SSS employer ID no.<input name="company.sssEmployerNo" maxlength="40" value="${esc(s.company.sssEmployerNo || '')}"></label>
-        <label class="field">PhilHealth employer ID no.<input name="company.philhealthEmployerNo" maxlength="40" value="${esc(s.company.philhealthEmployerNo || '')}"></label>
-        <label class="field">Pag-IBIG (HDMF) employer ID no.<input name="company.pagibigEmployerNo" maxlength="40" value="${esc(s.company.pagibigEmployerNo || '')}"></label>
-        <label class="field">eGov payment fee (₱, per remittance)<input type="number" min="0" step="0.01" name="company.egovFee" value="${s.company.egovFee ?? 15}"></label>
-        <label class="field">Leave form · Verified by (name)<input name="company.leaveVerifiedName" maxlength="120" value="${esc(s.company.leaveVerifiedName || '')}"></label>
-        <label class="field">Leave form · Verified by (position)<input name="company.leaveVerifiedTitle" maxlength="120" value="${esc(s.company.leaveVerifiedTitle || '')}"></label>
-        <label class="field">Leave form · Approved by (name)<input name="company.leaveApprovedName" maxlength="120" value="${esc(s.company.leaveApprovedName || '')}"></label>
-        <label class="field">Leave form · Approved by (position)<input name="company.leaveApprovedTitle" maxlength="120" value="${esc(s.company.leaveApprovedTitle || '')}"></label>
-        <label class="field">Theme<select name="company.theme"><option value="gds" ${s.company.theme === 'gds' ? 'selected' : ''}>GDS red and gold</option><option value="forest" ${s.company.theme === 'forest' ? 'selected' : ''}>Forest green</option></select></label>
-        <p class="legend">The logo is the GDS Capital logo file (public/gds-logo.png); replace that file to change it.</p></div></section>
+    const field = (label, name, value, extra = '') => `<label class="field">${label}<input name="${name}" value="${esc(value ?? '')}" ${extra}></label>`;
+    shell(heading('Settings', 'Manage company details, attendance access, and employee records.', `<span class="st-admin">${sIcon('lock')}System administrators only</span>`) +
+      `<nav class="st-tabs">${[['st-wifi', 'Office Wi-Fi'], ['st-company', 'Company details'], ['st-numbers', 'Employee numbers'], ['st-requirements', 'Document requirements']].map(([id, label], i) => `<button type="button" data-st-jump="${id}" class="${i === 0 ? 'active' : ''}">${label}</button>`).join('')}</nav>
+      <form id="settings-form">
+      <section class="panel st-panel" id="st-company"><div class="st-head"><h2>Company details</h2></div><div class="panel-body">
+        <h3 class="st-group">Company identity</h3><div class="form-grid">${field('Company name', 'company.name', s.company.name, 'required maxlength="120"')}${field('System title', 'company.systemTitle', s.company.systemTitle, 'required maxlength="120"')}</div>
+        <h3 class="st-group">Employer registration</h3><div class="form-grid">${field('SSS employer ID no.', 'company.sssEmployerNo', s.company.sssEmployerNo, 'maxlength="40"')}${field('PhilHealth employer ID no.', 'company.philhealthEmployerNo', s.company.philhealthEmployerNo, 'maxlength="40"')}${field('Pag-IBIG (HDMF) employer ID no.', 'company.pagibigEmployerNo', s.company.pagibigEmployerNo, 'maxlength="40"')}<label class="field">eGov payment fee (₱, per remittance)<span class="st-peso"><input type="number" min="0" step="0.01" name="company.egovFee" value="${s.company.egovFee ?? 15}"></span><small>Per remittance.</small></label></div>
+        <h3 class="st-group">Leave form signatories</h3><div class="form-grid">${field('Verified by (name)', 'company.leaveVerifiedName', s.company.leaveVerifiedName, 'maxlength="120"')}${field('Verified by (position)', 'company.leaveVerifiedTitle', s.company.leaveVerifiedTitle, 'maxlength="120"')}${field('Approved by (name)', 'company.leaveApprovedName', s.company.leaveApprovedName, 'maxlength="120"')}${field('Approved by (position)', 'company.leaveApprovedTitle', s.company.leaveApprovedTitle, 'maxlength="120"')}</div>
+        <div class="form-grid st-appearance"><div><h3 class="st-group">Appearance</h3><label class="field">Theme<span class="st-theme"><select name="company.theme"><option value="gds" ${s.company.theme === 'gds' ? 'selected' : ''}>GDS red and gold</option><option value="forest" ${s.company.theme === 'forest' ? 'selected' : ''}>Forest green</option></select><i class="st-swatch red"></i><i class="st-swatch gold"></i></span></label></div>
+          <div><h3 class="st-group st-group-light">Company logo</h3><div class="st-logo"><span><img src="/gds-logo.png" alt="Company logo"></span><small>Managed by your system administrator.</small></div></div></div>
+      </div></section>
+      <section class="panel st-panel" id="st-numbers"><div class="st-head"><h2>Employee numbers</h2></div><div class="panel-body st-numbers">
+        <div class="st-numbers-fields"><label class="field">Prefix (letters / digits)<input name="idFormat.prefix" maxlength="10" pattern="[A-Z0-9]*" value="${esc(s.idFormat.prefix)}"></label><label class="field">Digits<input type="number" name="idFormat.digits" min="3" max="8" value="${s.idFormat.digits}"></label><label class="field check"><input type="checkbox" name="idFormat.includeYear" ${s.idFormat.includeYear ? 'checked' : ''}> Include year hired</label></div>
+        <div class="st-next"><span>Next employee number</span><strong>${esc(preview)}</strong><small>Or the next available number.</small></div></div></section>
+      <section class="panel st-panel" id="st-requirements"><div class="st-head"><div><h2>201 document requirements</h2><p>Define required documents, deadlines, and access.</p></div><button type="button" class="st-outline" data-add-req>${sIcon('plus')}Add requirement</button></div>
+        <div class="scroll-table"><table class="settings-table st-req"><thead><tr><th>Requirement</th><th>Category</th><th>Required</th><th>Expires</th><th>Provided by</th><th>Restricted</th><th>Due after hire (days)</th><th>Departments</th><th>Classifications</th><th>Action</th></tr></thead><tbody id="req-rows">${s.documentRequirements.map(reqRow).join('')}</tbody></table></div>
+        <p class="panel-body legend">Restricted documents (e.g. medical or disciplinary) are visible only to HR Managers and Administrators. Leave departments / classifications blank for everyone. Company / HR documents are not shown in employee accounts.</p></section>
       <section class="panel"><div class="panel-head"><h2>Lists</h2><span class="legend">One per line</span></div><div class="panel-body form-grid three">
         <label class="field">Departments<textarea name="departments" rows="8">${lines(s.departments)}</textarea></label>
         <label class="field">Positions<textarea name="positions" rows="8">${lines(s.positions)}</textarea></label>
         <label class="field">Employment classifications<textarea name="classifications" rows="8" required>${lines(s.classifications)}</textarea></label></div></section>
-      <section class="panel"><div class="panel-head"><h2>Employee numbers</h2><span class="legend">Next new employee: <strong>${esc(preview)}</strong> (or the next free number)</span></div><div class="panel-body form-grid three">
-        <label class="field">Prefix (letters / digits)<input name="idFormat.prefix" maxlength="10" pattern="[A-Z0-9]*" value="${esc(s.idFormat.prefix)}"></label>
-        <label class="field">Digits<input type="number" name="idFormat.digits" min="3" max="8" value="${s.idFormat.digits}"></label>
-        <label class="field check"><input type="checkbox" name="idFormat.includeYear" ${s.idFormat.includeYear ? 'checked' : ''}> Include year hired</label></div></section>
-      <section class="panel"><div class="panel-head"><h2>201 document requirements</h2><button type="button" class="small" data-add-req>＋ Add requirement</button></div>
-        <div class="scroll-table"><table class="settings-table"><thead><tr><th>Requirement</th><th>Category</th><th>Required</th><th>Expires</th><th>Provided by</th><th>Restricted</th><th>Due (days after hire)</th><th>Only for departments</th><th>Only for classifications</th><th></th></tr></thead><tbody id="req-rows">${s.documentRequirements.map(reqRow).join('')}</tbody></table></div>
-        <p class="panel-body legend">Restricted documents (e.g. medical or disciplinary) are visible only to HR Managers and Administrators. Leave departments / classifications blank to apply to everyone. Requirements provided by the Company / HR (such as the contract) are not shown in employee accounts.</p></section>
       <section class="panel"><div class="panel-head"><h2>Uploads, reminders and fields</h2></div><div class="panel-body form-grid three">
         <label class="field">Photo size limit (MB)<input type="number" step="0.5" min="0.5" max="10" name="uploads.photoMB" value="${s.uploads.photoMB}"></label>
         <label class="field">Document size limit (MB)<input type="number" min="1" max="20" name="uploads.documentMB" value="${s.uploads.documentMB}"></label>
@@ -90,15 +87,20 @@ export function createAdmin(ctx) {
         <label class="field">Feb 29 birthdays and start dates, in other years<select name="celebrations.leapDay"><option value="feb28" ${(s.celebrations?.leapDay || 'feb28') === 'feb28' ? 'selected' : ''}>Celebrate on Feb 28</option><option value="mar1" ${s.celebrations?.leapDay === 'mar1' ? 'selected' : ''}>Celebrate on Mar 1</option></select></label>
         <input type="hidden" name="reminders.memoDays" value="${s.reminders.memoDays}"></div>
         </section>
-      <section class="panel"><div class="panel-head"><h2>User roles</h2><button type="button" class="small" data-accounts>Manage accounts →</button></div><div class="panel-body">${table(['Role', 'Can do'], [['System Administrator', 'Everything, including Settings, accounts and role assignment'], ['HR Manager', 'Employee records, document requirements and reviews, approvals, memos, trainings, reports'], ['HR Staff', 'Add and update employees, upload and review non-restricted documents, draft memos, manage trainings; no settings, government numbers or restricted documents'], ['Department Manager', 'View their own department’s employees, memo acknowledgements and trainings (account linked to their employee record)'], ['Management', 'Dashboards and summary reports'], ['Payroll', 'Payroll, loans, deductions and contributions'], ['Employee', 'Own profile, data sheet, memos and trainings']].map(([r, d]) => [`<strong>${r}</strong>`, d]))}</div></section>
-      <div class="sticky-save"><button class="primary">Save settings</button></div></form>`);
+      <div class="st-footer"><span>Changes apply across your organization.</span><span><button type="button" data-st-cancel>Cancel</button><button class="primary">Save settings</button></span></div></form>`);
     const form = document.querySelector('#settings-form');
     officeWifi(form);
+    document.querySelector('.st-tabs').addEventListener('click', event => {
+      const b = event.target.closest('[data-st-jump]'); if (!b) return;
+      document.querySelectorAll('.st-tabs button').forEach(x => x.classList.toggle('active', x === b));
+      document.getElementById(b.dataset.stJump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     form.addEventListener('click', event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-add-req')) { collectReqs(); settings.documentRequirements.push({ id: '', name: '', category: 'Other', required: true, expires: false, restricted: false, providedBy: 'employee', dueDays: null, departments: [], classifications: [] }); drawSettings(); }
       if (b.dataset.del) { collectReqs(); settings.documentRequirements.splice(Number(b.dataset.del), 1); drawSettings(); }
       if (b.hasAttribute('data-accounts')) ctx.openAccounts();
+      if (b.hasAttribute('data-st-cancel')) drawSettings();   // discard unsaved edits
     });
     form.onsubmit = async event => {
       event.preventDefault();
@@ -119,14 +121,14 @@ export function createAdmin(ctx) {
   }
   // Office Wi-Fi for time in / out: recognised by the office's internet address. Add it while on the office Wi-Fi.
   async function officeWifi(form) {
-    const box = document.createElement('section'); box.className = 'panel'; form.before(box);
+    const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-wifi'; form.before(box);
     const draw = d => {
       const here = d.networks.some(n => n.ip === d.current);
-      box.innerHTML = `<div class="panel-head"><h2>📶 Office Wi-Fi for time in / out</h2></div><div class="panel-body">
-        <p class="legend">Employees can time in and out only from the office Wi-Fi. Anywhere else they use <strong>Out of office</strong> with a reason, which HR or Admin approves on Live attendance. Open this page while connected to the office Wi-Fi and click <strong>Add this network</strong>. If the office internet address changes (for example after the router restarts), add it again.</p>
-        <p>This device's network address: <strong>${ctx.esc(d.current || 'unknown')}</strong> ${here ? '<span class="badge">✓ Office Wi-Fi</span>' : ''}</p>
-        ${d.networks.length ? `<ul class="plain-list office-net-list">${d.networks.map(n => `<li><span><strong>${ctx.esc(n.label)}</strong> · ${ctx.esc(n.ip)} <small>added by ${ctx.esc(n.addedBy)}</small></span><button type="button" class="small danger" data-net-remove="${ctx.esc(n.ip)}">Remove</button></li>`).join('')}</ul>` : '<p class="notice">No office network saved yet, so time in / out is not limited to the office Wi-Fi.</p>'}
-        ${here ? '' : '<button type="button" class="primary" data-net-add>Add this network as the office Wi-Fi</button>'}
+      box.innerHTML = `<div class="st-head"><h2 class="st-wifi-title">${sIcon('wifi', 'st-wifi')}Office Wi-Fi for time in / out</h2><span class="st-chip ${d.networks.length ? 'ok' : ''}"><i></i>${d.networks.length ? 'Configured' : 'Not configured'}</span></div><div class="panel-body">
+        <p class="legend">Limit time in and out to your office network. Off-site entries require a reason and HR or Admin approval.</p>
+        <label class="field st-ip">This device's network address<input value="${ctx.esc(d.current || 'unknown')}" readonly></label>
+        ${d.networks.length ? `<ul class="plain-list office-net-list">${d.networks.map(n => `<li><span><strong>${ctx.esc(n.label)}</strong> · ${ctx.esc(n.ip)} <small>added by ${ctx.esc(n.addedBy)}</small>${n.ip === d.current ? ' <span class="badge">✓ This network</span>' : ''}</span><button type="button" class="small danger" data-net-remove="${ctx.esc(n.ip)}">Remove</button></li>`).join('')}</ul>` : `<p class="st-warn">${sIcon('info')}No office network saved. Time in / out is currently unrestricted.</p>`}
+        ${here ? '' : '<div class="st-wifi-add"><button type="button" class="primary" data-net-add>Add this network as office Wi-Fi</button><small>Connect to office Wi-Fi before adding. Add the network again if your public address changes.</small></div>'}
         <p class="form-error hidden" role="alert" data-net-error></p></div>`;
     };
     const show = async body => {
