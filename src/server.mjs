@@ -218,7 +218,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         try { const b = employee && type && leaveBalance(s, employee, type, leave.startDate); if (b) available = b.perOccasion ? 'Per occasion' : `${b.available} day${b.available === 1 ? '' : 's'}`; } catch { /* not every leave type keeps a balance */ }
         store.log(auth.user, 'export', 'leaves', leave.id, null, { format: 'pdf' });
         res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="leave-${leave.employeeId}-${leave.startDate}.pdf"` });
-        res.end(renderLeavePdf(leave, { employee, typeName: type?.name || '', designation: designationOf(store, leave.employeeId), available, decidedBy: leave.decidedBy ? fullNameOf(store, leave.decidedBy) : '' })); return;
+        res.end(renderLeavePdf(leave, { employee, typeName: type?.name || '', designation: designationOf(store, leave.employeeId), available, decidedBy: leave.decidedBy ? fullNameOf(store, leave.decidedBy) : '', ...(c => ({ verified: { name: c.leaveVerifiedName, title: c.leaveVerifiedTitle }, approved: { name: c.leaveApprovedName, title: c.leaveApprovedTitle } }))(readSettings(store).company) })); return;
       }
       if (pathname === '/api/live' && req.method === 'GET') { send(200, liveDashboard(store, auth.user)); return; }
       if (pathname === '/api/live/correct' && req.method === 'POST') { send(200, correctClock(store, auth.user, await readBody(req))); return; }

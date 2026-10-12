@@ -13,7 +13,7 @@ function wrap(text, width, size) {
 }
 const STATUS = { pending: 'Pending HR approval', approved: 'Approved', rejected: 'Not approved', cancelled: 'Cancelled' };
 
-export function renderLeavePdf(leave, { employee, typeName = '', designation = '', available = '', decidedBy = '' }) {
+export function renderLeavePdf(leave, { employee, typeName = '', designation = '', available = '', decidedBy = '', verified = {}, approved = {} }) {
   const p = new Page(), image = logo();
   let y = H - 40;
   p.stroke(LEFT, 40, WIDTH, H - 80, COLOR.gold);
@@ -39,10 +39,20 @@ export function renderLeavePdf(leave, { employee, typeName = '', designation = '
   y = header('HR DECISION', y);
   rows([['Decision', STATUS[leave.status] || leave.status], ['Decided by', decidedBy || '-'], ['Date decided', leave.decidedAt ? longDate(leave.decidedAt) : '-'], ['HR remarks', leave.hrRemarks || '-']]);
 
-  const sign = Math.min(150, y - 40);
-  const line = (x, label, name) => { p.line(x, sign + 20, x + 200, sign + 20, COLOR.ink); if (name) p.text(name, x + 100, sign + 24, { size: 9, align: 'center' }); p.text(label, x + 100, sign + 9, { size: 7.5, color: COLOR.muted, align: 'center' }); };
-  line(LEFT + 20, 'Employee signature / date', employee?.name || '');
-  line(RIGHT - 220, 'Approved by / date', decidedBy);
+  // Signatures: the employee, then Verified by (HR) and Approved by, each with name and position.
+  const sign = Math.min(165, y - 55), colW = (WIDTH - 40) / 3;
+  const block = (i, heading, name, title) => {
+    const x = LEFT + 20 + i * (colW + 0), mid = x + colW / 2 - 6;
+    p.text(heading, x, sign + 52, { size: 8.5, bold: true, color: COLOR.muted });
+    p.line(x, sign + 20, x + colW - 12, sign + 20, COLOR.ink);
+    if (name) p.text(name, mid, sign + 24, { size: 9.5, bold: true, align: 'center' });
+    p.text(title || 'Signature over printed name', mid, sign + 9, { size: 7.5, color: COLOR.muted, align: 'center' });
+    p.text('Date: ____________', x, sign - 6, { size: 7.5, color: COLOR.muted });
+  };
+  const [last, first] = String(employee?.name || '').split(',').map(x => x.trim());
+  block(0, 'Filed by:', first ? `${first} ${last}` : String(employee?.name || ''), 'Employee');
+  block(1, 'Verified by:', verified.name || '', verified.title || 'HR');
+  block(2, 'Approved by:', approved.name || decidedBy, approved.title || '');
   p.text(`Leave ${String(leave.id || '').slice(0, 8)} | GDS CAPITAL INC. Human Resources`, W / 2, 50, { size: 7, color: COLOR.muted, align: 'center' });
   return assemblePdf(p, image);
 }

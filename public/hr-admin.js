@@ -60,6 +60,10 @@ export function createAdmin(ctx) {
         <label class="field">PhilHealth employer ID no.<input name="company.philhealthEmployerNo" maxlength="40" value="${esc(s.company.philhealthEmployerNo || '')}"></label>
         <label class="field">Pag-IBIG (HDMF) employer ID no.<input name="company.pagibigEmployerNo" maxlength="40" value="${esc(s.company.pagibigEmployerNo || '')}"></label>
         <label class="field">eGov payment fee (₱, per remittance)<input type="number" min="0" step="0.01" name="company.egovFee" value="${s.company.egovFee ?? 15}"></label>
+        <label class="field">Leave form · Verified by (name)<input name="company.leaveVerifiedName" maxlength="120" value="${esc(s.company.leaveVerifiedName || '')}"></label>
+        <label class="field">Leave form · Verified by (position)<input name="company.leaveVerifiedTitle" maxlength="120" value="${esc(s.company.leaveVerifiedTitle || '')}"></label>
+        <label class="field">Leave form · Approved by (name)<input name="company.leaveApprovedName" maxlength="120" value="${esc(s.company.leaveApprovedName || '')}"></label>
+        <label class="field">Leave form · Approved by (position)<input name="company.leaveApprovedTitle" maxlength="120" value="${esc(s.company.leaveApprovedTitle || '')}"></label>
         <label class="field">Theme<select name="company.theme"><option value="gds" ${s.company.theme === 'gds' ? 'selected' : ''}>GDS red and gold</option><option value="forest" ${s.company.theme === 'forest' ? 'selected' : ''}>Forest green</option></select></label>
         <p class="legend">The logo is the GDS Capital logo file (public/gds-logo.png); replace that file to change it.</p></div></section>
       <section class="panel"><div class="panel-head"><h2>Lists</h2><span class="legend">One per line</span></div><div class="panel-body form-grid three">
@@ -101,7 +105,7 @@ export function createAdmin(ctx) {
       collectReqs();
       const g = n => form.elements[n], list = n => g(n).value.split('\n').map(x => x.trim()).filter(Boolean);
       const next = { ...settings,
-        company: { name: g('company.name').value.trim(), systemTitle: g('company.systemTitle').value.trim(), theme: g('company.theme').value, sssEmployerNo: g('company.sssEmployerNo').value.trim(), philhealthEmployerNo: g('company.philhealthEmployerNo').value.trim(), pagibigEmployerNo: g('company.pagibigEmployerNo').value.trim(), egovFee: Number(g('company.egovFee').value || 0) },
+        company: { name: g('company.name').value.trim(), systemTitle: g('company.systemTitle').value.trim(), theme: g('company.theme').value, sssEmployerNo: g('company.sssEmployerNo').value.trim(), philhealthEmployerNo: g('company.philhealthEmployerNo').value.trim(), pagibigEmployerNo: g('company.pagibigEmployerNo').value.trim(), egovFee: Number(g('company.egovFee').value || 0), leaveVerifiedName: g('company.leaveVerifiedName').value.trim(), leaveVerifiedTitle: g('company.leaveVerifiedTitle').value.trim(), leaveApprovedName: g('company.leaveApprovedName').value.trim(), leaveApprovedTitle: g('company.leaveApprovedTitle').value.trim() },
         departments: list('departments'), positions: list('positions'), classifications: list('classifications'),
         idFormat: { prefix: g('idFormat.prefix').value.trim().toUpperCase(), includeYear: g('idFormat.includeYear').checked, digits: Number(g('idFormat.digits').value) },
         uploads: { photoMB: Number(g('uploads.photoMB').value), documentMB: Number(g('uploads.documentMB').value) },
