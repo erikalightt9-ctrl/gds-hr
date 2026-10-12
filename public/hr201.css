@@ -1098,3 +1098,35 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .tb-chat { color: #8b7fc0 !important; }
 .tb-bell { color: #f6a623 !important; }
 .tb-btn .bell-count { top: -5px; right: -5px; min-width: 18px; height: 18px; font-size: 10px; background: #f6a623; color: #fff; border: 2px solid #fffdf7; }
+/* Payroll & 13th Month (redesign) */
+.pr-ico { width: 22px; height: 22px; flex: none; }
+.pr-btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: 1px solid #d9c4a3; border-radius: 10px; background: #fffdf7; color: #2b2116; font-weight: 600; text-decoration: none; }
+.pr-btn .pr-ico { width: 18px; height: 18px; }
+.pr-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.pr-card { display: flex; gap: 14px; align-items: flex-start; padding: 18px; border: 1px solid #efe2c8; border-radius: 14px; background: #fffdf7; box-shadow: 0 6px 18px -14px #6b4f2a66; }
+.pr-card .pr-card-ico { width: 30px; height: 30px; color: #b8862b; }
+.pr-card span { display: block; font-size: 13.5px; color: #3d3d3d; }
+.pr-card strong { display: block; font-size: 24px; font-weight: 700; margin: 8px 0 6px; color: #1f1a14; font-variant-numeric: tabular-nums; }
+.pr-card small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.pr-card.featured { background: linear-gradient(160deg, #b51f2b, #7d1019); border-color: #7d1019; }
+.pr-card.featured span, .pr-card.featured strong, .pr-card.featured small, .pr-card.featured .pr-card-ico { color: #fff; }
+.pr-card.featured .pr-card-ico { color: #f6c64f; }
+.pr-panel-head { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-bottom: 1px solid #f3ead6; }
+.pr-panel-head h2 { font-size: 18px; margin: 0; } .pr-panel-head p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.pr-head-ico { width: 30px; height: 30px; color: #8a6a3a; }
+.pr-viewall { margin-left: auto; border: 0; background: none; color: #b51f2b; font-weight: 600; }
+.pr-empty { text-align: center; padding: 34px 20px !important; white-space: normal; }
+.pr-empty-ico { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 50%; background: #fbeed3; color: #c99a3b; }
+.pr-empty strong { display: block; font-size: 16px; color: #1f1a14; } .pr-empty small { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; }
+.payroll-computation .panel-foot { align-items: center; }
+.pr-history table td:first-child a { color: #b51f2b; font-weight: 600; }
+.pr-status { display: inline-block; padding: 4px 10px; border-radius: 7px; background: #def4e6; color: #22764a; font-weight: 600; font-size: 12.5px; }
+.pr-sent { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid #d9c4a3; border-radius: 9px; background: #fffdf7; color: #2b2116; font-weight: 600; font-size: 12.5px; }
+.pr-sent .pr-ico { width: 16px; height: 16px; color: #22764a; }
+.pr-13 { display: flex; align-items: center; gap: 18px; padding: 18px 22px; flex-wrap: wrap; }
+.pr-13-ico { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: #fbeed3; color: #b8862b; flex: none; }
+.pr-13-ico .pr-ico { width: 30px; height: 30px; }
+.pr-13-text { flex: 1; min-width: 200px; } .pr-13-text h2 { margin: 0; font-size: 18px; } .pr-13-text p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.pr-13 .th-year-pick { display: flex; align-items: flex-end; gap: 12px; padding: 0; }
+@media (max-width: 1300px) { .pr-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .pr-cards { grid-template-columns: 1fr 1fr; } }
