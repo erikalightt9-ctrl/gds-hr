@@ -1460,3 +1460,19 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ml-photo-btn { cursor: pointer; }
 .ml-avatar-lg img { object-position: top; }
 .sp-photo img { object-position: center top; } .sp-card.has-photo { background: #f3efe9; } .ml-avatar img, .dr-avatar img { object-position: center top; }
+/* Employee menu (redesign): dark, outline icons, grouped */
+.em-side { background: linear-gradient(180deg, #1b1c20, #141518) !important; color: #e8e8ea; display: flex; flex-direction: column; }
+.em-user { display: flex; align-items: center; gap: 12px; padding: 14px 16px 16px; border-bottom: 1px solid #2c2d33; }
+.em-avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(160deg, #8f1420, #5e0d14); color: #f3d6da; font-weight: 700; font-size: 14px; flex: none; }
+.em-who strong { display: block; color: #fff; font-size: 15px; font-weight: 600; } .em-who small { color: #9a9ba3; font-size: 12.5px; }
+.em-side nav { padding: 10px 10px 0; display: grid; gap: 0; }
+.em-group { padding: 6px 0 10px; border-bottom: 1px solid #2a2b30; } .em-group:last-child { border-bottom: 0; }
+.em-side .employee-menu-heading { display: block; color: #9a9ba3 !important; font-size: 11px !important; letter-spacing: .16em; text-transform: uppercase; margin: 8px 8px 6px !important; }
+.em-side nav button, .em-side .employee-sidebar-foot button { display: flex !important; align-items: center; gap: 14px; width: 100%; padding: 11px 14px !important; border: 0 !important; border-radius: 10px !important; background: none !important; color: #e8e8ea !important; font-size: 15px !important; font-weight: 500 !important; text-align: left; box-shadow: none !important; }
+.em-side nav button:hover, .em-side .employee-sidebar-foot button:hover { background: #24252a !important; }
+.em-side nav button.active { background: linear-gradient(90deg, #4a1820, #2c1a1d) !important; color: #fff !important; box-shadow: inset 3px 0 0 #c4283a !important; }
+.em-ico { width: 22px; height: 22px; flex: none; color: currentColor; }
+.em-side .employee-sidebar-foot { margin-top: auto; padding: 10px; border-top: 1px solid #2c2d33; display: grid; gap: 8px; }
+.em-side .em-signout { border: 1px solid #8f1420 !important; color: #e8505e !important; }
+.em-side .nav-flag { margin-left: auto; }
+.em-side .employee-sidebar-foot .em-signout { text-transform: none !important; letter-spacing: 0 !important; justify-content: flex-start !important; border: 1px solid #8f1420 !important; color: #e8505e !important; }

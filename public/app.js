@@ -1126,7 +1126,7 @@ document.addEventListener('input', event => {
   if (event.target.id !== 'search') return;
   const position = event.target.selectionStart; filter = event.target.value; render(); const node = document.querySelector('#search'); node.focus(); node.setSelectionRange(position, position);
 });
-try { auth = await api('/session'); if (auth.user) await refresh(); if (auth.user && readRoute()) await applyRoute(); else render(); }
+try { auth = await api('/session'); if (auth.user) await refresh(); if (auth.user && auth.user.role !== 'employee' && readRoute()) await applyRoute(); else render(); }   // employees have no page addresses: always draw their workspace
 catch (e) { app.innerHTML = `<div class="loading"><h1>Unable to connect</h1><p>${esc(e.message)}</p><p>Check that the HR service is running, then reload this page.</p></div>`; }
 document.addEventListener('input', event => {
   if (!event.target.matches('[data-contribution-salary]')) return;
