@@ -7,7 +7,7 @@ import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, d
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
 import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
 import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './roles.mjs';
-import { celebrationsOn, celebrantPhoto } from './celebrations.mjs';
+import { celebrationsOn, celebrationsThisMonth, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 import { fileOvertime, cancelOvertime, myOvertime } from './overtime.mjs';
 import { saveSchedule } from './work-schedule.mjs';
@@ -35,6 +35,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
 
   // ---------- Today's Celebrations (every signed-in user) ----------
   if (pathname === '/api/hr/celebrations' && method === 'GET') { send(200, celebrationsOn(store)); return true; }
+  if (pathname === '/api/hr/celebrations/month' && method === 'GET') { send(200, celebrationsThisMonth(store)); return true; }
   if ((p = m(/^\/api\/hr\/celebrations\/([^/]+)\/photo$/)) && method === 'GET') { const row = celebrantPhoto(store, decodeURIComponent(p[1])); res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true; }
 
   // ---------- Employee self-service ----------
@@ -51,6 +52,12 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/acknowledge$/)) && method === 'POST') { send(200, acknowledgeMemo(store, actor, p[1], Number(p[2]))); return true; }
     if (pathname === '/api/hr/me/trainings' && method === 'GET') { send(200, myTrainings(store, actor)); return true; }
     if ((p = m(/^\/api\/hr\/me\/trainings\/([a-f0-9-]+)\/registration$/)) && method === 'POST') { const b = await readBody(req); send(200, updateParticipant(store, actor, p[1], actor.employeeId, { registration: b.registration })); return true; }
+    // The employee's own profile photo (shown in their workspace menu and welcome).
+    if (pathname === '/api/hr/me/photo' && method === 'GET') {
+      const row = store.db.prepare('SELECT metadata, content FROM employee_documents WHERE employee_id=?').all(actor.employeeId || '').map(r => ({ meta: JSON.parse(r.metadata), content: r.content })).filter(r => r.meta.type === 'Photo' && r.meta.status === 'Active').sort((a, b) => String(b.meta.uploadedAt || '').localeCompare(String(a.meta.uploadedAt || '')))[0];
+      if (!row) throw new AppError('No photo.', 404);
+      res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true;
+    }
     if (pathname === '/api/hr/me/datasheet' && method === 'GET') { send(200, mySheet(store, actor)); return true; }
     if (pathname === '/api/hr/me/datasheet' && method === 'POST') { const b = await readBody(req); send(200, saveMySheet(store, actor, b.fields, !!b.submit)); return true; }
     if (pathname === '/api/hr/me/documents' && method === 'GET') { send(200, employeeChecklist(store, actor, actor.employeeId)); return true; }

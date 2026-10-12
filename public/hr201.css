@@ -1476,3 +1476,21 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .em-side .em-signout { border: 1px solid #8f1420 !important; color: #e8505e !important; }
 .em-side .nav-flag { margin-left: auto; }
 .em-side .employee-sidebar-foot .em-signout { text-transform: none !important; letter-spacing: 0 !important; justify-content: flex-start !important; border: 1px solid #8f1420 !important; color: #e8505e !important; }
+/* Employee dashboard: congratulations for the month, with photos */
+.cg { background: linear-gradient(160deg, #fffaf0, #fff); border-color: #efdcae; }
+.cg-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.cg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.cg-item { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid #f0e3c4; border-radius: 14px; background: #fff; }
+.cg-item.today { border-color: #d9b85c; box-shadow: 0 0 0 2px #f6e3a8; }
+.cg-photo { position: relative; flex: none; width: 72px; height: 72px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: linear-gradient(160deg, #b51f2b, #5e0d14); color: #f6d27c; font-weight: 800; font-size: 22px; }
+.cg-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; background: #f3efe9; }
+.cg-item strong { display: block; font-size: 15px; } .cg-item small { display: block; color: var(--muted); font-size: 12px; }
+.cg-item p { margin: 4px 0 2px; font-size: 13.5px; color: #8f1420; font-weight: 600; } .cg-item em { font-style: normal; font-size: 12px; color: #6a4b00; background: #fff3c9; border-radius: 999px; padding: 1px 8px; }
+/* Employee's own photo: menu avatar and welcome */
+.em-avatar { position: relative; overflow: hidden; }
+.em-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; background: #f3efe9; opacity: 0; }
+.em-avatar.has-photo img { opacity: 1; }
+.pm-hello { display: flex; align-items: center; gap: 12px; }
+.pm-me { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; flex: none; border: 2px solid #d9b85c; background: #f3efe9; }
+.pm-me img { width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block; }
+.pm-me.no-photo { display: none; }

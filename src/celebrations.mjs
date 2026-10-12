@@ -35,6 +35,20 @@ export function celebrationsOn(store, day = localToday()) {
   }
   return { date: day, celebrations: out.sort((a, b) => a.name.localeCompare(b.name) || a.occasion.localeCompare(b.occasion)) };
 }
+// This month's celebrations: every birthday and work anniversary falling in the current month, so the greeting stays
+// on employees' dashboards for the whole month (birthdays show the day only, never the year or age).
+export function celebrationsThisMonth(store, day = localToday()) {
+  const year = Number(day.slice(0, 4)), month = day.slice(5, 7), leapRule = readSettings(store).celebrations?.leapDay || 'feb28';
+  const out = [];
+  for (const e of store.read().employees) {
+    if (e.archived || e.draft && !e.startDate) continue;
+    if (activity(e, profileOf(store, e.id, 'employment')) !== 'Active') continue;
+    const personal = profileOf(store, e.id, 'personal'), name = personal.preferredName || displayName(e.name), position = profileOf(store, e.id, 'employment').position || '';
+    if (personal.birthDate) { const md = occasionDay(personal.birthDate, year, leapRule); if (md.slice(0, 2) === month) out.push({ employeeId: e.id, name, position, occasion: 'birthday', day: md, today: md === day.slice(5, 10) }); }
+    if (e.startDate) { const md = occasionDay(e.startDate, year, leapRule), years = year - Number(e.startDate.slice(0, 4)); if (md.slice(0, 2) === month && years >= 1) out.push({ employeeId: e.id, name, position, occasion: 'anniversary', years, day: md, today: md === day.slice(5, 10) }); }
+  }
+  return { month: day.slice(0, 7), celebrations: out.sort((a, b) => a.day.localeCompare(b.day) || a.name.localeCompare(b.name)) };
+}
 // "Last, First Middle" → "First Last" for a friendlier greeting.
 function displayName(name) {
   const [last, rest] = String(name).split(',').map(s => s.trim());
@@ -42,9 +56,9 @@ function displayName(name) {
   const given = rest ? rest.split(/\s+/) : [], first = given[0]?.endsWith('.') && given[1] ? `${given[0]} ${given[1]}` : given[0];   // "Ma. Rita"
   return rest ? `${tc(first)} ${tc(last)}` : name;
 }
-// A celebrant's profile photo may be shown to every signed-in user, but only on their celebration day.
+// A celebrant's profile photo may be shown to every signed-in user, but only during their celebration month.
 export function celebrantPhoto(store, employeeId) {
-  if (!celebrationsOn(store).celebrations.some(c => c.employeeId === employeeId)) throw new AppError('No photo.', 404);
+  if (!celebrationsThisMonth(store).celebrations.some(c => c.employeeId === employeeId)) throw new AppError('No photo.', 404);
   const row = store.db.prepare('SELECT metadata, content FROM employee_documents WHERE employee_id=?').all(employeeId).map(r => ({ meta: JSON.parse(r.metadata), content: r.content })).filter(r => r.meta.type === 'Photo' && r.meta.status === 'Active').sort((a, b) => b.meta.uploadedAt.localeCompare(a.meta.uploadedAt))[0];
   if (!row) throw new AppError('No photo.', 404);
   return row;
