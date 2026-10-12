@@ -1403,3 +1403,16 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .content:has(.db-grid8) { padding-top: 18px; padding-bottom: 18px; }
 @media (max-width: 1300px) { .db-grid8 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .sidebar .sb-foot { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; } .sidebar .sb-foot > * { margin: 0 !important; width: auto; }
+/* Dashboard bento look (GDS red & gold) + employee spotlight */
+.db-card, .content:has(.db-grid8) .db-live, .an-card { border-radius: 18px !important; border-color: #eee6d8 !important; box-shadow: 0 10px 28px -22px #6b3a1e66 !important; }
+.an-grid3.with-spot { grid-template-columns: 0.85fr 1.6fr 1fr 1fr; }
+.sp-card { position: relative; overflow: hidden; padding: 0 !important; min-height: 230px; border: 0 !important; color: #fff; text-align: left; font-weight: 400; background: linear-gradient(160deg, #b51f2b, #5e0d14); }
+.sp-photo { position: absolute; inset: 0; display: grid; place-items: center; }
+.sp-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sp-ini { font-size: 64px; font-weight: 800; color: #f6d27c; opacity: .9; letter-spacing: .02em; }
+.sp-card.has-photo .sp-ini { display: none; }
+.sp-shade { position: absolute; inset: 0; background: linear-gradient(180deg, #0000 40%, #000a); }
+.sp-text { position: absolute; left: 16px; bottom: 16px; right: 16px; display: grid; gap: 2px; }
+.sp-text strong { font-size: 19px; font-weight: 700; } .sp-text small { font-size: 12.5px; opacity: .85; }
+.sp-chip { position: absolute; top: 12px; left: 12px; padding: 5px 10px; border-radius: 999px; background: #ffffffe6; color: #8f1420; font-size: 11.5px; font-weight: 700; }
+@media (max-width: 1300px) { .an-grid3.with-spot { grid-template-columns: 1fr 1fr; } }
