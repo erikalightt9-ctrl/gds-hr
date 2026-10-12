@@ -41,3 +41,16 @@ test('users message each other one-to-one; only the two people can read it; unre
     stop();
   } finally { store.close(); }
 });
+
+test('daily attendance record prints one date as a PDF (and Excel) for staff', async () => {
+  const { buildReport } = await import('../src/reports.mjs');
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    const day = store.read().attendance[0]?.date || '2026-09-15';
+    const pdf = buildReport(store, { username: 'hr1', role: 'hr' }, 'daily-attendance', 'pdf', { date: day });
+    assert.equal(pdf.type, 'application/pdf'); const text = pdf.body.toString('latin1');
+    assert.ok(text.includes('Daily attendance record') && text.includes(day), 'title and the chosen date');
+    assert.equal(buildReport(store, { username: 'hr1', role: 'hr' }, 'daily-attendance', 'xlsx', { date: day }).type.includes('spreadsheet'), true);
+    assert.throws(() => buildReport(store, { username: 'e', role: 'employee' }, 'daily-attendance', 'pdf', { date: day }), /cannot download/);
+  } finally { store.close(); }
+});

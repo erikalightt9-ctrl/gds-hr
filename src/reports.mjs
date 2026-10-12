@@ -41,6 +41,29 @@ export const REPORTS = {
     headers: ['Employee ID', 'Name', 'SSS', 'PhilHealth', 'Pag-IBIG', 'TIN'],
     rows: (state, store) => state.employees.map(e => { const g = profile(store, e.id, 'government'); return [e.id, e.name, g.sss || '', g.philHealth || '', g.pagIbig || '', g.tin || '']; }),
   },
+  // Attendance → Daily records, for one date (as shown on screen), ready to print.
+  'daily-attendance': {
+    title: 'Daily attendance record', roles: ['admin', 'hr', 'hr_staff', 'maker', 'payroll', 'viewer'], filters: ['date'],
+    headers: ['Employee', 'Employee ID', 'Scheduled in', 'Time in', 'Time out', 'Late (min)', 'Status', 'Remarks'],
+    subtitle: () => 'Times in Asia/Manila',
+    rows: (state, store, actor, chosen) => {
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(chosen.date || '') ? chosen.date : localToday(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+      const minutes = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+      return state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= day && (!e.endDate || e.endDate >= day))
+        .sort((a, b) => a.name.localeCompare(b.name)).map(e => {
+          const a = state.attendance.find(x => x.employeeId === e.id && x.date === day);
+          if (a) {
+            const late = a.status === 'present' && minutes(a.timeIn) !== null && minutes(a.scheduledIn) !== null ? Math.max(0, minutes(a.timeIn) - minutes(a.scheduledIn)) : 0;
+            return [e.name, e.id, a.scheduledIn || '', a.timeIn || '', a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '', late || '', a.status === 'present' ? (late ? 'Late' : 'Present') : a.status, [a.offsetMinutes ? `Offset ${a.offsetMinutes} min` : '', a.explanation || ''].filter(Boolean).join(' · ')];
+          }
+          const open = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === day);
+          const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && (l.countedDates || []).includes(day));
+          const late = open && minutes(open.time) !== null && minutes(e.scheduleStart) !== null ? Math.max(0, minutes(open.time) - minutes(e.scheduleStart)) : 0;
+          const status = open ? 'No time out' : leave ? 'On leave' : (e.restDays || []).includes(weekday) ? 'Rest day' : day > localToday() ? '' : 'No time in';
+          return [e.name, e.id, e.scheduleStart || '', open ? open.time : '', '', late || '', status, leave ? (state.leaveTypes.find(t => t.id === leave.typeId)?.name || 'Approved leave') : ''];
+        });
+    },
+  },
   attendance: {
     title: 'Attendance records', roles: STAFF,
     headers: ['Date', 'Employee ID', 'Name', 'Status', 'Scheduled in', 'Time in', 'Time out', 'Next day', 'Unpaid breaks', 'Approved', 'Exception', 'Offset (min)', 'Explanation'],
@@ -140,7 +163,7 @@ export function availableReports(actor) {
   return Object.entries(REPORTS).filter(([, r]) => r.roles.includes(actor.role) && (!r.section || canReadSection(actor, r.section))).map(([key, r]) => ({ key, title: r.title, filters: r.filters || [], hr201: key in REPORTS_201 }));
 }
 
-const FILTER_LABELS = { department: 'Department', status: 'Status', from: 'From', to: 'To', month: 'Month' };
+const FILTER_LABELS = { department: 'Department', status: 'Status', from: 'From', to: 'To', month: 'Month', date: 'Date' };
 export function buildReport(store, actor, key, format, filters = {}) {
   const report = REPORTS[key];
   if (!report || !['xlsx', 'pdf'].includes(format)) throw new AppError('Report not found.', 404);

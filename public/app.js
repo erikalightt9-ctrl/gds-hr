@@ -315,7 +315,7 @@ function attendancePage() {
   });
   const shift = n => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   const label = new Date(`${day}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return top + `<section class="panel"><div class="panel-head"><div><h2>Daily records · ${esc(label)}</h2><p>${rows.length} employee${rows.length === 1 ? '' : 's'} · times use Asia/Manila</p></div>${downloads('attendance')}</div>
+  return top + `<section class="panel"><div class="panel-head"><div><h2>Daily records · ${esc(label)}</h2><p>${rows.length} employee${rows.length === 1 ? '' : 's'} · times use Asia/Manila</p></div><span class="download-links" aria-label="Download"><a class="small download-link" href="/api/reports/daily-attendance.pdf?date=${esc(day)}&view=1" target="_blank" rel="noopener" title="Open this day as a PDF to print or save">🖨 PDF</a><a class="small download-link" href="/api/reports/daily-attendance.xlsx?date=${esc(day)}" download>Excel</a></span></div>
     <div class="toolbar records-day"><button class="small" data-records-day="${shift(-1)}">‹ Previous day</button><label>Date<input type="date" id="records-date" value="${day}"></label><button class="small" data-records-day="${shift(1)}">Next day ›</button>${day !== today() ? `<button class="small" data-records-day="${today()}">Today</button>` : ''}<input class="search" id="search" placeholder="Search employee" value="${esc(filter)}" aria-label="Search employee"></div>
     ${table(['Employee', 'Scheduled', 'Clock in / out', 'Status', 'Offset', 'Approval', ''], rows, 'No employees for this date.')}</section>`;
 }
