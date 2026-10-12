@@ -253,13 +253,20 @@ export function createPortal(ctx) {
     const located = e => !!(e.clockOut || e.clockIn) && (e.clockOut || e.clockIn).latitude !== null;
     const row = e => {
       const [look, pill] = STATUS_LOOK[e.status] || ['idle', 'late'], ev = e.clockOut || e.clockIn;
-      const actions = [e.recordId ? `<button data-edit="attendance" data-id="${esc(e.recordId)}">Review attendance</button>` : '', e.open ? `<button data-correct-clock="${esc(e.employeeId)}" data-date="${e.date}">Correct missing time out</button>` : '', `<button data-profile="${esc(e.employeeId)}">Open 201 profile</button>`].filter(Boolean).join('');
+      // Request: what this person is waiting on HR for (explanations, out of office; overtime is added by the Attendance page).
+      const expl = (data.explanations || []).filter(x => x.employeeId === e.employeeId && ['pending', 'returned'].includes(x.status));
+      const away = (data.outOfOffice || []).filter(x => x.employeeId === e.employeeId);
+      const requests = [
+        ...expl.map(x => x.status === 'returned' ? `<span class="lv-req lv-req-wait">Explanation ${esc(x.date.slice(5))} · sent back</span>` : `<button class="lv-req" data-review-explanation="${esc(x.id)}">Explanation ${esc(x.date.slice(5))} · Review</button>`),
+        ...away.map(x => `<span class="lv-req-group"><span class="lv-req-label">Out of office · time ${esc(x.kind)} ${esc(x.time)}</span><button class="lv-req ok" data-oof-review="approve" data-id="${esc(x.id)}">Approve</button><button class="lv-req" data-oof-review="reject" data-id="${esc(x.id)}">Reject</button></span>`),
+        ...(e.status === 'Missing time out' && e.open ? [`<button class="lv-req" data-correct-clock="${esc(e.employeeId)}" data-date="${e.date}">Correct missing time out</button>`] : []),
+      ];
       return `<tr data-lv-row data-name="${esc(`${e.name} ${e.employeeId}`.toLowerCase())}" data-status="${esc(e.status)}" data-loc="${located(e) ? 'yes' : 'no'}">
-        <td><div class="lv-emp"><span class="lv-avatar lv-${look}">${esc(initialsOf(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.employeeId)}</small></span></div></td>
+        <td><button class="lv-emp" data-profile="${esc(e.employeeId)}" title="Open 201 profile"><span class="lv-avatar lv-${look}">${esc(initialsOf(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.employeeId)}</small></span></button></td>
         <td><span class="lv-pill lv-${look}">${icon(pill)}${esc(e.status)}</span></td>
         <td class="lv-time">${esc(e.actualIn || '—')}</td><td class="lv-time">${esc(e.actualOut || '—')}</td>
         <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}">${icon('pin')}<span>View location</span></button>` : '<span class="lv-muted">No location</span>'}</td>
-        <td class="lv-actions"><button class="lv-details" data-profile="${esc(e.employeeId)}">${icon('doc')}Details</button><details class="lv-menu"><summary aria-label="More actions">${icon('dots')}</summary><div>${actions}</div></details></td></tr>`;
+        <td class="lv-requests" data-lv-req="${esc(e.employeeId)}">${requests.join('') || '<span class="lv-muted">—</span>'}</td></tr>`;
     };
     const html = `<section class="panel live-panel lv">
       <div class="lv-head"><div><h2>Live attendance</h2><p>Today's employee attendance</p></div><div class="lv-head-tools"><span class="lv-live"><i></i>Live</span><a class="lv-btn" href="/api/reports/daily-attendance.pdf?date=${esc(data.employees[0]?.date || '')}&view=1" target="_blank" rel="noopener">${icon('export')}Export</a></div></div>
@@ -267,7 +274,7 @@ export function createPortal(ctx) {
       <div class="lv-filters"><label class="lv-search">${icon('search')}<input type="search" data-lv-search placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
         <select data-lv-status aria-label="Status"><option value="">Status</option>${[...new Set(data.employees.map(e => e.status))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select>
         <select data-lv-loc aria-label="Location"><option value="">Location</option><option value="yes">With location</option><option value="no">No location</option></select></div>
-      <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Action</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="6" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
+      <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Request</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="6" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
       <p class="lv-foot" data-lv-count>${filtered.length} employee${filtered.length === 1 ? '' : 's'} total</p></section>`;
     if (!countsOnly) return html;
     return `<section class="panel live-panel"><div class="panel-head"><div><h2>Today · live attendance</h2></div><button class="small" data-nav="live">Open live attendance →</button></div><div class="live-counts">${statuses.map(s => `<button data-nav="live" title="Open live attendance"><strong>${count(s)}</strong>${s}</button>`).join('')}</div></section>`;

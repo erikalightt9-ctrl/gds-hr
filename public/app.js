@@ -455,18 +455,12 @@ function render() {
   if (page === 'attendance' && ['admin', 'hr', 'payroll'].includes(auth.user.role)) {
     api('/overtime-requests').then(list => {
       const content = document.querySelector('.content'); if (page !== 'attendance' || !content) return;
-      const section = document.createElement('section'); section.className = 'panel';
-      const can = ['admin', 'hr'].includes(auth.user.role), STATUS = { pending: ['Pending', 'pending'], approved: ['Approved', ''], rejected: ['Not approved', 'rejected'] };
-      section.innerHTML = `<div class="panel-head"><h2>Requests</h2></div>`
-        + (list.length ? `<div class="panel-body"><h3>Overtime</h3>${table(['Employee', 'Date', 'Hours', 'Reason', 'Status', ''], list.map(o => [employee(o.employeeId), o.date, `${o.hours} h${o.startTime ? `<small>${esc(o.startTime)} – ${esc(o.endTime)}</small>` : ''}${o.worked !== null && o.worked < o.hours ? `<small>worked ${o.worked} h</small>` : ''}`, `<span class="wrap">${esc(o.reason)}</span>`, badge(...STATUS[o.status]) + (o.status === 'approved' && o.approvedHours !== o.hours ? `<small>${o.approvedHours} h approved</small>` : ''), can && !o.locked ? `<span class="row-actions">${o.status !== 'approved' ? `<button class="small primary" data-ot-decision="approve" data-id="${esc(o.id)}" data-hours="${o.worked === null ? o.hours : Math.min(o.hours, o.worked)}" data-filed="${o.hours}">Approve</button>` : ''}${o.status !== 'rejected' ? `<button class="small" data-ot-decision="reject" data-id="${esc(o.id)}">Reject</button>` : ''}</span>` : '']))}</div>` : '')
-        + (() => {
-          // Other attendance requests HR acts on: out-of-office time in / out and attendance explanations.
-          const oof = liveData?.outOfOffice || [], expl = (liveData?.explanations || []).filter(x => x.status === 'pending');
-          const name = id => esc(state.employees.find(x => x.id === id)?.name || id);
-          if (!oof.length && !expl.length && !list.length) return '<p class="muted panel-body">Nothing waiting for review.</p>';
-          return `${oof.length ? `<div class="panel-body"><h3>Out of office</h3>${table(['Employee', 'Time', 'Reason', ''], oof.map(o => [name(o.employeeId), `Time ${esc(o.kind)} · ${esc(o.workDate)} ${esc(o.time)}`, `<span class="wrap">${esc(o.reason)}</span>`, can ? `<span class="download-links"><button class="small primary" data-oof-review="approve" data-id="${esc(o.id)}">Approve</button><button class="small" data-oof-review="reject" data-id="${esc(o.id)}">Reject</button></span>` : '']), 'No out-of-office time records waiting.')}</div>` : ''}${expl.length ? `<div class="panel-body"><h3>Late / attendance explanations</h3>${table(['Employee', 'Date', 'Reason', ''], expl.map(x => [name(x.employeeId), esc(x.date), `<span class="wrap">${esc(x.reason)}${x.explanation ? `<small>${esc(x.explanation)}</small>` : ''}</span>`, `<button class="small" data-review-explanation="${esc(x.id)}">Review</button>`]), 'No explanations waiting.')}</div>` : ''}`;
-        })();
-      const live = content.querySelector('[data-live-block]'); if (live) live.after(section); else content.querySelector('.page-heading')?.after(section) ?? content.prepend(section);
+      const can = ['admin', 'hr'].includes(auth.user.role);
+      for (const o of list.filter(x => x.status === 'pending' && !x.locked)) {
+        const cell = content.querySelector(`[data-lv-req="${CSS.escape(o.employeeId)}"]`); if (!cell) continue;
+        const dash = cell.querySelector('.lv-muted'); if (dash) dash.remove();
+        cell.insertAdjacentHTML('beforeend', `<span class="lv-req-group"><span class="lv-req-label">Overtime ${esc(o.date.slice(5))} · ${o.hours} h</span>${can ? `<button class="lv-req ok" data-ot-decision="approve" data-id="${esc(o.id)}" data-hours="${o.worked === null ? o.hours : Math.min(o.hours, o.worked)}" data-filed="${o.hours}">Approve</button><button class="lv-req" data-ot-decision="reject" data-id="${esc(o.id)}">Reject</button>` : ''}</span>`);
+      }
     }).catch(error => toast(error.message));
   }
   if (page === 'overview') {

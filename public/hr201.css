@@ -966,3 +966,12 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .lv-foot { margin: 12px 2px 0; color: var(--muted); font-size: 13px; }
 @media (max-width: 1200px) { .lv-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } .lv-filters { grid-template-columns: 1fr 1fr; } .lv-search { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .lv-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lv-head { flex-direction: column; } }
+/* Live attendance: Request column */
+.lv-emp { border: 0; background: none; padding: 0; text-align: left; color: inherit; font-weight: 400; }
+.lv-emp:hover strong { color: #b51f2b; text-decoration: underline; }
+.lv-requests { white-space: normal; min-width: 220px; }
+.lv-req { display: inline-flex; align-items: center; margin: 2px 6px 2px 0; padding: 6px 12px; border: 1px solid #e6dcc6; border-radius: 9px; background: #fff; color: #8f1420; font-weight: 600; font-size: 13px; }
+.lv-req.ok { background: linear-gradient(180deg, #c32a37, #96131f); border-color: #96131f; color: #fff; }
+.lv-req-wait { color: var(--muted); font-weight: 500; border-style: dashed; }
+.lv-req-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 8px 2px 0; }
+.lv-req-label { font-size: 12.5px; color: #3d3d3d; margin-right: 2px; }
