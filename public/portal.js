@@ -218,12 +218,58 @@ export function createPortal(ctx) {
     lookup.onclick = async () => { lookup.disabled = true; try { const result = await api(`/location-address/${event.id}`, {}); dialog.querySelector('#location-address').textContent = result.address || result.message; } catch (error) { toast(error.message); } finally { lookup.disabled = false; } };
   }
   // countsOnly: just the heading and today's counts (HR dashboard); each count opens the Live Attendance page.
+  // Live attendance: count cards (click to filter), search + status / location filters, and one row per employee
+  // with an initials badge, a status pill, time in / out, a location link, Details and a ⋮ menu of actions.
+  const SVG = {
+    all: '<path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.7 0-6 1.3-6 3.5V19h12v-2.5C14 14.3 10.7 13 8 13Zm8 0c-.3 0-.7 0-1.1.1A4.4 4.4 0 0 1 16 16.5V19h6v-2.5c0-2.2-3.3-3.5-6-3.5Z"/>',
+    present: '<path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 4.5V21h10.3a6 6 0 0 1-.3-2 6 6 0 0 1 .6-2.6A13 13 0 0 0 12 14Zm8.3 1.3-3.6 3.6-1.6-1.6-1.1 1.1 2.7 2.7 4.7-4.7Z"/>',
+    late: '<path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm0 16.2A7.2 7.2 0 1 1 19.2 12 7.2 7.2 0 0 1 12 19.2Zm.9-11.7h-1.8v5.1l4.4 2.6.9-1.5-3.5-2.1Z"/>',
+    absent: '<path d="M10 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 4.5V21h16v-2.5c0-2.8-4.7-4.5-8-4.5Zm12.3-5.9-1.4-1.4-1.9 1.9-1.9-1.9-1.4 1.4 1.9 1.9-1.9 1.9 1.4 1.4 1.9-1.9 1.9 1.9 1.4-1.4-1.9-1.9Z"/>',
+    leave: '<path d="M20 7h-4V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Zm-10-2h4v2h-4Zm10 14H4v-5h6v2h4v-2h6Zm0-7H4V9h16Z"/>',
+    missing: '<path d="M12 2 1 21h22Zm0 4.2L19.5 19h-15Zm-1 4.8v4h2v-4Zm0 5v2h2v-2Z"/>',
+    check: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1.4 14.6-4.2-4.2 1.4-1.4 2.8 2.8 5.8-5.8 1.4 1.4Z"/>',
+    pin: '<path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 14.5 9 2.5 2.5 0 0 1 12 11.5Z"/>',
+    doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM8 12h8v1.6H8Zm0 3.4h8V17H8Z"/>',
+    search: '<path d="M10 3a7 7 0 1 0 4.2 12.6l5.1 5.1 1.4-1.4-5.1-5.1A7 7 0 0 0 10 3Zm0 2a5 5 0 1 1-5 5 5 5 0 0 1 5-5Z"/>',
+    export: '<path d="M12 3 7 8l1.4 1.4L11 6.8V15h2V6.8l2.6 2.6L17 8Zm-7 13v4h14v-4h-2v2H7v-2Z"/>',
+    dots: '<circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>',
+  };
+  const icon = (name, cls = '') => `<svg class="lv-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${SVG[name]}</svg>`;
+  const STATUS_LOOK = { Present: ['present', 'check'], Late: ['late', 'late'], Absent: ['absent', 'absent'], 'On leave': ['leave', 'leave'], 'Missing time out': ['missing', 'missing'] };
+  const initialsOf = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return `${(first || '').charAt(0)}${(last || '').charAt(0)}`.toUpperCase() || '?'; };
+  // Search, status and location filters hide rows in place (no redraw, so typing is not interrupted).
+  const filterLive = panel => {
+    const q = panel.querySelector('[data-lv-search]').value.trim().toLowerCase(), st = panel.querySelector('[data-lv-status]').value, loc = panel.querySelector('[data-lv-loc]').value;
+    let shown = 0;
+    for (const r of panel.querySelectorAll('[data-lv-row]')) { const ok = (!q || r.dataset.name.includes(q)) && (!st || r.dataset.status === st) && (!loc || r.dataset.loc === loc); r.hidden = !ok; if (ok) shown++; }
+    panel.querySelector('[data-lv-count]').textContent = `${shown} employee${shown === 1 ? '' : 's'} total`;
+  };
+  for (const type of ['input', 'change']) document.addEventListener(type, e => { const panel = e.target.closest?.('.lv'); if (panel && e.target.matches('[data-lv-search], [data-lv-status], [data-lv-loc]')) filterLive(panel); });
   function live(data, { countsOnly = false } = {}) {
     const statuses = ['All', 'Present', 'Late', 'Absent', 'On leave', 'Missing time out'];
-    const filtered = data.employees.filter(e => liveFilter === 'All' || (liveFilter === 'Attendance exceptions' ? e.exceptions.length : e.status === liveFilter));
-    const html = `<section class="panel live-panel"><div class="panel-head"><div><h2>Today · live attendance</h2></div><span class="sync-label">● Live</span></div><div class="live-counts">${statuses.map(s => `<button data-live-filter="${s}" class="${s === liveFilter ? 'active' : ''}"><strong>${s === 'All' ? data.employees.length : data.employees.filter(e => s === 'Attendance exceptions' ? e.exceptions.length : e.status === s).length}</strong>${s}</button>`).join('')}</div>${table(['Employee', 'Status', 'In / out', 'Location', 'Review'], filtered.map(e => [`<button class="employee-link" data-profile="${esc(e.employeeId)}">${esc(e.name)}<small>${esc(e.employeeId)}</small></button>`, esc(e.status), `${e.actualIn || '—'} / ${e.actualOut || '—'}`, gpsCell(e.clockOut || e.clockIn), e.recordId ? `<button class="small" data-edit="attendance" data-id="${esc(e.recordId)}">Review attendance</button>` : e.open ? `<button class="small" data-correct-clock="${esc(e.employeeId)}" data-date="${e.date}">Correct missing time out</button>` : '']))}</section>`;
+    const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => e.status === s).length);
+    const CARD = { All: ['all', 'All employees'], Present: ['present', 'Present'], Late: ['late', 'Late'], Absent: ['absent', 'Absent'], 'On leave': ['leave', 'On leave'], 'Missing time out': ['missing', 'Missing time out'] };
+    const filtered = data.employees.filter(e => liveFilter === 'All' || e.status === liveFilter);
+    const located = e => !!(e.clockOut || e.clockIn) && (e.clockOut || e.clockIn).latitude !== null;
+    const row = e => {
+      const [look, pill] = STATUS_LOOK[e.status] || ['idle', 'late'], ev = e.clockOut || e.clockIn;
+      const actions = [e.recordId ? `<button data-edit="attendance" data-id="${esc(e.recordId)}">Review attendance</button>` : '', e.open ? `<button data-correct-clock="${esc(e.employeeId)}" data-date="${e.date}">Correct missing time out</button>` : '', `<button data-profile="${esc(e.employeeId)}">Open 201 profile</button>`].filter(Boolean).join('');
+      return `<tr data-lv-row data-name="${esc(`${e.name} ${e.employeeId}`.toLowerCase())}" data-status="${esc(e.status)}" data-loc="${located(e) ? 'yes' : 'no'}">
+        <td><div class="lv-emp"><span class="lv-avatar lv-${look}">${esc(initialsOf(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.employeeId)}</small></span></div></td>
+        <td><span class="lv-pill lv-${look}">${icon(pill)}${esc(e.status)}</span></td>
+        <td class="lv-time">${esc(e.actualIn || '—')}</td><td class="lv-time">${esc(e.actualOut || '—')}</td>
+        <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}">${icon('pin')}<span>View location</span></button>` : '<span class="lv-muted">No location</span>'}</td>
+        <td class="lv-actions"><button class="lv-details" data-profile="${esc(e.employeeId)}">${icon('doc')}Details</button><details class="lv-menu"><summary aria-label="More actions">${icon('dots')}</summary><div>${actions}</div></details></td></tr>`;
+    };
+    const html = `<section class="panel live-panel lv">
+      <div class="lv-head"><div><h2>Live attendance</h2><p>Today's employee attendance</p></div><div class="lv-head-tools"><span class="lv-live"><i></i>Live</span><a class="lv-btn" href="/api/reports/daily-attendance.pdf?date=${esc(data.employees[0]?.date || '')}&view=1" target="_blank" rel="noopener">${icon('export')}Export</a></div></div>
+      <div class="lv-cards">${statuses.map(s => `<button data-live-filter="${s}" class="lv-card${s === liveFilter ? ' active' : ''}"><span class="lv-card-ico lv-${CARD[s][0]}">${icon(CARD[s][0])}</span><span><strong>${count(s)}</strong><small>${CARD[s][1]}</small></span></button>`).join('')}</div>
+      <div class="lv-filters"><label class="lv-search">${icon('search')}<input type="search" data-lv-search placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
+        <select data-lv-status aria-label="Status"><option value="">Status</option>${[...new Set(data.employees.map(e => e.status))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select>
+        <select data-lv-loc aria-label="Location"><option value="">Location</option><option value="yes">With location</option><option value="no">No location</option></select></div>
+      <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Action</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="6" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
+      <p class="lv-foot" data-lv-count>${filtered.length} employee${filtered.length === 1 ? '' : 's'} total</p></section>`;
     if (!countsOnly) return html;
-    const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => s === 'Attendance exceptions' ? e.exceptions.length : e.status === s).length);
     return `<section class="panel live-panel"><div class="panel-head"><div><h2>Today · live attendance</h2></div><button class="small" data-nav="live">Open live attendance →</button></div><div class="live-counts">${statuses.map(s => `<button data-nav="live" title="Open live attendance"><strong>${count(s)}</strong>${s}</button>`).join('')}</div></section>`;
   }
   // Opens the leave form with a type chosen, e.g. the dashboard's unpaid leave / absence shortcut.

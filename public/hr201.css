@@ -914,3 +914,55 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .am-bar i.am-w90 { width: 90%; }
 .am-bar i.am-w95 { width: 95%; }
 .am-bar i.am-w100 { width: 100%; }
+/* Live attendance (redesign) */
+.lv { padding: 22px 24px 14px; }
+.lv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.lv-head h2 { font-size: 26px; font-weight: 800; letter-spacing: -.5px; margin: 0; }
+.lv-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.lv-head-tools { display: flex; align-items: center; gap: 12px; }
+.lv-live { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: #3d3d3d; }
+.lv-live i { width: 9px; height: 9px; border-radius: 50%; background: #2e9a5a; box-shadow: 0 0 0 3px #2e9a5a22; }
+.lv-btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: 1px solid #e6dcc6; border-radius: 10px; background: #fff; color: #262626; font-weight: 600; text-decoration: none; }
+.lv-btn:hover { border-color: var(--brand, #b51f2b); }
+.lv-ico { width: 18px; height: 18px; flex: none; }
+.lv-cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.lv-card { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; border: 1px solid #efe2c8; background: #fffaf0; text-align: left; color: inherit; font-weight: 400; }
+.lv-card.active { border: 2px solid #b51f2b; background: #fff5f6; }
+.lv-card strong { display: block; font-size: 26px; color: #8f1420; line-height: 1.1; }
+.lv-card small { font-size: 13px; color: #3d3d3d; }
+.lv-card-ico { flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; }
+.lv-card-ico .lv-ico { width: 22px; height: 22px; }
+.lv-card-ico.lv-all { background: #fbe3e5; color: #b51f2b; } .lv-card-ico.lv-present { background: #def4e6; color: #2e9a5a; } .lv-card-ico.lv-late { background: #fdecd2; color: #d98b12; }
+.lv-card-ico.lv-absent { background: #ececec; color: #555; } .lv-card-ico.lv-leave { background: #fdecd2; color: #c47a12; } .lv-card-ico.lv-missing { background: #fdecd2; color: #c4700f; }
+.lv-filters { display: grid; grid-template-columns: minmax(220px, 1fr) 200px 240px; gap: 12px; margin-bottom: 14px; }
+.lv-search { position: relative; display: block; }
+.lv-search .lv-ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #555; }
+.lv-search input { width: 100%; padding: 12px 14px 12px 42px; border-radius: 10px; border: 1px solid #e6dcc6; }
+.lv-filters select { padding: 12px 14px; border-radius: 10px; border: 1px solid #e6dcc6; background: #fff; }
+.lv-table-wrap { border: 1px solid #efe2c8; border-radius: 12px; overflow: auto; }
+.lv-table { width: 100%; border-collapse: collapse; font-size: 14px; white-space: nowrap; }
+.lv-table thead th { background: #fbf1dd; color: #2b2b2b; font-size: 14px; font-weight: 700; text-transform: none; letter-spacing: 0; padding: 14px 18px; position: static; }
+.lv-table td { padding: 12px 18px; border-bottom: 1px solid #f3ead6; vertical-align: middle; }
+.lv-table tr[hidden] { display: none; }
+.lv-emp { display: flex; align-items: center; gap: 14px; }
+.lv-emp strong { display: block; font-weight: 600; color: #262626; } .lv-emp small { color: var(--muted); font-size: 12px; }
+.lv-avatar { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 15px; background: #ececec; color: #555; }
+.lv-avatar.lv-present { background: #def4e6; color: #22764a; } .lv-avatar.lv-late, .lv-avatar.lv-missing, .lv-avatar.lv-leave { background: #fdecd2; color: #a8640c; } .lv-avatar.lv-absent { background: #fbe3e5; color: #a31927; }
+.lv-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 14px; background: #ececec; color: #4a4a4a; }
+.lv-pill.lv-present { background: #def4e6; color: #22764a; } .lv-pill.lv-late, .lv-pill.lv-missing { background: #fdecd2; color: #a8640c; } .lv-pill.lv-leave { background: #fff3c9; color: #8a6300; } .lv-pill.lv-absent { background: #fbe3e5; color: #a31927; }
+.lv-time { font-variant-numeric: tabular-nums; }
+.lv-loc { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; color: #b51f2b; font-weight: 500; }
+.lv-loc span { text-decoration: underline; text-underline-offset: 3px; }
+.lv-muted { color: var(--muted); }
+.lv-actions { display: flex; align-items: center; gap: 10px; }
+.lv-details { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid #e6dcc6; border-radius: 10px; background: #fff; color: #262626; font-weight: 600; }
+.lv-menu { position: relative; }
+.lv-menu summary { list-style: none; cursor: pointer; padding: 6px; border-radius: 8px; color: #333; }
+.lv-menu summary::-webkit-details-marker { display: none; }
+.lv-menu[open] summary { background: #f4ecd9; }
+.lv-menu > div { position: absolute; right: 0; top: 34px; z-index: 5; min-width: 210px; background: #fff; border: 1px solid #e6dcc6; border-radius: 10px; box-shadow: 0 12px 30px #0000001f; padding: 6px; display: grid; }
+.lv-menu > div button { border: 0; background: none; text-align: left; padding: 9px 10px; border-radius: 7px; color: #262626; font-weight: 500; }
+.lv-menu > div button:hover { background: #fff5e3; }
+.lv-foot { margin: 12px 2px 0; color: var(--muted); font-size: 13px; }
+@media (max-width: 1200px) { .lv-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } .lv-filters { grid-template-columns: 1fr 1fr; } .lv-search { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .lv-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lv-head { flex-direction: column; } }
