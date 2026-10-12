@@ -179,7 +179,8 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     const sheet = await api('/hr/me/datasheet');
     if (!sheet.missing?.length || ['submitted', 'under-review'].includes(sheet.current?.status)) return;
     const box = document.createElement('section'); box.className = 'compliance-alert missing-details'; box.setAttribute('role', 'status');
-    box.innerHTML = `<div><strong>📝 Please complete your details (${sheet.missing.length})</strong><ol class="comply-list">${sheet.missing.map(x => `<li>${esc(x)}</li>`).join('')}</ol><p class="legend">Fill them in on your data sheet and submit it to HR.</p></div><button class="primary" data-portal-tab="datasheet">Fill in now</button>`;
+    box.className = 'pm-card pm-details missing-details';
+    box.innerHTML = `<div class="pm-details-head"><div><h2>Complete your details</h2><p>Update your data sheet and submit it to HR.</p></div><span class="pm-chip pm-late">${sheet.missing.length} missing</span></div><div class="pm-details-body"><ul class="pm-todo">${sheet.missing.map(x => `<li>${esc(x)}</li>`).join('')}</ul><button class="pm-fill" data-portal-tab="datasheet">Fill in now</button></div>`;
     const anchor = main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
     if (anchor) anchor.after(box); else main.prepend(box);
   }
