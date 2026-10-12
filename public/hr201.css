@@ -1376,3 +1376,30 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .an-bar i.db-w90 { width: 90%; }
 .an-bar i.db-w95 { width: 95%; }
 .an-bar i.db-w100 { width: 100%; }
+/* Dashboard on one screen: compact sizes */
+.content:has(.db-grid8) .page-heading { margin-bottom: 12px; }
+.content:has(.db-grid8) .page-heading h1 { font-size: 26px; margin-bottom: 2px; }
+.db-grid8 { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.db-grid8 .db-card { min-height: 0; padding: 12px; gap: 6px; border-radius: 10px; }
+.db-grid8 .db-head { gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.db-grid8 .db-ico { width: 30px; height: 30px; border-radius: 8px; } .db-grid8 .db-ico svg { width: 17px; height: 17px; }
+.db-grid8 .db-title { font-size: 12px; line-height: 1.25; flex: 1 1 60%; }
+.db-grid8 .db-head em { font-size: 10px; padding: 1px 6px; order: 3; }
+.db-grid8 .db-value { gap: 6px; flex-wrap: wrap; } .db-grid8 .db-value strong { font-size: 24px; }
+.db-grid8 .db-value small, .db-grid8 .db-sub, .db-grid8 .db-link { font-size: 11px; }
+.content:has(.db-grid8) .db-live { padding: 10px 16px; margin-bottom: 12px; }
+.content:has(.db-grid8) .db-live-head { padding-bottom: 8px; }
+.content:has(.db-grid8) .db-live-head h2 { font-size: 16px; } .content:has(.db-grid8) .db-live-head p { font-size: 12px; margin-top: 2px; }
+.content:has(.db-grid8) .db-open { padding: 6px 12px; font-size: 13px; }
+.content:has(.db-grid8) .db-live-stats button { padding: 8px 14px; gap: 2px; } .content:has(.db-grid8) .db-live-stats strong { font-size: 22px; }
+.content:has(.db-grid8) .an { margin-top: 0; }
+.content:has(.db-grid8) .an-head { margin-bottom: 8px; } .content:has(.db-grid8) .an-head h2 { font-size: 17px; } .content:has(.db-grid8) .an-head p { font-size: 12px; margin-top: 2px; }
+.content:has(.db-grid8) .an-head select { height: 34px; }
+.content:has(.db-grid8) .an-card { padding: 12px 16px; } .content:has(.db-grid8) .an-card h3 { font-size: 15px; } .content:has(.db-grid8) .an-card > p { margin: 2px 0 6px; font-size: 12px; }
+.content:has(.db-grid8) .an-donut { width: 120px; height: 120px; } .content:has(.db-grid8) .an-donut-wrap { margin: 0 0 6px; }
+.content:has(.db-grid8) .an-key { font-size: 13px; gap: 4px; }
+.content:has(.db-grid8) .an-big { font-size: 38px; margin-top: 6px; } .content:has(.db-grid8) .an-row { margin: 12px 0 6px; font-size: 13px; }
+.content:has(.db-grid8) .an-note { margin: 8px 0; font-size: 12px; } .content:has(.db-grid8) .an-legend { margin-top: 2px; font-size: 12px; }
+.content:has(.db-grid8) { padding-top: 18px; padding-bottom: 18px; }
+@media (max-width: 1300px) { .db-grid8 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.sidebar .sb-foot { flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; } .sidebar .sb-foot > * { margin: 0 !important; width: auto; }

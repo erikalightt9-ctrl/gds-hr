@@ -1,5 +1,5 @@
 // HR dashboard: every figure is calculated on the server from current records; each card opens the matching list.
-import { fmtDate, celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
+import { celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
 
 // Outline icons for the dashboard cards.
 const ICONS = {
@@ -29,7 +29,7 @@ function attendanceTrend(state, days, today) {
   return out;
 }
 function trendChart(esc, data) {
-  const W = 560, H = 220, L = 34, B = 30, T = 10, max = Math.max(4, ...data.map(d => d.present + d.late)), top = Math.ceil(max / 4) * 4;
+  const W = 560, H = 170, L = 30, B = 24, T = 8, max = Math.max(4, ...data.map(d => d.present + d.late)), top = Math.ceil(max / 4) * 4;
   const slot = (W - L - 8) / data.length, bw = Math.max(2, Math.min(18, slot * 0.36)), y = v => T + (H - T - B) * (1 - v / top);
   const step = data.length > 14 ? Math.ceil(data.length / 10) : 1, DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const grid = [0, top / 4, top / 2, (3 * top) / 4, top].map(v => `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" class="an-grid"/><text x="${L - 8}" y="${y(v) + 4}" class="an-axis" text-anchor="end">${v}</text>`).join('');
@@ -42,7 +42,7 @@ function donut(active, inactive) {
 }
 let analyticsRange = '7';
 export function createDashboard(ctx) {
-  const { api, esc, table, shell, heading } = ctx;
+  const { api, esc, shell, heading } = ctx;
   function analyticsHtml(t) {
     const state = ctx.getState?.(), trend = attendanceTrend(state, Number(analyticsRange), ctx.today());
     const totalP = trend.reduce((s, d) => s + d.present, 0), totalL = trend.reduce((s, d) => s + d.late, 0);
@@ -61,22 +61,18 @@ export function createDashboard(ctx) {
     const card = (key, value, text, nav, { sub = '', link = '', tone = '', alert = false } = {}) => `<button class="db-card${alert ? ' alert' : ''}" data-go="${esc(JSON.stringify(nav))}"><span class="db-head"><span class="db-ico ${tone}">${svg(key)}</span><span class="db-title">${text}</span>${alert ? '<em>Needs attention</em>' : ''}</span><span class="db-value"><strong>${value ?? '—'}</strong>${sub && !link ? `<small>${sub}</small>` : ''}</span>${link ? `${sub ? `<small class="db-sub">${sub}</small>` : ''}<span class="db-link">${link} →</span>` : ''}</button>`;
     const asOf = new Date(`${String(d.asOf).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     shell(heading('Dashboard', `${esc(ctx.context().company.name)} · Overview as of ${asOf}`) +
-      `${celebrationsHtml(esc, party)}<div class="db-grid">
+      `${celebrationsHtml(esc, party)}<div class="db-grid db-grid8">
         ${card('total', t.total, 'Total employees', { page: 'files' }, { tone: 'red', sub: t.archived ? `${t.archived} archived not counted` : '' })}
         ${card('active', t.active, 'Active employees', { page: 'files', status: 'Active' }, { tone: 'green' })}
         ${card('inactive', t.inactive, 'Inactive employees', { page: 'files', status: 'Inactive' }, { tone: 'red' })}
         ${card('newHires', t.newHires, 'New hires', { page: 'files', docs: 'newhires' }, { tone: 'red', sub: 'Last 30 days' })}
-      </div>
-      <h2 class="db-section">Operations overview</h2>
-      <div class="db-grid">
         ${card('departments', t.departments, 'Subsidiaries', { dialog: 'departments' }, { link: 'View or add subsidiaries' })}
         ${t.missingDocuments !== null ? card('missing', t.missingDocuments, 'Missing requirements', { page: 'files', docs: 'missing' }, { tone: 'red', alert: t.missingDocuments > 0, sub: `${t.employeesMissing} employee${t.employeesMissing === 1 ? '' : 's'} affected`, link: 'Review requirements' }) : ''}
         ${card('acks', t.pendingAcks, 'Pending memo acknowledgments', { page: 'memos' }, { sub: t.pendingAcks ? (t.overdueAcks ? `${t.overdueAcks} overdue` : 'Waiting for employees') : 'All acknowledgments up to date' })}
         ${card('trainings', t.upcomingTrainings, 'Upcoming trainings', { page: 'trainings' }, { sub: t.upcomingTrainings ? 'Scheduled sessions' : 'No upcoming sessions' })}
       </div>
       ${ctx.livePanel ? `<div id="dash-live">${ctx.livePanel()}</div>` : ''}
-      <section class="an" id="dash-analytics">${analyticsHtml(t)}</section>
-      ${d.nextTrainings?.length ? `<section class="panel"><div class="panel-head"><h2>Upcoming trainings</h2></div>${table(['Training', 'Date', 'Participants', ''], d.nextTrainings.map(x => [esc(x.title) + (x.required ? ' <small>required</small>' : ''), `${fmtDate(x.date)}${x.startTime ? ` · ${x.startTime}` : ''}`, x.participants, `<button class="small" data-go="${esc(JSON.stringify({ page: 'trainings', id: x.id }))}">Open</button>`]))}</section>` : ''}`);
+      <section class="an" id="dash-analytics">${analyticsHtml(t)}</section>`);
     bindCelebrationPhotos(document.querySelector('.content'));
     document.querySelector('[data-an-range]')?.addEventListener('change', event => { analyticsRange = event.target.value; document.querySelector('#dash-analytics').innerHTML = analyticsHtml(t); });
     document.querySelector('.content').addEventListener('click', event => {
