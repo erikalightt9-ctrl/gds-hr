@@ -1163,3 +1163,42 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .tc-pill.tc-ok { background: #def4e6; color: #22764a; } .tc-pill.tc-rejected { background: #fbe3e5; color: #a31927; } .tc-pill.tc-neutral { background: #ececec; color: #4a4a4a; } .tc-pill.tc-pending { background: #fdecd2; color: #a8640c; }
 .tc-add { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: #b51f2b; font-weight: 600; padding: 4px 0; }
 @media (max-width: 1100px) { .tc-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Leave management (redesign) */
+.lm-ico { width: 20px; height: 20px; flex: none; }
+.lm-tagline { display: block; font-size: 22px; font-weight: 700; color: #1f1a14; margin-bottom: 6px; }
+.lm-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.lm-card { display: flex; gap: 14px; align-items: flex-start; padding: 20px; border: 1px solid #ece4d6; border-radius: 14px; background: #fff; box-shadow: 0 6px 18px -14px #6b4f2a55; }
+.lm-card-ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #fbe3e5; color: #b51f2b; flex: none; }
+.lm-card:nth-child(2) .lm-card-ico { background: #def4e6; color: #22764a; }
+.lm-card span { display: block; font-size: 14px; color: #3d3d3d; } .lm-card strong { display: block; font-size: 28px; font-weight: 800; margin: 6px 0 4px; color: #1f1a14; } .lm-card small { color: var(--muted); font-size: 13px; }
+.lm-tabs { display: flex; gap: 8px; border-bottom: 1px solid #ece4d6; margin-bottom: 16px; }
+.lm-tabs button { border: 0; background: none; border-radius: 0; padding: 10px 14px; color: #555; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
+.lm-tabs button.active { color: #b51f2b; font-weight: 700; box-shadow: inset 0 -3px 0 #b51f2b; }
+.lm-count { min-width: 22px; height: 22px; display: grid; place-items: center; border-radius: 999px; background: #fbe3e5; color: #b51f2b; font-size: 12px; font-weight: 700; }
+.lm-panel { border: 1px solid #ece4d6; border-radius: 14px; background: #fff; overflow: hidden; margin-bottom: 20px; }
+.lm-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 20px; }
+.lm-panel-head h2 { margin: 0; font-size: 19px; } .lm-panel-head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.lm-filters { display: flex; gap: 12px; }
+.lm-search { position: relative; } .lm-search .lm-ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #555; }
+.lm-search input { width: 270px; height: 40px; padding: 0 12px 0 40px; border: 1px solid #e3dbcc; border-radius: 9px; }
+.lm-filters select { height: 40px; padding: 0 12px; border: 1px solid #e3dbcc; border-radius: 9px; background: #fff; min-width: 150px; }
+.lm-table-wrap { overflow-x: auto; }
+.lm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.lm-table thead th { background: #f7f5f1; color: #3d3d3d; font-size: 13.5px; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 12px 16px; position: static; text-align: left; }
+.lm-table td { padding: 14px 16px; border-bottom: 1px solid #f1ece2; vertical-align: middle; }
+.lm-table tr[hidden] { display: none; }
+.lm-emp { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; white-space: nowrap; }
+.lm-emp strong { display: block; color: #1f1a14; } .lm-emp small { color: var(--muted); font-size: 12px; } .lm-emp:hover strong { color: #b51f2b; text-decoration: underline; }
+.lm-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #fbe3e5; color: #a31927; font-weight: 700; font-size: 13px; flex: none; }
+.lm-dates { white-space: nowrap; } .lm-dates small { display: block; color: var(--muted); font-size: 12px; }
+.lm-reason { white-space: normal; min-width: 220px; max-width: 320px; line-height: 1.45; }
+.lm-status { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.lm-status i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.lm-status.lm-ok { background: #def4e6; color: #22764a; } .lm-status.lm-wait { background: #fdecd2; color: #a8640c; } .lm-status.lm-no { background: #fbe3e5; color: #a31927; } .lm-status.lm-off { background: #ececec; color: #555; }
+.lm-btn { padding: 8px 14px; border: 1px solid #c97880; border-radius: 9px; background: #fff; color: #8f1420; font-weight: 600; white-space: nowrap; }
+.lm-btn.primary { background: linear-gradient(180deg, #b51f2b, #8f1420); color: #fff; border-color: #8f1420; }
+.lm-foot { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; color: #3d3d3d; font-size: 13.5px; }
+.lm-pager { display: inline-flex; align-items: center; gap: 12px; } .lm-pager button { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border: 1px solid #ece4d6; border-radius: 8px; background: #fff; }
+.lm-note { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: #eef7ef; color: #2b4a33; font-size: 13.5px; }
+.lm-note .lm-ico { color: #fff; background: #2e9a5a; border-radius: 50%; padding: 3px; width: 24px; height: 24px; }
+@media (max-width: 1100px) { .lm-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
