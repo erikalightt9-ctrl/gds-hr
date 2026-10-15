@@ -249,13 +249,16 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // Company policy option: time before the scheduled start is not paid, so overtime only accrues after the scheduled end.
       const minutes = attendanceProfile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduledMinute) : attendanceMinutes(record);
       const lateMinutes = rest ? 0 : Math.max(0, (startMinute - scheduledMinute) / 60000);
-      // Late below the threshold (default 5 minutes) is not deductible; from the threshold on, the whole late time is
-      // deducted unless it is covered by an approved offset (or an approved exception).
-      const lateThreshold = r.lateThresholdMinutes ?? 5;
-      const deductibleMinutes = record.exception || lateMinutes < lateThreshold ? 0 : Math.max(0, lateMinutes - graceMinutes - record.offsetMinutes);
+      // Grace period (default 15 minutes): late within it is not tagged late, provided it is offset by working the same
+      // minutes after the scheduled end (or by an approved offset); whatever is not offset is deducted.
+      // Beyond the grace period the whole late time is deducted unless covered by an approved offset or exception.
+      const lateThreshold = r.lateThresholdMinutes ?? 5, withinGrace = lateMinutes > 0 && lateMinutes <= graceMinutes;
+      const workedOffset = withinGrace ? Math.max(0, Math.min(lateMinutes, minutes.length + lateMinutes - normalHours * 60)) : 0;
+      const deductibleMinutes = record.exception ? 0 : withinGrace ? Math.max(0, lateMinutes - workedOffset - record.offsetMinutes)
+        : lateMinutes < lateThreshold ? 0 : Math.max(0, lateMinutes - record.offsetMinutes);
       // Unoffset late time is converted to a fraction of the scheduled day and taken off the days credited for pay.
       const dayMinutes = normalHours * 60, lostDay = r.deductLate ? deductibleMinutes / dayMinutes : 0, deduction = round(lostDay * daily);
-      late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
+      late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, withinGrace, workedOffset, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
       if (deduction) {
         lateDaysLost += lostDay; lateReduction += deduction; lateMinutesUnoffset += deductibleMinutes;
         add(earnings, 'basic', -deduction, `Late ${deductibleMinutes} min not offset ÷ ${dayMinutes} min day = ${Math.round(lostDay * 10000) / 10000} day × ${daily} (days credited reduced)`, record, d);

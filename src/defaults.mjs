@@ -5,7 +5,7 @@ export const defaultRules = {
   special: 1.3, specialRest: 1.5, regular: 2, double: 3, nsd: 0.1,
   specialUnworked: 0, regularUnworked: 1, doubleUnworked: 2, other: 1, otherUnworked: 0,
   normalHours: 8, dailyDivisor: 22, hourlyDivisor: 8, workdaysPerMonth: 22,
-  graceMinutes: 0, lateThresholdMinutes: 5, deductLate: true, deductUndertime: true, cutoff: 'semi-monthly', overtimeApproval: 'separate',
+  graceMinutes: 15, lateThresholdMinutes: 5, deductLate: true, deductUndertime: true, cutoff: 'semi-monthly', overtimeApproval: 'separate',
   includeHolidayBaseIn13th: false, contributionsReviewed: false,
   calendarReviewedYears: [], thirteenthTaxExemption: 0,
   contributions: { SSS: [], PhilHealth: [], 'Pag-IBIG': [] }, taxBrackets: [],

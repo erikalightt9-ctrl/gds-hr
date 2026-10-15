@@ -32,7 +32,7 @@ test('NSD crosses midnight and excludes timed breaks', () => {
   assert.equal(nightMinutes('2026-09-01T21:00', '2026-09-02T07:00', [{ start: '2026-09-02T01:00', end: '2026-09-02T02:00' }]), 420);
 });
 test('ordinary OT and lateness are independently traced; late time reduces credited days, not a deduction line', () => {
-  const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })]; withOtherDays(s);
+  const s = fixture(); s.rules[0].graceMinutes = 0; s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })]; withOtherDays(s);
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15');
   const row = p.rows[0];
   assert.equal(row.earnings.regularOT, 426.14);

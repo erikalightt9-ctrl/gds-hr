@@ -298,8 +298,9 @@ function attendancePage() {
       recorded = true; sched = a.scheduledIn || sched; view = `data-edit="attendance" data-id="${esc(a.id)}"`;
       if (a.status === 'present') {
         clockIn = a.timeIn || '—'; clockOut = a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '—';
-        const late = mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? mins(a.timeIn) - mins(a.scheduledIn) - (a.offsetMinutes || 0) : 0;
-        if (late > 0) { look = 'late'; label = 'Late'; sub = `${late} min late`; } else { look = 'ok'; label = 'Present'; icon = 'ok'; }
+        const raw = mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? mins(a.timeIn) - mins(a.scheduledIn) : 0, late = raw - (a.offsetMinutes || 0);
+        // Late within the grace period is not tagged late (it is offset at the end of the day).
+        if (late > 0 && raw > graceMinutes()) { look = 'late'; label = 'Late'; sub = `${late} min late`; } else { look = 'ok'; label = 'Present'; icon = 'ok'; if (raw > 0) sub = `${raw} min · grace period`; }
       } else { look = 'leave'; label = a.status.replace(/-/g, ' ').replace(/^./, c => c.toUpperCase()); icon = 'cal'; }
       offset = a.offsetMinutes ? `${a.offsetMinutes} min` : '—';
       approval = `<span class="dr-tag ${a.approved ? 'ok' : 'wait'}">${a.approved ? 'Approved' : 'Pending'}</span>`;
@@ -462,6 +463,7 @@ function rulesPage() {
   return heading('Payroll rules & rates', 'Versioned policies. Transparent formulas. An approval behind every change.', addButton('rules', 'New rules version')) + `<div class="notice ${r.approvedBy ? 'success' : ''}">${r.approvedBy ? `Reference version effective ${esc(r.effectiveDate)}, approved by ${esc(who(r.approvedBy))}. Payroll selects the version effective on its cutoff start.` : 'The starting rules are an unapproved template. Review employee coverage, contribution and tax tables, and your company policy before approving a version.'}</div><div class="grid2"><section class="panel"><div class="panel-head"><h2>Applicable Statutory / Company Payroll Rate</h2></div>${table(['Work category', 'Underlying formula', 'Combined rate'], rateRows.map(([name, formula, rate]) => [name, formula, badge(`${Math.round(rate * 10000) / 100}%`)]))}<div class="panel-foot">NSD earnings add only the differential; base pay is counted once.</div></section><section class="panel"><div class="panel-head"><h2>Rules history</h2></div>${table(['Effective', 'Approval', ''], state.rules.slice().sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate)).map(v => [v.effectiveDate, v.approvedBy ? esc(who(v.approvedBy)) : badge('Draft', 'pending'), editButton('rules', v.id)]))}<div class="panel-body"><h3>Policy reference</h3><p class="legend">${esc(r.basis)}</p><a class="legend" href="https://nwpc.dole.gov.ph/wp-content/uploads/2024/11/Workers-Statutory-Monetary-Benefits-Handbook-2024-Edition.pdf" target="_blank" rel="noreferrer">Read the DOLE/NWPC handbook ↗</a></div></section></div>`;
 }
 // The newest version by effective date, draft or approved, so pending tables can be reviewed before approval.
+const graceMinutes = () => (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
 const latestRules = () => state.rules.slice().sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
 async function signOut() {
   await api('/logout', {}); auth = { user: null }; state = null; currentRun = null;

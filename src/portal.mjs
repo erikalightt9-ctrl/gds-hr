@@ -97,6 +97,8 @@ export function todayAttendance(store, employee, now = new Date()) {
   const scheduledOut = schedule.end || (scheduledIn ? fromMinutes(hhmm(scheduledIn) + schedule.hoursPerDay * 60 + schedule.mealBreakMinutes) : '');
   const actualIn = record?.timeIn || clockIn?.time || '', actualOut = record?.timeOut || clockOut?.time || '';
   const late = scheduledIn && actualIn ? Math.max(0, hhmm(actualIn) - hhmm(scheduledIn)) : 0;
+  // Within the grace period the employee is not tagged late; they offset it by staying the same minutes after the end.
+  const grace = profileOf(state, employee.id, 'attendance').graceMinutes ?? ruleOn(state, day)?.graceMinutes ?? 0, graceLate = late && late <= grace ? late : 0;
   const currentMinutes = hhmm(local(now).slice(11, 16)) + (day > workDate ? 1440 : 0);
   const endMinutes = scheduledOut && scheduledIn ? hhmm(scheduledOut) + (scheduledOut <= scheduledIn ? 1440 : 0) : null;
   let workedMinutes = record?.timeIn && record.timeOut ? attendanceMinutes(record).length : clockIn ? Math.max(0, Math.floor(((clockOut ? Date.parse(clockOut.recordedAt) : now.getTime()) - Date.parse(clockIn.recordedAt)) / 60000)) : 0;
@@ -111,9 +113,9 @@ export function todayAttendance(store, employee, now = new Date()) {
   else if (record?.status === 'rest-day-swap') status = 'Rest-day swap';
   else if (record?.status === 'off') status = 'Off duty';
   else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
-  else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late ? 'Late' : 'Present';
+  else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late && !graceLate ? 'Late' : 'Present';
   const exceptions = events.filter(e => ['Outside', 'Uncertain'].includes(e.geofence.status) || e.geofence.poorAccuracy).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'}: ${e.geofence.status}, accuracy ±${e.accuracy} m`);
-  return { date: workDate, status, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late, undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
+  return { date: workDate, status, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
 }
 function validateAttachment(store, actor, id) { if (id) { const doc = getDocument(store, actor, id); if (doc.employeeId !== actor.employeeId || doc.uploadedBy !== actor.username || doc.type !== 'Leave Supporting' || doc.status !== 'Active') throw new AppError('Use your own active supporting document.', 403); } }
 export function applyLeave(store, actor, input) {
