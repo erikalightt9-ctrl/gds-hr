@@ -1535,3 +1535,9 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 @media (max-width: 720px) { .hl-grid { grid-template-columns: 1fr; } .hl-search { margin-left: 0; } .hl-search input { width: 100%; } }
 .an-top { margin: 0 0 16px; }
 .pm-grace { background: #fff8e6; border-color: #f0d68f; }
+/* Employee "My profile": same design as the HR masterlist profile, full width */
+.mp-profile { position: static; max-width: 1100px; }
+.mp-profile .ml-pv-head { margin-bottom: 18px; }
+.mp-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; }
+.mp-profile .legend { margin: 8px 0 0; }
+@media (max-width: 760px) { .mp-cols { grid-template-columns: 1fr; } }

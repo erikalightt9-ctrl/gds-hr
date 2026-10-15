@@ -1,5 +1,5 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
-import { DOC_BADGE, fmtDate, fmtDateTime, readFile, fieldBoxes, sectionCard, bindCelebrationPhotos } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos } from './hr-common.js';
 
 export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message) }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
@@ -25,13 +25,46 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
+  const MP_ICON = {
+    all: '<path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.7 0-6 1.3-6 3.5V19h12v-2.5C14 14.3 10.7 13 8 13Zm8 0c-.3 0-.7 0-1.1.1A4.4 4.4 0 0 1 16 16.5V19h6v-2.5c0-2.2-3.3-3.5-6-3.5Z"/>',
+    active: '<path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 4.5V21h10.3a6 6 0 0 1-.3-2 6 6 0 0 1 .6-2.6A13 13 0 0 0 12 14Zm8.3 1.3-3.6 3.6-1.6-1.6-1.1 1.1 2.7 2.7 4.7-4.7Z"/>',
+    inactive: '<path d="M10 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.3 0-8 1.7-8 4.5V21h16v-2.5c0-2.8-4.7-4.5-8-4.5Zm12.3-5.9-1.4-1.4-1.9 1.9-1.9-1.9-1.4 1.4 1.9 1.9-1.9 1.9 1.4 1.4 1.9-1.9 1.9 1.9 1.4-1.4-1.9-1.9Z"/>',
+    search: '<path d="M10 3a7 7 0 1 0 4.2 12.6l5.1 5.1 1.4-1.4-5.1-5.1A7 7 0 0 0 10 3Zm0 2a5 5 0 1 1-5 5 5 5 0 0 1 5-5Z"/>',
+    export: '<path d="M12 3 7 8l1.4 1.4L11 6.8V15h2V6.8l2.6 2.6L17 8Zm-7 13v4h14v-4h-2v2H7v-2Z"/>',
+    plus: '<path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/>',
+    check: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1.4 14.6-4.2-4.2 1.4-1.4 2.8 2.8 5.8-5.8 1.4 1.4Z"/>',
+    minus: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm5 11H7v-2h10Z"/>',
+    pen: '<path d="m15.2 4.2 4.6 4.6L8.6 20H4v-4.6Zm2.1-2.1 1-1a1.5 1.5 0 0 1 2.1 0l2.5 2.5a1.5 1.5 0 0 1 0 2.1l-1 1Z"/>',
+    building: '<path d="M4 21V5l8-3v19Zm2-2h4V5L6 6.5ZM14 21V9h6v12Zm2-2h2v-8h-2Z"/>',
+    bag: '<path d="M20 7h-4V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Zm-10-2h4v2h-4Zm10 14H4v-5h6v2h4v-2h6Zm0-7H4V9h16Z"/>',
+    calendar: '<path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3Zm12 8H5v9h14ZM5 8h14V6H5Z"/>',
+    doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM8 12h8v1.6H8Zm0 3.4h8V17H8Z"/>',
+    pin: '<path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 14.5 9 2.5 2.5 0 0 1 12 11.5Z"/>',
+    people: '<path d="M9 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3ZM9 13c-2.7 0-8 1.3-8 4v3h16v-3c0-2.7-5.3-4-8-4Zm8 0h-.8a5 5 0 0 1 2.8 4v3h4v-3c0-2.5-3.6-3.8-6-4Z"/>',
+    mail: '<path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2.4V17h16V7.4l-8 5.3Zm.9-.4L12 11.7 19.1 7Z"/>',
+    phone: '<path d="M6.6 10.8a15.2 15.2 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.2 11.4 11.4 0 0 0 3.6.6 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .6 3.6 1 1 0 0 1-.3 1Z"/>',
+    user: '<path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4 0-9 2-9 5v2h18v-2c0-3-5-5-9-5Z"/>',
+    chevron: '<path d="m9 6 6 6-6 6-1.4-1.4L12.2 12 7.6 7.4Z"/>',
+    left: '<path d="m15 6-6 6 6 6 1.4-1.4L11.8 12l4.6-4.6Z"/>',
+  };
+  // My profile: the same layout as the HR masterlist profile (photo header, status, icon-labelled sections), read-only.
   function profile(box, r) {
-    const f = r.form;
-    box.innerHTML = sectionCard(esc, '👤', 'Personal Information', fieldBoxes(esc, [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]))
-      + sectionCard(esc, '📞', 'Emergency Contact', fieldBoxes(esc, [['Contact person', f.emergency.name], ['Relationship', f.emergency.relationship], ['Contact number', f.emergency.contact]]))
-      + sectionCard(esc, '💼', 'Employment', fieldBoxes(esc, [['Employee number', r.number], ['Department', f.employment.department], ['Position', f.employment.position], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Immediate supervisor', f.employment.supervisor], ['Date hired', fmtDate(f.employment.dateHired)]]))
-      + sectionCard(esc, '🪪', 'Government IDs', fieldBoxes(esc, [['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]))
-      + '<p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved.</p>';
+    const f = r.form, svg = name => `<svg class="ml-ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${MP_ICON[name] || MP_ICON.doc}</svg>`;
+    const info = (ic, label, value) => `<div class="ml-info">${svg(ic)}<span><small>${esc(label)}</small><strong>${esc(value || 'Not set')}</strong></span></div>`;
+    const block = (title, items) => `<section class="ml-block"><h3>${title}</h3><div class="ml-grid">${items.join('')}</div></section>`;
+    const name = [f.personal.firstName, f.personal.middleName, f.personal.lastName, f.personal.suffix].filter(Boolean).join(' ');
+    const ini = `${(f.personal.firstName || '').charAt(0)}${(f.personal.lastName || '').charAt(0)}`.toUpperCase();
+    box.innerHTML = `<section class="ml-preview mp-profile">
+      <div class="ml-pv-head"><span class="ml-avatar ml-active ml-avatar-lg" aria-hidden="true"><img src="/api/hr/me/photo" alt="" data-mp-photo>${esc(ini)}</span><div><strong class="ml-pv-name">${esc(name)}</strong><span>${esc(f.employment.position || '—')}</span><span>${esc(r.number || '')}</span><span class="ml-pill ml-active">${svg('check')}Active</span></div></div>
+      <div class="mp-cols">
+        ${block('Work information', [info('building', 'Subsidiary', f.employment.department), info('bag', 'Position', f.employment.position), info('calendar', 'Date hired', f.employment.dateHired && fmtDate(f.employment.dateHired)), info('doc', 'Employment type', f.employment.employmentType || f.employment.classification), info('people', 'Reporting manager', f.employment.supervisor), info('doc', 'Employee number', r.number)])}
+        ${block('Contact information', [info('mail', 'Work email', f.personal.workEmail || f.employment.businessEmail), info('phone', 'Mobile', f.personal.mobile), info('mail', 'Personal email', f.personal.personalEmail), info('pin', 'Address', f.personal.address)])}
+        ${block('Personal information', [info('user', 'Preferred name', f.personal.preferredName), info('user', 'Sex', f.personal.sex), info('calendar', 'Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)), info('pin', 'Place of birth', f.personal.birthPlace), info('user', 'Civil status', f.personal.civilStatus), info('user', 'Nationality', f.personal.nationality)])}
+        ${block('Emergency contact', [info('people', 'Contact person', f.emergency.name), info('people', 'Relationship', f.emergency.relationship), info('phone', 'Contact number', f.emergency.contact)])}
+        ${block('Government IDs', [info('doc', 'TIN', f.government.tin), info('doc', 'SSS number', f.government.sss), info('doc', 'PhilHealth number', f.government.philHealth), info('doc', 'Pag-IBIG MID', f.government.pagIbig)])}
+      </div>
+      <p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved.</p></section>`;
+    box.querySelector('[data-mp-photo]')?.addEventListener('error', event => event.target.remove());
   }
   function overtime(box, list) {
     const STATUS = { pending: 'Pending HR approval', approved: 'Approved', rejected: 'Not approved', cancelled: 'Cancelled' };
