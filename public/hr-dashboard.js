@@ -45,8 +45,9 @@ let analyticsRange = '7';
 // Employee spotlight: today's celebrant, else the newest hire (last 30 days), else an employee of the day (rotates daily).
 function pickSpotlight(people, party, today) {
   const active = people.filter(p => !p.archived && !p.draft && p.status === 'Active');
-  const c = party?.celebrations?.[0];
-  if (c) { const p = active.find(x => x.id === c.employeeId); if (p) return { p, chip: c.occasion === 'birthday' ? '🎂 Birthday today' : `🎉 ${c.years ? `${c.years} year${c.years === 1 ? '' : 's'}` : 'Work anniversary'} today` }; }
+  // Today's celebrant first, else this month's (the greeting stays up for the whole month).
+  const list = (party?.celebrations || []).slice().sort((a, b) => Number(!!b.today) - Number(!!a.today));
+  for (const c of list) { const p = active.find(x => x.id === c.employeeId); if (p) return { p, chip: c.occasion === 'birthday' ? `🎂 Birthday ${c.today ? 'today' : 'this month'}` : `🎉 ${c.years ? `${c.years} year${c.years === 1 ? '' : 's'}` : 'Work anniversary'} ${c.today ? 'today' : 'with GDS'}` }; }
   const cut = new Date(`${today}T00:00:00Z`); cut.setUTCDate(cut.getUTCDate() - 30); const since = cut.toISOString().slice(0, 10);
   const fresh = active.filter(p => p.dateHired && p.dateHired >= since && p.dateHired <= today).sort((a, b) => b.dateHired.localeCompare(a.dateHired))[0];
   if (fresh) return { p: fresh, chip: '👋 New hire' };
@@ -78,8 +79,8 @@ export function createDashboard(ctx) {
   }
   async function render() {
     shell(heading('Dashboard', 'Loading…') + '<div class="loading">Loading dashboard…</div>');
-    const [d, party, people] = await Promise.all([api('/hr/dashboard'), api('/hr/celebrations').catch(() => null), api('/hr/employees').catch(() => [])]), t = d.totals;
-    const spot = spotlightHtml(esc, pickSpotlight(people, party, ctx.today()));
+    const [d, party, people, monthParty] = await Promise.all([api('/hr/dashboard'), api('/hr/celebrations').catch(() => null), api('/hr/employees').catch(() => []), api('/hr/celebrations/month').catch(() => null)]), t = d.totals;
+    const spot = spotlightHtml(esc, pickSpotlight(people, monthParty, ctx.today()));
     const card = (key, value, text, nav, { sub = '', link = '', tone = '', alert = false } = {}) => `<button class="db-card${alert ? ' alert' : ''}" data-go="${esc(JSON.stringify(nav))}"><span class="db-head"><span class="db-ico ${tone}">${svg(key)}</span><span class="db-title">${text}</span>${alert ? '<em>Needs attention</em>' : ''}</span><span class="db-value"><strong>${value ?? '—'}</strong>${sub && !link ? `<small>${sub}</small>` : ''}</span>${link ? `${sub ? `<small class="db-sub">${sub}</small>` : ''}<span class="db-link">${link} →</span>` : ''}</button>`;
     const asOf = new Date(`${String(d.asOf).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     shell(heading('Dashboard', `${esc(ctx.context().company.name)} · Overview as of ${asOf}`) +
