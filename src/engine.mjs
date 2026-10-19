@@ -5,6 +5,7 @@ import { date as dateSchema } from './schema.mjs';
 // 13th month (annual ledger) are not overridable here.
 export const OVERRIDE_EARNINGS = ['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance'];
 export const OVERRIDE_DEDUCTIONS = ['absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'sssLoan', 'pagibigLoan', 'salaryDeduction'];
+export const OT_BLOCK = 30;   // minutes: overtime is paid in whole blocks
 export const round = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const dayMs = 86400000;
 export function dates(start, end) {
@@ -314,14 +315,19 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const separateOT = (r.overtimeApproval || 'separate') === 'separate', filings = (state.overtimeRequests || []).filter(o => o.employeeId === e.id && o.date === d);
       const approvedOTMinutes = filings.filter(o => o.status === 'approved').reduce((s, o) => s + o.approvedHours * 60, 0);
       if (separateOT && e.coveredOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime filings before posting.`);
-      let unfiledMinutes = 0;
+      let unfiledMinutes = 0, belowBlock = 0;
+      // Overtime counts in whole 30-minute blocks, rounded down (40 min = 30 min; 1 h 15 min = 1 h; under 30 min = none).
+      const otWorked = flexible ? 0 : Math.max(0, minutes.length - normalHours * 60);
+      const otPayable = Math.floor(Math.min(otWorked, separateOT && e.coveredOT ? approvedOTMinutes : otWorked) / OT_BLOCK) * OT_BLOCK;
       minutes.forEach((m, index) => {
         const date = new Date(m).toISOString().slice(0, 10), c0 = classification(state, e, date), c = perDayWorked && c0 === 'rest' ? 'ordinary' : c0;
         const ot = !flexible && index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
         if (ot && separateOT && e.coveredOT && index - normalHours * 60 >= approvedOTMinutes) { unfiledMinutes++; return; }
+        if (ot && index - normalHours * 60 >= otPayable) { belowBlock++; return; }
         const key = `${date}/${c}/${ot}/${night}`;
         const group = groups.get(key) || { date, c, ot, night, count: 0 }; group.count++; groups.set(key, group);
       });
+      if (belowBlock) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `${belowBlock} min overtime not paid: overtime counts in whole 30-minute blocks`, sourceKind: 'attendance', sourceId: record.id, date: d });
       if (unfiledMinutes) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `${round(unfiledMinutes / 60)} h after the schedule${approvedOTMinutes ? ` beyond the ${round(approvedOTMinutes / 60)} h approved` : ''} without approved overtime filing: not paid`, sourceKind: 'attendance', sourceId: record.id, date: d, quantity: round(unfiledMinutes / 60) });
       for (const g of groups.values()) {
         const mult = dayRate(g.c, r), overtime = g.c === 'ordinary' ? r.ordinaryOT : r.premiumOT;
@@ -364,7 +370,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // A manual "add" entry for a component that attendance already pays would count the same work twice: flag it.
       const fromAttendance = new Set(trace.filter(t => t.sourceKind === 'attendance' && t.side === 'earnings' && t.amount > 0).map(t => t.component));
       const H = (key, component, multiplier, label, c, ot, night = false) => {
-        const h = m.hours?.[key] || 0; if (!h) return;
+        // Typed overtime hours follow the same 30-minute blocks (rounded down); night differential hours are as typed.
+        const typed = m.hours?.[key] || 0, h = key === 'nightDiff' || !/OT$/.test(key) ? typed : Math.floor(typed * 60 / OT_BLOCK) * OT_BLOCK / 60; if (!h) return;
         if (m.mode === 'add' && fromAttendance.has(component)) blockers.push(`${prefix}: manual ${label} hours overlap ${label} already calculated from attendance. Review the manual entry (use "replace" or remove the overlap).`);
         add(earnings, component, h * hourly * multiplier, `${tag}: ${h} h × ${round(hourly)} × ${Math.round(multiplier * 10000) / 10000} ${label}`, src, end, h, multiplier);
         workBreakdown.push({ date: end, classification: c, overtime: ot, night, hours: h, dayMultiplier: multiplier, otMultiplier: 1, nightMultiplier: 1, combinedMultiplier: multiplier, sourceId: src.id });

@@ -236,3 +236,13 @@ test('paid leave is shown as Leave pay, taken out of basic pay; gross is unchang
   assert.equal(row.earnings.leavePay, Math.round(daily * 100) / 100);
   assert.equal(Math.round((row.earnings.basic + row.earnings.leavePay) * 100) / 100, 15000, 'basic + leave pay = the full cutoff salary');
 });
+
+test('overtime is paid in whole 30-minute blocks, rounded down (40 min = 30; 1 h 15 = 1 h; 29 min = none)', () => {
+  const ot = out => { const s = fixture(); s.attendance = [attend('2026-09-01', { timeOut: out })]; withOtherDays(s); return calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularOT; };
+  const hour = ot('17:00');
+  assert.ok(hour > 0);
+  assert.ok(Math.abs(ot('16:40') - hour / 2) < 0.02, '40 minutes -> 30 minutes');
+  assert.equal(ot('17:15'), hour, '1 h 15 min -> 1 h');
+  assert.equal(ot('16:29'), 0, '29 minutes -> not overtime');
+  assert.ok(Math.abs(ot('16:30') - hour / 2) < 0.02, 'exactly 30 minutes counts');
+});
