@@ -207,3 +207,12 @@ test('a cutoff waiver removes late and undertime deductions; the minutes stay on
   assert.equal(after.late[0].lateMinutes, 30); assert.equal(after.late[0].deductibleMinutes, 0);
   assert.equal(after.deductions.undertime, 0); assert.equal(after.earnings.basic, 15000);
 });
+
+test('a loan set to the 1st-15th cutoff is deducted only there; every-cutoff loans each cutoff', () => {
+  const loan = (deductOn) => ({ id: `L-${deductOn}`, employeeId: 'EMP-001', type: 'Salary Loan', reference: deductOn, original: 5000, balance: 3000, monthlyAmortization: 0, perPayroll: 1000, loanDate: '', skipCutoffs: [], deductOn, startDate: '2026-09-01', endDate: '2027-01-15', terms: 5, remainingTerms: 3, authorized: true, interestTotal: 0, interestBalance: 0, applicationId: '' });
+  const run = (start, end, l) => { const s = fixture(); withOtherDays(s, start, end); s.loans = [l]; return calculatePayroll(s, start, end).rows[0].deductions.loans; };
+  assert.equal(run('2026-09-01', '2026-09-15', loan('first')), 1000);
+  assert.equal(run('2026-09-16', '2026-09-30', loan('first')), 0, 'not in the 16th-end cutoff');
+  assert.equal(run('2026-09-16', '2026-09-30', loan('second')), 1000);
+  assert.equal(run('2026-09-16', '2026-09-30', loan('every')), 1000);
+});

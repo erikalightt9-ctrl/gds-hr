@@ -90,7 +90,8 @@ function nextDeduction(state, loan, today = localToday()) {
     if (!end || end < from) continue;
     const posted = state.runs.some(r => r.status === 'posted' && r.end === end && r.rows.some(row => row.employeeId === loan.employeeId));
     const start = end.endsWith('-15') ? `${end.slice(0, 7)}-01` : rule?.cutoff === 'monthly' ? `${end.slice(0, 7)}-01` : `${end.slice(0, 7)}-16`;
-    if (!posted && !(loan.skipCutoffs || []).includes(start)) return end;
+    const wrongHalf = (loan.deductOn === 'first' && !start.endsWith('-01')) || (loan.deductOn === 'second' && !start.endsWith('-16'));
+    if (!posted && !wrongHalf && !(loan.skipCutoffs || []).includes(start)) return end;
   }
   return '';
 }
