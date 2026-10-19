@@ -6,6 +6,7 @@ import { date, schemas } from './schema.mjs';
 import { leaveBalance, leaveSplit, ruleOn, isRest, attendanceMinutes, scheduleOn } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 import { networkStatus } from './office-network.mjs';
+import { lateIncidents, lateBy, graceFor, LETTER_AFTER, letterMessage } from './late-incidents.mjs';
 import { payDateFor, payslipReleased } from './paydays.mjs';
 const localDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
@@ -78,6 +79,14 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
       store.log(actor, 'create-from-clock', 'attendance', record.id, null, record);
     }
     store.db.prepare('INSERT INTO clock_events VALUES(?,?,?,?,?)').run(event.id, employee.id, value.kind, workDate, JSON.stringify(event));
+    // Late 15 minutes or more: from the 3rd time this month the employee is asked for an explanation letter.
+    if (value.kind === 'in') {
+      const lateMin = lateBy(event.time, scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate).start), grace = graceFor(state, employee.id, workDate);
+      if (grace > 0 && lateMin >= grace) {
+        const month = workDate.slice(0, 7), count = lateIncidents(state, employee.id, month).filter(x => x.date !== workDate).length + 1;
+        if (count >= LETTER_AFTER) { store.notify(employee.id, letterMessage(count, month)); store.notify(null, `${employee.id} ${employee.name}: late 15 minutes or more ${count} times in ${month}. Explanation letter required.`); }
+      }
+    }
     store.notify(null, value.mode === 'outside' ? `${employee.id}: OUT OF OFFICE time ${value.kind} at ${event.time} needs approval. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
     store.log(actor, `time-${value.kind}`, 'clock', event.id, null, event);
     return event;
@@ -98,7 +107,7 @@ export function todayAttendance(store, employee, now = new Date()) {
   const actualIn = record?.timeIn || clockIn?.time || '', actualOut = record?.timeOut || clockOut?.time || '';
   const late = scheduledIn && actualIn ? Math.max(0, hhmm(actualIn) - hhmm(scheduledIn)) : 0;
   // Within the grace period the employee is not tagged late; they offset it by staying the same minutes after the end.
-  const grace = profileOf(state, employee.id, 'attendance').graceMinutes ?? ruleOn(state, day)?.graceMinutes ?? 0, graceLate = late && late <= grace ? late : 0;
+  const grace = profileOf(state, employee.id, 'attendance').graceMinutes ?? ruleOn(state, day)?.graceMinutes ?? 0, graceLate = late && late < grace ? late : 0;
   const currentMinutes = hhmm(local(now).slice(11, 16)) + (day > workDate ? 1440 : 0);
   const endMinutes = scheduledOut && scheduledIn ? hhmm(scheduledOut) + (scheduledOut <= scheduledIn ? 1440 : 0) : null;
   let workedMinutes = record?.timeIn && record.timeOut ? attendanceMinutes(record).length : clockIn ? Math.max(0, Math.floor(((clockOut ? Date.parse(clockOut.recordedAt) : now.getTime()) - Date.parse(clockIn.recordedAt)) / 60000)) : 0;
@@ -115,7 +124,10 @@ export function todayAttendance(store, employee, now = new Date()) {
   else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
   else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late && !graceLate ? 'Late' : 'Present';
   const exceptions = events.filter(e => ['Outside', 'Uncertain'].includes(e.geofence.status) || e.geofence.poorAccuracy).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'}: ${e.geofence.status}, accuracy ±${e.accuracy} m`);
-  return { date: workDate, status, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
+  const incidents = lateIncidents(state, employee.id, day.slice(0, 7));
+  if (!record && late >= grace && grace > 0 && workDate.startsWith(day.slice(0, 7)) && !incidents.some(x => x.date === workDate)) incidents.push({ date: workDate, minutes: late });
+  const lateLetter = incidents.length >= LETTER_AFTER ? { count: incidents.length, dates: incidents.map(x => x.date), message: letterMessage(incidents.length, day.slice(0, 7)) } : null;
+  return { lateLetter, date: workDate, status, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
 }
 function validateAttachment(store, actor, id) { if (id) { const doc = getDocument(store, actor, id); if (doc.employeeId !== actor.employeeId || doc.uploadedBy !== actor.username || doc.type !== 'Leave Supporting' || doc.status !== 'Active') throw new AppError('Use your own active supporting document.', 403); } }
 export function applyLeave(store, actor, input) {

@@ -23,7 +23,7 @@ function attendanceTrend(state, days, today) {
     const d = new Date(`${today}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - i); const date = d.toISOString().slice(0, 10);
     const recs = (state?.attendance || []).filter(a => a.date === date && a.status === 'present');
     const grace = (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
-    const late = recs.filter(a => { const raw = mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? mins(a.timeIn) - mins(a.scheduledIn) : 0; return raw > grace && raw > (a.offsetMinutes || 0); }).length;
+    const late = recs.filter(a => { const raw = mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? mins(a.timeIn) - mins(a.scheduledIn) : 0; return raw >= Math.max(1, grace) && raw > (a.offsetMinutes || 0); }).length;
     const open = (state?.openClockIns || []).filter(c => c.workDate === date).length;
     out.push({ date, present: recs.length - late + open, late });
   }

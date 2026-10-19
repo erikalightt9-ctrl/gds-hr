@@ -118,7 +118,7 @@ test('employee contribution shares can be overridden for one cutoff without chan
   } finally { store.close(); }
 });
 
-test('15-minute grace: late within it is deducted only when not offset by staying after the end; beyond it the whole late time', () => {
+test('late time is deducted only when not offset by staying after the end (any amount); approved offsets also cover it', () => {
   const pad = n => String(n).padStart(2, '0');
   const late = (minutes, offset = 0, stay = 0) => fixture(s => { s.rules[0].graceMinutes = 15; const out = s.attendance[0].timeOut.split(':').map(Number), end = out[0] * 60 + out[1] + stay; s.attendance[0].timeIn = `${pad(8 + Math.floor(minutes / 60))}:${pad(minutes % 60)}`; s.attendance[0].timeOut = `${pad(Math.floor(end / 60))}:${pad(end % 60)}`; s.attendance[0].offsetMinutes = offset; if (offset) s.attendance[0].explanation = 'Approved offset (demo)'; });
   const lost = store => { try { return run(store).rows[0].late.find(l => l.lateMinutes > 0)?.deductibleMinutes ?? 0; } finally { store.close(); } };
@@ -126,7 +126,8 @@ test('15-minute grace: late within it is deducted only when not offset by stayin
   assert.equal(lost(late(12, 0, 12)), 0, '12 minutes late, stayed 12 minutes: offset, no deduction');
   assert.equal(lost(late(12, 0, 5)), 7, '12 minutes late, stayed 5 minutes: 7 minutes deducted');
   assert.equal(lost(late(15, 0, 15)), 0, '15 minutes late (edge of grace), stayed 15 minutes: no deduction');
-  assert.equal(lost(late(20, 0, 20)), 20, '20 minutes late: beyond grace, staying does not offset');
+  assert.equal(lost(late(20, 0, 20)), 0, '20 minutes late, stayed 20 minutes: offset, no deduction');
+  assert.equal(lost(late(37, 0, 10)), 27, '37 minutes late, stayed 10 minutes: 27 minutes deducted');
   assert.equal(lost(late(12, 12)), 0, 'approved offset: no deduction');
 });
 

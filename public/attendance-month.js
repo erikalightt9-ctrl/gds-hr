@@ -14,7 +14,7 @@ function dayStatus(state, e, date, today, since) {
   if (a) {
     if (a.status !== 'present') return a.status === 'absent' ? 'absent' : 'leave';
     const raw = minutes(a.timeIn) !== null && minutes(a.scheduledIn) !== null ? minutes(a.timeIn) - minutes(a.scheduledIn) : 0, grace = (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
-    const late = raw > grace && raw > (a.offsetMinutes || 0);
+    const late = raw >= Math.max(1, grace) && raw > (a.offsetMinutes || 0);
     return late ? 'late' : 'present';
   }
   if ((state.openClockIns || []).some(c => c.employeeId === e.id && c.workDate === date)) return 'open';

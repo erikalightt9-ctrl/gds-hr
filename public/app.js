@@ -300,7 +300,7 @@ function attendancePage() {
         clockIn = a.timeIn || '—'; clockOut = a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '—';
         const raw = mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? mins(a.timeIn) - mins(a.scheduledIn) : 0, late = raw - (a.offsetMinutes || 0);
         // Late within the grace period is not tagged late (it is offset at the end of the day).
-        if (late > 0 && raw > graceMinutes()) { look = 'late'; label = 'Late'; sub = `${late} min late`; } else { look = 'ok'; label = 'Present'; icon = 'ok'; if (raw > 0) sub = `${raw} min · grace period`; }
+        if (late > 0 && raw >= Math.max(1, graceMinutes())) { look = 'late'; label = 'Late'; sub = `${late} min late`; } else { look = 'ok'; label = 'Present'; icon = 'ok'; if (raw > 0) sub = `${raw} min · grace period`; }
       } else { look = 'leave'; label = a.status.replace(/-/g, ' ').replace(/^./, c => c.toUpperCase()); icon = 'cal'; }
       offset = a.offsetMinutes ? `${a.offsetMinutes} min` : '—';
       approval = `<span class="dr-tag ${a.approved ? 'ok' : 'wait'}">${a.approved ? 'Approved' : 'Pending'}</span>`;

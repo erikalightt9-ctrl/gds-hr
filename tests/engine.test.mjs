@@ -31,15 +31,15 @@ test('NSD crosses midnight and excludes timed breaks', () => {
   assert.equal(nightMinutes('2026-09-01T22:00', '2026-09-02T02:00', []), 240);
   assert.equal(nightMinutes('2026-09-01T21:00', '2026-09-02T07:00', [{ start: '2026-09-02T01:00', end: '2026-09-02T02:00' }]), 420);
 });
-test('ordinary OT and lateness are independently traced; late time reduces credited days, not a deduction line', () => {
+test('ordinary OT and lateness are independently traced; late time made up after the shift is offset', () => {
   const s = fixture(); s.rules[0].graceMinutes = 0; s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })]; withOtherDays(s);
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15');
   const row = p.rows[0];
   assert.equal(row.earnings.regularOT, 426.14);
   assert.equal(row.deductions.late, undefined, 'no separate late deduction');
-  assert.equal(row.earnings.basic, 15000 - 42.61, '15 min of a 480-min day = 0.03125 day x 1,363.64 daily');
-  assert.equal(row.creditedDays, 10.9688, 'credited days are kept to 4 decimals (11 days present, 0.03125 day lost)');
-  assert.equal(row.late[0].deductibleMinutes, 15);
+  assert.equal(row.earnings.basic, 15000, 'the 15 late minutes are offset by staying after the scheduled end');
+  assert.equal(row.creditedDays, 11);
+  assert.equal(row.late[0].lateMinutes, 15); assert.equal(row.late[0].workedOffset, 15); assert.equal(row.late[0].deductibleMinutes, 0);
   assert.equal(row.late[0].sourceId, '2026-09-01');
 });
 test('approved exception and offset protect covered late time', () => {
@@ -187,4 +187,13 @@ test('half-day leave: the leave half is paid (or deducted when unpaid); the work
   const unpaid = run('unpaid');
   assert.equal(Math.round((unpaid.absenceAmount - paid.absenceAmount) * 100) / 100, 681.82, 'unpaid half day reduces basic by half a day (1,363.64 / 2)');
   assert.equal(unpaid.deductions.undertime, 0);
+});
+
+test('late time not made up reduces credited days, not a deduction line', () => {
+  const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:00' })]; withOtherDays(s);
+  const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(row.deductions.late, undefined, 'no separate late deduction');
+  assert.equal(row.earnings.basic, 15000 - 42.61, '15 min of a 480-min day = 0.03125 day x 1,363.64 daily');
+  assert.equal(row.creditedDays, 10.9688, 'credited days are kept to 4 decimals (11 days present, 0.03125 day lost)');
+  assert.equal(row.late[0].deductibleMinutes, 15);
 });

@@ -54,7 +54,7 @@ export const REPORTS = {
           const a = state.attendance.find(x => x.employeeId === e.id && x.date === day);
           if (a) {
             const late = a.status === 'present' && minutes(a.timeIn) !== null && minutes(a.scheduledIn) !== null ? Math.max(0, minutes(a.timeIn) - minutes(a.scheduledIn)) : 0;
-            return [e.name, e.id, a.scheduledIn || '', a.timeIn || '', a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '', late || '', a.status === 'present' ? (late > (state.rules.filter(r => r.approvedBy).sort((x, y) => y.effectiveDate.localeCompare(x.effectiveDate))[0]?.graceMinutes ?? 0) ? 'Late' : 'Present') : a.status, [a.offsetMinutes ? `Offset ${a.offsetMinutes} min` : '', a.explanation || ''].filter(Boolean).join(' · ')];
+            return [e.name, e.id, a.scheduledIn || '', a.timeIn || '', a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1 day)' : ''}` : '', late || '', a.status === 'present' ? (late >= Math.max(1, state.rules.filter(r => r.approvedBy).sort((x, y) => y.effectiveDate.localeCompare(x.effectiveDate))[0]?.graceMinutes ?? 0) ? 'Late' : 'Present') : a.status, [a.offsetMinutes ? `Offset ${a.offsetMinutes} min` : '', a.explanation || ''].filter(Boolean).join(' · ')];
           }
           const open = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === day);
           const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && (l.countedDates || []).includes(day));
