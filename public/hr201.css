@@ -1544,3 +1544,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .lm-time { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .pr-note { display: block; color: #b51f2b; font-size: 12.5px; white-space: nowrap; }
 .check-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.ln-table .row-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; white-space: nowrap; }
+.ln-table .row-actions > * { margin: 0; }
