@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { ruleOn } from './engine.mjs';
 import { localToday } from './profiles.mjs';
+import { payDateFor } from './paydays.mjs';
 
 const APPROVERS = ['admin', 'payroll', 'hr'];
 const TYPES = ['Salary Loan', 'Emergency Loan', 'Medical Loan', 'Educational Loan', 'Housing Loan', 'Vehicle Loan', 'Calamity Loan', 'SSS Loan', 'Pag-IBIG Loan', 'Other Company Loan'];
@@ -99,7 +100,8 @@ function nextDeduction(state, loan, today = localToday()) {
     const posted = state.runs.some(r => r.status === 'posted' && r.end === end && r.rows.some(row => row.employeeId === loan.employeeId));
     const start = end.endsWith('-15') ? `${end.slice(0, 7)}-01` : rule?.cutoff === 'monthly' ? `${end.slice(0, 7)}-01` : `${end.slice(0, 7)}-16`;
     const wrongHalf = (loan.deductOn === 'first' && !start.endsWith('-01')) || (loan.deductOn === 'second' && !start.endsWith('-16'));
-    if (!posted && !wrongHalf && !(loan.skipCutoffs || []).includes(start)) return end;
+    // Shown as the salary day the deduction is taken (1st-15th: the 22nd; 16th-end: the 8th of the next month).
+    if (!posted && !wrongHalf && !(loan.skipCutoffs || []).includes(start)) return payDateFor(start, end);
   }
   return '';
 }
