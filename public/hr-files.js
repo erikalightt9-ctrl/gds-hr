@@ -3,7 +3,7 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who } from './hr-common.js';
 
 const PAGE_SIZE = 10;
-const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
+const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
 function serviceLength(start, today) {
@@ -223,7 +223,7 @@ export function createFiles(ctx) {
         ${scheduleCard(record)}
         ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
-    if (tab === 'employment') return block('💼', 'Employment information', dl(employmentRows(record)), formBtn('employment', edit)) + '<p class="legend">Active / inactive status and employment classification are separate. Probation and review dates are reminders only; the system never changes status by itself.</p>';
+    if (tab === 'employment' || tab === 'history') return block('💼', 'Employment information', dl([...employmentRows(record), ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]), formBtn('employment', edit)) + (extras.history ? block('🕘', 'Previous employment', table(['Company', 'Position', 'From', 'To', 'Reason for leaving'], extras.history.entries.map(x => [esc(x.company), esc(x.position || '—'), x.from ? fmtDate(x.from) : '—', x.to ? fmtDate(x.to) : '—', esc(x.reason || '—')]), 'No previous employment recorded.'), editBtn('history', edit)) : '');
     const loansHtml = () => {
       const L = extras.loans;
       const rows = L.loans.map(l => [esc(l.type), l.loanDate ? fmtDate(l.loanDate) : '—', ctx.money(l.original), ctx.money(l.perPayroll), ctx.money(l.totalRepaid), `<strong>${ctx.money(l.outstanding)}</strong>`, l.nextDeduction ? fmtDate(l.nextDeduction) : '—', esc(l.status)]);
@@ -248,7 +248,6 @@ export function createFiles(ctx) {
         + block('🧒', 'Children', table(['Name', 'Date of birth'], fam.children.map(c => [esc(c.name), c.birthDate ? fmtDate(c.birthDate) : '—']), 'No children recorded.'), editBtn('family', edit));
     }
     if (tab === 'education') return block('🎓', 'Education', table(['Level', 'School', 'Course / strand', 'Years', 'Honors'], extras.education.entries.map(x => [esc(x.level), esc(x.school), esc(x.course || '—'), esc([x.yearFrom, x.yearTo].filter(Boolean).join('–') || '—'), esc(x.honors || '—')]), 'No education recorded.'), editBtn('education', edit));
-    if (tab === 'history') return block('🏢', 'Employment with GDS', dl([...employmentRows(record), ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]), formBtn('employment', edit)) + block('🕘', 'Previous employment', table(['Company', 'Position', 'From', 'To', 'Reason for leaving'], extras.history.entries.map(x => [esc(x.company), esc(x.position || '—'), x.from ? fmtDate(x.from) : '—', x.to ? fmtDate(x.to) : '—', esc(x.reason || '—')]), 'No previous employment recorded.'), editBtn('history', edit));
     if (tab === 'leave') {
       const L = extras.leave;
       return block('🌴', `Leave credits · ${L.year}`, table(['Leave type', 'Eligible', 'Credits this year', 'Used leave', 'Available'], L.types.map(t => [esc(t.name), t.eligible ? 'Yes' : 'No', `${t.entitled} day${t.entitled === 1 ? '' : 's'}`, (t.taken || []).length || t.usedBefore ? `<button class="ml-name lc-used" data-leave-dates="${esc(t.typeId)}" title="Show the leave dates">${Math.round(t.used * 100) / 100} day(s)</button>` : `${Math.round(t.used * 100) / 100} day(s)`, `<strong>${t.available} day${t.available === 1 ? '' : 's'}</strong>`]), 'No paid leave types are configured.'), L.canEdit && !record.archived ? ' <button class="small" data-edit-leave>Edit leave credits</button>' : '');
