@@ -1542,3 +1542,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .mp-profile .legend { margin: 8px 0 0; }
 @media (max-width: 760px) { .mp-cols { grid-template-columns: 1fr; } }
 .lm-time { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.pr-note { display: block; color: #b51f2b; font-size: 12.5px; white-space: nowrap; }
+.check-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }

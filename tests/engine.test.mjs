@@ -197,3 +197,13 @@ test('late time not made up reduces credited days, not a deduction line', () => 
   assert.equal(row.creditedDays, 10.9688, 'credited days are kept to 4 decimals (11 days present, 0.03125 day lost)');
   assert.equal(row.late[0].deductibleMinutes, 15);
 });
+
+test('a cutoff waiver removes late and undertime deductions; the minutes stay on record', () => {
+  const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:30', timeOut: '15:00' })]; withOtherDays(s);
+  const before = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.ok(before.late[0].deductibleMinutes > 0 && before.deductions.undertime > 0);
+  s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveLate: true, waiveUndertime: true, reason: 'Waived', updatedBy: 'admin' }];
+  const after = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(after.late[0].lateMinutes, 30); assert.equal(after.late[0].deductibleMinutes, 0);
+  assert.equal(after.deductions.undertime, 0); assert.equal(after.earnings.basic, 15000);
+});
