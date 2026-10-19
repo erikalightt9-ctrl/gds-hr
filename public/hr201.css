@@ -1560,3 +1560,7 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ml-photo-pen .ml-ico { width: 15px; height: 15px; color: #fff; }
 .ml-photo-pen { width: 22px; height: 22px; right: 4px; bottom: 4px; border-width: 1.5px; }
 .ml-photo-pen .ml-ico { width: 11px; height: 11px; }
+/* Employee forms on phones: boxes fit the screen (date / time inputs never push past the card) */
+.employee-main .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.employee-main .form-grid > *, .employee-main .field { min-width: 0; }
+.employee-main .field input, .employee-main .field select, .employee-main .field textarea { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
