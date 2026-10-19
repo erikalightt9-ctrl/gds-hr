@@ -5,7 +5,7 @@ import { AppError, permit, saveRecord } from './service.mjs';
 import { saveProfile, localToday } from './profiles.mjs';
 import { HR_MANAGERS, HR_TEAM, DIRECTORY, DASHBOARD, SENSITIVE_IDS } from './roles.mjs';
 import { personalNames, titleCase } from './names.mjs';
-import { leaveBalance } from './engine.mjs';
+import { leaveBalance, leaveFraction } from './engine.mjs';
 import { assertMakerCanChange, lockedFields } from './field-locks.mjs';
 import { scheduleOf, applyScheduleFromForm } from './work-schedule.mjs';
 
@@ -313,7 +313,9 @@ export function leaveCredits(store, actor, id, year = Number(localToday().slice(
     year, canEdit: LEAVE_EDITORS.includes(actor.role),
     types: state.leaveTypes.filter(t => t.paid && t.affectsPayroll !== false && t.accrual !== 'none').map(t => {
       const m = entries.find(x => x.typeId === t.id && x.effectiveYear === year), b = leaveBalance({ ...state, employeeProfiles: [{ employeeId: id, section: 'leave', entitlements: entries }] }, e, t, asOf);
-      return { typeId: t.id, name: t.name, policyDays: t.entitledDays, eligible: e.leaveEligibility.includes(t.id), manualCredits: m?.manualCredits ?? null, usedBefore: m?.usedBefore || 0, ...b };
+      // Approved leave of this type in the year (the dates behind "Used in the system").
+      const taken = state.leaves.filter(l => l.employeeId === id && l.typeId === t.id && l.status === 'approved').map(l => ({ startDate: l.startDate, endDate: l.endDate, startTime: l.startTime || '', endTime: l.endTime || '', half: (l.partialDates || []).length > 0, reason: l.reason || '', days: (l.countedDates || []).filter(d => d.startsWith(`${year}-`)).reduce((n, d) => n + leaveFraction(l, d), 0) })).filter(x => x.days > 0).sort((a, b) => a.startDate.localeCompare(b.startDate));
+      return { typeId: t.id, name: t.name, policyDays: t.entitledDays, eligible: e.leaveEligibility.includes(t.id), manualCredits: m?.manualCredits ?? null, usedBefore: m?.usedBefore || 0, ...b, taken };
     }),
   };
 }
