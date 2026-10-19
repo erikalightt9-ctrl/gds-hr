@@ -212,7 +212,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const employed = days.filter(d => d >= e.startDate && (!e.endDate || d <= e.endDate));
     const scheduled = employed.filter(d => !isRest(e, d));
     const baseline = dailyPaid || perDayWorked ? round(daily * scheduled.length) : round(e.monthlySalary * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
-    const earnings = { basic: baseline, regularOT: 0, restDay: 0, restOT: 0, nsd: 0, specialHoliday: 0, specialOT: 0, regularHoliday: 0, regularHolidayOT: 0, otherHoliday: 0, otherOT: 0, allowance: 0, additional: 0, thirteenth: 0 };
+    const earnings = { basic: baseline, leavePay: 0, regularOT: 0, restDay: 0, restOT: 0, nsd: 0, specialHoliday: 0, specialOT: 0, regularHoliday: 0, regularHolidayOT: 0, otherHoliday: 0, otherOT: 0, allowance: 0, additional: 0, thirteenth: 0 };
     const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, sssLoan: 0, pagibigLoan: 0, salaryDeduction: 0, other: 0 };
     const trace = [], late = [], leaveNotes = [], loanDeductions = [], workBreakdown = [];
     let holidayBase = 0, excludedLeave = 0, additionalBasic = 0, daysPresent = 0, leaveDays = 0;
@@ -245,6 +245,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         const type = state.leaveTypes.find(t => t.id === leave.typeId), normal = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
         leaveDays += 0.5; presentOrLeave.add(d); leaveNotes.push(`${d}: ${type?.name || leave.typeId} (half day${leave.startTime ? ` ${leave.startTime}-${leave.endTime}` : ''})`);
         if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', daily / 2, `${daily} × 0.5 unpaid half-day leave`, leave, d);
+        else if (type?.paid) { add(earnings, 'basic', -daily / 2, `${daily} × 0.5 day moved to leave pay`, leave, d); add(earnings, 'leavePay', daily / 2, `Approved ${type.name} (half day): 0.5 day × ${daily}`, leave, d); }
         else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId} (half day); salary already included in cutoff basic`, leave, d);
         if (type?.paid && !type.includedIn13th) excludedLeave += daily / 2;
         leaveCoverMinutes = normal * 30;
@@ -256,6 +257,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         const type = state.leaveTypes.find(t => t.id === leave.typeId);
         leaveDays++; presentOrLeave.add(d); leaveNotes.push(`${d}: ${type?.name || leave.typeId}`);
         if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', daily, `${daily} × 1 unpaid leave day`, leave, d);
+        // Paid leave is shown on its own line (Leave pay), taken out of basic pay; the total is unchanged.
+        else if (type?.paid) { add(earnings, 'basic', -daily, `${daily} × 1 day moved to leave pay`, leave, d); add(earnings, 'leavePay', daily, `Approved ${type.name}: 1 day × ${daily}`, leave, d); }
         else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId}; salary already included in cutoff basic`, leave, d);
         if (type?.paid && !type.includedIn13th) excludedLeave += daily;
         if (record?.status === 'present') blockers.push(`${prefix}: attendance conflicts with leave on ${d}.`);

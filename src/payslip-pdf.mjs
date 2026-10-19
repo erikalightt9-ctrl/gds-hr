@@ -96,6 +96,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   p.text('PARTICULARS', LEFT + 10, y - 14, { size: 9, bold: true }); p.text('DAYS / HOURS', (C1 + C3) / 2, y - 14, { size: 9, bold: true, align: 'center' }); p.text('AMOUNT', RIGHT - 12, y - 14, { size: 9, bold: true, align: 'right' }); y -= 20;
   const rows = [
     ['Days worked (regular)', slip.creditedDays ?? slip.daysPresent, 'DAY', e.basic],
+    ...(e.leavePay ? [['Leave pay', '', '', e.leavePay]] : []),
     ['Overtime', hrs(hours.regularOT), 'HRS', e.regularOT],
     ['Rest day / RDOT', hrs((hours.restDay || 0) + (hours.restOT || 0)), 'HRS', (e.restDay || 0) + (e.restOT || 0)],
     ['Night differential', hrs(hours.nsd), 'HRS', e.nsd],

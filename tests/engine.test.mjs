@@ -226,3 +226,13 @@ test('paid per day worked: daily rate × days worked, a rest day worked is a pla
   assert.equal(row.earnings.restDay || 0, 0, 'no rest-day premium');
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').blockers.filter(b => /Missing attendance/.test(b)).length, 0);
 });
+
+test('paid leave is shown as Leave pay, taken out of basic pay; gross is unchanged', () => {
+  const s = fixture(); withOtherDays(s); s.attendance = s.attendance.filter(a => a.date !== '2026-09-02');
+  const before = s.attendance.length;
+  s.leaves = [{ id: 'v1', employeeId: 'EMP-001', typeId: 'vacation', startDate: '2026-09-02', endDate: '2026-09-02', days: 1, countedDates: ['2026-09-02'], reason: 'VL', documentReference: '', status: 'approved', eligibilityVerified: true }];
+  const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0], daily = 30000 / 22;
+  assert.equal(before, 10);
+  assert.equal(row.earnings.leavePay, Math.round(daily * 100) / 100);
+  assert.equal(Math.round((row.earnings.basic + row.earnings.leavePay) * 100) / 100, 15000, 'basic + leave pay = the full cutoff salary');
+});

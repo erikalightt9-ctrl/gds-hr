@@ -3,7 +3,7 @@
 // Uses the run's own saved trace, rates and rules version, so posted payroll is never recalculated.
 const LABELS = {
   basic: 'Basic Pay', regularOT: 'Regular Overtime', restDay: 'Rest Day Pay', restOT: 'Rest Day Overtime', nsd: 'Night Differential',
-  specialHoliday: 'Special Holiday Pay', specialOT: 'Special Holiday Overtime', regularHoliday: 'Regular Holiday Pay', regularHolidayOT: 'Regular Holiday Overtime',
+  leavePay: 'Leave Pay', specialHoliday: 'Special Holiday Pay', specialOT: 'Special Holiday Overtime', regularHoliday: 'Regular Holiday Pay', regularHolidayOT: 'Regular Holiday Overtime',
   otherHoliday: 'Other Holiday Pay', otherOT: 'Other Holiday Overtime', allowance: 'Allowance', additional: 'Additional Pay', thirteenth: '13th Month Pay',
   undertime: 'Undertime Deduction', absence: 'Absence / Unpaid Leave Deduction', SSS: 'SSS Contribution', PhilHealth: 'PhilHealth Contribution', 'Pag-IBIG': 'Pag-IBIG Contribution',
   tax: 'Withholding Tax', loans: 'Loan Deductions', other: 'Other Deductions',
