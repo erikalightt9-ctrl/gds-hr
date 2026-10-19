@@ -336,7 +336,7 @@ function proofReviewCell(l) {
   const uploaded = /^[0-9a-f-]{36}$/.test(l.documentReference || '');
   const view = uploaded && l.proofStatus !== 'required' ? `<a class="small" href="/api/documents/${esc(l.documentReference)}/content" target="_blank" rel="noopener">View proof</a>` : '';
   const review = l.proofStatus === 'submitted' && canEdit('leaves') ? `<span class="proof-actions"><button class="small primary" data-proof-review="${esc(l.id)}" data-decision="verified">Confirm</button><button class="small danger" data-proof-review="${esc(l.id)}" data-decision="rejected">Reject</button></span>` : '';
-  const by = l.proofReviewedBy && ['verified', 'rejected'].includes(l.proofStatus) ? `<small>by ${esc(l.proofReviewedBy)}${l.proofNote ? ` · ${esc(l.proofNote)}` : ''}</small>` : '';
+  const by = l.proofStatus === 'rejected' && l.proofNote ? `<small>${esc(l.proofNote)}</small>` : '';
   return `${badge(label, tone)} ${view}${by}${review}`;
 }
 function leavePage() {
