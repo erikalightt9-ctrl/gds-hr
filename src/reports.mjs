@@ -195,7 +195,7 @@ export function payrollRunPdf(run) {
   const peso = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const headers = ['Employee\nID', 'Name', 'Days\ncredited', 'Basic', 'Overtime', 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', 'Undertime', 'Loans', 'Other', 'Total\ndeductions', 'Net\nsalary'];
   const premiums = e => Object.entries(e).filter(([k]) => !['basic', 'thirteenth', 'additional', 'allowance'].includes(k)).reduce((s, [, v]) => s + v, 0);
-  const loans = d => (d.loans || 0) + (d.sssLoan || 0) + (d.pagibigLoan || 0), other = d => (d.other || 0) + (d.salaryDeduction || 0) + (d.absence || 0);
+  const loans = d => (d.loans || 0) + (d.sssLoan || 0) + (d.pagibigLoan || 0) + (d.salaryDeduction || 0), other = d => (d.other || 0) + (d.absence || 0);
   const values = r => [r.earnings.basic, premiums(r.earnings), r.gross, r.deductions.SSS, r.deductions.PhilHealth, r.deductions['Pag-IBIG'], r.deductions.tax, r.deductions.undertime, loans(r.deductions), other(r.deductions), r.totalDeductions, r.net];
   const sorted = run.rows.slice().sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' }));
   const rows = sorted.map(r => [r.employeeId, r.employeeName, Number(r.creditedDays ?? r.daysPresent).toLocaleString('en-US', { maximumFractionDigits: 4 }), ...values(r).map(peso)]);
