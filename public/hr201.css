@@ -1558,3 +1558,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ml-photo-pen { position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #8f1420; color: #fff; border: 2px solid #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .ml-photo-pen:hover { background: #b51f2b; }
 .ml-photo-pen .ml-ico { width: 15px; height: 15px; color: #fff; }
+.ml-photo-pen { width: 22px; height: 22px; right: 4px; bottom: 4px; border-width: 1.5px; }
+.ml-photo-pen .ml-ico { width: 11px; height: 11px; }
