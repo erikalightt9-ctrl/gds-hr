@@ -230,7 +230,7 @@ export function createFiles(ctx) {
         + block('✔️', 'Pay coverage', dl([['Overtime', c.coveredOT ? 'Covered' : 'Not covered'], ['Night differential', c.coveredNSD ? 'Covered' : 'Not covered'], ['Holiday pay', c.coveredHoliday ? 'Covered' : 'Not covered'], ['13th month pay', c.covered13th ? 'Covered' : 'Not covered'], ['Withholding tax', c.withholdingTax === 'exempt' ? 'Exempt (no withholding tax)' : 'Withheld per tax table']]), extras.canEditPay ? ' <button class="small" data-edit-pay>Edit coverage</button>' : '')
         // Loans (Employee loans) and company deductions in one list: both are taken from payroll.
         + block('➖', 'Loans & deductions', table(['Deduction', 'Amount', 'When', 'Balance'], [
-          ...((extras.loans?.loans || []).filter(l => l.status === 'Active').map(l => [`${esc(l.type)} <small>loan</small>`, ctx.money(l.perPayroll), { first: '1st–15th cutoff', second: '16th–end cutoff' }[l.deductOn] || 'Every cutoff', ctx.money(l.outstanding)])),
+          ...((extras.loans?.loans || []).filter(l => l.status === 'Active').map(l => [esc(l.type), ctx.money(l.perPayroll), { first: '1st–15th cutoff', second: '16th–end cutoff' }[l.deductOn] || 'Every cutoff', ctx.money(l.outstanding)])),
           ...c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule), '—'])], 'No loans or company deductions.'), ctx.legacy() ? ' <button class="small" data-go-loans>Record a loan</button> <button class="small" data-go-deductions>Manage deductions</button>' : '')
         + (ctx.legacy() ? `<p class="legend">Salary, schedule and contributions are edited under <button class="link-button" data-legacy-profile="${esc(record.id)}">Attendance, leave &amp; pay</button>.</p>` : '');
     }
