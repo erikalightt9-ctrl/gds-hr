@@ -3,7 +3,7 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who } from './hr-common.js';
 
 const PAGE_SIZE = 10;
-const TABS = [['overview', 'Overview', '📊'], ['personal', 'Personal', '👤'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['loans', 'Loans', '💳'], ['government', 'Government IDs', '🪪'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Requirements & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅'], ['activity', 'Activity', '↺']];
+const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['loans', 'Loans', '💳'], ['government', 'Government IDs', '🪪'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Requirements & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅'], ['activity', 'Activity', '↺']];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
 function serviceLength(start, today) {
@@ -70,10 +70,10 @@ export function createFiles(ctx) {
     const link = (ic, label, tabId) => `<button class="ml-link" data-open="${esc(p.id)}" data-start-tab="${tabId}">${svg(ic)}<span>${esc(label)}</span>${svg('chevron', 'ml-chev')}</button>`;
     return `<aside class="ml-preview"><h2>Employee profile</h2>
       <div class="ml-pv-head">${avatar(p, 'ml-avatar-lg')}<div><strong class="ml-pv-name">${esc(personName(p.name))}</strong><span>${esc(p.position || '—')}</span><span>${esc(p.number)}</span>${pill(p)}</div>${can().manage ? `<span class="ml-pv-actions"><button class="ml-btn" data-edit-emp="${esc(p.id)}">${svg('pen')}Edit profile</button><label class="ml-btn ml-photo-btn">📷 Change photo<input type="file" accept="image/png,image/jpeg" data-ml-photo="${esc(p.id)}" hidden></label></span>` : ''}</div>
-      <nav class="ml-tabs">${[['overview', 'Overview'], ['employment', 'Employment'], ['requirements', 'Documents'], ['personal', 'More']].map(([id, label], i) => `<button class="${i === 0 ? 'active' : ''}" data-open="${esc(p.id)}" data-start-tab="${id}">${label}</button>`).join('')}</nav>
+      <nav class="ml-tabs">${[['overview', 'Overview'], ['employment', 'Employment'], ['requirements', 'Documents'], ['overview', 'More']].map(([id, label], i) => `<button class="${i === 0 ? 'active' : ''}" data-open="${esc(p.id)}" data-start-tab="${id}">${label}</button>`).join('')}</nav>
       <section class="ml-block"><h3>Work information</h3><div class="ml-grid">${info('building', 'Subsidiary', p.department)}${info('bag', 'Position', p.position)}${info('calendar', 'Date hired', p.dateHired ? fmtDate(p.dateHired) : '')}${info('doc', 'Employment type', p.employmentType || p.classification)}${info('pin', 'Office location', p.workLocation)}${info('people', 'Reporting manager', p.supervisor)}</div></section>
       <section class="ml-block"><h3>Contact information</h3><div class="ml-grid">${info('mail', 'Work email', p.workEmail)}${info('phone', 'Work phone', p.mobile)}</div></section>
-      <div class="ml-links">${link('user', 'Personal information', 'personal')}${link('people', 'Emergency contacts', 'personal')}${link('calendar', 'Leave & attendance', 'leave')}</div></aside>`;
+      <div class="ml-links">${link('user', 'Personal information', 'overview')}${link('people', 'Emergency contacts', 'overview')}${link('calendar', 'Leave & attendance', 'leave')}</div></aside>`;
   }
   function directoryHtml() {
     const list = filtered(), size = PAGE_SIZE, pages = Math.max(1, Math.ceil(list.length / size)); pageNo = Math.min(pageNo, pages);
@@ -89,7 +89,7 @@ export function createFiles(ctx) {
           <select data-f="department" aria-label="Subsidiary">${options(people.map(p => p.department), query.department, 'Subsidiary')}</select>
           <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
         <div class="ml-table-wrap"><table class="ml-table"><thead><tr><th>Employee</th><th>Subsidiary / Position</th><th>Status</th><th>Date hired</th></tr></thead><tbody>
-          ${rows.map(p => `<tr class="${p.id === selectedId ? 'selected' : ''}" data-ml-row="${esc(p.id)}"><td><div class="ml-emp">${avatar(p)}<span><button class="ml-name" data-open="${esc(p.id)}" data-start-tab="personal" title="Open personal information">${esc(personName(p.name))}</button><small>${esc(p.number)}</small></span></div></td><td><span class="ml-two"><strong>${esc(p.department || '—')}</strong><small>${esc(p.position || '—')}</small></span></td><td>${pill(p)}</td><td>${p.dateHired ? fmtDate(p.dateHired) : '—'}</td></tr>`).join('') || `<tr><td colspan="4" class="empty">${query.q || query.department || query.status ? 'No employees match these filters.' : 'No employees yet.'}</td></tr>`}
+          ${rows.map(p => `<tr class="${p.id === selectedId ? 'selected' : ''}" data-ml-row="${esc(p.id)}"><td><div class="ml-emp">${avatar(p)}<span><button class="ml-name" data-open="${esc(p.id)}" data-start-tab="overview" title="Open personal information">${esc(personName(p.name))}</button><small>${esc(p.number)}</small></span></div></td><td><span class="ml-two"><strong>${esc(p.department || '—')}</strong><small>${esc(p.position || '—')}</small></span></td><td>${pill(p)}</td><td>${p.dateHired ? fmtDate(p.dateHired) : '—'}</td></tr>`).join('') || `<tr><td colspan="4" class="empty">${query.q || query.department || query.status ? 'No employees match these filters.' : 'No employees yet.'}</td></tr>`}
         </tbody></table></div>
         <div class="ml-pager"><span>Showing ${from}–${to} of ${list.length} employee${list.length === 1 ? '' : 's'}</span><span class="ml-pages"><button data-page="${pageNo - 1}" ${pageNo === 1 ? 'disabled' : ''} aria-label="Previous page">${svg('left')}</button>${Array.from({ length: pages }, (_, i) => `<button data-page="${i + 1}" class="${i + 1 === pageNo ? 'active' : ''}">${i + 1}</button>`).join('')}<button data-page="${pageNo + 1}" ${pageNo === pages ? 'disabled' : ''} aria-label="Next page">${svg('chevron')}</button></span></div>
       </section>${previewHtml(people.find(p => p.id === selectedId))}</div>`;
@@ -217,14 +217,12 @@ export function createFiles(ctx) {
       const stat = (icon, label, value, sub, percent = null) => `<div class="overview-stat"><span><span aria-hidden="true">${icon}</span> ${esc(label)}</span><strong>${value}</strong><small>${esc(sub)}</small>${percent === null ? '' : `<span class="hr-progress full"><span class="hr-progress-bar w${Math.round(percent / 5) * 5}"></span></span>`}</div>`;
       const outstanding = checklist.items.filter(i => i.requirement.required && !['Verified', 'Not Applicable'].includes(i.status));
       return `<div class="overview-stats">${stat('✅', 'Requirements', `${checklist.completeCount} / ${checklist.requiredCount}`, 'Complete', checklist.percent)}${stat('📁', 'Documents', docs, 'Total files')}${stat('🏅', 'Trainings', `${trainingsDone} / ${extra.trainings.length}`, 'Complete', extra.trainings.length ? Math.round(trainingsDone / extra.trainings.length * 100) : 0)}${stat('📝', 'Memos', extra.memos.length, `${acked} acknowledged`)}</div>
-        ${sectionCard('👤', 'Personal Information', boxes(personalRows(f)))}
-        ${sectionCard('📞', 'Emergency Contact', boxes(emergencyRows(f)))}
+        ${sectionCard('👤', 'Personal Information', boxes(personalRows(f)), formBtn('personal', edit))}
+        ${sectionCard('📞', 'Emergency Contact', boxes(emergencyRows(f)), formBtn('emergency', edit))}
         ${block('💼', 'Employment information', dl(employmentRows(record)))}
         ${scheduleCard(record)}
-        <p class="legend">Overview is read-only. To change details, open the Personal, Employment or other tabs.</p>
         ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
-    if (tab === 'personal') return sectionCard('👤', 'Personal Information', boxes(personalRows(f)), formBtn('personal', edit)) + sectionCard('📞', 'Emergency Contact', boxes(emergencyRows(f)), formBtn('emergency', edit));
     if (tab === 'employment') return block('💼', 'Employment information', dl(employmentRows(record)), formBtn('employment', edit)) + '<p class="legend">Active / inactive status and employment classification are separate. Probation and review dates are reminders only; the system never changes status by itself.</p>';
     if (tab === 'compensation') {
       const c = extras.compensation, daily = c.basis === 'daily';
