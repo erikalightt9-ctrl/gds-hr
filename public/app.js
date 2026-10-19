@@ -429,7 +429,7 @@ function loansPage() { return heading('Employee loans', 'Scheduled deductions, c
 const SCHEDULE_LABEL = Object.fromEntries([['every-cutoff', 'Every payroll cutoff'], ['second-cutoff', 'Once a month, 2nd cutoff (16th-end)'], ['first-cutoff', 'Once a month, 1st cutoff (1st-15th)'], ['once', 'One time only, in the cutoff of the start date']]);
 // Company deductions: free-form, set by HR/Admin, applied automatically by payroll on their schedule.
 function deductionsPage() {
-  return heading('Loans & Deductions', '', addButton('deductions', 'Add deduction')) + deductionsSection();
+  return heading('Loans & Deductions', '') + deductionsSection();
 }
 // Deductions, shown on the Loans & Deductions page under the loans.
 function deductionsSection() {
