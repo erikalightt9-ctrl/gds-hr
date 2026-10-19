@@ -37,7 +37,8 @@ export function monthSheet({ state, esc, today, month, search = '' }) {
   const grid = people.map(e => ({ e, days: dates.map(d => dayStatus(state, e, d, today, since)) }));
   const isWeekend = d => [0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay());
   const holiday = d => (state.holidays || []).find(h => h.date === d && h.kind !== 'ordinary');
-  const workDays = dates.filter(d => !isWeekend(d) && !holiday(d)).length;
+  // Work days per month are fixed by the payroll rules (26 for every month), as on the payroll screen.
+  const workDays = (state.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.dailyDivisor ?? 26;
   const counted = s => ['present', 'late', 'open'].includes(s);
   const rows = grid.map(({ e, days }) => {
     const present = days.filter(counted).length, absent = days.filter(s => s === 'absent').length, leave = days.filter(s => s === 'leave').length;
