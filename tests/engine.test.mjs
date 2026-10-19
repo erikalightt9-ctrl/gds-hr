@@ -216,3 +216,13 @@ test('a loan set to the 1st-15th cutoff is deducted only there; every-cutoff loa
   assert.equal(run('2026-09-16', '2026-09-30', loan('second')), 1000);
   assert.equal(run('2026-09-16', '2026-09-30', loan('every')), 1000);
 });
+
+test('paid per day worked: daily rate × days worked, a rest day worked is a plain day, days not worked are not blockers', () => {
+  const s = fixture();
+  s.employeeProfiles = [{ employeeId: 'EMP-001', section: 'payroll', basis: 'days-worked', dailyRate: null, hourlyRate: null, frequency: '', schedule: '', status: 'Active', withholdingTax: 'exempt' }];
+  s.attendance = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-05'].map(d => attend(d));   // Sep 5 is a Saturday rest day
+  const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0], daily = 30000 / 22;
+  assert.ok(Math.abs(row.earnings.basic - daily * 4) < 0.05, '4 days worked × daily rate (per-day rounding)');
+  assert.equal(row.earnings.restDay || 0, 0, 'no rest-day premium');
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').blockers.filter(b => /Missing attendance/.test(b)).length, 0);
+});

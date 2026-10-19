@@ -201,6 +201,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     if (state.runs.some(run => run.status === 'posted' && run.start > end && run.rows.some(row => row.employeeId === e.id))) blockers.push(`${prefix}: payroll must be posted chronologically; a later cutoff has already been posted.`);
     // Daily-paid staff earn their daily rate per scheduled workday; absences then deduct whole days.
     const dailyPaid = payrollProfile?.basis === 'daily';
+    // Paid per day worked: monthly salary ÷ the rules divisor (26) × days actually worked. A rest day worked is one more
+    // day at the plain daily rate (no rest-day premium); a scheduled day not worked is simply not paid (not a blocker).
+    const perDayWorked = payrollProfile?.basis === 'days-worked';
     if (dailyPaid && !payrollProfile.dailyRate) blockers.push(`${prefix}: daily-paid employees need a daily rate in their payroll profile.`);
     // Hourly rate follows the employee's own scheduled hours (a 12-hour driver: daily ÷ 12), else the rules divisor.
     const scheduledHours = attendanceProfile?.hoursPerDay || r.hourlyDivisor;
@@ -208,7 +211,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const allScheduled = days.filter(d => !isRest(e, d));
     const employed = days.filter(d => d >= e.startDate && (!e.endDate || d <= e.endDate));
     const scheduled = employed.filter(d => !isRest(e, d));
-    const baseline = dailyPaid ? round(daily * scheduled.length) : round(e.monthlySalary * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
+    const baseline = dailyPaid || perDayWorked ? round(daily * scheduled.length) : round(e.monthlySalary * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
     const earnings = { basic: baseline, regularOT: 0, restDay: 0, restOT: 0, nsd: 0, specialHoliday: 0, specialOT: 0, regularHoliday: 0, regularHolidayOT: 0, otherHoliday: 0, otherOT: 0, allowance: 0, additional: 0, thirteenth: 0 };
     const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, sssLoan: 0, pagibigLoan: 0, salaryDeduction: 0, other: 0 };
     const trace = [], late = [], leaveNotes = [], loanDeductions = [], workBreakdown = [];
@@ -220,7 +223,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       side[component] = round(side[component] + rounded);
       trace.push({ component, side: side === earnings ? 'earnings' : 'deductions', amount: rounded, formula, sourceId: source?.id || r.id, sourceKind: source?.sourceKind || (source?.timeIn !== undefined ? 'attendance' : source?.typeId ? 'leaves' : source?.kind ? 'adjustments' : 'rules'), date, quantity, multiplier });
     };
-    trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid ? `${daily} × ${scheduled.length} scheduled workdays (daily-paid)` : `${e.monthlySalary} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
+    trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid || perDayWorked ? `${daily} × ${scheduled.length} scheduled workdays (${dailyPaid ? 'daily-paid' : 'paid per day worked; days not worked are taken off below'})` : `${e.monthlySalary} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
     // Manual entry for exactly this cutoff: "replace" skips attendance; "add" pays the typed hours on top of it.
     const manual = (state.payrollInputs || []).find(i => i.employeeId === e.id && i.start === start && i.end === end) || null;
     for (const d of manual?.mode === 'replace' ? [] : employed) {
@@ -259,7 +262,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         continue;
       }
       if (!record) {
-        if (!rest || kind !== 'rest') blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
+        if ((!rest || kind !== 'rest') && !perDayWorked) blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
         // No attendance on a scheduled workday: the day is not credited (no pay) until attendance or a leave is recorded.
         if (!rest && kind === 'ordinary') add(deductions, 'absence', daily, `${daily} × 1 day with no attendance record (not credited)`, null, d);
         continue;
@@ -280,6 +283,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         continue;
       }
       daysPresent++; presentOrLeave.add(d);
+      if (perDayWorked && rest) add(earnings, 'basic', daily, `Rest day worked: 1 day × ${daily} (paid per day worked, no rest-day premium)`, record, d);
       const daySched = scheduleOn(e, attendanceProfile, d, r), normalHours = daySched.hoursPerDay, flexible = daySched.flexible;
       const startMinute = stamp(`${d}T${record.timeIn}`), scheduledMinute = flexible ? startMinute : stamp(`${d}T${leaveShiftStart || record.scheduledIn}`);
       // Company policy option: time before the scheduled start is not paid, so overtime only accrues after the scheduled end.
@@ -309,7 +313,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       if (separateOT && e.coveredOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime filings before posting.`);
       let unfiledMinutes = 0;
       minutes.forEach((m, index) => {
-        const date = new Date(m).toISOString().slice(0, 10), c = classification(state, e, date);
+        const date = new Date(m).toISOString().slice(0, 10), c0 = classification(state, e, date), c = perDayWorked && c0 === 'rest' ? 'ordinary' : c0;
         const ot = !flexible && index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
         if (ot && separateOT && e.coveredOT && index - normalHours * 60 >= approvedOTMinutes) { unfiledMinutes++; return; }
         const key = `${date}/${c}/${ot}/${night}`;
@@ -320,7 +324,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         const mult = dayRate(g.c, r), overtime = g.c === 'ordinary' ? r.ordinaryOT : r.premiumOT;
         const fullRate = mult * (g.ot ? overtime : 1), hours = g.count / 60;
         let component = g.c.startsWith('special') ? (g.ot ? 'specialOT' : 'specialHoliday') : g.c.startsWith('regular') || g.c.startsWith('double') ? (g.ot ? 'regularHolidayOT' : 'regularHoliday') : g.c.startsWith('other') ? (g.ot ? 'otherOT' : 'otherHoliday') : g.c === 'rest' ? (g.ot ? 'restOT' : 'restDay') : g.ot ? 'regularOT' : 'basic';
-        const credit = !g.ot && !rest ? 1 : 0;
+        const credit = !g.ot && (!rest || perDayWorked) ? 1 : 0;
         // Exempt employees require an explicit approved additional-pay entry for OT.
         if (g.ot && !e.coveredOT) continue;
         if (!g.ot && component !== 'basic' && !rest) holidayBase += g.c === 'rest' ? 0 : hours * hourly;
