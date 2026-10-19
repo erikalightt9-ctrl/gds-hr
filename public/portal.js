@@ -290,7 +290,7 @@ export function createPortal(ctx) {
     };
     // The street address is looked up automatically (saved after the first lookup of each punch).
     const box = dialog.querySelector('#location-address'); box.textContent = 'Finding the address…';
-    api(`/location-address/${event.id}`, {}).then(result => { if (box.isConnected) box.textContent = result.address ? `📍 ${result.address}` : result.message; }).catch(error => { if (box.isConnected) box.textContent = error.message; });
+    api(`/location-address/${event.id}`, {}).then(result => { if (box.isConnected) box.textContent = result.address ? `📍 ${result.address}${result.office ? ` (office · ${result.via})` : ''}` : result.message; }).catch(error => { if (box.isConnected) box.textContent = error.message; });
   }
   // countsOnly: just the heading and today's counts (HR dashboard); each count opens the Live Attendance page.
   // Live attendance: count cards (click to filter), search + status / location filters, and one row per employee

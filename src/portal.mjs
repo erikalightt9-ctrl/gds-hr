@@ -310,9 +310,16 @@ export function correctClock(store, actor, input) {
   return saved;
   });
 }
+const distanceMeters = (lat1, lon1, lat2, lon2) => { const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(a)); };
 export async function locationAddress(store, actor, eventId, provider = process.env.HR_GEOCODING_URL) {
   const row = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(eventId);
   if (!row || (actor.role === 'employee' ? row.employee_id !== actor.employeeId : !['admin', 'hr'].includes(actor.role))) throw new AppError('Location not found.', 404);
+  // A punch on the office Wi-Fi, or within the office radius, is shown with the office address (Settings -> Company).
+  const event0 = JSON.parse(row.data), company = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').company || {}; } catch { return {}; } })();
+  if (company.officeAddress) {
+    const near = company.officeLatitude !== null && company.officeLatitude !== undefined && event0.latitude !== null && distanceMeters(event0.latitude, event0.longitude, company.officeLatitude, company.officeLongitude) <= (company.officeRadius || 150);
+    if (event0.onOfficeNetwork || near) return { address: company.officeAddress, office: true, via: event0.onOfficeNetwork ? 'office Wi-Fi' : 'office location' };
+  }
   const cached = store.db.prepare('SELECT address,fetched_at AS fetchedAt FROM location_addresses WHERE event_id=?').get(eventId);
   if (cached) return cached;
   if (!provider) return { address: null, message: 'Reverse geocoding is not configured. Coordinates and the approved workplace are available.' };
