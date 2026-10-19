@@ -3,7 +3,7 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who } from './hr-common.js';
 
 const PAGE_SIZE = 10;
-const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['loans', 'Loans', '💳'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
+const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['history', 'Employment History', '🕘'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
 function serviceLength(start, today) {
@@ -161,7 +161,7 @@ export function createFiles(ctx) {
     extras.loans = await api('/loans/dashboard').then(d => ({ loans: d.loans.filter(l => l.employeeId === id), applications: d.applications.filter(a => a.employeeId === id) })).catch(() => null);
     if (profileId !== id) return;
     const f = record.form, legacy = ctx.legacy(), today = ctx.today();
-    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (key !== 'loans' || extras.loans) && (!['family', 'education', 'history'].includes(key) || extras.family));
+    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (!['family', 'education', 'history'].includes(key) || extras.family));
     if (!tabs.some(([key]) => key === tab)) tab = 'overview';
     const header = `<section class="panel hr-profile-head"><div class="hr-profile-id"><span class="hr-avatar large"><img src="/api/hr/employees/${enc}/photo" alt="" data-photo>${esc(initials(record.name))}</span><div><h1>${esc(record.name)}</h1><p class="sub">${esc(record.number)} · ${esc(f.employment.position || 'No position')} · ${esc(f.employment.department || 'No department')}</p><p>${statusBadge(record.archived ? 'Archived' : record.activity)} ${f.employment.classification ? badge(f.employment.classification, 'neutral') : ''} ${record.draft ? badge('Pay setup incomplete', 'pending') : ''}</p></div></div>
       <div class="actions"><button class="small" data-back>← All employees</button>${record.canEdit && !record.archived ? '<button class="small primary" data-edit-self>Edit record</button>' : ''}${can().approve ? (record.archived ? `<button class="small" data-restore="${esc(id)}">Restore</button>` : `<button class="small ghost-danger" data-archive="${esc(id)}">Archive</button>`) : ''}${legacy ? `<button class="small" data-legacy-profile="${esc(id)}">Attendance, leave &amp; pay →</button>` : ''}</div></section>`;
@@ -224,14 +224,20 @@ export function createFiles(ctx) {
         ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
     if (tab === 'employment') return block('💼', 'Employment information', dl(employmentRows(record)), formBtn('employment', edit)) + '<p class="legend">Active / inactive status and employment classification are separate. Probation and review dates are reminders only; the system never changes status by itself.</p>';
-    if (tab === 'compensation') {
+    const loansHtml = () => {
+      const L = extras.loans;
+      const rows = L.loans.map(l => [esc(l.type), l.loanDate ? fmtDate(l.loanDate) : '—', ctx.money(l.original), ctx.money(l.perPayroll), ctx.money(l.totalRepaid), `<strong>${ctx.money(l.outstanding)}</strong>`, l.nextDeduction ? fmtDate(l.nextDeduction) : '—', esc(l.status)]);
+      const paid = L.loans.flatMap(l => (l.history || []).map(h => ({ ...h, type: l.type, reference: l.reference }))).sort((a, b) => String(b.end || b.date || '').localeCompare(String(a.end || a.date || '')));
+      return block('💳', 'Loans', `${table(['Loan', 'Loan date', 'Original', 'Per payroll', 'Repaid', 'Outstanding', 'Next deduction', 'Status'], rows)}`)
+        + (paid.length ? block('🧾', 'Payment history', table(['Date / cutoff', 'Loan', 'Amount', 'Balance after'], paid.map(h => [esc(h.prior ? fmtDate(h.end) : h.start && h.end ? `${fmtDate(h.start)} – ${fmtDate(h.end)}` : fmtDate(h.end || h.date || '')), esc(h.type), ctx.money(h.amount ?? (h.principal || 0) + (h.interest || 0)), ctx.money(h.balanceAfter ?? h.remainingBalance ?? 0)]))) : '')
+        + (L.applications.length ? block('📝', 'Loan applications', table(['Type', 'Requested', 'Months', 'Applied', 'Status'], L.applications.map(a => [esc(a.type), ctx.money(a.amount), a.months, fmtDate(a.appliedAt), esc(a.status)]))) : '');
+    };
+    if (tab === 'compensation' || tab === 'loans') {
       const c = extras.compensation, daily = c.basis === 'daily';
       return block('💰', 'Pay', dl([['Pay basis', daily ? 'Daily-paid' : c.basis === 'days-worked' ? 'Per day worked (monthly ÷ 26 × days worked)' : 'Monthly'], [daily ? 'Daily rate' : 'Monthly salary', ctx.money(daily ? c.dailyRate : c.monthlySalary)], ...(daily ? [['Monthly equivalent', ctx.money(c.monthlySalary)]] : [['Daily rate', c.dailyRate === null ? 'From company divisor' : ctx.money(c.dailyRate)]]), ['Payroll frequency', c.frequency || 'Company default'], ['Payroll status', c.status]]), extras.canEditPay ? ' <button class="small" data-edit-pay>Edit pay</button>' : '')
         + block('✔️', 'Pay coverage', dl([['Overtime', c.coveredOT ? 'Covered' : 'Not covered'], ['Night differential', c.coveredNSD ? 'Covered' : 'Not covered'], ['Holiday pay', c.coveredHoliday ? 'Covered' : 'Not covered'], ['13th month pay', c.covered13th ? 'Covered' : 'Not covered'], ['Withholding tax', c.withholdingTax === 'exempt' ? 'Exempt (no withholding tax)' : 'Withheld per tax table']]), extras.canEditPay ? ' <button class="small" data-edit-pay>Edit coverage</button>' : '')
-        // Loans (Employee loans) and company deductions in one list: both are taken from payroll.
-        + block('➖', 'Loans & deductions', table(['Deduction', 'Amount', 'When', 'Balance'], [
-          ...((extras.loans?.loans || []).filter(l => l.status === 'Active').map(l => [esc(l.type), ctx.money(l.perPayroll), { first: '1st–15th cutoff', second: '16th–end cutoff' }[l.deductOn] || 'Every cutoff', ctx.money(l.outstanding)])),
-          ...c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule), '—'])], 'No loans or company deductions.'), ctx.legacy() ? ' <button class="small" data-go-loans>Record a loan</button> <button class="small" data-go-deductions>Manage deductions</button>' : '')
+        + block('➖', 'Company deductions', table(['Deduction', 'Amount', 'When'], c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule)]), 'No company deductions.'), ctx.legacy() ? ' <button class="small" data-go-deductions>Manage deductions</button>' : '')
+        + (extras.loans ? loansHtml() : '')
         + (ctx.legacy() ? `<p class="legend">Salary, schedule and contributions are edited under <button class="link-button" data-legacy-profile="${esc(record.id)}">Attendance, leave &amp; pay</button>.</p>` : '');
     }
     const governmentIds = () => block('🪪', 'Government IDs', dl([['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]), formBtn('government', edit && record.sensitiveIds && ctx.context().can.approve)) + `<p class="legend">${record.sensitiveIds ? 'Shown in full to authorised roles only. HR Managers and Administrators can edit them.' : 'Masked for your role.'}</p>`;
@@ -250,14 +256,6 @@ export function createFiles(ctx) {
     if (tab === 'requirements' || tab === 'documents' || tab === 'government') {
       const files = checklist.items.flatMap(i => i.versions.map(v => ({ ...v, current: i.current?.id === v.id })));
       return governmentIds() + documentsTab(record, checklist) + (files.length ? block('📁', 'All 201 files', table(['File', 'Requirement', 'Version', 'Uploaded', 'Review', ''], files.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(v => [`<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, esc(v.requirementName || ''), `v${v.version}${v.current ? ' <small>current</small>' : ' <small>earlier</small>'}`, `${fmtDateTime(v.uploadedAt)}<small>${esc(who(v.uploadedBy))}</small>`, badge(v.reviewStatus, DOC_BADGE[v.reviewStatus]), `<a class="small download-link" href="/api/hr/documents/${v.id}/content?download=1">Download</a>`]), 'No files uploaded yet. Upload them from the Requirements tab.')) : '');
-    }
-    if (tab === 'loans') {
-      const L = extras.loans;
-      const rows = L.loans.map(l => [esc(l.type), l.loanDate ? fmtDate(l.loanDate) : '—', ctx.money(l.original), ctx.money(l.perPayroll), ctx.money(l.totalRepaid), `<strong>${ctx.money(l.outstanding)}</strong>`, l.nextDeduction ? fmtDate(l.nextDeduction) : '—', esc(l.status)]);
-      const paid = L.loans.flatMap(l => (l.history || []).map(h => ({ ...h, type: l.type, reference: l.reference }))).sort((a, b) => String(b.end || b.date || '').localeCompare(String(a.end || a.date || '')));
-      return block('💳', 'Loans', `${table(['Loan', 'Loan date', 'Original', 'Per payroll', 'Repaid', 'Outstanding', 'Next deduction', 'Status'], rows)}`)
-        + (paid.length ? block('🧾', 'Payment history', table(['Date / cutoff', 'Loan', 'Amount', 'Balance after'], paid.map(h => [esc(h.prior ? fmtDate(h.end) : h.start && h.end ? `${fmtDate(h.start)} – ${fmtDate(h.end)}` : fmtDate(h.end || h.date || '')), esc(h.type), ctx.money(h.amount ?? (h.principal || 0) + (h.interest || 0)), ctx.money(h.balanceAfter ?? h.remainingBalance ?? 0)]))) : '')
-        + (L.applications.length ? block('📝', 'Loan applications', table(['Type', 'Requested', 'Months', 'Applied', 'Status'], L.applications.map(a => [esc(a.type), ctx.money(a.amount), a.months, fmtDate(a.appliedAt), esc(a.status)]))) : '');
     }
     if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'), edit ? ' <button class="small" data-go-memos>Send a memo</button>' : '');
     if (tab === 'trainings') return block('🏅', 'Training records', table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(x => [esc(x.title), fmtDate(x.date), x.required ? 'Required' : 'Optional', esc(x.registration), esc(x.attendance), x.completion === 'completed' ? badge('Completed') : esc(x.completion)]), 'No trainings assigned.'), edit ? ' <button class="small" data-go-trainings>Assign a training</button>' : '');
