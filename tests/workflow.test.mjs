@@ -74,6 +74,9 @@ test('leave with times: a half day counts 0.5, may sit beside the worked half; a
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...base, id: 'whole2', startDate: day, endDate: day }), /conflicts with recorded work/);
   const two = saveRecord(db, admin, 'leaves', { ...base, id: 'two', startDate: '2026-09-16', endDate: '2026-09-17', startTime: '14:00', endTime: '18:00' });
   assert.equal(two.days, 1.5, 'afternoon of the first day + whole second day');
+  const att = { ...db.read().attendance[0], id: 'am-half', date: '2026-09-16', timeIn: '08:00', timeOut: '12:00' };
+  assert.equal(saveRecord(db, admin, 'attendance', att).date, '2026-09-16', 'the worked half can be recorded on a half-day leave date');
+  assert.throws(() => saveRecord(db, admin, 'attendance', { ...att, id: 'full-leave-day', date: '2026-09-17' }), /conflicts with approved leave/);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...base, id: 'bad', startDate: '2026-09-18', endDate: '2026-09-18', startTime: '19:00', endTime: '20:00' }), /outside the work schedule/);
   db.close();
 });

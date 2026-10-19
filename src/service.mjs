@@ -55,7 +55,7 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       if (value.status === 'present') attendanceMinutes(value);
       if (value.date < employee.startDate || (employee.endDate && value.date > employee.endDate)) throw new AppError('Attendance is outside employment dates.');
       if (state.attendance.some(a => a.id !== value.id && a.employeeId === value.employeeId && a.date === value.date)) throw new AppError('Attendance already exists for this employee and date.');
-      if (value.status === 'present' && state.leaves.some(l => l.employeeId === value.employeeId && l.status === 'approved' && value.date >= l.startDate && value.date <= l.endDate && !isRest(employee, value.date))) throw new AppError('Attendance conflicts with approved leave.');
+      if (value.status === 'present' && state.leaves.some(l => l.employeeId === value.employeeId && l.status === 'approved' && value.date >= l.startDate && value.date <= l.endDate && !isRest(employee, value.date) && !(l.partialDates || []).includes(value.date))) throw new AppError('Attendance conflicts with approved leave.');   // a half-day leave date keeps its worked half
       if (value.status === 'present') {
         const mins = attendanceMinutes(value);
         for (const a of state.attendance.filter(a => a.employeeId === value.employeeId && a.id !== value.id && a.status === 'present')) {
