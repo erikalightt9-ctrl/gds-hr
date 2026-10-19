@@ -1546,3 +1546,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .check-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
 .ln-table .row-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; white-space: nowrap; }
 .ln-table .row-actions > * { margin: 0; }
+.ln-name { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ln-name:hover { color: #8f1420; text-decoration: underline; }
