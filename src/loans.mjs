@@ -135,6 +135,6 @@ export function myLoans(store, actor) {
   const state = store.read();
   return {
     applications: apps(store, 'WHERE employee_id=?', actor.employeeId),
-    loans: state.loans.filter(l => l.employeeId === actor.employeeId).map(l => { const paid = repayments(state, l.id); return { id: l.id, type: l.type, reference: l.reference, original: l.original, interestTotal: l.interestTotal || 0, perPayroll: l.perPayroll, monthlyAmortization: l.monthlyAmortization, outstanding: r2(l.balance + (l.interestBalance || 0)), totalRepaid: r2(paid.reduce((s, p) => s + p.amount, 0)), status: loanStatus(l), nextDeduction: nextDeduction(state, l), startDate: l.startDate, endDate: l.endDate, history: paid }; }),
+    loans: state.loans.filter(l => l.employeeId === actor.employeeId).map(l => { const paid = repayments(state, l.id); return { id: l.id, type: l.type, reference: l.reference, loanDate: l.loanDate || '', original: l.original, interestTotal: l.interestTotal || 0, perPayroll: l.perPayroll, monthlyAmortization: l.monthlyAmortization, outstanding: r2(l.balance + (l.interestBalance || 0)), totalRepaid: r2(paid.reduce((s, p) => s + p.amount, 0)), status: loanStatus(l), nextDeduction: nextDeduction(state, l), startDate: l.startDate, endDate: l.endDate, history: paid }; }),
   };
 }
