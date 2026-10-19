@@ -23,7 +23,7 @@ const MENU_GROUPS = [['', ['dashboard', 'profile201', 'files201']], ['Time &amp;
 export function createPortal(ctx) {
   const { api, esc, money, toast, openDialog, dialog, refresh, render, app, today } = ctx;
   const table = (headers, rows, empty = 'Nothing to show yet.') => ctx.table(headers, rows, empty);
-  let attendanceView = 'history';
+  let attendanceView = 'history', calMonth = '', calDay = '';
   let tab = 'dashboard', currentPayslip = null, dirty = false, liveFilter = 'All', pendingClock = null, historyOverride = null, historyEnd = false;
   let clockTimer;
   const clockTime = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
@@ -50,10 +50,53 @@ export function createPortal(ctx) {
   const confirmBox = (title, message) => openDialog(title, `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${message}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
   const attachmentSelect = data => `<label class="field">Supporting document<select name="documentId"><option value="">None</option>${data.documents.filter(d => d.status === 'Active').map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</select></label>`;
   function gpsCell(event) { return event && event.latitude !== null ? `<button class="small" data-location="${esc(event.id)}">${event.latitude.toFixed(6)}, ${event.longitude.toFixed(6)}</button>${[event.geofence.status && event.geofence.status !== 'Not configured' ? esc(event.geofence.status) : ''].filter(Boolean).length ? `<small>${[event.geofence.status && event.geofence.status !== 'Not configured' ? esc(event.geofence.status) : ''].filter(Boolean).join(' · ')}</small>` : ''}` : 'No device location'; }
-  function history(data) {
-    const events = historyOverride || data.history;
-    return `<section class="panel"><div class="panel-head"><h2>My attendance locations</h2>${downloads('my-attendance')}<span class="legend">Original events · Asia/Manila</span></div>${table(['Date / time', 'Event', 'Location & accuracy', 'Synchronized'], events.map(e => [`${e.workDate}<br>${e.time}`, e.correctedBy ? `HR correction by ${esc(e.correctedBy)}` : e.kind === 'in' ? 'Time in' : 'Time out', gpsCell(e), stamp(e.synchronizedAt)]))}${events.length >= 200 && !historyEnd ? '<div class="panel-foot"><button data-earlier-history>Load earlier events</button></div>' : ''}</section><section class="panel"><div class="panel-head"><h2>Attendance corrections</h2></div>${table(['Date', 'Reason', 'Corrected by / approver', 'Changes'], data.corrections.map(c => [stamp(c.at), esc(c.reason), `${esc(c.correctedBy)} / ${esc(c.approver)}`, `<details><summary>Original → correction</summary><pre>${esc(JSON.stringify({ original: c.before, correction: c.after }, null, 2))}</pre></details>`]))}</section>`;
+  // My attendance calendar: one month, each day coloured by its status; clicking a day shows the details below.
+  function calendar(data) {
+    const now = today(), month = calMonth || now.slice(0, 7), [y, m] = month.split('-').map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const cal = data.calendar || { restDays: [0], grace: 15, holidays: [] }, mins = hm => { const [h, mm] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (mm || 0) : null; };
+    const typeName = id => data.balances?.find(b => b.typeId === id)?.name || id;
+    const dayInfo = d => {
+      const a = (data.attendance || []).find(x => x.date === d), leave = (data.leaves || []).find(l => l.status === 'approved' && (l.countedDates || []).includes(d));
+      const holiday = cal.holidays.find(h => h.date === d), rest = cal.restDays.includes(new Date(`${d}T00:00:00Z`).getUTCDay());
+      const late = a?.status === 'present' && mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? Math.max(0, mins(a.timeIn) - mins(a.scheduledIn)) : 0;
+      const half = leave && (leave.partialDates || []).includes(d);
+      let kind = '', label = '';
+      if (leave && !half) [kind, label] = ['leave', `On leave · ${typeName(leave.typeId)}`];
+      else if (a?.status === 'present') [kind, label] = late >= Math.max(1, cal.grace) ? ['late', `Late · ${late} min`] : ['present', 'Present'];
+      else if (a?.status === 'absent') [kind, label] = ['absent', 'Absent'];
+      else if (a) [kind, label] = ['off', a.status === 'off' ? 'Off' : a.status.replace(/-/g, ' ')];
+      else if (holiday) [kind, label] = ['holiday', holiday.name];
+      else if (rest) [kind, label] = ['rest', 'Rest day'];
+      else if (d < now) [kind, label] = ['none', 'No record'];
+      if (half) label += `${label ? ' · ' : ''}Half-day leave · ${typeName(leave.typeId)}`;
+      return { d, a, leave, holiday, kind: kind || (half ? 'leave' : ''), label, late };
+    };
+    const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(), cells = [];
+    for (let i = 0; i < first; i++) cells.push('<span class="cal-cell blank"></span>');
+    for (let n = 1; n <= last; n++) {
+      const d = `${month}-${String(n).padStart(2, '0')}`, x = dayInfo(d);
+      cells.push(`<button class="cal-cell ${x.kind ? `k-${x.kind}` : ''}${d === now ? ' today' : ''}${d === calDay ? ' picked' : ''}" data-cal-day="${d}" title="${esc(x.label || '')}"><b>${n}</b>${x.kind && x.kind !== 'rest' ? '<i></i>' : ''}</button>`);
+    }
+    const pick = calDay && calDay.startsWith(month) ? dayInfo(calDay) : null;
+    const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const detail = pick ? `<div class="cal-detail"><strong>${nice(pick.d)}</strong><span class="cal-tag k-${pick.kind || 'none'}">${esc(pick.label || 'Nothing recorded')}</span>${pick.a && pick.a.status === 'present' ? `<dl><div><dt>Time in</dt><dd>${esc(pick.a.timeIn || '—')}</dd></div><div><dt>Time out</dt><dd>${esc(pick.a.timeOut || '—')}${pick.a.endNextDay ? ' (+1 day)' : ''}</dd></div><div><dt>Schedule</dt><dd>${esc(pick.a.scheduledIn || '—')}</dd></div><div><dt>Late</dt><dd>${pick.late ? `${pick.late} min` : '—'}</dd></div></dl>` : ''}${pick.leave ? `<p class="legend">${esc(typeName(pick.leave.typeId))}${pick.leave.reason ? ` · ${esc(pick.leave.reason)}` : ''}</p>` : ''}</div>` : '<p class="legend">Tap a day to see its details.</p>';
+    const title = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const key = [['present', 'Present'], ['late', 'Late'], ['absent', 'Absent'], ['leave', 'Leave'], ['holiday', 'Holiday'], ['none', 'No record']].map(([k, l]) => `<span><i class="k-${k}"></i>${l}</span>`).join('');
+    return `<section class="panel cal-panel"><div class="cal-head"><button class="cal-nav" data-cal-nav="-1" aria-label="Previous month">‹</button><h2>${title}</h2><button class="cal-nav" data-cal-nav="1" aria-label="Next month" ${month >= now.slice(0, 7) ? 'disabled' : ''}>›</button></div>
+      <div class="cal-grid">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(w => `<span class="cal-wd">${w}</span>`).join('')}${cells.join('')}</div><div class="cal-key">${key}</div>${detail}</section>`;
   }
+  // My attendance records: one row per day (date, time in, time out, overtime, location of the time in / out).
+  function history(data) {
+    const events = historyOverride || data.history, byDay = new Map();
+    for (const a of data.attendance || []) if (a.status === 'present') byDay.set(a.date, { date: a.date, timeIn: a.timeIn, timeOut: a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '', ot: a.otMinutes || 0 });
+    for (const e of events) { const row = byDay.get(e.workDate) || { date: e.workDate, timeIn: '', timeOut: '', ot: 0 }; if (e.kind === 'in') { row.inEvent = row.inEvent || e; row.timeIn = row.timeIn || e.time; } else { row.outEvent = e; row.timeOut = row.timeOut || e.time; } byDay.set(e.workDate, row); }
+    const rows = [...byDay.values()].sort((a, b) => b.date.localeCompare(a.date));
+    const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const otText = n => (n ? `${Math.floor(n / 60) ? `${Math.floor(n / 60)} h ` : ''}${n % 60 ? `${n % 60} min` : ''}`.trim() : '—');
+    const where = r => [r.inEvent ? `In: ${gpsCell(r.inEvent)}` : '', r.outEvent ? `Out: ${gpsCell(r.outEvent)}` : ''].filter(Boolean).join('<br>') || 'Biometric / HR record';
+    return calendar(data) + `<section class="panel"><div class="panel-head"><h2>My attendance</h2>${downloads('my-attendance')}<span class="legend">Asia/Manila · overtime is paid only when filed and approved</span></div>${table(['Date', 'Time in', 'Time out', 'OT', 'Location'], rows.map(r => [nice(r.date), esc(r.timeIn || '—'), esc(r.timeOut || '—'), otText(r.ot), where(r)]))}${events.length >= 200 && !historyEnd ? '<div class="panel-foot"><button data-earlier-history>Load earlier events</button></div>' : ''}</section>${(data.corrections || []).length ? `<section class="panel"><div class="panel-head"><h2>Attendance corrections</h2></div>${table(['Date', 'Reason', 'Corrected by / approver', 'Changes'], data.corrections.map(c => [stamp(c.at), esc(c.reason), `${esc(c.correctedBy)} / ${esc(c.approver)}`, `<details><summary>Original → correction</summary><pre>${esc(JSON.stringify({ original: c.before, correction: c.after }, null, 2))}</pre></details>`]))}</section>` : ''}`;
+  }
+
   // Line icons for the time card buttons (white on red).
   const svg = d => `<svg class="btn-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const ICON = {
@@ -332,6 +375,8 @@ export function createPortal(ctx) {
       if (target === 'datasheet') { ctx.portalHr?.showDatasheet?.(); target = 'files201'; } else if (target === 'files201') ctx.portalHr?.showDocuments?.();
       tab = section ? 'attendance' : target; dirty = false; render(); window.scrollTo({ top: 0 });
     }
+    if (button.dataset.calNav) { const [y, m] = (calMonth || today().slice(0, 7)).split('-').map(Number), d = new Date(Date.UTC(y, m - 1 + Number(button.dataset.calNav), 1)); calMonth = d.toISOString().slice(0, 7); calDay = ''; render(); return; }
+    if (button.dataset.calDay) { calDay = button.dataset.calDay; render(); return; }
     if (button.dataset.attendanceView) { attendanceView = button.dataset.attendanceView; dirty = false; render(); }
     if (button.dataset.attendanceJump) { attendanceView = button.dataset.attendanceJump; dirty = false; render(); }
     if (button.hasAttribute('data-file-unpaid')) { tab = 'leave'; dirty = false; render(); preselectLeave(''); /* opens the leave form; the employee picks the leave type */ }

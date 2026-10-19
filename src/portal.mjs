@@ -3,7 +3,7 @@ import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { z } from 'zod';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { date, schemas } from './schema.mjs';
-import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn } from './engine.mjs';
+import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, OT_BLOCK } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 import { networkStatus } from './office-network.mjs';
 import { lateIncidents, lateBy, graceFor, LETTER_AFTER, letterMessage } from './late-incidents.mjs';
@@ -257,6 +257,15 @@ export function replyExplanation(store, actor, id, input) {
     store.log(actor, 'reply', 'explanations', id, before, after); return after;
   });
 }
+// Time worked after the day's scheduled end, in whole 30-minute blocks (shown to the employee; pay still needs an approved filing).
+function overtimeMinutes(state, employee, a) {
+  if (a.status !== 'present' || !a.timeIn || !a.timeOut) return 0;
+  const s = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), a.date, ruleOn(state, a.date));
+  if (s.flexible) return 0;
+  const start = hhmm(s.start || a.scheduledIn || a.timeIn), end = s.end ? hhmm(s.end) + (hhmm(s.end) <= start ? 1440 : 0) : start + Math.round(s.hoursPerDay * 60) + (s.mealBreakMinutes ?? 60);
+  const out = hhmm(a.timeOut) + (a.endNextDay || hhmm(a.timeOut) < hhmm(a.timeIn) ? 1440 : 0);
+  return Math.floor(Math.max(0, out - end) / OT_BLOCK) * OT_BLOCK;
+}
 export function employeeDashboard(store, actor, now = new Date()) {
   const employee = ownEmployee(store, actor), state = store.read(), day = local(now).slice(0, 10);
   announcePayslips(store, state, employee.id, day);
@@ -269,7 +278,8 @@ export function employeeDashboard(store, actor, now = new Date()) {
   // Greeting name: First Last from the 201 personal record (else the part after the comma, then the last name).
   const personal = JSON.parse(store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(employee.id)?.data ?? '{}'), [lastPart, restPart = ''] = employee.name.split(',').map(s => s.trim());
   const greetingName = [personal.firstName || restPart, personal.lastName || lastPart].filter(Boolean).join(' ');
-  return { employee: { id: employee.id, name: employee.name, greetingName, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: rows(store, 'clock_events', employee.id).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id).slice(-200), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), balances, leaves, documents,
+  const calendar = { restDays: employee.restDays || [0], grace: graceFor(state, employee.id, day), holidays: state.holidays.filter(h => h.date.slice(0, 4) >= String(Number(day.slice(0, 4)) - 1) && h.kind !== 'ordinary').map(h => ({ date: h.date, name: h.name, kind: h.kind })) };
+  return { calendar, employee: { id: employee.id, name: employee.name, greetingName, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: rows(store, 'clock_events', employee.id).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id && a.date >= `${Number(day.slice(0, 4)) - 1}-01-01`).map(a => ({ ...a, otMinutes: overtimeMinutes(state, employee, a) })), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), balances, leaves, documents,
     payslips: state.runs.filter(r => payslipReleased(r, day) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ id: r.id, start: r.start, end: r.end, payDate: payDateFor(r.start, r.end), net: r.rows.find(row => row.employeeId === employee.id).net })),
     upcomingPayslips: state.runs.filter(r => r.status === 'posted' && !payslipReleased(r, day) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ start: r.start, end: r.end, payDate: payDateFor(r.start, r.end) })),
     notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id=? ORDER BY rowid DESC LIMIT 50').all(employee.id), serverTime: now.toISOString() };
