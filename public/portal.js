@@ -288,9 +288,9 @@ export function createPortal(ctx) {
       const x = event.longitude, y = event.latitude, bounds = [Math.max(-180, x - .004), Math.max(-90, y - .004), Math.min(180, x + .004), Math.min(90, y + .004)].join(',');
       dialog.querySelector('#location-map').innerHTML = `<iframe class="attendance-map" title="Recorded attendance location" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&amp;layer=mapnik&amp;marker=${encodeURIComponent(`${y},${x}`)}"></iframe>`;
     };
-    const lookup = document.createElement('button'); lookup.textContent = 'Look up address using configured HR provider'; lookup.className = 'small';
-    dialog.querySelector('#location-address').after(lookup);
-    lookup.onclick = async () => { lookup.disabled = true; try { const result = await api(`/location-address/${event.id}`, {}); dialog.querySelector('#location-address').textContent = result.address || result.message; } catch (error) { toast(error.message); } finally { lookup.disabled = false; } };
+    // The street address is looked up automatically (saved after the first lookup of each punch).
+    const box = dialog.querySelector('#location-address'); box.textContent = 'Finding the address…';
+    api(`/location-address/${event.id}`, {}).then(result => { if (box.isConnected) box.textContent = result.address ? `📍 ${result.address}` : result.message; }).catch(error => { if (box.isConnected) box.textContent = error.message; });
   }
   // countsOnly: just the heading and today's counts (HR dashboard); each count opens the Live Attendance page.
   // Live attendance: count cards (click to filter), search + status / location filters, and one row per employee
