@@ -77,8 +77,15 @@ export function decideLoanApplication(store, actor, id, input) {
 }
 
 // ---------- Dashboard ----------
-function repayments(state, loanId) {
+function postedRepayments(state, loanId) {
   return state.runs.filter(r => r.status === 'posted').flatMap(run => run.rows.flatMap(row => (row.loanDeductions || []).filter(l => l.loanId === loanId).map(l => ({ runId: run.id, start: run.start, end: run.end, postedAt: run.postedAt, amount: l.amount, principal: l.principal ?? l.amount, interest: l.interest ?? 0, balanceAfter: l.remainingBalance })))).sort((a, b) => a.start.localeCompare(b.start));
+}
+// Payment history: payments made before the system (recorded by HR on the loan) followed by posted payroll deductions.
+function repayments(state, loanId) {
+  const loan = state.loans.find(l => l.id === loanId), prior = (loan?.priorPayments || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  let paid = 0;
+  const before = prior.map(p => { paid += p.amount; return { prior: true, start: p.date, end: p.date, amount: p.amount, principal: p.amount, interest: 0, balanceAfter: r2((loan.original || 0) - paid), note: p.note || 'Paid before the system' }; });
+  return [...before, ...postedRepayments(state, loanId)];
 }
 function nextDeduction(state, loan, today = localToday()) {
   if (!loan.authorized || r2(loan.balance + (loan.interestBalance || 0)) <= 0) return '';

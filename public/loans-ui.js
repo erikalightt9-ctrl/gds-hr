@@ -48,7 +48,7 @@ export function createLoansPage({ api, esc, money, table, badge, toast, openDial
       }
       if (b.dataset.loanHistory) {
         const l = data.loans.find(x => x.id === b.dataset.loanHistory);
-        openDialog(`Repayments · ${l.type} ${l.reference}`, `<div class="dialog-body"><p class="sub">${esc(l.employeeName)} · original ${money(l.original)}${l.interestTotal ? ` + interest ${money(l.interestTotal)}` : ''} · ${fmt(l.startDate)} – ${fmt(l.endDate)}</p>${table(['Payroll period', 'Deducted', 'Principal', 'Interest', 'Balance after'], l.history.map(h => [`${fmt(h.start)} – ${fmt(h.end)}`, money(h.amount), money(h.principal), money(h.interest), money(h.balanceAfter)]), 'No posted repayments yet.')}<div class="bd-total"><span>Outstanding</span><strong>${money(l.outstanding)}</strong></div></div>`, '<div class="dialog-foot"><button data-close>Close</button></div>');
+        openDialog(`Payment history · ${l.type}`, `<div class="dialog-body"><p class="sub">${esc(l.employeeName)} · original ${money(l.original)}${l.interestTotal ? ` + interest ${money(l.interestTotal)}` : ''} · ${fmt(l.startDate)} – ${fmt(l.endDate)}</p>${table(['Payroll period', 'Deducted', 'Principal', 'Interest', 'Balance after'], l.history.map(h => [h.prior ? `${fmt(h.end)} · before the system` : `${fmt(h.start)} – ${fmt(h.end)}`, money(h.amount), money(h.principal), money(h.interest), money(h.balanceAfter)]), 'No posted repayments yet.')}<div class="bd-total"><span>Outstanding</span><strong>${money(l.outstanding)}</strong></div></div>`, '<div class="dialog-foot"><button data-close>Close</button></div>');
       }
       if (b.dataset.loanReject) {
         const remarks = window.prompt('Reason for not approving (the employee will see this):'); if (!remarks) return;
