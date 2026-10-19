@@ -82,8 +82,9 @@ function repayments(state, loanId) {
 }
 function nextDeduction(state, loan, today = localToday()) {
   if (!loan.authorized || r2(loan.balance + (loan.interestBalance || 0)) <= 0) return '';
-  const rule = ruleOn(state, today) || state.rules[0], from = loan.startDate > today ? loan.startDate : today;
-  for (let i = 0; i < 26; i++) {
+  // The first cutoff from the loan's start that is not posted yet: a cutoff that has ended but is not finalized is still next.
+  const rule = ruleOn(state, today) || state.rules[0], from = loan.startDate;
+  for (let i = 0; i < 2400; i++) {
     const d = new Date(`${from.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + Math.floor(i / 2));
     const ym = d.toISOString().slice(0, 7), last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
     const end = rule?.cutoff === 'monthly' ? (i % 2 ? null : `${ym}-${last}`) : i % 2 ? `${ym}-${last}` : `${ym}-15`;
