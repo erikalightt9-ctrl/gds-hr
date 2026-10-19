@@ -117,7 +117,7 @@ export function leaveBalance(state, employee, type, asOf) {
   // Expired, unused carry is removed; carry already consumed must not consume this year's grant twice.
   const carry = asOf <= expiry ? carryEntitled : consumedBeforeExpiry;
   const entitled = manual && manual.manualCredits !== null && manual.manualCredits !== undefined ? manual.manualCredits : earnedEntitlement(employee, type, asOf), used = round(usedIn(year) + (manual?.usedBefore || 0));
-  return { entitled, carry, used, expired: Math.max(0, carryEntitled - carry), available: round(Math.max(0, entitled + carry - used)) };
+  return { entitled, carry, used, usedBefore: manual?.usedBefore || 0, expired: Math.max(0, carryEntitled - carry), available: round(Math.max(0, entitled + carry - used)) };
 }
 // Salary encoded by HR for months before the system went live. A month that already has posted payroll for the
 // employee is counted from payroll only, so nothing is counted twice.

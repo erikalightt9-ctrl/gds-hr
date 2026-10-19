@@ -3,7 +3,7 @@ import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { z } from 'zod';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { date, schemas } from './schema.mjs';
-import { leaveBalance, leaveSplit, ruleOn, isRest, attendanceMinutes, scheduleOn } from './engine.mjs';
+import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 import { networkStatus } from './office-network.mjs';
 import { lateIncidents, lateBy, graceFor, LETTER_AFTER, letterMessage } from './late-incidents.mjs';
@@ -262,7 +262,7 @@ export function employeeDashboard(store, actor, now = new Date()) {
   announcePayslips(store, state, employee.id, day);
   const employment = profileOf(state, employee.id, 'employment'), leaves = state.leaves.filter(l => l.employeeId === employee.id);
   const balances = state.leaveTypes.filter(t => employee.leaveEligibility.includes(t.id)).map(type => {
-    const balance = leaveBalance(state, employee, type, day), pending = leaves.filter(l => l.typeId === type.id && l.status === 'pending').reduce((sum, l) => sum + (l.countedDates || []).filter(d => d.startsWith(day.slice(0, 4))).length, 0);
+    const balance = leaveBalance(state, employee, type, day), pending = leaves.filter(l => l.typeId === type.id && l.status === 'pending').reduce((sum, l) => sum + (l.countedDates || []).filter(d => d.startsWith(day.slice(0, 4))).reduce((n, d) => n + leaveFraction(l, d), 0), 0);
     return { typeId: type.id, name: type.name, documentsRequired: type.documentsRequired, perOccasion: !type.balanceRequired, maxDays: type.entitledDays, ...balance, pending, remaining: Math.max(0, balance.available - pending) };
   });
   const documents = store.db.prepare('SELECT metadata FROM employee_documents WHERE employee_id=?').all(employee.id).map(d => JSON.parse(d.metadata)).filter(d => d.uploadedBy === actor.username && d.type === 'Leave Supporting');
