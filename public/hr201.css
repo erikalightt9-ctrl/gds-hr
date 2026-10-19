@@ -1553,3 +1553,8 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .att-tools { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
 .att-tools .field { max-width: 220px; }
 .ml-pv-name.ml-name { font-size: 20px; font-weight: 800; line-height: 1.25; }
+/* Masterlist panel: pencil on the photo to change it */
+.ml-pv-photo { position: relative; display: inline-block; flex: none; }
+.ml-photo-pen { position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #8f1420; color: #fff; border: 2px solid #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+.ml-photo-pen:hover { background: #b51f2b; }
+.ml-photo-pen .ml-ico { width: 15px; height: 15px; color: #fff; }
