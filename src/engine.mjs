@@ -211,6 +211,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, sssLoan: 0, pagibigLoan: 0, salaryDeduction: 0, other: 0 };
     const trace = [], late = [], leaveNotes = [], loanDeductions = [], workBreakdown = [];
     let holidayBase = 0, excludedLeave = 0, additionalBasic = 0, daysPresent = 0, leaveDays = 0;
+    const presentOrLeave = new Set();   // dates worked or on approved leave (a half day counts once): the HR "days present"
     let lateDaysLost = 0, lateReduction = 0, lateMinutesUnoffset = 0;   // late time lowers credited days, never a separate deduction
     const add = (side, component, amount, formula, source, date, quantity = null, multiplier = null) => {
       const rounded = round(amount);
@@ -237,7 +238,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       if (half) {
         // Half-day leave: half the day is leave (paid or unpaid by type); the other half follows attendance as usual.
         const type = state.leaveTypes.find(t => t.id === leave.typeId), normal = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
-        leaveDays += 0.5; leaveNotes.push(`${d}: ${type?.name || leave.typeId} (half day${leave.startTime ? ` ${leave.startTime}-${leave.endTime}` : ''})`);
+        leaveDays += 0.5; presentOrLeave.add(d); leaveNotes.push(`${d}: ${type?.name || leave.typeId} (half day${leave.startTime ? ` ${leave.startTime}-${leave.endTime}` : ''})`);
         if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', daily / 2, `${daily} × 0.5 unpaid half-day leave`, leave, d);
         else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId} (half day); salary already included in cutoff basic`, leave, d);
         if (type?.paid && !type.includedIn13th) excludedLeave += daily / 2;
@@ -248,7 +249,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
       if (leave && !rest && !half) {
         const type = state.leaveTypes.find(t => t.id === leave.typeId);
-        leaveDays++; leaveNotes.push(`${d}: ${type?.name || leave.typeId}`);
+        leaveDays++; presentOrLeave.add(d); leaveNotes.push(`${d}: ${type?.name || leave.typeId}`);
         if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', daily, `${daily} × 1 unpaid leave day`, leave, d);
         else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId}; salary already included in cutoff basic`, leave, d);
         if (type?.paid && !type.includedIn13th) excludedLeave += daily;
@@ -276,7 +277,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         } else if (!rest) add(deductions, 'absence', daily, `${daily} × 1 absent day`, record, d);
         continue;
       }
-      daysPresent++;
+      daysPresent++; presentOrLeave.add(d);
       const normalHours = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
       const startMinute = stamp(`${d}T${record.timeIn}`), scheduledMinute = stamp(`${d}T${leaveShiftStart || record.scheduledIn}`);
       // Company policy option: time before the scheduled start is not paid, so overtime only accrues after the scheduled end.
@@ -461,7 +462,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };
