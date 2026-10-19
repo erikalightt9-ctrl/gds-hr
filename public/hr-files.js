@@ -255,7 +255,7 @@ export function createFiles(ctx) {
       const L = extras.loans;
       const rows = L.loans.map(l => [esc(l.type), l.loanDate ? fmtDate(l.loanDate) : '—', ctx.money(l.original), ctx.money(l.perPayroll), ctx.money(l.totalRepaid), `<strong>${ctx.money(l.outstanding)}</strong>`, l.nextDeduction ? fmtDate(l.nextDeduction) : '—', esc(l.status)]);
       const paid = L.loans.flatMap(l => (l.history || []).map(h => ({ ...h, type: l.type, reference: l.reference }))).sort((a, b) => String(b.end || b.date || '').localeCompare(String(a.end || a.date || '')));
-      return block('💳', 'Loans', `${table(['Loan', 'Loan date', 'Original', 'Per payroll', 'Repaid', 'Outstanding', 'Next deduction', 'Status'], rows)}<p class="legend">Loan deductions are taken from payroll automatically. Add or change loans in Payroll &amp; Attendance → Employee Loans. <button class="small" data-go-loans>Open Employee Loans</button></p>`)
+      return block('💳', 'Loans', `${table(['Loan', 'Loan date', 'Original', 'Per payroll', 'Repaid', 'Outstanding', 'Next deduction', 'Status'], rows)}`)
         + (paid.length ? block('🧾', 'Repayments from posted payroll', table(['Cutoff', 'Loan', 'Amount', 'Balance after'], paid.map(h => [esc(h.start && h.end ? `${fmtDate(h.start)} – ${fmtDate(h.end)}` : fmtDate(h.end || h.date || '')), `${esc(h.type)} <small>${esc(h.reference)}</small>`, ctx.money(h.amount ?? (h.principal || 0) + (h.interest || 0)), ctx.money(h.remainingBalance ?? 0)]))) : '')
         + (L.applications.length ? block('📝', 'Loan applications', table(['Type', 'Requested', 'Months', 'Applied', 'Status'], L.applications.map(a => [esc(a.type), ctx.money(a.amount), a.months, fmtDate(a.appliedAt), esc(a.status)]))) : '');
     }
