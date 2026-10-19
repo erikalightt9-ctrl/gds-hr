@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
-import { calculatePayroll, attendanceMinutes, leaveDates, isRest, leaveBalance } from './engine.mjs';
+import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
 import { payDateFor, payslipReleased } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
@@ -77,8 +77,12 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
         Object.assign(value, { proofStatus: 'verified', proofNote: 'Recorded by HR', proofReviewedBy: actor.username, proofReviewedAt: new Date().toISOString() });
       }
       if (value.startDate < employee.startDate || (employee.endDate && value.endDate > employee.endDate)) throw new AppError('Leave is outside employment dates.');
-      const scheduled = leaveDates(employee, type, value.startDate, value.endDate);
-      if (scheduled.length !== value.days) throw new AppError(`Leave covers ${scheduled.length} scheduled days under its ${type.dayBasis}-day policy. Enter that number; partial-day leave is not supported.`);
+      const attendanceProfile = (state.employeeProfiles || []).find(p => p.employeeId === employee.id && p.section === 'attendance');
+      const split = leaveSplit(employee, attendanceProfile, ruleOn(state, value.startDate), type, value.startDate, value.endDate, value.startTime, value.endTime);
+      if (split.invalidDate) throw new AppError(`The leave time on ${split.invalidDate} is outside the work schedule. Check the start and end times.`);
+      const scheduled = split.countedDates;
+      value.days = split.days; value.partialDates = split.partialDates; // Server-derived from the dates and times.
+      if (!scheduled.length) throw new AppError('Choose at least one scheduled leave day.');
       value.countedDates = scheduled; // Server-derived; callers cannot rewrite the counted dates.
       if (!['rejected', 'cancelled'].includes(value.status) && state.leaves.some(l => l.id !== value.id && l.employeeId === value.employeeId && !['rejected', 'cancelled'].includes(l.status) && overlaps(value.startDate, value.endDate, l.startDate, l.endDate))) throw new AppError('Leave dates overlap an existing request.');
       if (value.status === 'approved') {
@@ -90,15 +94,16 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
         if (type.documentsRequired && !value.documentReference.trim()) throw new AppError('Supporting document reference is required.');
         const without = { ...state, leaves: state.leaves.filter(l => l.id !== value.id) };
         if (type.balanceRequired) {
-          const reservation = { ...value, countedDates: [] };
+          const reservation = { ...value, countedDates: [] };   // partialDates kept: a half day reserves 0.5
           without.leaves.push(reservation);
           for (const day of scheduled) {
             const bal = leaveBalance(without, employee, type, day);
-            if (bal.available < 1) throw new AppError(`Insufficient leave balance on ${day}: ${bal.available} days available.`);
+            if (bal.available < leaveFraction(value, day)) throw new AppError(`Insufficient leave balance on ${day}: ${bal.available} days available.`);
             reservation.countedDates.push(day);
           }
         }
-        if (state.attendance.some(a => a.employeeId === value.employeeId && a.status === 'present' && a.date >= value.startDate && a.date <= value.endDate && !isRest(employee, a.date))) throw new AppError('Leave conflicts with recorded work.');
+        // Work recorded on a half-day leave date is the other half of the day; whole leave days cannot have work.
+        if (state.attendance.some(a => a.employeeId === value.employeeId && a.status === 'present' && a.date >= value.startDate && a.date <= value.endDate && !isRest(employee, a.date) && !value.partialDates.includes(a.date))) throw new AppError('Leave conflicts with recorded work. For a half day, enter the leave times.');
       }
     }
     if (kind === 'holidays' && state.holidays.some(h => h.id !== value.id && h.date === value.date)) throw new AppError('A holiday classification already exists for that date. Edit the existing record.');

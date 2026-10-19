@@ -34,7 +34,8 @@ export function renderLeavePdf(leave, { employee, typeName = '', designation = '
   y = header('EMPLOYEE INFORMATION', y);
   rows([['Employee name', String(employee?.name || leave.employeeId).toUpperCase()], ['Employee ID', leave.employeeId], ['Designation', designation || '-'], ['Department', employee?.department || '-']]);
   y = header('LEAVE REQUESTED', y);
-  const dates = leave.startDate === leave.endDate ? longDate(leave.startDate) : `${longDate(leave.startDate)} to ${longDate(leave.endDate)}`;
+  const at = (d, t) => `${longDate(d)}${t ? `, ${t}` : ''}`;
+  const dates = leave.startDate === leave.endDate ? `${longDate(leave.startDate)}${leave.startTime || leave.endTime ? `, ${leave.startTime || 'start'} to ${leave.endTime || 'end'}` : ''}` : `${at(leave.startDate, leave.startTime)} to ${at(leave.endDate, leave.endTime)}`;
   rows([['Type of leave', typeName || leave.typeId], ['Date(s)', dates], ['Number of days', String(leave.days ?? (leave.countedDates || []).length)], ['Reason', leave.reason || '-'], ...(available !== '' ? [['Available credits', String(available)]] : []), ...(leave.documentReference ? [['Supporting document', leave.documentReference]] : [])]);
   y = header('HR DECISION', y);
   rows([['Decision', STATUS[leave.status] || leave.status], ['Decided by', decidedBy || '-'], ['Date decided', leave.decidedAt ? longDate(leave.decidedAt) : '-'], ['HR remarks', leave.hrRemarks || '-']]);

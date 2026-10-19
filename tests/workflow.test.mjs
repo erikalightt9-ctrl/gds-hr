@@ -60,9 +60,22 @@ test('leave approval requires eligibility, documents, balance, non-overlap and n
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave2' }), /overlap/);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /Insufficient/);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave4', startDate: '2026-09-01', endDate: '2026-09-01' }), /conflicts/);
-  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, days: 2 }), /scheduled days/);
+  assert.equal(saveRecord(db, admin, 'leaves', { ...l, days: 2 }).days, 1, 'days are derived from the dates, not typed');
   deleteRecord(db, admin, 'leaves', l.id);
   assert.equal(db.read().leaves.length, 0); db.close();
+});
+test('leave with times: a half day counts 0.5, may sit beside the worked half; a whole day may not', () => {
+  const db = new Store(':memory:'); db.write(completeState());
+  const base = { employeeId: 'EMP-001', typeId: 'sil', days: 1, reason: 'Half day', documentReference: 'HR-DOC-1', status: 'approved', eligibilityVerified: true };
+  const day = db.read().attendance[0].date;
+  const half = saveRecord(db, admin, 'leaves', { ...base, id: 'half1', startDate: day, endDate: day, startTime: '14:00', endTime: '18:00' });
+  assert.equal(half.days, 0.5); assert.deepEqual(half.partialDates, [day]);
+  deleteRecord(db, admin, 'leaves', 'half1');
+  assert.throws(() => saveRecord(db, admin, 'leaves', { ...base, id: 'whole2', startDate: day, endDate: day }), /conflicts with recorded work/);
+  const two = saveRecord(db, admin, 'leaves', { ...base, id: 'two', startDate: '2026-09-16', endDate: '2026-09-17', startTime: '14:00', endTime: '18:00' });
+  assert.equal(two.days, 1.5, 'afternoon of the first day + whole second day');
+  assert.throws(() => saveRecord(db, admin, 'leaves', { ...base, id: 'bad', startDate: '2026-09-18', endDate: '2026-09-18', startTime: '19:00', endTime: '20:00' }), /outside the work schedule/);
+  db.close();
 });
 test('validation protects employee references, unique dates, breaks and immutable rules', () => {
   const db = new Store(':memory:'); db.write(completeState());

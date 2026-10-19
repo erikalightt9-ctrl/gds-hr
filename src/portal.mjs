@@ -3,7 +3,7 @@ import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { z } from 'zod';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { date, schemas } from './schema.mjs';
-import { leaveBalance, leaveDates, ruleOn, isRest, attendanceMinutes, scheduleOn } from './engine.mjs';
+import { leaveBalance, leaveSplit, ruleOn, isRest, attendanceMinutes, scheduleOn } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 import { networkStatus } from './office-network.mjs';
 import { payDateFor, payslipReleased } from './paydays.mjs';
@@ -58,7 +58,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     if (value.kind === 'in') {
       if (latest?.kind === 'in' && !staleOpen(latest, day, now)) throw new AppError('You already have an open time-in. Time out or contact HR.');
       if (history.some(e => e.workDate === day && e.kind === 'in') || state.attendance.some(a => a.employeeId === employee.id && a.date === day)) throw new AppError('Attendance already exists for today. Ask HR for a correction.');
-      if (state.leaves.some(l => l.employeeId === employee.id && l.status === 'approved' && (l.countedDates || []).includes(day))) throw new AppError('You are on approved leave today. Ask HR to review before clocking in.');
+      if (state.leaves.some(l => l.employeeId === employee.id && l.status === 'approved' && (l.countedDates || []).includes(day) && !(l.partialDates || []).includes(day))) throw new AppError('You are on approved leave today. Ask HR to review before clocking in.');
     } else {
       if (latest?.kind !== 'in') throw new AppError('Record time-in before time-out.');
       if (staleOpen(latest, day, now)) throw new AppError(`Your time in on ${latest.workDate} has no time out. HR will correct it; time in for today instead.`);
@@ -104,7 +104,7 @@ export function todayAttendance(store, employee, now = new Date()) {
   let workedMinutes = record?.timeIn && record.timeOut ? attendanceMinutes(record).length : clockIn ? Math.max(0, Math.floor(((clockOut ? Date.parse(clockOut.recordedAt) : now.getTime()) - Date.parse(clockIn.recordedAt)) / 60000)) : 0;
   const hours = Math.round(workedMinutes / 60 * 100) / 100;
   const undertime = actualOut && !isRest(employee, workDate) ? Math.max(0, schedule.hoursPerDay * 60 - workedMinutes - late) : 0;
-  const leave = state.leaves.find(l => l.employeeId === employee.id && l.status === 'approved' && (l.countedDates || []).includes(day));
+  const leave = state.leaves.find(l => l.employeeId === employee.id && l.status === 'approved' && (l.countedDates || []).includes(day) && !(l.partialDates || []).includes(day));
   let status = employee.draft ? 'Profile incomplete' : !employee.active || (employee.endDate && employee.endDate < day) ? 'Inactive' : employee.startDate > day ? 'Not started' : 'Awaiting time in';
   if (status === 'Awaiting time in' && isRest(employee, day)) status = 'Rest day';
   if (status === 'Awaiting time in' && state.holidays.some(h => h.date === day && h.kind !== 'ordinary')) status = 'Holiday';
@@ -120,7 +120,7 @@ export function todayAttendance(store, employee, now = new Date()) {
 function validateAttachment(store, actor, id) { if (id) { const doc = getDocument(store, actor, id); if (doc.employeeId !== actor.employeeId || doc.uploadedBy !== actor.username || doc.type !== 'Leave Supporting' || doc.status !== 'Active') throw new AppError('Use your own active supporting document.', 403); } }
 export function applyLeave(store, actor, input) {
   const employee = ownEmployee(store, actor);
-  const value = z.object({ typeId: z.string().max(80), startDate: date, endDate: date, reason: note, documentId }).strict().refine(v => v.endDate >= v.startDate && Date.parse(v.endDate) - Date.parse(v.startDate) <= 366 * 86400000, 'Choose a valid leave range of at most 366 days.').parse(input);
+  const value = z.object({ typeId: z.string().max(80), startDate: date, endDate: date, startTime: z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal('')]).default(''), endTime: z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal('')]).default(''), reason: note, documentId }).strict().refine(v => v.endDate >= v.startDate && Date.parse(v.endDate) - Date.parse(v.startDate) <= 366 * 86400000, 'Choose a valid leave range of at most 366 days.').parse(input);
   return store.transaction(() => {
     const state = store.read(), type = state.leaveTypes.find(t => t.id === value.typeId);
     ready(employee, value.startDate); ready(employee, value.endDate);
@@ -128,9 +128,11 @@ export function applyLeave(store, actor, input) {
     validateAttachment(store, actor, value.documentId);
     if (state.leaves.some(l => l.employeeId === employee.id && !['rejected', 'cancelled'].includes(l.status) && l.startDate <= value.endDate && l.endDate >= value.startDate)) throw new AppError('These dates overlap an existing leave request.');
     if (state.runs.some(r => r.start <= value.endDate && r.end >= value.startDate && r.rows.some(row => row.employeeId === employee.id))) throw new AppError('These dates belong to posted payroll.');
-    const countedDates = leaveDates(employee, type, value.startDate, value.endDate);
+    const split = leaveSplit(employee, profileOf(state, employee.id, 'attendance'), ruleOn(state, value.startDate), type, value.startDate, value.endDate, value.startTime, value.endTime);
+    if (split.invalidDate) throw new AppError(`The leave time on ${split.invalidDate} is outside your work schedule. Check the start and end times.`);
+    const { countedDates, partialDates } = split;
     if (!countedDates.length) throw new AppError('Choose at least one eligible leave day.');
-    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, reason: value.reason, days: countedDates.length, countedDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : type.documentsRequired ? 'required' : '', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' };
+    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, startTime: value.startTime, endTime: value.endTime, reason: value.reason, days: split.days, countedDates, partialDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : type.documentsRequired ? 'required' : '', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' };
     state.leaves.push(leave); state.version++; store.write(state); store.log(actor, 'apply', 'leaves', leave.id, null, leave); return leave;
   });
 }

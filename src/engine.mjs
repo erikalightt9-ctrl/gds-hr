@@ -29,6 +29,25 @@ export function scheduleOn(employee, profile = {}, date, rule) {
   };
 }
 export const leaveDates = (employee, type, start, end) => dates(start, end).filter(d => type.dayBasis === 'calendar' || !isRest(employee, d));
+// Leave with times: each counted day is a whole day, or a half day when the leave covers at most 60% of that day's
+// scheduled span (e.g. 14:00-18:00 of a 09:00-18:00 day). Blank times mean the whole scheduled day.
+// Returns invalidDate when the time on a day falls outside the work schedule.
+export function leaveSplit(employee, profile, rule, type, startDate, endDate, startTime = '', endTime = '') {
+  const mins = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const countedDates = leaveDates(employee, type, startDate, endDate), partialDates = [];
+  for (const d of countedDates) {
+    const s = scheduleOn(employee, profile || {}, d, rule), from0 = mins(s.start || '09:00');
+    let to0 = s.end ? mins(s.end) : from0 + Math.round(s.hoursPerDay * 60) + (s.mealBreakMinutes ?? 60);
+    if (to0 <= from0) to0 += 1440;
+    let end = d === endDate && endTime ? mins(endTime) : to0;
+    if (end <= from0 && to0 > 1440) end += 1440;
+    const from = Math.max(from0, d === startDate && startTime ? mins(startTime) : from0), to = Math.min(to0, end);
+    if (to <= from) return { countedDates, partialDates, days: 0, invalidDate: d };
+    if (to - from <= (to0 - from0) * 0.6) partialDates.push(d);
+  }
+  return { countedDates, partialDates, days: countedDates.length - partialDates.length / 2 };
+}
+export const leaveFraction = (leave, d) => ((leave.partialDates || []).includes(d) ? 0.5 : 1);
 export function classification(state, employee, date) {
   const kind = state.holidays.find(h => h.date === date)?.kind || 'ordinary';
   return kind === 'ordinary' ? (isRest(employee, date) ? 'rest' : 'ordinary') : `${kind}${isRest(employee, date) ? '-rest' : ''}`;
@@ -88,11 +107,11 @@ export function leaveBalance(state, employee, type, asOf) {
   const year = Number(asOf.slice(0, 4));
   const approved = state.leaves.filter(l => l.employeeId === employee.id && l.typeId === type.id && l.status === 'approved');
   const counted = l => l.countedDates || leaveDates(employee, type, l.startDate, l.endDate);
-  const usedIn = y => approved.reduce((s, l) => s + counted(l).filter(d => d.startsWith(`${y}-`)).length, 0);
+  const usedIn = y => approved.reduce((s, l) => s + counted(l).filter(d => d.startsWith(`${y}-`)).reduce((n, d) => n + leaveFraction(l, d), 0), 0);
   const priorEntitlement = earnedEntitlement(employee, priorOverride ? { ...originalType, entitledDays: priorOverride.annualDays } : originalType, `${year - 1}-12-31`);
   const carryEntitled = Math.min(type.carryOverDays, Math.max(0, priorEntitlement - usedIn(year - 1)));
   const expiry = new Date(Date.UTC(year, type.expirationMonths, 0)).toISOString().slice(0, 10);
-  const consumedBeforeExpiry = Math.min(carryEntitled, approved.reduce((sum, l) => sum + counted(l).filter(d => d.startsWith(`${year}-`) && d <= expiry).length, 0));
+  const consumedBeforeExpiry = Math.min(carryEntitled, approved.reduce((sum, l) => sum + counted(l).filter(d => d.startsWith(`${year}-`) && d <= expiry).reduce((n, d) => n + leaveFraction(l, d), 0), 0));
   // Expired, unused carry is removed; carry already consumed must not consume this year's grant twice.
   const carry = asOf <= expiry ? carryEntitled : consumedBeforeExpiry;
   const entitled = manual && manual.manualCredits !== null && manual.manualCredits !== undefined ? manual.manualCredits : earnedEntitlement(employee, type, asOf), used = round(usedIn(year) + (manual?.usedBefore || 0));
@@ -213,7 +232,21 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
       const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && l.startDate <= d && l.endDate >= d);
       const rest = isRest(e, d), kind = classification(state, e, d);
-      if (leave && !rest) {
+      const half = leave && !rest && leaveFraction(leave, d) === 0.5;
+      let leaveCoverMinutes = 0, leaveShiftStart = '';
+      if (half) {
+        // Half-day leave: half the day is leave (paid or unpaid by type); the other half follows attendance as usual.
+        const type = state.leaveTypes.find(t => t.id === leave.typeId), normal = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
+        leaveDays += 0.5; leaveNotes.push(`${d}: ${type?.name || leave.typeId} (half day${leave.startTime ? ` ${leave.startTime}-${leave.endTime}` : ''})`);
+        if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', daily / 2, `${daily} × 0.5 unpaid half-day leave`, leave, d);
+        else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId} (half day); salary already included in cutoff basic`, leave, d);
+        if (type?.paid && !type.includedIn13th) excludedLeave += daily / 2;
+        leaveCoverMinutes = normal * 30;
+        // Morning leave: lateness is measured from the end of the leave.
+        if (leave.endTime && leave.startDate === d && (!leave.startTime || leave.startTime <= (record?.scheduledIn || '00:00'))) leaveShiftStart = leave.endTime;
+        if (!record) { add(deductions, 'absence', daily / 2, `${daily} × 0.5 day: no attendance for the other half of the day`, null, d); continue; }
+      }
+      if (leave && !rest && !half) {
         const type = state.leaveTypes.find(t => t.id === leave.typeId);
         leaveDays++; leaveNotes.push(`${d}: ${type?.name || leave.typeId}`);
         if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', daily, `${daily} × 1 unpaid leave day`, leave, d);
@@ -245,7 +278,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
       daysPresent++;
       const normalHours = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
-      const startMinute = stamp(`${d}T${record.timeIn}`), scheduledMinute = stamp(`${d}T${record.scheduledIn}`);
+      const startMinute = stamp(`${d}T${record.timeIn}`), scheduledMinute = stamp(`${d}T${leaveShiftStart || record.scheduledIn}`);
       // Company policy option: time before the scheduled start is not paid, so overtime only accrues after the scheduled end.
       const minutes = attendanceProfile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduledMinute) : attendanceMinutes(record);
       const lateMinutes = rest ? 0 : Math.max(0, (startMinute - scheduledMinute) / 60000);
@@ -263,7 +296,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         lateDaysLost += lostDay; lateReduction += deduction; lateMinutesUnoffset += deductibleMinutes;
         add(earnings, 'basic', -deduction, `Late ${deductibleMinutes} min not offset ÷ ${dayMinutes} min day = ${Math.round(lostDay * 10000) / 10000} day × ${daily} (days credited reduced)`, record, d);
       }
-      const under = rest || record.exception ? 0 : Math.max(0, normalHours * 60 - minutes.length - lateMinutes);
+      const under = rest || record.exception ? 0 : Math.max(0, normalHours * 60 - minutes.length - lateMinutes - leaveCoverMinutes);
       if (r.deductUndertime && under) add(deductions, 'undertime', under / 60 * hourly, `${under} minutes ÷ 60 × ${hourly}`, record, d);
       const groups = new Map();
       // Policy "separate" (the default): time after the schedule is overtime only up to the hours the employee filed

@@ -174,3 +174,17 @@ test('payroll is real time: unapproved attendance and a time-in without time out
   assert.equal(row.creditedDays, 10.9375, '30 minutes late on the open day: 1 - 30/480');
   assert.ok(p.blockers.some(b => /no time out yet/.test(b)) && p.blockers.some(b => /not approved/.test(b)), 'flagged until complete');
 });
+
+test('half-day leave: the leave half is paid (or deducted when unpaid); the worked half has no undertime', () => {
+  const run = typeId => {
+    const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:00', timeOut: '12:00' })]; withOtherDays(s);
+    s.leaves = [{ id: 'h1', employeeId: 'EMP-001', typeId, startDate: '2026-09-01', endDate: '2026-09-01', startTime: '12:00', endTime: '16:00', days: 0.5, countedDates: ['2026-09-01'], partialDates: ['2026-09-01'], reason: 'Half day', documentReference: 'x', status: 'approved', eligibilityVerified: true }];
+    return calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  };
+  const paid = run('sil');
+  assert.equal(paid.deductions.undertime, 0, 'the leave half is not undertime');
+  assert.equal(paid.absenceAmount, 0, 'paid half day: nothing deducted');
+  const unpaid = run('unpaid');
+  assert.equal(Math.round((unpaid.absenceAmount - paid.absenceAmount) * 100) / 100, 681.82, 'unpaid half day reduces basic by half a day (1,363.64 / 2)');
+  assert.equal(unpaid.deductions.undertime, 0);
+});
