@@ -3,7 +3,7 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who } from './hr-common.js';
 
 const PAGE_SIZE = 10;
-const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
+const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['attendance', 'Attendance', '🕒'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
 function serviceLength(start, today) {
@@ -160,11 +160,11 @@ export function createFiles(ctx) {
     // Loans (pay information): only roles allowed to see loans get the tab.
     extras.loans = await api('/loans/dashboard').then(d => ({ loans: d.loans.filter(l => l.employeeId === id), applications: d.applications.filter(a => a.employeeId === id) })).catch(() => null);
     if (profileId !== id) return;
-    const f = record.form, legacy = ctx.legacy(), today = ctx.today();
-    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (!['family', 'education', 'history'].includes(key) || extras.family));
+    const f = record.form, today = ctx.today();
+    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (key !== 'attendance' || ctx.getState?.()?.attendance) && (!['family', 'education', 'history'].includes(key) || extras.family));
     if (!tabs.some(([key]) => key === tab)) tab = 'overview';
     const header = `<section class="panel hr-profile-head"><div class="hr-profile-id"><span class="hr-avatar large"><img src="/api/hr/employees/${enc}/photo" alt="" data-photo>${esc(initials(record.name))}</span><div><h1>${esc(record.name)}</h1><p class="sub">${esc(record.number)} · ${esc(f.employment.position || 'No position')} · ${esc(f.employment.department || 'No department')}</p><p>${statusBadge(record.archived ? 'Archived' : record.activity)} ${f.employment.classification ? badge(f.employment.classification, 'neutral') : ''} ${record.draft ? badge('Pay setup incomplete', 'pending') : ''}</p></div></div>
-      <div class="actions"><button class="small" data-back>← All employees</button>${record.canEdit && !record.archived ? '<button class="small primary" data-edit-self>Edit record</button>' : ''}${can().approve ? (record.archived ? `<button class="small" data-restore="${esc(id)}">Restore</button>` : `<button class="small ghost-danger" data-archive="${esc(id)}">Archive</button>`) : ''}${legacy ? `<button class="small" data-legacy-profile="${esc(id)}">Attendance, leave &amp; pay →</button>` : ''}</div></section>`;
+      <div class="actions"><button class="small" data-back>← All employees</button>${record.canEdit && !record.archived ? '<button class="small primary" data-edit-self>Edit record</button>' : ''}${can().approve ? (record.archived ? `<button class="small" data-restore="${esc(id)}">Restore</button>` : `<button class="small ghost-danger" data-archive="${esc(id)}">Archive</button>`) : ''}</div></section>`;
     const infoCard = (icon, label, value) => `<div class="info-card"><span class="info-icon" aria-hidden="true">${icon}</span><span><small>${esc(label)}</small><strong>${esc(value || '—')}</strong></span></div>`;
     const info = `<div class="info-cards">${infoCard('📅', 'Years of service', serviceLength(f.employment.dateHired, today))}${infoCard('💼', 'Employment type', f.employment.employmentType || 'Not set')}${infoCard('📈', 'Job level', f.employment.jobLevel || 'Not set')}${infoCard('🗓️', 'Date hired', fmtDate(f.employment.dateHired))}</div>`;
     const tabBar = `<section class="panel profile-tabs-panel"><div class="tabs hr-tabs profile-tab-grid" role="tablist">${tabs.map(([key, text, icon]) => `<button role="tab" aria-selected="${key === tab}" class="${key === tab ? 'active' : ''}" data-tab-select="${key}"><span aria-hidden="true">${icon}</span> ${text}</button>`).join('')}</div><div class="hr-tab-body">${safeBody(record, checklist, extra, extras)}</div></section>`;
@@ -173,6 +173,7 @@ export function createFiles(ctx) {
     root.querySelector('[data-photo]')?.addEventListener('error', event => event.target.remove());
     root.querySelector('[data-photo]')?.addEventListener('load', event => event.target.parentElement.classList.add('has-photo'));
     root.addEventListener('click', event => onProfileClick(event, record, checklist, extras));
+    root.addEventListener('change', event => { if (!event.target.matches('[data-att-month]')) return; attMonth = event.target.value; root.querySelector('[data-att-box]').innerHTML = attendanceHtml(record.id); });
   }
   const dl = rows => boxes(rows);   // all profile details use the boxed field layout
   // Read-only field boxes and section cards come from hr-common.js, shared with the employee portal.
@@ -207,6 +208,31 @@ export function createFiles(ctx) {
   const formBtn = (part, canEdit) => (canEdit ? ` <button class="small" data-edit-part="${part}">Edit</button>` : '');
   function personalRows(f) { return [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ...(f.personal.bloodType ? [['Blood type', f.personal.bloodType]] : []), ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]; }
   function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Subsidiary', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
+  // Attendance history for one month: recorded attendance and approved leave, newest first.
+  let attMonth = '';
+  function attendanceHtml(id) {
+    const state = ctx.getState(), month = attMonth || ctx.today().slice(0, 7);
+    const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+    const grace = state.rules.filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 15;
+    const typeName = tid => state.leaveTypes.find(x => x.id === tid)?.name || tid;
+    const rows = new Map();
+    for (const a of state.attendance.filter(x => x.employeeId === id && x.date.startsWith(month))) {
+      const late = a.status === 'present' && mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? Math.max(0, mins(a.timeIn) - mins(a.scheduledIn)) : 0;
+      const status = a.status === 'present' ? (late >= Math.max(1, grace) ? 'Late' : 'Present') : a.status === 'absent' ? 'Absent' : a.status === 'off' ? 'Off' : a.status.replace(/-/g, ' ');
+      rows.set(a.date, { date: a.date, status, timeIn: a.timeIn, timeOut: a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '', late, note: a.explanation || '' });
+    }
+    for (const l of state.leaves.filter(x => x.employeeId === id && x.status === 'approved')) for (const d of (l.countedDates || []).filter(x => x.startsWith(month))) {
+      const half = (l.partialDates || []).includes(d), row = rows.get(d) || { date: d, timeIn: '', timeOut: '', late: 0, note: '' };
+      rows.set(d, { ...row, status: half && row.status ? `${row.status} · ${typeName(l.typeId)} (half day)` : `On leave · ${typeName(l.typeId)}${half ? ' (half day)' : ''}` });
+    }
+    const list = [...rows.values()].sort((a, b) => b.date.localeCompare(a.date));
+    const months = [...new Set([ctx.today().slice(0, 7), ...state.attendance.filter(x => x.employeeId === id).map(x => x.date.slice(0, 7))])].sort().reverse();
+    const label = m => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const count = s => list.filter(r => r.status.startsWith(s)).length;
+    return block('🕒', 'Attendance history', `<div class="att-tools"><label class="field">Month<select data-att-month>${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${label(m)}</option>`).join('')}</select></label><span class="legend">${count('Present')} present · ${count('Late')} late · ${count('Absent')} absent · ${count('On leave')} on leave</span></div>`
+      + table(['Date', 'Status', 'Time in', 'Time out', 'Late (min)', 'Remarks'], list.map(r => [day(r.date), esc(r.status), esc(r.timeIn || '—'), esc(r.timeOut || '—'), r.late || '—', `<span class="wrap">${esc(r.note || '')}</span>`]), 'No attendance recorded for this month.'));
+  }
   function safeBody(...args) {
     try { return tabBody(...args); } catch (error) { return `<div class="notice">This tab could not be shown: ${esc(error.message)}. Reload the page (Ctrl+F5) and try again.</div>`; }
   }
@@ -256,6 +282,7 @@ export function createFiles(ctx) {
       const files = checklist.items.flatMap(i => i.versions.map(v => ({ ...v, current: i.current?.id === v.id })));
       return governmentIds() + documentsTab(record, checklist) + (files.length ? block('📁', 'All 201 files', table(['File', 'Requirement', 'Version', 'Uploaded', 'Review', ''], files.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(v => [`<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, esc(v.requirementName || ''), `v${v.version}${v.current ? ' <small>current</small>' : ' <small>earlier</small>'}`, `${fmtDateTime(v.uploadedAt)}<small>${esc(who(v.uploadedBy))}</small>`, badge(v.reviewStatus, DOC_BADGE[v.reviewStatus]), `<a class="small download-link" href="/api/hr/documents/${v.id}/content?download=1">Download</a>`]), 'No files uploaded yet. Upload them from the Requirements tab.')) : '');
     }
+    if (tab === 'attendance') return `<div data-att-box>${attendanceHtml(record.id)}</div>`;
     if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'), edit ? ' <button class="small" data-go-memos>Send a memo</button>' : '');
     if (tab === 'trainings') return block('🏅', 'Training records', table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(x => [esc(x.title), fmtDate(x.date), x.required ? 'Required' : 'Optional', esc(x.registration), esc(x.attendance), x.completion === 'completed' ? badge('Completed') : esc(x.completion)]), 'No trainings assigned.'), edit ? ' <button class="small" data-go-trainings>Assign a training</button>' : '');
     return block('↺', 'Activity history', table(['When', 'Who', 'Action', 'Area', 'Previous → updated'], extra.activity.map(a => [fmtDateTime(a.at), esc(who(a.actor)), esc(a.action), esc(a.area), (a.changes || []).length ? `<span class="wrap">${a.changes.map(c => `<small><strong>${esc(c.field)}</strong>: ${esc(c.before)} → ${esc(c.after)}</small>`).join('')}</span>` : '—']), record.canEdit ? 'No recorded activity yet.' : 'Activity history is available to HR.')) + '<p class="legend">The audit trail is permanent: it cannot be edited or deleted. Values you are not authorized to see (such as salary) are left out.</p>';
