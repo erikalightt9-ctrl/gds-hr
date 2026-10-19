@@ -26,6 +26,8 @@ export function scheduleOn(employee, profile = {}, date, rule) {
     hoursPerDay: override.hoursPerDay ?? profile.hoursPerDay ?? rule?.normalHours ?? 8,
     mealBreakMinutes: override.mealBreakMinutes ?? profile.mealBreakMinutes ?? 60,
     arrangement: override.arrangement || profile.arrangement || '',
+    // Flexible day: any start time; only the regular hours must be rendered. Never late, and no overtime.
+    flexible: !!override.flexible,
   };
 }
 export const leaveDates = (employee, type, start, end) => dates(start, end).filter(d => type.dayBasis === 'calendar' || !isRest(employee, d));
@@ -278,8 +280,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         continue;
       }
       daysPresent++; presentOrLeave.add(d);
-      const normalHours = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
-      const startMinute = stamp(`${d}T${record.timeIn}`), scheduledMinute = stamp(`${d}T${leaveShiftStart || record.scheduledIn}`);
+      const daySched = scheduleOn(e, attendanceProfile, d, r), normalHours = daySched.hoursPerDay, flexible = daySched.flexible;
+      const startMinute = stamp(`${d}T${record.timeIn}`), scheduledMinute = flexible ? startMinute : stamp(`${d}T${leaveShiftStart || record.scheduledIn}`);
       // Company policy option: time before the scheduled start is not paid, so overtime only accrues after the scheduled end.
       const minutes = attendanceProfile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduledMinute) : attendanceMinutes(record);
       const lateMinutes = rest ? 0 : Math.max(0, (startMinute - scheduledMinute) / 60000);
@@ -308,7 +310,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       let unfiledMinutes = 0;
       minutes.forEach((m, index) => {
         const date = new Date(m).toISOString().slice(0, 10), c = classification(state, e, date);
-        const ot = index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
+        const ot = !flexible && index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
         if (ot && separateOT && e.coveredOT && index - normalHours * 60 >= approvedOTMinutes) { unfiledMinutes++; return; }
         const key = `${date}/${c}/${ot}/${night}`;
         const group = groups.get(key) || { date, c, ot, night, count: 0 }; group.count++; groups.set(key, group);

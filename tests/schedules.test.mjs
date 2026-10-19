@@ -27,10 +27,10 @@ function sixDayState(profile) {
 
 test('day overrides replace the base schedule only on their weekday', () => {
   const employee = { scheduleStart: '09:00' }, profile = { ...weekday, daySchedules: [halfDaySaturday] };
-  assert.deepEqual(scheduleOn(employee, profile, MONDAY), { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'Office' });
-  assert.deepEqual(scheduleOn(employee, profile, SATURDAY), { start: '09:00', end: '14:00', hoursPerDay: 5, mealBreakMinutes: 0, arrangement: 'Office' });
+  assert.deepEqual(scheduleOn(employee, profile, MONDAY), { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'Office', flexible: false });
+  assert.deepEqual(scheduleOn(employee, profile, SATURDAY), { start: '09:00', end: '14:00', hoursPerDay: 5, mealBreakMinutes: 0, arrangement: 'Office', flexible: false });
   const wfh = scheduleOn(employee, { ...weekday, daySchedules: [{ day: 6, arrangement: 'WFH' }] }, SATURDAY);
-  assert.deepEqual(wfh, { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'WFH' }, 'blank override fields inherit the base schedule');
+  assert.deepEqual(wfh, { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'WFH', flexible: false }, 'blank override fields inherit the base schedule');
   assert.equal(scheduleOn(employee, {}, MONDAY, { normalHours: 7 }).hoursPerDay, 7, 'rules supply hours when no profile value exists');
 });
 
@@ -62,7 +62,7 @@ test('attendance profiles validate day schedules and allow up to 16 regular hour
     state.employees.push({ id: 'E1', name: 'Driver, Test', draft: true, active: false, startDate: '', endDate: '', monthlySalary: null, department: '', restDays: [0], scheduleStart: '08:00', leaveEligibility: [] });
     store.write(state);
     const saved = saveProfile(store, admin, 'E1', 'attendance', { hoursPerDay: 12, daySchedules: [halfDaySaturday] });
-    assert.deepEqual(saved.daySchedules, [halfDaySaturday]);
+    assert.deepEqual(saved.daySchedules, [{ ...halfDaySaturday, flexible: false }]);
     assert.deepEqual(saveProfile(store, admin, 'E1', 'attendance', { hoursPerDay: 8 }).daySchedules, [], 'defaults to no overrides');
     assert.throws(() => saveProfile(store, admin, 'E1', 'attendance', { hoursPerDay: 17 }));
     assert.throws(() => saveProfile(store, admin, 'E1', 'attendance', { daySchedules: [halfDaySaturday, { ...halfDaySaturday }] }), /Duplicate/);
@@ -87,4 +87,20 @@ test('the employee portal shows the day-specific schedule and arrangement', () =
     assert.equal(wfh.arrangement, 'WFH');
     assert.equal(todayAttendance(store, employee, new Date(`${MONDAY}T01:00:00Z`)).arrangement, 'Office');
   } finally { store.close(); }
+});
+
+test('flexible Saturday: any start, never late, 4 hours required, extra hours are not overtime', async () => {
+  const { calculatePayroll } = await import('../src/engine.mjs');
+  const { fixture, attend } = await import('./engine.test.mjs');
+  const s = fixture(); s.employees[0].restDays = [0];
+  s.employeeProfiles = [{ employeeId: 'EMP-001', section: 'attendance', scheduleEnd: '16:00', hoursPerDay: 8, mealBreakMinutes: 0, daySchedules: [{ day: 6, scheduleStart: '', scheduleEnd: '', hoursPerDay: 4, mealBreakMinutes: 0, arrangement: 'Office', flexible: true }] }];
+  s.rules[0].overtimeApproval = 'attendance';
+  s.attendance = [attend('2026-09-05', { scheduledIn: '08:00', timeIn: '13:00', timeOut: '19:00' })];
+  const row = calculatePayroll(s, '2026-09-05', '2026-09-05').rows[0];
+  assert.equal(row.late[0].lateMinutes, 0, 'no start time to be late for');
+  assert.equal(row.earnings.regularOT || 0, 0, 'hours beyond the 4 are not overtime');
+  assert.equal(row.deductions.undertime, 0);
+  const short = fixture(); short.employees[0].restDays = [0]; short.employeeProfiles = s.employeeProfiles; short.rules[0].overtimeApproval = 'attendance';
+  short.attendance = [attend('2026-09-05', { scheduledIn: '08:00', timeIn: '13:00', timeOut: '16:00' })];
+  assert.ok(calculatePayroll(short, '2026-09-05', '2026-09-05').rows[0].deductions.undertime > 0, 'under 4 hours is undertime');
 });

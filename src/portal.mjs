@@ -73,7 +73,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     if (clockIn) {
       if (state.attendance.some(a => a.employeeId === employee.id && a.date === workDate)) throw new AppError('HR has already entered a record for this day. Ask HR to reconcile it.');
       const approvedExplanation = rows(store, 'attendance_explanations', employee.id).find(e => e.date === workDate && e.status === 'approved');
-      const record = schemas.attendance.parse({ id: `clock-${clockIn.id}`, employeeId: employee.id, date: workDate, status: 'present', scheduledIn: scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate).start, timeIn: clockIn.time, timeOut: event.time, endNextDay: day !== workDate, breaks: [], approved: false, offsetMinutes: approvedExplanation?.approvedOffset || 0, exception: false, explanation: approvedExplanation?.explanation || 'Employee clock events: HR must review exact unpaid breaks and approve.', holidayEligible: false });
+      const record = schemas.attendance.parse({ id: `clock-${clockIn.id}`, employeeId: employee.id, date: workDate, status: 'present', scheduledIn: (s => (s.flexible ? clockIn.time : s.start))(scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate)), timeIn: clockIn.time, timeOut: event.time, endNextDay: day !== workDate, breaks: [], approved: false, offsetMinutes: approvedExplanation?.approvedOffset || 0, exception: false, explanation: approvedExplanation?.explanation || 'Employee clock events: HR must review exact unpaid breaks and approve.', holidayEligible: false });
       attendanceMinutes(record);
       state.attendance.push(record); state.version++; store.write(state);
       store.log(actor, 'create-from-clock', 'attendance', record.id, null, record);
@@ -81,7 +81,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     store.db.prepare('INSERT INTO clock_events VALUES(?,?,?,?,?)').run(event.id, employee.id, value.kind, workDate, JSON.stringify(event));
     // Late 15 minutes or more: from the 3rd time this month the employee is asked for an explanation letter.
     if (value.kind === 'in') {
-      const lateMin = lateBy(event.time, scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate).start), grace = graceFor(state, employee.id, workDate);
+      const daySched = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate), lateMin = daySched.flexible ? 0 : lateBy(event.time, daySched.start), grace = graceFor(state, employee.id, workDate);
       if (grace > 0 && lateMin >= grace) {
         const month = workDate.slice(0, 7), count = lateIncidents(state, employee.id, month).filter(x => x.date !== workDate).length + 1;
         if (count >= LETTER_AFTER) { store.notify(employee.id, letterMessage(count, month)); store.notify(null, `${employee.id} ${employee.name}: late 15 minutes or more ${count} times in ${month}. Explanation letter required.`); }
@@ -102,7 +102,7 @@ export function todayAttendance(store, employee, now = new Date()) {
   const workDate = open?.workDate || day, events = allEvents.filter(e => e.workDate === workDate), clockIn = events.find(e => e.kind === 'in'), clockOut = events.find(e => e.kind === 'out');
   const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
   const schedule = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
-  const scheduledIn = record?.scheduledIn || schedule.start;
+  const scheduledIn = schedule.flexible ? (record?.timeIn || clockIn?.time || '') : record?.scheduledIn || schedule.start;
   const scheduledOut = schedule.end || (scheduledIn ? fromMinutes(hhmm(scheduledIn) + schedule.hoursPerDay * 60 + schedule.mealBreakMinutes) : '');
   const actualIn = record?.timeIn || clockIn?.time || '', actualOut = record?.timeOut || clockOut?.time || '';
   const late = scheduledIn && actualIn ? Math.max(0, hhmm(actualIn) - hhmm(scheduledIn)) : 0;
