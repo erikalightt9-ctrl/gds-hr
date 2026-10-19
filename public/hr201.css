@@ -1548,3 +1548,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ln-table .row-actions > * { margin: 0; }
 .ln-name { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .ln-name:hover { color: #8f1420; text-decoration: underline; }
+.ml-name { display: block; border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-align: left; cursor: pointer; }
+.ml-name:hover { color: #8f1420; text-decoration: underline; }
