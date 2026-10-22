@@ -359,7 +359,15 @@ export function payslipFromRow(run, row, { designation = '' } = {}) {
   const loanRemainder = residual(row.deductions.loans || 0, loans), otherRemainder = residual(row.deductions.other || 0, otherItems);
   if (loanRemainder) deductionItems.push({ label: 'Other loan deductions (detail unavailable)', amount: loanRemainder });
   if (otherRemainder || !otherItems.length) deductionItems.push({ label: 'Other authorized deductions', amount: otherRemainder });
-  return { draft: run.status !== 'posted', designation, payBasis: row.payBasis || 'monthly', workBreakdown: row.workBreakdown || [], contributionBasis: row.contributionBasis || null, id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
+  const leaveDays = new Map();
+  for (const note of row.leaveNotes || []) {
+    const [d, ...rest] = note.split(': '), text = rest.join(': '), half = /\(half day/.test(text), name = text.replace(/\s*\(half day.*\)$/, '');
+    const code = /\(([^)]+)\)/.exec(name)?.[1] || name.split(/\s+/).filter(w => /^[A-Z]/.test(w)).map(w => w[0]).join('');
+    const label = `${new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}${half ? ' (half day)' : ''}`;
+    leaveDays.set(code, [...(leaveDays.get(code) || []), label]);
+  }
+  const leaves = [...leaveDays].map(([code, days]) => `${code}: ${days.join(', ')}`).join('; ');
+  return { leaves, draft: run.status !== 'posted', designation, payBasis: row.payBasis || 'monthly', workBreakdown: row.workBreakdown || [], contributionBasis: row.contributionBasis || null, id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
 }
 // At 9:00 AM on salary day the server releases finalized payslips and tells each employee once (bell notice).
 export function announceDuePayslips(store, now = new Date()) {
