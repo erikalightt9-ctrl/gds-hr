@@ -12,6 +12,15 @@ export function officeNetworks(store) {
   return store.db.prepare('SELECT ip, label, added_by AS addedBy, added_at AS addedAt FROM office_networks ORDER BY added_at').all();
 }
 // Is this device on an office network? configured=false means no address is saved yet (time in is not restricted).
+// Office area: the device's GPS is within the office radius (Settings -> Company -> Office location). The office's
+// internet address can change during the day, so a phone at the office counts as in the office even when its
+// address does not match the saved Wi-Fi.
+export function inOfficeArea(store, latitude, longitude, accuracy = 0) {
+  const company = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').company || {}; } catch { return {}; } })();
+  if (latitude === null || latitude === undefined || company.officeLatitude === null || company.officeLatitude === undefined) return false;
+  const r = Math.PI / 180, a = Math.sin((company.officeLatitude - latitude) * r / 2) ** 2 + Math.cos(latitude * r) * Math.cos(company.officeLatitude * r) * Math.sin((company.officeLongitude - longitude) * r / 2) ** 2;
+  return 12742000 * Math.asin(Math.sqrt(a)) - Math.min(Number(accuracy) || 0, 100) <= (company.officeRadius || 150);
+}
 export function networkStatus(store, ip) {
   const list = officeNetworks(store), address = clean(ip);
   return { configured: list.length > 0, office: list.some(n => n.ip === address) };

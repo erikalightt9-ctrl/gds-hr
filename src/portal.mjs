@@ -5,7 +5,7 @@ import { AppError, permit, saveRecord } from './service.mjs';
 import { date, schemas } from './schema.mjs';
 import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, OT_BLOCK } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
-import { networkStatus } from './office-network.mjs';
+import { networkStatus, inOfficeArea } from './office-network.mjs';
 import { lateIncidents, lateBy, graceFor, LETTER_AFTER, letterMessage } from './late-incidents.mjs';
 import { payDateFor, payslipReleased } from './paydays.mjs';
 const localDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -45,7 +45,8 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
   // Office Wi-Fi rule: time in / out from the office network; anywhere else it is "Out of office" with a reason for HR.
   const network = networkStatus(store, ip);
-  if (value.mode === 'office' && network.configured && !network.office) throw new AppError('You are not connected to the office Wi-Fi. Connect to it, or choose Out of office and give a reason for HR approval.');
+  const officeArea = inOfficeArea(store, value.latitude, value.longitude, value.accuracy);
+  if (value.mode === 'office' && network.configured && !network.office && !officeArea) throw new AppError('You are not at the office (not on the office Wi-Fi and your location is outside the office). Choose Out of office and give a reason for HR approval.');
   if (value.mode === 'outside' && value.reason.length < 5) throw new AppError('Give the reason you are out of the office (at least 5 characters).');
   return store.transaction(() => {
     const retry = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(value.requestId);
@@ -69,7 +70,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     }
     const workDate = clockIn?.workDate || day;
     if (state.runs.some(r => r.start <= workDate && r.end >= workDate && r.rows.some(row => row.employeeId === employee.id))) throw new AppError('This attendance belongs to posted payroll. Contact HR.');
-    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason, approval: 'pending' } : {}), approvedLocation: workplace.approvedLocation || '', address: null, clockInId: clockIn?.id || null };
+    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, inOfficeArea: officeArea, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason, approval: 'pending' } : {}), approvedLocation: workplace.approvedLocation || '', address: null, clockInId: clockIn?.id || null };
     if (clockIn) {
       if (state.attendance.some(a => a.employeeId === employee.id && a.date === workDate)) throw new AppError('HR has already entered a record for this day. Ask HR to reconcile it.');
       const approvedExplanation = rows(store, 'attendance_explanations', employee.id).find(e => e.date === workDate && e.status === 'approved');
@@ -318,7 +319,7 @@ export async function locationAddress(store, actor, eventId, provider = process.
   const event0 = JSON.parse(row.data), company = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').company || {}; } catch { return {}; } })();
   if (company.officeAddress) {
     const near = company.officeLatitude !== null && company.officeLatitude !== undefined && event0.latitude !== null && distanceMeters(event0.latitude, event0.longitude, company.officeLatitude, company.officeLongitude) <= (company.officeRadius || 150);
-    if (event0.onOfficeNetwork || near) return { address: company.officeAddress, office: true, via: event0.onOfficeNetwork ? 'office Wi-Fi' : 'office location' };
+    if (event0.onOfficeNetwork || event0.inOfficeArea || near) return { address: company.officeAddress, office: true, via: event0.onOfficeNetwork ? 'office Wi-Fi' : 'office location' };
   }
   const cached = store.db.prepare('SELECT address,fetched_at AS fetchedAt FROM location_addresses WHERE event_id=?').get(eventId);
   if (cached) return cached;
