@@ -55,7 +55,7 @@ test('an approved basis flows into payroll, the payslip and the remittance repor
     assert.equal(row.deductions['Pag-IBIG'], 200);
     assert.ok(row.trace.some(t => t.component === 'SSS' && /contribution basis 20000/.test(t.formula)));
     const slip = payslipFromRow({ ...run, id: 'preview' }, row);
-    assert.match(payslipPdf(slip, { draft: true }).toString('latin1'), /Contribution basis: SSS PHP 20,000.00/);
+    assert.doesNotMatch(payslipPdf(slip, { draft: true }).toString('latin1'), /Contribution basis|Company-paid government contributions/, 'no remark lines on the payslip');
     const posted = postPayroll(store, admin, { start: run.start, end: run.end, pay13th: false, fingerprint: run.fingerprint, employeeIds: ['EMP-001'] });
     const line = REPORTS.contributions.rows(store.read()).find(r => r[1] === 'EMP-001' && r[0].startsWith(posted.start));
     assert.deepEqual(line.slice(3, 7).map(v => String(v).replace(/[^\d.]/g, '')), ['35000', '20000', '35000', '35000']);

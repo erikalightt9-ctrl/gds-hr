@@ -132,12 +132,6 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   p.text('TOTAL DEDUCTIONS', C3 - 10, y - 13.5, { bold: true, align: 'right' }); p.text(amount(slip.totalDeductions), RIGHT - 12, y - 13.5, { bold: true, align: 'right', color: COLOR.redText }); y -= 20;
   p.fill(COLOR.net, LEFT, y - 26, WIDTH, 26); p.stroke(LEFT, y - 26, WIDTH, 26, COLOR.gold); p.line(C3, y, C3, y - 26, COLOR.gold);
   p.text('NET PAY', C3 - 10, y - 17, { size: 11, bold: true, align: 'right' }); p.text(`PHP ${amount(slip.net)}`, RIGHT - 12, y - 17, { size: 11.5, bold: true, align: 'right' }); y -= 40;
-  // Notes: employer share and any approved contribution basis, in small type.
-  const notes = [`Company-paid government contributions this cutoff (not deducted from your pay): PHP ${amount(slip.employerTotal)}.`];
-  const basis = slip.contributionBasis;
-  if (basis && Object.values(basis).some(v => v !== slip.monthlySalary)) notes.push(`Contribution basis: SSS PHP ${amount(basis.SSS)} | PhilHealth PHP ${amount(basis.PhilHealth)} | Pag-IBIG PHP ${amount(basis['Pag-IBIG'])} (approved adjustment; salary unchanged).`);
-  for (const n of notes) { p.text(n, LEFT + 4, y, { size: 7.5, color: COLOR.muted }); y -= 11; }
-
   // Sign-off.
   const sign = Math.min(118, y - 26);
   p.text('Received by:', LEFT + 12, sign + 22, { italic: true, size: 9.5 }); p.line(LEFT + 80, sign + 20, LEFT + 260, sign + 20, COLOR.ink);
