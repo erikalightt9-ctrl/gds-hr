@@ -7,8 +7,7 @@ import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinu
 import { getDocument } from './profiles.mjs';
 import { networkStatus, inOfficeArea } from './office-network.mjs';
 import { lateIncidents, lateBy, graceFor, LETTER_AFTER, letterMessage } from './late-incidents.mjs';
-import { payDateFor, payslipReleased } from './paydays.mjs';
-const localDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default('') }).strict();
 const note = z.string().trim().min(3).max(2000);
@@ -269,7 +268,8 @@ function overtimeMinutes(state, employee, a) {
 }
 export function employeeDashboard(store, actor, now = new Date()) {
   const employee = ownEmployee(store, actor), state = store.read(), day = local(now).slice(0, 10);
-  announcePayslips(store, state, employee.id, day);
+  const at = manilaNow(now);
+  announcePayslips(store, state, employee.id, at);
   const employment = profileOf(state, employee.id, 'employment'), leaves = state.leaves.filter(l => l.employeeId === employee.id);
   const balances = state.leaveTypes.filter(t => employee.leaveEligibility.includes(t.id)).map(type => {
     const balance = leaveBalance(state, employee, type, day), pending = leaves.filter(l => l.typeId === type.id && l.status === 'pending').reduce((sum, l) => sum + (l.countedDates || []).filter(d => d.startsWith(day.slice(0, 4))).reduce((n, d) => n + leaveFraction(l, d), 0), 0);
@@ -281,8 +281,8 @@ export function employeeDashboard(store, actor, now = new Date()) {
   const greetingName = [personal.firstName || restPart, personal.lastName || lastPart].filter(Boolean).join(' ');
   const calendar = { restDays: employee.restDays || [0], grace: graceFor(state, employee.id, day), holidays: state.holidays.filter(h => h.date.slice(0, 4) >= String(Number(day.slice(0, 4)) - 1) && h.kind !== 'ordinary').map(h => ({ date: h.date, name: h.name, kind: h.kind })) };
   return { calendar, employee: { id: employee.id, name: employee.name, greetingName, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: rows(store, 'clock_events', employee.id).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id && a.date >= `${Number(day.slice(0, 4)) - 1}-01-01`).map(a => ({ ...a, otMinutes: overtimeMinutes(state, employee, a) })), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), balances, leaves, documents,
-    payslips: state.runs.filter(r => payslipReleased(r, day) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ id: r.id, start: r.start, end: r.end, payDate: payDateFor(r.start, r.end), net: r.rows.find(row => row.employeeId === employee.id).net })),
-    upcomingPayslips: state.runs.filter(r => r.status === 'posted' && !payslipReleased(r, day) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ start: r.start, end: r.end, payDate: payDateFor(r.start, r.end) })),
+    payslips: state.runs.filter(r => payslipReleased(r, at) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ id: r.id, start: r.start, end: r.end, payDate: payDateFor(r.start, r.end), net: r.rows.find(row => row.employeeId === employee.id).net })),
+    upcomingPayslips: state.runs.filter(r => r.status === 'posted' && !payslipReleased(r, at) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ start: r.start, end: r.end, payDate: payDateFor(r.start, r.end) })),
     notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id=? ORDER BY rowid DESC LIMIT 50').all(employee.id), serverTime: now.toISOString() };
 }
 export function liveDashboard(store, actor, now = new Date()) {
@@ -361,9 +361,14 @@ export function payslipFromRow(run, row, { designation = '' } = {}) {
   if (otherRemainder || !otherItems.length) deductionItems.push({ label: 'Other authorized deductions', amount: otherRemainder });
   return { draft: run.status !== 'posted', designation, payBasis: row.payBasis || 'monthly', workBreakdown: row.workBreakdown || [], contributionBasis: row.contributionBasis || null, id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
 }
+// At 9:00 AM on salary day the server releases finalized payslips and tells each employee once (bell notice).
+export function announceDuePayslips(store, now = new Date()) {
+  const state = store.read(), at = manilaNow(now), ids = new Set(state.runs.filter(r => payslipReleased(r, at)).flatMap(r => r.rows.map(row => row.employeeId)));
+  for (const id of ids) announcePayslips(store, state, id, at);
+}
 // On salary day, tell the employee once that the payslip is now in their account.
-function announcePayslips(store, state, employeeId, day) {
-  for (const run of state.runs.filter(r => payslipReleased(r, day) && r.rows.some(row => row.employeeId === employeeId))) {
+function announcePayslips(store, state, employeeId, at) {
+  for (const run of state.runs.filter(r => payslipReleased(r, at) && r.rows.some(row => row.employeeId === employeeId))) {
     const key = `payslip-notice:${run.id}:${employeeId}`;
     if (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(key)) continue;
     store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run(key);
@@ -373,7 +378,7 @@ function announcePayslips(store, state, employeeId, day) {
 export function ownPayslip(store, actor, runId) {
   const employee = ownEmployee(store, actor), run = store.read().runs.find(r => r.id === runId && r.status === 'posted'), row = run?.rows.find(r => r.employeeId === employee.id);
   if (!row) throw new AppError('Payslip not found.', 404);
-  if (!payslipReleased(run, localDay())) throw new AppError(`This payslip will be available on salary day, ${payDateFor(run.start, run.end)}.`, 403);
+  if (!payslipReleased(run, manilaNow())) throw new AppError(`This payslip will be available on salary day, ${payDateFor(run.start, run.end)}, at 9:00 AM.`, 403);
   store.log(actor, 'view-payslip', 'payslip', run.id, null, { employeeId: employee.id });
   return payslipFromRow(run, row, { designation: designationOf(store, row.employeeId) });
 }

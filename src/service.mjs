@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
-import { payDateFor, payslipReleased } from './paydays.mjs';
+import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }
@@ -191,7 +191,7 @@ export function reversePayroll(store, actor, runId, input) {
       if (d.previousInterest !== undefined) loan.interestBalance = d.previousInterest;
       store.log(actor, 'payroll-reversal', 'loans', loan.id, before, loan);
     }
-    const wasReleased = payslipReleased(run, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()));
+    const wasReleased = payslipReleased(run, manilaNow());
     run.status = 'reversed'; run.reversedBy = actor.username; run.reversedAt = new Date().toISOString(); run.reversalReason = reason;
     state.version++; store.write(state);
     // Employees are told only when the payslip was already visible to them (on or after salary day).

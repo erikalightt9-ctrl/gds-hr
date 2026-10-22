@@ -11,9 +11,10 @@ test('salary days: 1st-15th is paid on the 22nd, 16th-end on the 8th of the next
   assert.equal(payDateFor('2026-09-01', '2026-09-15'), '2026-09-22');
   assert.equal(payDateFor('2026-09-16', '2026-09-30'), '2026-10-08');
   assert.equal(payDateFor('2026-12-16', '2026-12-31'), '2027-01-08', 'year change');
-  assert.equal(payslipReleased({ status: 'posted', start: '2026-09-16', end: '2026-09-30' }, '2026-10-07'), false);
-  assert.equal(payslipReleased({ status: 'posted', start: '2026-09-16', end: '2026-09-30' }, '2026-10-08'), true);
-  assert.equal(payslipReleased({ status: 'reversed', start: '2026-09-16', end: '2026-09-30' }, '2026-10-08'), false);
+  assert.equal(payslipReleased({ status: 'posted', start: '2026-09-16', end: '2026-09-30' }, '2026-10-07T23:59'), false);
+  assert.equal(payslipReleased({ status: 'posted', start: '2026-09-16', end: '2026-09-30' }, '2026-10-08T08:59'), false, 'not before 9:00 AM on salary day');
+  assert.equal(payslipReleased({ status: 'posted', start: '2026-09-16', end: '2026-09-30' }, '2026-10-08T09:00'), true, 'released at 9:00 AM');
+  assert.equal(payslipReleased({ status: 'reversed', start: '2026-09-16', end: '2026-09-30' }, '2026-10-08T10:00'), false);
 });
 
 test('a finalized payslip shows in the employee account only from salary day, with a one-time notice', () => {

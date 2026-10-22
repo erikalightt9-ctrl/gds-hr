@@ -30,7 +30,7 @@ import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, reviewOutOfOffice } from './portal.mjs';
+import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, reviewOutOfOffice, announceDuePayslips } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
@@ -394,6 +394,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   // Holiday calendar: this year and next year are filled in automatically (checked at start and twice a day).
   const holidayCheck = () => { try { const added = ensureHolidayYears(store); if (added.length) console.log(`Holidays added automatically for ${added.join(', ')}.`); } catch (error) { console.error('Automatic holiday calendar:', error.message); } };
   holidayCheck(); setInterval(holidayCheck, 12 * 3600000).unref();
+  // Payslips: released and announced at 9:00 AM on the 8th and 22nd (checked every minute).
+  const payslipCheck = () => { try { announceDuePayslips(store); } catch (error) { console.error('payslip release check failed:', error.message); } };
+  payslipCheck(); setInterval(payslipCheck, 60000).unref();
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });

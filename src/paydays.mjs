@@ -11,4 +11,7 @@ export function payDateFor(start, end) {
   const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
   return `${ny}-${pad(nm)}-${pad(PAY_DAY_SECOND_CUTOFF)}`;
 }
-export const payslipReleased = (run, today) => run.status === 'posted' && (!!run.releasedAt || payDateFor(run.start, run.end) <= today);
+// Payslips of a finalized payroll are released at 9:00 AM (Asia/Manila) on salary day, or earlier when HR sends them.
+export const RELEASE_TIME = '09:00';
+export const manilaNow = (now = new Date()) => new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 16);   // YYYY-MM-DDTHH:MM
+export const payslipReleased = (run, at = manilaNow()) => run.status === 'posted' && (!!run.releasedAt || `${payDateFor(run.start, run.end)}T${RELEASE_TIME}` <= (at.length === 10 ? `${at}T00:00` : at));
