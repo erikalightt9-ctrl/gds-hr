@@ -202,7 +202,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       // Messages between users (one-to-one) and display names: open to every signed-in user, employees included.
       if (pathname === '/api/messages' && req.method === 'GET') { send(200, messageContacts(store, auth.user)); return; }
       if (pathname === '/api/messages/unread' && req.method === 'GET') { send(200, unreadMessages(store, auth.user)); return; }
-      const chat = pathname.match(/^\/api\/messages\/([a-f0-9-]{36})$/);
+      const chat = pathname.match(/^\/api\/messages\/([a-f0-9-]{36}|everyone)$/);
       if (chat && req.method === 'GET') { send(200, conversation(store, auth.user, chat[1])); return; }
       if (chat && req.method === 'POST') { send(201, sendMessage(store, auth.user, chat[1], await readBody(req))); return; }
       if (pathname === '/api/staff-names' && req.method === 'GET') { send(200, staffNames(store, { staffOnly: auth.user.role === 'employee' })); return; }

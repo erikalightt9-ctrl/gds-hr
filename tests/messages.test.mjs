@@ -17,8 +17,9 @@ test('users message each other one-to-one; only the two people can read it; unre
     assert.deepEqual(heard.at(-1).sort(), [a.id, b.id].sort(), 'sender and recipient screens are told');
     assert.equal(unreadMessages(store, b).unread, 1);
     const list = messageContacts(store, b);
-    assert.equal(list.contacts[0].id, a.id, 'latest conversation first');
-    assert.equal(list.contacts[0].unread, 1);
+    assert.equal(list.contacts[0].id, 'everyone', 'Everyone is always first');
+    assert.equal(list.contacts[1].id, a.id, 'then the latest conversation');
+    assert.equal(list.contacts[1].unread, 1);
     assert.ok(!list.contacts.some(x => x.id === b.id), 'not yourself');
     const thread = conversation(store, b, a.id);
     assert.equal(thread.messages[0].body, 'Hello Ben'); assert.equal(thread.messages[0].mine, false);
@@ -61,4 +62,23 @@ test('a leave request prints as a formal leave application PDF', async () => {
   const pdf = renderLeavePdf(leave, { employee: { name: 'Hernando, Albert Puyat', department: 'GDS Capital HQ' }, typeName: 'Vacation Leave', designation: 'Driver', available: '6 days', decidedBy: 'GDS Capital Inc', verified: { name: 'Miller Leria', title: 'HR Manager' }, approved: { name: 'Erika Hernando', title: 'Admin Senior Supervisor' } }).toString('latin1');
   assert.ok(pdf.startsWith('%PDF-1.4'));
   for (const text of ['LEAVE APPLICATION', 'HERNANDO, ALBERT PUYAT', 'Vacation Leave', 'October 14, 2026', 'Approved', 'Verified by:', 'Miller Leria', 'HR Manager', 'Approved by:', 'Erika Hernando', 'Admin Senior Supervisor', 'Albert Puyat Hernando']) assert.ok(pdf.includes(text), text);
+});
+
+test('Everyone: HR posts one message all users read; employees cannot post there', async () => {
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    const setup = { username: 'setup', role: 'admin' };
+    const hr = await addUser(store, { username: 'hana', password: 'Hana-pass-2026', role: 'hr' }, setup);
+    const emp = await addUser(store, { username: 'eli', password: 'Eli-pass-20266', role: 'employee', employeeId: 'EMP-001' }, setup);
+    const heard = []; const stop = onChat(ids => heard.push(ids));
+    sendMessage(store, hr, 'everyone', { body: 'Office closed on Friday.' });
+    assert.ok([hr.id, emp.id].every(id => heard.at(-1).includes(id)), 'every user is told');
+    assert.equal(unreadMessages(store, emp).unread, 1);
+    const thread = conversation(store, emp, 'everyone');
+    assert.equal(thread.messages[0].body, 'Office closed on Friday.'); assert.equal(thread.canPost, false);
+    assert.equal(unreadMessages(store, emp).unread, 0, 'reading it clears the count');
+    assert.throws(() => sendMessage(store, emp, 'everyone', { body: 'hi all' }), /Only HR/);
+    assert.equal(conversation(store, hr, 'everyone').canPost, true);
+    stop();
+  } finally { store.close(); }
 });

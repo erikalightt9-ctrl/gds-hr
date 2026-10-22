@@ -47,12 +47,12 @@ async function showConversation(id, { keepDraft = false } = {}) {
   const bubbles = data.messages.map(m => {
     const d = new Date(m.at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric' });
     const sep = d !== day ? `<p class="msg-day">${esc(d)}</p>` : ''; day = d;
-    return `${sep}<div class="msg-bubble ${m.mine ? 'mine' : 'theirs'}"><p>${esc(m.body)}</p><small>${esc(new Date(m.at).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }))}${m.mine && m.read ? ' · Seen' : ''}</small></div>`;
+    return `${sep}<div class="msg-bubble ${m.mine ? 'mine' : 'theirs'}">${data.contact.group && !m.mine && m.from ? `<b class="msg-from">${esc(m.from)}</b>` : ''}<p>${esc(m.body)}</p><small>${esc(new Date(m.at).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }))}${m.mine && m.read ? ' · Seen' : ''}</small></div>`;
   }).join('');
   panel.innerHTML = `<header class="msg-head"><button class="small icon-button" data-msg-back aria-label="Back to people">←</button><span class="msg-title"><strong>${esc(data.contact.name)}</strong><small>${esc(data.contact.role)}</small></span><button class="small icon-button" data-msg-close aria-label="Close messages">✕</button></header>
     <div class="msg-thread" data-msg-thread>${bubbles || '<p class="muted msg-empty">No messages yet. Say hello!</p>'}</div>
-    <form class="msg-compose"><textarea data-msg-text rows="2" maxlength="2000" placeholder="Write a message… (Enter to send, Shift+Enter for a new line)" aria-label="Message"></textarea><button class="primary" data-msg-send>Send</button></form>`;
-  const box = panel.querySelector('[data-msg-text]'); box.value = draft; box.focus();
+    ${data.contact.group && !data.canPost ? '<p class="msg-readonly">Announcements from HR. To reply, message HR privately.</p>' : `<form class="msg-compose"><textarea data-msg-text rows="2" maxlength="2000" placeholder="${data.contact.group ? 'Message everyone… (Enter to send, Shift+Enter for a new line)' : 'Write a message… (Enter to send, Shift+Enter for a new line)'}" aria-label="Message"></textarea><button class="primary" data-msg-send>Send</button></form>`}`;
+  const box = panel.querySelector('[data-msg-text]'); if (box) { box.value = draft; box.focus(); }
   const thread = panel.querySelector('[data-msg-thread]'); thread.scrollTop = thread.scrollHeight;
   await refreshCount();
 }
