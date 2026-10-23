@@ -39,7 +39,7 @@ let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun
 let employeeStatusFilter = 'All Employees';
 let attendanceView = 'month'; // 'month' (monthly sheet), 'records' (one day, all employees) or 'timecard' (one employee beside pay)
 let attendanceMonth = '';      // Attendance → Monthly: YYYY-MM shown (blank = this month)
-let payrollEmployee = '';   // '' = all, an employee ID, or 'company:<subsidiary>'
+let payrollEmployee = '', attCompany = '';   // attCompany: subsidiary filter on the attendance pages   // '' = all, an employee ID, or 'company:<subsidiary>'
 // Subsidiaries with employees on payroll; a company payroll is generated, totalled and finalized on its own.
 const companies = () => [...new Set(state.employees.filter(e => !e.archived && e.department).map(e => e.department))].sort();
 const scopeIds = scope => (!scope ? null : scope.startsWith('company:') ? state.employees.filter(e => !e.draft && !e.archived && e.department === scope.slice(8)).map(e => e.id) : [scope]);
@@ -282,12 +282,14 @@ function employeesPage() {
 }
 function attendancePage() {
   const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Timecard · against pay</button></div>`;
-  const top = heading('Attendance', '') + views;
+  // Subsidiary filter (All / each company) for the monthly sheet and the daily records.
+  const companyPick = `<label class="att-company">Subsidiary <select data-att-company><option value="">All subsidiaries</option>${companies().map(c => `<option ${c === attCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
+  const top = heading('Attendance', '') + views + (['month', 'records'].includes(attendanceView) ? companyPick : '');
   if (attendanceView === 'timecard') return top + timecard.panel(state);
-  if (attendanceView === 'month') return top + monthSheet({ state, esc, today: today(), month: attendanceMonth || today().slice(0, 7), search: filter });
+  if (attendanceView === 'month') return top + monthSheet({ state, esc, today: today(), month: attendanceMonth || today().slice(0, 7), search: filter, company: attCompany });
   // Daily attendance records: one date, every employee (with day / today navigation, search, status and record tabs).
   const day = recordsDate || today(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
-  const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= day && (!e.endDate || e.endDate >= day)).sort((a, b) => a.name.localeCompare(b.name));
+  const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= day && (!e.endDate || e.endDate >= day) && (!attCompany || e.department === attCompany)).sort((a, b) => a.name.localeCompare(b.name));
   const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
   const ICONS = { ok: '<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1.4 14.6-4.2-4.2 1.4-1.4 2.8 2.8 5.8-5.8 1.4 1.4Z"/>', clock: '<path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm0 16.2A7.2 7.2 0 1 1 19.2 12 7.2 7.2 0 0 1 12 19.2Zm.9-11.7h-1.8v5.1l4.4 2.6.9-1.5-3.5-2.1Z"/>', doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM8 12h8v1.6H8Zm0 3.4h8V17H8Z"/>', sheet: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM7 11h10v8H7Zm1.5 1.5v2h3v-2Zm4.5 0v2h3v-2Zm-4.5 3.5v2h3v-2Zm4.5 0v2h3v-2Z"/>', cal: '<path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3Zm12 8H5v9h14ZM5 8h14V6H5Z"/>', search: '<path d="M10 3a7 7 0 1 0 4.2 12.6l5.1 5.1 1.4-1.4-5.1-5.1A7 7 0 0 0 10 3Zm0 2a5 5 0 1 1-5 5 5 5 0 0 1 5-5Z"/>', left: '<path d="m15 6-6 6 6 6 1.4-1.4L11.8 12l4.6-4.6Z"/>', right: '<path d="m9 6 6 6-6 6-1.4-1.4L12.2 12 7.6 7.4Z"/>' };
   const ic = name => `<svg class="dr-ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICONS[name]}</svg>`;
@@ -1185,6 +1187,7 @@ function filterDaily() {
   for (const r of box.querySelectorAll('[data-dr-row]')) r.hidden = !((!q || r.dataset.drName.includes(q)) && (!st || r.dataset.drStatus === st) && (tabSel === 'all' || r.dataset.drRecorded === tabSel));
 }
 document.addEventListener('input', event => { if (event.target.matches?.('[data-dr-search]')) filterDaily(); });
+document.addEventListener('change', event => { if (event.target.matches?.('[data-att-company]')) { attCompany = event.target.value; render(); } });
 document.addEventListener('click', event => { const b = event.target.closest?.('[data-dr-tab]'); if (!b) return; b.parentElement.querySelectorAll('[data-dr-tab]').forEach(x => x.classList.toggle('active', x === b)); filterDaily(); });
 document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } if (event.target.matches?.('[data-dr-status]')) filterDaily(); if (event.target.id === 'records-date' && event.target.value) { recordsDate = event.target.value; render(); } if (event.target.id === 'hol-year') { const y = event.target.value.trim(); if (!/^\d{4}$/.test(y)) { toast('Type the year as YYYY, e.g. 2028.'); return; } const show = () => { holidayYear = y; render(); }; if (canEdit('holidays') && !state.holidays.some(h => h.date.startsWith(`${y}-`))) api('/holidays/year', { year: y }).then(async r => { await refresh(); show(); if (r.added) toast(`${y} holidays added (${r.added} dates). Add Eid'l Fitr and Eid'l Adha when proclaimed.`); }).catch(e => toast(e.message)); else show(); } });
 setupInstall();

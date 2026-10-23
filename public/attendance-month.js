@@ -25,12 +25,13 @@ function dayStatus(state, e, date, today, since) {
   return date > today ? 'future' : date < since ? 'none' : 'absent';   // before attendance was kept in the system: no mark
 }
 
-export function monthSheet({ state, esc, today, month, search = '' }) {
+export function monthSheet({ state, esc, today, month, search = '', company = '' }) {
   const [y, m] = month.split('-').map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const dates = Array.from({ length: last }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
   const start = dates[0], end = dates.at(-1);
   const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start))
     .filter(e => !search || `${e.name} ${e.id}`.toLowerCase().includes(search.toLowerCase()))
+    .filter(e => !company || e.department === company)
     .sort((a, b) => a.name.localeCompare(b.name));
   // Attendance kept in the system starts with the first recorded time in; earlier days are not marked absent.
   const since = [...state.attendance.map(a => a.date), ...(state.openClockIns || []).map(c => c.workDate)].sort()[0] || today;

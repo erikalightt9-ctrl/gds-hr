@@ -317,12 +317,12 @@ export function createPortal(ctx) {
   const initialsOf = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return `${(first || '').charAt(0)}${(last || '').charAt(0)}`.toUpperCase() || '?'; };
   // Search, status and location filters hide rows in place (no redraw, so typing is not interrupted).
   const filterLive = panel => {
-    const q = panel.querySelector('[data-lv-search]').value.trim().toLowerCase(), st = panel.querySelector('[data-lv-status]').value, loc = panel.querySelector('[data-lv-loc]').value;
+    const q = panel.querySelector('[data-lv-search]').value.trim().toLowerCase(), st = panel.querySelector('[data-lv-status]').value, loc = panel.querySelector('[data-lv-loc]').value, co = panel.querySelector('[data-lv-company]')?.value || '';
     let shown = 0;
-    for (const r of panel.querySelectorAll('[data-lv-row]')) { const ok = (!q || r.dataset.name.includes(q)) && (!st || r.dataset.status === st) && (!loc || r.dataset.loc === loc); r.hidden = !ok; if (ok) shown++; }
+    for (const r of panel.querySelectorAll('[data-lv-row]')) { const ok = (!q || r.dataset.name.includes(q)) && (!st || r.dataset.status === st) && (!loc || r.dataset.loc === loc) && (!co || r.dataset.company === co); r.hidden = !ok; if (ok) shown++; }
     panel.querySelector('[data-lv-count]').textContent = `${shown} employee${shown === 1 ? '' : 's'} total`;
   };
-  for (const type of ['input', 'change']) document.addEventListener(type, e => { const panel = e.target.closest?.('.lv'); if (panel && e.target.matches('[data-lv-search], [data-lv-status], [data-lv-loc]')) filterLive(panel); });
+  for (const type of ['input', 'change']) document.addEventListener(type, e => { const panel = e.target.closest?.('.lv'); if (panel && e.target.matches('[data-lv-search], [data-lv-status], [data-lv-loc], [data-lv-company]')) filterLive(panel); });
   function live(data, { countsOnly = false } = {}) {
     const statuses = ['All', 'Present', 'Late', 'Absent', 'On leave', 'Missing time out'];
     const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => e.status === s).length);
@@ -339,7 +339,7 @@ export function createPortal(ctx) {
         ...away.map(x => `<span class="lv-req-group"><span class="lv-req-label">Out of office · time ${esc(x.kind)} ${esc(x.time)}</span><button class="lv-req ok" data-oof-review="approve" data-id="${esc(x.id)}">Approve</button><button class="lv-req" data-oof-review="reject" data-id="${esc(x.id)}">Reject</button></span>`),
         ...(e.status === 'Missing time out' && e.open ? [`<button class="lv-req" data-correct-clock="${esc(e.employeeId)}" data-date="${e.date}">Correct missing time out</button>`] : []),
       ];
-      return `<tr data-lv-row data-name="${esc(`${e.name} ${e.employeeId}`.toLowerCase())}" data-status="${esc(e.status)}" data-loc="${located(e) ? 'yes' : 'no'}">
+      return `<tr data-lv-row data-name="${esc(`${e.name} ${e.employeeId}`.toLowerCase())}" data-status="${esc(e.status)}" data-loc="${located(e) ? 'yes' : 'no'}" data-company="${esc(e.department || '')}">
         <td><button class="lv-emp" data-profile="${esc(e.employeeId)}" title="Open 201 profile"><span class="lv-avatar lv-${look}">${esc(initialsOf(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.employeeId)}</small></span></button></td>
         <td><span class="lv-pill lv-${look}">${icon(pill)}${esc(e.status)}</span></td>
         <td class="lv-time">${esc(e.actualIn || '—')}</td><td class="lv-time">${esc(e.actualOut || '—')}</td>
@@ -350,6 +350,7 @@ export function createPortal(ctx) {
       <div class="lv-head"><div><h2>Live attendance</h2><p>Today's employee attendance</p></div><div class="lv-head-tools"><span class="lv-live"><i></i>Live</span><a class="lv-btn" href="/api/reports/daily-attendance.pdf?date=${esc(data.employees[0]?.date || '')}&view=1" target="_blank" rel="noopener">${icon('export')}Export</a></div></div>
       <div class="lv-cards">${statuses.map(s => `<button data-live-filter="${s}" class="lv-card${s === liveFilter ? ' active' : ''}"><span class="lv-card-ico lv-${CARD[s][0]}">${icon(CARD[s][0])}</span><span><strong>${count(s)}</strong><small>${CARD[s][1]}</small></span></button>`).join('')}</div>
       <div class="lv-filters"><label class="lv-search">${icon('search')}<input type="search" data-lv-search placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
+        <select data-lv-company aria-label="Subsidiary"><option value="">All subsidiaries</option>${[...new Set(data.employees.map(e => e.department).filter(Boolean))].sort().map(c => `<option>${esc(c)}</option>`).join('')}</select>
         <select data-lv-status aria-label="Status"><option value="">Status</option>${[...new Set(data.employees.map(e => e.status))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select>
         <select data-lv-loc aria-label="Location"><option value="">Location</option><option value="yes">With location</option><option value="no">No location</option></select></div>
       <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Request</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="6" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
