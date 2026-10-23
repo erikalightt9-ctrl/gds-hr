@@ -29,7 +29,8 @@ export function monthSheet({ state, esc, today, month, search = '', company = ''
   const [y, m] = month.split('-').map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const dates = Array.from({ length: last }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
   const start = dates[0], end = dates.at(-1);
-  const people = state.employees.filter(e => !e.draft && !e.archived && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start))
+  // Inactive employees (resigned, separated, set inactive) are not shown.
+  const people = state.employees.filter(e => !e.draft && !e.archived && e.active !== false && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start))
     .filter(e => !search || `${e.name} ${e.id}`.toLowerCase().includes(search.toLowerCase()))
     .filter(e => !company || e.department === company)
     .sort((a, b) => a.name.localeCompare(b.name));
