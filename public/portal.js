@@ -279,7 +279,17 @@ export function createPortal(ctx) {
       const recordedAt = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date());
       await api('/me/clock', pendingClock); pendingClock = null; dirty = false; await refresh(); render();
       confirmBox(`Time ${kind} submitted`, `Your <strong>${extra.mode === 'outside' ? 'out-of-office ' : ''}time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location and sent to HR${extra.mode === 'outside' ? ' for approval' : ''}.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
-    } catch (error) { if (!/fetch|network|connect/i.test(error.message)) pendingClock = null; dirty = false; toast(error.message); button.disabled = false; button.textContent = `Retry time ${kind}`; }
+    } catch (error) {
+      if (!/fetch|network|connect/i.test(error.message)) pendingClock = null; dirty = false; button.disabled = false;
+      // Not at the office: say so plainly and offer the Out of office time in / out (reason + HR approval).
+      if (extra.mode === 'office' && /not at the office|not connected to the office/i.test(error.message)) {
+        button.textContent = `Time ${kind}`;
+        openDialog('You are not at the office', `<div class="dialog-body"><p>Your phone is not on the office Wi-Fi and your location is outside the office.</p><p>If you are working outside (for example at a client or another site), use <strong>Out of office time ${kind}</strong>: give the reason and HR will approve it. Your exact location is recorded.</p></div>`, `<div class="dialog-foot"><button data-close>Cancel</button><button class="primary" data-go-outside="${kind}">Out of office time ${kind}</button></div>`);
+        dialog.querySelector('[data-go-outside]').onclick = () => { dialog.close(); document.querySelector(`[data-clock-outside="${kind}"]`)?.click(); };
+        return;
+      }
+      toast(error.message); button.textContent = `Retry time ${kind}`;
+    }
   }
   function map(event) {
     if (event.latitude === null) { toast('This HR correction has no device GPS reading. The original time-in remains in history.'); return; }
