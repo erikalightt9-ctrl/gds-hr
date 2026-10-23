@@ -111,7 +111,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         send(200, { user: auth?.user || null, csrf: auth?.csrf || null, demo, setup: store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0 }); return;
       }
       if (pathname === '/api/setup' && req.method === 'POST') {
-        checkLimit(store, `setup:${client}`);
+        checkLimit(store, `setup:${visitorIp}`);
         const body = await readBody(req);
         if (typeof body.token !== 'string' || !setupToken || !constantEqual(body.token, setupToken)) throw new AppError('The setup code is incorrect.', 403);
         const user = await addUser(store, { username: body.username, password: body.password, role: 'admin' });
@@ -119,16 +119,16 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       if (pathname === '/api/login' && req.method === 'POST') {
         const body = loginSchema.parse(await readBody(req));
-        const auth = await login(store, body.username, body.password, `login:${client}`, body.otp, { currentTokenHash: session(store, req.headers.cookie)?.tokenHash || '' });
+        const auth = await login(store, body.username, body.password, `login:${visitorIp}`, body.otp, { currentTokenHash: session(store, req.headers.cookie)?.tokenHash || '' });
         res.setHeader('Set-Cookie', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
         send(200, { user: auth.user, csrf: auth.csrf, demo }); return;
       }
       if (pathname === '/api/recovery/request' && req.method === 'POST') {
-        checkLimit(store, `recovery:${client}`); const body = z.object({ identifier: z.string().trim().min(1).max(80) }).strict().parse(await readBody(req));
+        checkLimit(store, `recovery:${visitorIp}`); const body = z.object({ identifier: z.string().trim().min(1).max(80) }).strict().parse(await readBody(req));
         send(200, { message: requestRecovery(store, body.identifier, { mailer, origin }).message }); return;
       }
       if (pathname === '/api/recovery/reset' && req.method === 'POST') {
-        checkLimit(store, `reset:${client}`); const body = z.object({ token: z.string().max(64), password: z.string().min(9).max(200) }).strict().parse(await readBody(req));
+        checkLimit(store, `reset:${visitorIp}`); const body = z.object({ token: z.string().max(64), password: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         send(200, await redeemPasswordReset(store, body.token, body.password)); return;
       }
       const auth = session(store, req.headers.cookie);
