@@ -93,7 +93,7 @@ export function createPortal(ctx) {
     const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     const otText = n => (n ? `${Math.floor(n / 60) ? `${Math.floor(n / 60)} h ` : ''}${n % 60 ? `${n % 60} min` : ''}`.trim() : '—');
     // A time from the app opens its GPS location when clicked; biometric / HR times are plain text.
-    const time = (value, ev) => (ev && ev.latitude !== null && ev.latitude !== undefined ? `<button class="time-link" data-location="${esc(ev.id)}" title="Show location">${esc(value || ev.time)}</button>` : esc(value || '—'));
+    const time = (value, ev) => (ev && ev.latitude !== null && ev.latitude !== undefined ? `<button class="time-link" data-location="${esc(ev.id)}" title="${esc(ev.place || 'Show location')}">${esc(value || ev.time)}</button>${ev.place ? `<small class="time-place">${esc(ev.atOffice ? 'Office' : ev.place.split(',').slice(0, 2).join(','))}</small>` : ''}` : esc(value || '—'));
     return calendar(data) + `<section class="panel"><div class="panel-head"><h2>My attendance</h2>${downloads('my-attendance')}<span class="legend">Asia/Manila · tap a time to see where it was recorded · overtime is paid only when filed and approved</span></div>${table(['Date', 'Time in', 'Time out', 'OT'], rows.map(r => [nice(r.date), time(r.timeIn, r.inEvent), time(r.timeOut, r.outEvent), otText(r.ot)]))}${events.length >= 200 && !historyEnd ? '<div class="panel-foot"><button data-earlier-history>Load earlier events</button></div>' : ''}</section>${(data.corrections || []).length ? `<section class="panel"><div class="panel-head"><h2>Attendance corrections</h2></div>${table(['Date', 'Reason', 'Corrected by / approver', 'Changes'], data.corrections.map(c => [stamp(c.at), esc(c.reason), `${esc(c.correctedBy)} / ${esc(c.approver)}`, `<details><summary>Original → correction</summary><pre>${esc(JSON.stringify({ original: c.before, correction: c.after }, null, 2))}</pre></details>`]))}</section>` : ''}`;
   }
 
@@ -283,14 +283,17 @@ export function createPortal(ctx) {
   }
   function map(event) {
     if (event.latitude === null) { toast('This HR correction has no device GPS reading. The original time-in remains in history.'); return; }
-    openDialog('Attendance location', `<div class="dialog-body"><h3>${esc(event.employeeId)} · ${event.workDate} ${event.time}</h3><p>GPS: ${event.latitude}, ${event.longitude}<br>Device accuracy: ±${event.accuracy} meters${event.geofence.status !== 'Not configured' ? `<br>Geofence: ${esc(event.geofence.status)}${event.geofence.distance !== null ? ` · ${event.geofence.distance} m from workplace` : ''}` : ''}<br>Captured: ${stamp(event.capturedAt)}<br>Server recorded: ${stamp(event.recordedAt)}<br>Synchronized: ${stamp(event.synchronizedAt)}</p><p>Approved workplace: ${esc(event.approvedLocation || 'Not configured')}<br>Reverse-geocoded address: <span id="location-address">${esc(event.address || 'Not available')}</span></p><p class="legend">GPS is device-reported and may be inaccurate. Loading the map sends these coordinates to OpenStreetMap.</p><button id="load-location-map">Load interactive map</button><div id="location-map"></div></div>`, '<div class="dialog-foot"><button data-close>Close</button></div>');
-    dialog.querySelector('#load-location-map').onclick = () => {
-      const x = event.longitude, y = event.latitude, bounds = [Math.max(-180, x - .004), Math.max(-90, y - .004), Math.min(180, x + .004), Math.min(90, y + .004)].join(',');
-      dialog.querySelector('#location-map').innerHTML = `<iframe class="attendance-map" title="Recorded attendance location" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&amp;layer=mapnik&amp;marker=${encodeURIComponent(`${y},${x}`)}"></iframe>`;
-    };
-    // The street address is looked up automatically (saved after the first lookup of each punch).
-    const box = dialog.querySelector('#location-address'); box.textContent = 'Finding the address…';
-    api(`/location-address/${event.id}`, {}).then(result => { if (box.isConnected) box.textContent = result.address ? `📍 ${result.address}${result.office ? ` (office · ${result.via})` : ''}` : result.message; }).catch(error => { if (box.isConnected) box.textContent = error.message; });
+    const x = event.longitude, y = event.latitude, bounds = [Math.max(-180, x - .003), Math.max(-90, y - .003), Math.min(180, x + .003), Math.min(90, y + .003)].join(',');
+    const pin = `https://www.google.com/maps/search/?api=1&query=${y},${x}`;
+    openDialog('Time in / out location', `<div class="dialog-body loc-box"><p class="loc-when">${esc(event.workDate)} · ${esc(event.kind === 'out' ? 'Time out' : 'Time in')} ${esc(event.time)}${event.outOfOffice ? ' · <b>Out of office</b>' : ''}</p>
+      <p class="loc-place ${event.atOffice ? 'office' : ''}">📍 <span id="location-address">${esc(event.place || 'Finding the exact address…')}</span>${event.atOffice ? `<small>${event.onOfficeNetwork ? 'Office Wi-Fi' : 'At the office'}</small>` : ''}</p>
+      <div class="loc-map"><iframe class="attendance-map" title="Pinned location" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&amp;layer=mapnik&amp;marker=${encodeURIComponent(`${y},${x}`)}"></iframe></div>
+      <p class="loc-actions"><a class="button small" href="${pin}" target="_blank" rel="noopener noreferrer">Open pin in Google Maps</a></p>
+      <p class="legend">Device accuracy ±${esc(event.accuracy)} m · recorded ${esc(stamp(event.recordedAt))} · GPS ${esc(y)}, ${esc(x)}${event.reason ? ` · Reason: ${esc(event.reason)}` : ''}</p></div>`, '<div class="dialog-foot"><button data-close>Close</button></div>');
+    if (!event.place) {
+      const box = dialog.querySelector('#location-address');
+      api(`/location-address/${event.id}`, {}).then(result => { if (box.isConnected) box.textContent = result.address || result.message; }).catch(error => { if (box.isConnected) box.textContent = error.message; });
+    }
   }
   // countsOnly: just the heading and today's counts (HR dashboard); each count opens the Live Attendance page.
   // Live attendance: count cards (click to filter), search + status / location filters, and one row per employee
@@ -340,7 +343,7 @@ export function createPortal(ctx) {
         <td><button class="lv-emp" data-profile="${esc(e.employeeId)}" title="Open 201 profile"><span class="lv-avatar lv-${look}">${esc(initialsOf(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.employeeId)}</small></span></button></td>
         <td><span class="lv-pill lv-${look}">${icon(pill)}${esc(e.status)}</span></td>
         <td class="lv-time">${esc(e.actualIn || '—')}</td><td class="lv-time">${esc(e.actualOut || '—')}</td>
-        <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}">${icon('pin')}<span>View location</span></button>` : '<span class="lv-muted">No location</span>'}</td>
+        <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}" title="${esc(ev.place || 'View location')}">${icon('pin')}<span>${esc(ev.atOffice ? 'Office' : ev.place ? ev.place.split(',').slice(0, 2).join(',') : 'View location')}</span></button>` : '<span class="lv-muted">No location</span>'}</td>
         <td class="lv-requests" data-lv-req="${esc(e.employeeId)}">${requests.join('') || '<span class="lv-muted">—</span>'}</td></tr>`;
     };
     const html = `<section class="panel live-panel lv">

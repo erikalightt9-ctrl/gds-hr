@@ -16,6 +16,18 @@ const local = now => new Date(now.getTime() + 8 * 3600000).toISOString();
 const hhmm = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
 const fromMinutes = minutes => `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const rows = (store, table, id) => store.db.prepare(`SELECT data FROM ${table} WHERE employee_id=? ORDER BY rowid DESC`).all(id).map(r => JSON.parse(r.data));
+// Where a time in / out was made: the office address on the office Wi-Fi or inside the office area, else the street
+// address looked up for that exact GPS point (when already known).
+function distanceMeters(lat1, lon1, lat2, lon2) { const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(a)); }
+const companyOf = store => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').company || {}; } catch { return {}; } };
+function withPlace(store, events) {
+  const company = companyOf(store), cached = new Map(store.db.prepare('SELECT event_id, address FROM location_addresses').all().map(r => [r.event_id, r.address]));
+  return events.map(e => {
+    if (e.latitude === null || e.latitude === undefined) return e;
+    const office = company.officeAddress && (e.onOfficeNetwork || e.inOfficeArea || (company.officeLatitude !== null && company.officeLatitude !== undefined && distanceMeters(e.latitude, e.longitude, company.officeLatitude, company.officeLongitude) <= (company.officeRadius || 150)));
+    return { ...e, place: office ? company.officeAddress : cached.get(e.id) || '', atOffice: !!office };
+  });
+}
 function ownEmployee(store, actor) {
   permit(actor, ['employee']);
   const employee = store.read().employees.find(e => e.id === actor.employeeId);
@@ -280,7 +292,7 @@ export function employeeDashboard(store, actor, now = new Date()) {
   const personal = JSON.parse(store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(employee.id)?.data ?? '{}'), [lastPart, restPart = ''] = employee.name.split(',').map(s => s.trim());
   const greetingName = [personal.firstName || restPart, personal.lastName || lastPart].filter(Boolean).join(' ');
   const calendar = { restDays: employee.restDays || [0], grace: graceFor(state, employee.id, day), holidays: state.holidays.filter(h => h.date.slice(0, 4) >= String(Number(day.slice(0, 4)) - 1) && h.kind !== 'ordinary').map(h => ({ date: h.date, name: h.name, kind: h.kind })) };
-  return { calendar, employee: { id: employee.id, name: employee.name, greetingName, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: rows(store, 'clock_events', employee.id).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id && a.date >= `${Number(day.slice(0, 4)) - 1}-01-01`).map(a => ({ ...a, otMinutes: overtimeMinutes(state, employee, a) })), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), balances, leaves, documents,
+  return { calendar, employee: { id: employee.id, name: employee.name, greetingName, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: withPlace(store, rows(store, 'clock_events', employee.id)).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id && a.date >= `${Number(day.slice(0, 4)) - 1}-01-01`).map(a => ({ ...a, otMinutes: overtimeMinutes(state, employee, a) })), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), balances, leaves, documents,
     payslips: state.runs.filter(r => payslipReleased(r, at) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ id: r.id, start: r.start, end: r.end, payDate: payDateFor(r.start, r.end), net: r.rows.find(row => row.employeeId === employee.id).net })),
     upcomingPayslips: state.runs.filter(r => r.status === 'posted' && !payslipReleased(r, at) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ start: r.start, end: r.end, payDate: payDateFor(r.start, r.end) })),
     notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id=? ORDER BY rowid DESC LIMIT 50').all(employee.id), serverTime: now.toISOString() };
@@ -291,7 +303,7 @@ export function liveDashboard(store, actor, now = new Date()) {
   // Only people who clock in: not drafts (incomplete or remittance-only profiles such as the CEO), not archived, not separated.
   const employees = state.employees.filter(e => !e.draft && !e.archived && (!e.endDate || e.endDate >= local(now).slice(0, 10))).map(e => ({ employeeId: e.id, name: e.name, ...todayAttendance(store, e, now) }));
   const explanations = store.db.prepare('SELECT data FROM attendance_explanations ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
-  const history = store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
+  const history = withPlace(store, store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data)));
   return { employees, outOfOffice: pendingOutOfOffice(store, state), explanations, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
 }
 export function correctClock(store, actor, input) {
@@ -311,7 +323,6 @@ export function correctClock(store, actor, input) {
   return saved;
   });
 }
-const distanceMeters = (lat1, lon1, lat2, lon2) => { const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(a)); };
 export async function locationAddress(store, actor, eventId, provider = process.env.HR_GEOCODING_URL) {
   const row = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(eventId);
   if (!row || (actor.role === 'employee' ? row.employee_id !== actor.employeeId : !['admin', 'hr'].includes(actor.role))) throw new AppError('Location not found.', 404);

@@ -170,7 +170,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         permit(auth.user, ['employee']);
         if (pathname === '/api/me/dashboard' && req.method === 'GET') { send(200, { ...employeeDashboard(store, auth.user), network: networkStatus(store, visitorIp) }); return; }
         if (pathname === '/api/me/history' && req.method === 'GET') { send(200, earlierHistory(store, auth.user, url.searchParams.get('before') || '')); return; }
-        if (pathname === '/api/me/clock' && req.method === 'POST') { checkLimit(store, `clock:${auth.user.id}`); send(200, punch(store, auth.user, await readBody(req), new Date(), { ip: visitorIp })); return; }
+        if (pathname === '/api/me/clock' && req.method === 'POST') { checkLimit(store, `clock:${auth.user.id}`); const event = punch(store, auth.user, await readBody(req), new Date(), { ip: visitorIp }); send(200, event); if (event.latitude !== null && !event.onOfficeNetwork && !event.inOfficeArea) locationAddress(store, auth.user, event.id).catch(() => {}); return; }
         if (pathname === '/api/me/leaves' && req.method === 'POST') { send(201, applyLeave(store, auth.user, await readBody(req))); return; }
         const cancellation = pathname.match(/^\/api\/me\/leaves\/([a-zA-Z0-9_-]+)\/cancel$/);
         if (cancellation && req.method === 'POST') { send(200, cancelLeave(store, auth.user, cancellation[1])); return; }
