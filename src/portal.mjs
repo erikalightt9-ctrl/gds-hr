@@ -305,7 +305,8 @@ export function liveDashboard(store, actor, now = new Date()) {
   const employees = state.employees.filter(e => !e.draft && !e.archived && e.active !== false && (!e.endDate || e.endDate >= local(now).slice(0, 10))).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now) })).filter(e => e.status !== 'Inactive');
   const explanations = store.db.prepare('SELECT data FROM attendance_explanations ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
   const history = withPlace(store, store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data)));
-  return { employees, outOfOffice: pendingOutOfOffice(store, state), explanations, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
+  const companies = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').departments || []; } catch { return []; } })();
+  return { companies, employees, outOfOffice: pendingOutOfOffice(store, state), explanations, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
 }
 export function correctClock(store, actor, input) {
   permit(actor, ['admin', 'hr']);

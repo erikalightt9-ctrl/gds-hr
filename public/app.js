@@ -41,7 +41,7 @@ let attendanceView = 'month'; // 'month' (monthly sheet), 'records' (one day, al
 let attendanceMonth = '';      // Attendance → Monthly: YYYY-MM shown (blank = this month)
 let payrollEmployee = '', attCompany = '';   // attCompany: subsidiary filter on the attendance pages   // '' = all, an employee ID, or 'company:<subsidiary>'
 // Subsidiaries with employees on payroll; a company payroll is generated, totalled and finalized on its own.
-const companies = () => [...new Set(state.employees.filter(e => !e.archived && e.department).map(e => e.department))].sort();
+const companies = () => [...new Set([...(hrContext?.departments || []), ...state.employees.filter(e => !e.archived && e.department).map(e => e.department)])].sort();
 const scopeIds = scope => (!scope ? null : scope.startsWith('company:') ? state.employees.filter(e => !e.draft && !e.archived && e.department === scope.slice(8)).map(e => e.id) : [scope]);
 let computationContext = null; // the payroll computation being reviewed, reopened after an adjustment is saved // '' = all employees; otherwise the one Employee ID being calculated
 let holidayYear = '';   // Holiday calendar: year shown (blank = this year)
