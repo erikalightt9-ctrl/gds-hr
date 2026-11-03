@@ -85,8 +85,12 @@ export function thirteenthLedger(store, actor, year) {
     const lastMonth = year === thisMonth.slice(0, 4) ? Number(thisMonth.slice(5)) : 12, first = e.startDate && e.startDate.startsWith(year) ? Number(e.startDate.slice(5, 7)) : 1;
     const missing = []; for (let m = first; m <= lastMonth; m++) { const key = `${year}-${String(m).padStart(2, '0')}`; if (!covered.has(key) && (!e.endDate || key <= e.endDate.slice(0, 7))) missing.push(key); }
     const computedTotal = r2(postedBasic + prior.basic), ov = edited.get(e.id) || {};
-    const totalBasic = ov.totalBasic ?? computedTotal, computedAccrued = e.covered13th ? r2(totalBasic / 12) : 0, accrued = ov.thirteenth ?? computedAccrued, paid = r2(postedPaid + prior.thirteenthPaid);
-    return { employeeId: e.id, name: e.name, endDate: e.endDate || '', covered13th: e.covered13th, postedBasic, priorBasic: prior.basic, priorMonths: prior.months, totalBasic, accrued, computedTotal, computedAccrued, totalEdited: ov.totalBasic != null, thirteenthEdited: ov.thirteenth != null, paid, balance: Math.max(0, r2(accrued - paid)), missingMonths: missing };
+    const totalBasic = ov.totalBasic ?? computedTotal, computedAccrued = e.covered13th ? r2(totalBasic / 12) : 0, accrued = ov.thirteenth ?? computedAccrued;
+    // Approved adjustments add to (or reduce) what is due; finalized 13th month payslips count as paid.
+    const adjustments = r2((state.thirteenthAdjustments || []).filter(a => a.employeeId === e.id && a.year === String(year)).reduce((s, a) => s + a.amount, 0));
+    const payslipPaid = r2((state.thirteenthPayslips || []).filter(p => p.employeeId === e.id && p.year === String(year)).reduce((s, p) => s + p.amountPaid, 0));
+    const due = Math.max(0, r2(accrued + adjustments)), paid = r2(postedPaid + prior.thirteenthPaid + payslipPaid);
+    return { employeeId: e.id, name: e.name, startDate: e.startDate || '', endDate: e.endDate || '', covered13th: e.covered13th, postedBasic, priorBasic: prior.basic, priorMonths: prior.months, totalBasic, accrued, computedTotal, computedAccrued, totalEdited: ov.totalBasic != null, thirteenthEdited: ov.thirteenth != null, adjustments, due, payslipPaid, paid, balance: Math.max(0, r2(due - paid)), missingMonths: missing };
   });
 }
 
