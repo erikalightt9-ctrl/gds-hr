@@ -22,7 +22,7 @@ test('salary encoded for months before the system counts toward the 13th month, 
     encode(store, ['03'], 30000, { thirteenthPaid: 5000, notes: 'Mid-year advance' });
     const before = thirteenthLedger(store, payroll, '2026')[0];
     assert.equal(before.priorBasic, 240000); assert.equal(before.accrued, 20000); assert.equal(before.paid, 5000); assert.equal(before.balance, 15000);
-    assert.deepEqual(before.missingMonths, ['2026-09', '2026-10'].filter(m => m <= new Date().toISOString().slice(0, 7)));
+    assert.deepEqual(before.missingMonths, ['2026-09', '2026-10', '2026-11', '2026-12'].filter(m => m <= new Date().toISOString().slice(0, 7)));
     const { run } = postSeptFirstHalf(store, true), row = run.rows[0];
     assert.equal(row.annualBasic, Math.round((240000 + row.applicableBasic) * 100) / 100, 'payroll uses encoded months');
     assert.equal(row.thirteenthPaid, 5000);
