@@ -1,5 +1,6 @@
 // HTTP routes for the HR 201 modules (/api/hr/...). Every handler enforces its own permission on the server.
 import { AppError, permit } from './service.mjs';
+import { explanationsDue } from './late-explanations.mjs';
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
@@ -82,6 +83,14 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     permit(actor, DASHBOARD);
     const items = [];
     if (['admin', 'hr'].includes(actor.role)) { const leaves = store.read().leaves.filter(l => l.status === 'pending').length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave' }); }
+    // Late arrivals (15+ minutes): explanations to review and those the employees still owe, in Attendance → Explanations.
+    if (['admin', 'hr'].includes(actor.role)) {
+      const toReview = store.db.prepare("SELECT COUNT(*) n FROM attendance_explanations WHERE json_extract(data,'$.status')='pending'").get().n;
+      if (toReview) items.push({ text: `${toReview} attendance explanation${toReview === 1 ? '' : 's'} to review`, nav: 'explanations' });
+      const due = explanationsDue(store), today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }), now = due.filter(d => d.date >= today).length, earlier = due.length - now;
+      if (now) items.push({ text: `${now} late time in${now === 1 ? '' : 's'} today need${now === 1 ? 's' : ''} an explanation from the employee`, nav: 'explanations' });
+      if (earlier) items.push({ text: `${earlier} earlier late arrival${earlier === 1 ? '' : 's'} (15+ minutes) still need${earlier === 1 ? 's' : ''} an explanation`, nav: 'explanations' });
+    }
     if (HR_TEAM.includes(actor.role)) {
       const docs = documentSummary(store, actor), sheets = pendingSheets(store);
       if (sheets) items.push({ text: `${sheets} data sheet${sheets === 1 ? '' : 's'} awaiting review`, nav: 'datasheets' });

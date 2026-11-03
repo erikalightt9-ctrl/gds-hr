@@ -6,7 +6,8 @@ import { date, schemas } from './schema.mjs';
 import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, OT_BLOCK } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 import { networkStatus, inOfficeArea } from './office-network.mjs';
-import { lateIncidents, lateBy, graceFor, LETTER_AFTER, letterMessage } from './late-incidents.mjs';
+import { lateBy, graceFor } from './late-incidents.mjs';
+import { explanationsDue, EXPLAIN_AFTER_MINUTES } from './late-explanations.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default('') }).strict();
@@ -57,7 +58,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
   // Office Wi-Fi rule: time in / out from the office network; anywhere else it is "Out of office" with a reason for HR.
   const network = networkStatus(store, ip);
   const officeArea = inOfficeArea(store, value.latitude, value.longitude, value.accuracy);
-  if (value.mode === 'office' && network.configured && !network.office && !officeArea) throw new AppError('You are not at the office (not on the office Wi-Fi and your location is outside the office). Choose Out of office and give a reason for HR approval.');
+  if (value.mode === 'office' && network.configured && !network.office && !officeArea) throw new AppError('You are not at the office (not on the office Wi-Fi and your location is outside the office). Choose Out of office and give the reason.');
   if (value.mode === 'outside' && value.reason.length < 5) throw new AppError('Give the reason you are out of the office (at least 5 characters).');
   return store.transaction(() => {
     const retry = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(value.requestId);
@@ -81,7 +82,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     }
     const workDate = clockIn?.workDate || day;
     if (state.runs.some(r => r.start <= workDate && r.end >= workDate && r.rows.some(row => row.employeeId === employee.id))) throw new AppError('This attendance belongs to posted payroll. Contact HR.');
-    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, inOfficeArea: officeArea, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason, approval: 'pending' } : {}), approvedLocation: workplace.approvedLocation || '', address: null, clockInId: clockIn?.id || null };
+    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, inOfficeArea: officeArea, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason } : {}), approvedLocation: workplace.approvedLocation || '', address: null, clockInId: clockIn?.id || null };
     if (clockIn) {
       if (state.attendance.some(a => a.employeeId === employee.id && a.date === workDate)) throw new AppError('HR has already entered a record for this day. Ask HR to reconcile it.');
       const approvedExplanation = rows(store, 'attendance_explanations', employee.id).find(e => e.date === workDate && e.status === 'approved');
@@ -91,15 +92,15 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
       store.log(actor, 'create-from-clock', 'attendance', record.id, null, record);
     }
     store.db.prepare('INSERT INTO clock_events VALUES(?,?,?,?,?)').run(event.id, employee.id, value.kind, workDate, JSON.stringify(event));
-    // Late 15 minutes or more: from the 3rd time this month the employee is asked for an explanation letter.
+    // Late 15 minutes or more against the day's schedule: the employee must explain it (Attendance → Explanations).
     if (value.kind === 'in') {
-      const daySched = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate), lateMin = daySched.flexible ? 0 : lateBy(event.time, daySched.start), grace = graceFor(state, employee.id, workDate);
-      if (grace > 0 && lateMin >= grace) {
-        const month = workDate.slice(0, 7), count = lateIncidents(state, employee.id, month).filter(x => x.date !== workDate).length + 1;
-        if (count >= LETTER_AFTER) { store.notify(employee.id, letterMessage(count, month)); store.notify(null, `${employee.id} ${employee.name}: late 15 minutes or more ${count} times in ${month}. Explanation letter required.`); }
+      const daySched = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate), lateMin = daySched.flexible ? 0 : lateBy(event.time, daySched.start);
+      if (lateMin >= EXPLAIN_AFTER_MINUTES && !rows(store, 'attendance_explanations', employee.id).some(e => e.date === workDate)) {
+        store.notify(employee.id, `You timed in ${lateMin} minutes late on ${workDate} (scheduled ${daySched.start}). Please submit a written explanation in Attendance → Explanations.`);
+        store.notify(null, `${employee.id} ${employee.name}: timed in ${lateMin} minutes late on ${workDate}. Explanation required.`);
       }
     }
-    store.notify(null, value.mode === 'outside' ? `${employee.id}: OUT OF OFFICE time ${value.kind} at ${event.time} needs approval. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
+    store.notify(null, value.mode === 'outside' ? `${employee.id}: out of office time ${value.kind} at ${event.time}. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
     store.log(actor, `time-${value.kind}`, 'clock', event.id, null, event);
     return event;
   });
@@ -136,10 +137,7 @@ export function todayAttendance(store, employee, now = new Date()) {
   else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
   else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late && !graceLate ? 'Late' : 'Present';
   const exceptions = events.filter(e => ['Outside', 'Uncertain'].includes(e.geofence.status) || e.geofence.poorAccuracy).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'}: ${e.geofence.status}, accuracy ±${e.accuracy} m`);
-  const incidents = lateIncidents(state, employee.id, day.slice(0, 7));
-  if (!record && late >= grace && grace > 0 && workDate.startsWith(day.slice(0, 7)) && !incidents.some(x => x.date === workDate)) incidents.push({ date: workDate, minutes: late });
-  const lateLetter = incidents.length >= LETTER_AFTER ? { count: incidents.length, dates: incidents.map(x => x.date), message: letterMessage(incidents.length, day.slice(0, 7)) } : null;
-  return { lateLetter, date: workDate, status, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
+  return { date: workDate, status, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
 }
 function validateAttachment(store, actor, id) { if (id) { const doc = getDocument(store, actor, id); if (doc.employeeId !== actor.employeeId || doc.uploadedBy !== actor.username || doc.type !== 'Leave Supporting' || doc.status !== 'Active') throw new AppError('Use your own active supporting document.', 403); } }
 export function applyLeave(store, actor, input) {
@@ -212,7 +210,7 @@ export function submitExplanation(store, actor, input) {
     if (rows(store, 'attendance_explanations', employee.id).some(e => e.date === value.date && e.status !== 'rejected')) throw new AppError('An explanation already exists for this day.');
     const explanation = { ...value, id: randomUUID(), employeeId: employee.id, submittedAt: new Date().toISOString(), status: 'pending', approvedOffset: 0 };
     store.db.prepare('INSERT INTO attendance_explanations VALUES(?,?,?)').run(explanation.id, employee.id, JSON.stringify(explanation));
-    store.notify(null, `${employee.id}: attendance explanation awaits review.`);
+    store.notify(null, `${employee.id} ${employee.name}: submitted an attendance explanation for ${value.date}. Review it in Attendance → Explanations.`);
     store.log(actor, 'submit', 'explanations', explanation.id, null, explanation); return explanation;
   });
 }
@@ -292,7 +290,7 @@ export function employeeDashboard(store, actor, now = new Date()) {
   const personal = JSON.parse(store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(employee.id)?.data ?? '{}'), [lastPart, restPart = ''] = employee.name.split(',').map(s => s.trim());
   const greetingName = [personal.firstName || restPart, personal.lastName || lastPart].filter(Boolean).join(' ');
   const calendar = { restDays: employee.restDays || [0], grace: graceFor(state, employee.id, day), holidays: state.holidays.filter(h => h.date.slice(0, 4) >= String(Number(day.slice(0, 4)) - 1) && h.kind !== 'ordinary').map(h => ({ date: h.date, name: h.name, kind: h.kind })) };
-  return { calendar, employee: { id: employee.id, name: employee.name, greetingName, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: withPlace(store, rows(store, 'clock_events', employee.id)).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id && a.date >= `${Number(day.slice(0, 4)) - 1}-01-01`).map(a => ({ ...a, otMinutes: overtimeMinutes(state, employee, a) })), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), balances, leaves, documents,
+  return { calendar, employee: { id: employee.id, name: employee.name, greetingName, department: employee.department, position: employment.position || '', employmentStatus: employment.employmentStatus || '', employeeStatus: employment.employeeStatus || (employee.active ? 'Active' : 'Inactive'), scheduleStart: employee.scheduleStart, draft: employee.draft }, today: todayAttendance(store, employee, now), history: withPlace(store, rows(store, 'clock_events', employee.id)).slice(0, 200), attendance: state.attendance.filter(a => a.employeeId === employee.id && a.date >= `${Number(day.slice(0, 4)) - 1}-01-01`).map(a => ({ ...a, otMinutes: overtimeMinutes(state, employee, a) })), corrections: rows(store, 'attendance_corrections', employee.id).slice(0, 100), explanations: rows(store, 'attendance_explanations', employee.id), explanationsDue: explanationsDue(store, state, { employeeId: employee.id }), balances, leaves, documents,
     payslips: state.runs.filter(r => payslipReleased(r, at) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ id: r.id, start: r.start, end: r.end, payDate: payDateFor(r.start, r.end), net: r.rows.find(row => row.employeeId === employee.id).net })),
     upcomingPayslips: state.runs.filter(r => r.status === 'posted' && !payslipReleased(r, at) && r.rows.some(row => row.employeeId === employee.id)).map(r => ({ start: r.start, end: r.end, payDate: payDateFor(r.start, r.end) })),
     notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id=? ORDER BY rowid DESC LIMIT 50').all(employee.id), serverTime: now.toISOString() };
@@ -303,10 +301,9 @@ export function liveDashboard(store, actor, now = new Date()) {
   // Only people who clock in: not drafts (incomplete or remittance-only profiles such as the CEO), not archived, not separated.
   // Inactive employees (resigned, separated, set inactive) are not listed.
   const employees = state.employees.filter(e => !e.draft && !e.archived && e.active !== false && (!e.endDate || e.endDate >= local(now).slice(0, 10))).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now) })).filter(e => e.status !== 'Inactive');
-  const explanations = store.db.prepare('SELECT data FROM attendance_explanations ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data));
   const history = withPlace(store, store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data)));
   const companies = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').departments || []; } catch { return []; } })();
-  return { companies, employees, outOfOffice: pendingOutOfOffice(store, state), explanations, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
+  return { companies, employees, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
 }
 export function correctClock(store, actor, input) {
   permit(actor, ['admin', 'hr']);
@@ -419,30 +416,23 @@ export function payslipPdf(payslip, { draft = payslip.draft } = {}) {
   return renderPayslipPdf(payslip, { draft, designation: payslip.designation });
 }
 
-// HR / Admin decision on an out-of-office time in or time out. Clock events are immutable, so the decision is kept
-// in its own table (one per event); the employee is notified and the decision is audited.
+// Out-of-office time in / out is recorded at once with its reason, time and location; it needs no approval.
+// Decisions HR made before that rule (clock_reviews) are kept and shown with the record in the attendance history.
 const ensureReviews = store => store.db.exec('CREATE TABLE IF NOT EXISTS clock_reviews(event_id TEXT PRIMARY KEY, data TEXT NOT NULL)');
 export function outOfOfficeReview(store, eventId) { ensureReviews(store); const r = store.db.prepare('SELECT data FROM clock_reviews WHERE event_id=?').get(eventId); return r ? JSON.parse(r.data) : null; }
-export function reviewOutOfOffice(store, actor, eventId, input) {
+
+// One employee's time in / out records for a month (HR / Admin): out-of-office reason, recording time, GPS point and
+// place, and any decision made under the earlier approval rule.
+export function employeeClockEvents(store, actor, employeeId, month) {
   permit(actor, ['admin', 'hr']);
-  const { decision, note } = z.object({ decision: z.enum(['approve', 'reject']), note: z.string().trim().max(500).default('') }).strict().parse(input);
-  return store.transaction(() => {
-    const row = store.db.prepare('SELECT data FROM clock_events WHERE id=?').get(eventId);
-    if (!row) throw new AppError('Time record not found.', 404);
-    const event = JSON.parse(row.data);
-    if (!event.outOfOffice) throw new AppError('This time record was made from the office and needs no approval.');
-    if (outOfOfficeReview(store, eventId)) throw new AppError('This out-of-office time record was already reviewed.');
-    if (decision === 'reject' && note.length < 3) throw new AppError('Give a reason for rejecting.');
-    const review = { eventId, approval: decision === 'approve' ? 'approved' : 'rejected', reviewedBy: actor.username, reviewedAt: new Date().toISOString(), reviewNote: note };
-    store.db.prepare('INSERT INTO clock_reviews(event_id,data) VALUES(?,?)').run(eventId, JSON.stringify(review));
-    store.notify(event.employeeId, `Your out-of-office time ${event.kind} on ${event.workDate} at ${event.time} was ${review.approval}${note ? `: ${note}` : ''}.`);
-    store.log(actor, `out-of-office-${review.approval}`, 'clock', eventId, null, review);
-    return { ...event, ...review };
-  });
+  if (!/^\d{4}-\d{2}$/.test(String(month || ''))) throw new AppError('Choose a month.');
+  const events = store.db.prepare('SELECT data FROM clock_events WHERE employee_id=? AND work_date LIKE ? ORDER BY rowid DESC').all(String(employeeId), `${month}-%`).map(r => JSON.parse(r.data));
+  return withPlace(store, events).map(e => { const review = e.outOfOffice ? outOfOfficeReview(store, e.id) : null; return review ? { ...e, earlierDecision: review } : e; });
 }
-// Out-of-office time records still waiting for HR / Admin (newest first).
-export function pendingOutOfOffice(store, state = store.read()) {
-  const names = Object.fromEntries(state.employees.map(e => [e.id, e.name]));
-  return store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 500').all().map(r => JSON.parse(r.data))
-    .filter(e => e.outOfOffice && !outOfOfficeReview(store, e.id)).map(e => ({ ...e, employeeName: names[e.employeeId] || e.employeeId }));
+
+// Attendance → Explanations (HR / Admin): late arrivals still waiting for an explanation and every explanation.
+export function explanationsOverview(store, actor) {
+  permit(actor, ['admin', 'hr']);
+  const state = store.read();
+  return { due: explanationsDue(store, state), explanations: store.db.prepare('SELECT data FROM attendance_explanations ORDER BY rowid DESC LIMIT 500').all().map(r => JSON.parse(r.data)), names: Object.fromEntries(state.employees.map(e => [e.id, e.name])) };
 }

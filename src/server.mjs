@@ -32,7 +32,7 @@ import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, reviewOutOfOffice, announceDuePayslips } from './portal.mjs';
+import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, announceDuePayslips, employeeClockEvents, explanationsOverview } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
@@ -276,8 +276,6 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
       if (pathname === '/api/office-networks' && req.method === 'GET') { permit(auth.user, ['admin', 'hr']); send(200, { networks: officeNetworks(store), current: visitorIp.replace(/^::ffff:/, '') }); return; }
       if (pathname === '/api/office-networks' && req.method === 'POST') { send(200, changeOfficeNetworks(store, auth.user, await readBody(req), visitorIp)); return; }
-      const oofReview = pathname.match(/^\/api\/clock\/([a-f0-9-]+)\/review$/);
-      if (oofReview && req.method === 'POST') { send(200, reviewOutOfOffice(store, auth.user, oofReview[1], await readBody(req))); return; }
       const loanSkips = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/skips$/);
       if (loanSkips && req.method === 'POST') { send(200, setLoanSkips(store, auth.user, loanSkips[1], await readBody(req))); return; }
       const releaseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/release$/);
@@ -286,6 +284,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (reverseRun && req.method === 'POST') { send(200, reversePayroll(store, auth.user, reverseRun[1], await readBody(req))); return; }
       const leaveDecision = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/decision$/);
       if (leaveDecision && req.method === 'POST') { send(200, reviewLeave(store, auth.user, leaveDecision[1], await readBody(req))); return; }
+      if (pathname === '/api/explanations' && req.method === 'GET') { send(200, explanationsOverview(store, auth.user)); return; }
+      if (pathname === '/api/clock-events' && req.method === 'GET') { send(200, employeeClockEvents(store, auth.user, url.searchParams.get('employeeId') || '', url.searchParams.get('month') || '')); return; }
       const proofReview = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/proof-review$/);
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
       const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete)$/);
