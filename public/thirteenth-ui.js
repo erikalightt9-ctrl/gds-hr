@@ -80,7 +80,14 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
     const prior = new Map(data.prior.map(p => [`${p.employeeId}:${p.month}`, p]));
     // Total earned and 13th month pay: computed, but HR can type a different amount (blank = back to the computation).
     const ovBox = (r, kind, value, computed, edited) => `<span class="th-peso"><input class="share-input th-ov${kind === '13th' ? ' th-13' : ''}${edited ? ' th-edited' : ''}" type="text" inputmode="decimal" data-amount data-th-ov="${kind}" data-emp="${esc(r.employeeId)}" value="${fmtAmount(value)}" aria-label="${esc(r.name)} ${kind === '13th' ? '13th month pay' : 'total earned'}" title="${edited ? `Edited · computed ${fmtAmount(computed)}` : 'Computed'}"${editable ? '' : ' disabled'}></span>`;
-    const gridRow = r => [esc(r.name), ...months.map(m => {
+    // The employee's name opens their 13th month payslip PDF: the finalized one when the year is paid in full on a
+    // payslip, otherwise the draft built from the saved records.
+    const nameCell = r => {
+      if (!data.canPayslip) return esc(r.name);
+      const final = r.balance <= 0 && data.payslips.find(p => p.employeeId === r.employeeId && p.status === 'final');
+      return `<a class="employee-link" data-th-pdf href="${final ? slipUrl(final.id) : pdfUrl(r.employeeId)}" target="_blank" rel="noopener" title="Open the 13th month payslip PDF${final ? '' : ' (draft)'}">${esc(r.name)}</a>`;
+    };
+    const gridRow = r => [nameCell(r), ...months.map(m => {
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`), fromPayroll = data.postedBasic?.[r.employeeId]?.[m] || 0;
       if (posted) return `<span class="payroll-amount">₱${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
       // Part typed before the system + part from finalized payroll: one box with the month's total; click to see or change the typed part.
