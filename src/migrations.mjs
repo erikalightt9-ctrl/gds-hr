@@ -1,6 +1,7 @@
 // One-time data updates applied at start-up. Each runs once per database (recorded in hr_counters) and writes
 // every change to the audit trail with its previous value.
 import { capitalizeExistingNames } from './names.mjs';
+import { explanationsDue } from './late-explanations.mjs';
 
 const once = (store, key, run) => {
   if (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(key)) return 0;
@@ -96,6 +97,20 @@ function contributionsOnceAMonth(store) {
     return changed;
   }));
 }
+// Late arrival explanations (November 2026): every time in 15 minutes or more late needs one, earlier days included.
+// Nothing is changed in the records; administrators get one notice listing how many earlier days still need one.
+function lateExplanationNotice(store, now = new Date()) {
+  return once(store, 'migration:late-explanations-2026-11', () => store.transaction(() => {
+    const today = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }), earlier = explanationsDue(store).filter(d => d.date < today);
+    if (earlier.length) {
+      const people = new Set(earlier.map(d => d.employeeId)).size;
+      store.notify(null, `${earlier.length} earlier late arrival${earlier.length === 1 ? '' : 's'} (15 minutes or more) by ${people} employee${people === 1 ? '' : 's'} still need${earlier.length === 1 ? 's' : ''} a written explanation. See Attendance → Explanations.`);
+    }
+    store.log({ username: 'system (late explanations)' }, 'notify', 'explanations', 'historical-late', null, { count: earlier.length });
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:late-explanations-2026-11');
+    return earlier.length;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store) };
+  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store) };
 }

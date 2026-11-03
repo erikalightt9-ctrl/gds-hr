@@ -210,6 +210,22 @@ export function createFiles(ctx) {
   function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Subsidiary', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
   // Attendance history for one month: recorded attendance and approved leave, newest first.
   let attMonth = '';
+  // Time in / out records (out of office: reason, time recorded, location), loaded per employee and month.
+  const clockCache = new Map();
+  function clockEventsHtml(id, month) {
+    const key = `${id}|${month}`;
+    if (!clockCache.has(key)) {
+      clockCache.set(key, null);
+      ctx.api(`/clock-events?employeeId=${encodeURIComponent(id)}&month=${month}`).then(list => { clockCache.set(key, list); const box = document.querySelector('[data-att-box]'); if (box && (attMonth || ctx.today().slice(0, 7)) === month) box.innerHTML = attendanceHtml(id); }).catch(() => clockCache.set(key, []));
+      return '<p class="muted">Loading time records…</p>';
+    }
+    const list = clockCache.get(key);
+    if (list === null) return '<p class="muted">Loading time records…</p>';
+    const away = list.filter(e => e.outOfOffice);
+    const where = e => (e.latitude === null || e.latitude === undefined ? 'No GPS reading' : `<a href="https://www.google.com/maps/search/?api=1&query=${e.latitude},${e.longitude}" target="_blank" rel="noopener noreferrer">${esc(e.place || `${e.latitude}, ${e.longitude}`)}</a><small> ±${esc(e.accuracy)} m</small>`);
+    const stampOf = iso => new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
+    return `<h3>Out of office time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
+  }
   function attendanceHtml(id) {
     const state = ctx.getState(), month = attMonth || ctx.today().slice(0, 7);
     const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
@@ -231,7 +247,8 @@ export function createFiles(ctx) {
     const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
     const count = s => list.filter(r => r.status.startsWith(s)).length;
     return block('🕒', 'Attendance history', `<div class="att-tools"><label class="field">Month<select data-att-month>${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${label(m)}</option>`).join('')}</select></label><span class="legend">${count('Present')} present · ${count('Late')} late · ${count('Absent')} absent · ${count('On leave')} on leave</span></div>`
-      + table(['Date', 'Status', 'Time in', 'Time out', 'Late (min)', 'Remarks'], list.map(r => [day(r.date), esc(r.status), esc(r.timeIn || '—'), esc(r.timeOut || '—'), r.late || '—', `<span class="wrap">${esc(r.note || '')}</span>`]), 'No attendance recorded for this month.'));
+      + table(['Date', 'Status', 'Time in', 'Time out', 'Late (min)', 'Remarks'], list.map(r => [day(r.date), esc(r.status), esc(r.timeIn || '—'), esc(r.timeOut || '—'), r.late || '—', `<span class="wrap">${esc(r.note || '')}</span>`]), 'No attendance recorded for this month.')
+      + (ctx.context?.()?.can?.approve ? clockEventsHtml(id, month) : ''));
   }
   function safeBody(...args) {
     try { return tabBody(...args); } catch (error) { return `<div class="notice">This tab could not be shown: ${esc(error.message)}. Reload the page (Ctrl+F5) and try again.</div>`; }

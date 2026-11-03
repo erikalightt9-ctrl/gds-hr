@@ -261,6 +261,7 @@ const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
+  if (nav.page === 'explanations') { attendanceView = 'explanations'; nav = { ...nav, page: 'attendance' }; }
   page = nav.page;
   if (page === 'files') return files.directory({ status: nav.status || '', docs: nav.docs || '' });
   if (page === 'employee201') return files.openProfile(nav.id, nav.tab || 'overview');
@@ -281,11 +282,12 @@ function employeesPage() {
   return heading('Your people', 'Open an employee to view their complete, connected profile.', addButton('employees', 'Add employee')) + `${state.employees.some(e => e.draft) ? '<div class="notice">Draft profiles are excluded from payroll until salary, joining date, department, schedule, and benefit coverage are completed.</div>' : ''}<section class="panel"><div class="panel-head"><h2>Employee directory</h2>${downloads('employees')}${badge(`${list.length} employees`, 'neutral')}</div>${searchToolbar(`<label class="field">Employee filter<select id="employee-status-filter">${statuses.map(s => `<option ${s === employeeStatusFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></label>`)}${table(['Employee', 'Position', 'Monthly salary', 'Joined', 'Status', ''], list.map(e => [`<button class="employee-link" data-profile="${esc(e.id)}">${employee(e.id)}</button>`, esc(e.profile.position || 'Position required'), e.monthlySalary === null ? 'Not set' : money(e.monthlySalary), e.startDate || 'Not set', badge(e.draft ? 'Draft · needs details' : e.profile.employeeStatus || (e.active ? 'Active' : 'Inactive'), e.draft ? 'pending' : '') + `<small>${esc(e.profile.employmentStatus || '')}</small>`, `<button class="small" data-profile="${esc(e.id)}">Open profile</button>`]))}</section>`;
 }
 function attendancePage() {
-  const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Timecard · against pay</button></div>`;
+  const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Timecard · against pay</button>${['admin', 'hr'].includes(auth.user.role) ? `<button data-attendance-view="explanations" class="${attendanceView === 'explanations' ? 'active' : ''}">Explanations</button>` : ''}</div>`;
   // Subsidiary filter (All / each company) for the monthly sheet and the daily records.
   const companyPick = `<label class="att-company">Subsidiary <select data-att-company><option value="">All subsidiaries</option>${companies().map(c => `<option ${c === attCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
   const top = heading('Attendance', '') + views + (['month', 'records'].includes(attendanceView) ? companyPick : '');
   if (attendanceView === 'timecard') return top + timecard.panel(state);
+  if (attendanceView === 'explanations') return top + '<div data-explanations><div class="loading">Loading explanations…</div></div>';
   if (attendanceView === 'month') return top + monthSheet({ state, esc, today: today(), month: attendanceMonth || today().slice(0, 7), search: filter, company: attCompany });
   // Daily attendance records: one date, every employee (with day / today navigation, search, status and record tabs).
   const day = recordsDate || today(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
@@ -539,7 +541,10 @@ function render() {
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   shell(views[page]());
   // Attendance: today's live attendance comes first, above the requests and the records.
-  if (page === 'attendance' && liveData && ['admin', 'hr'].includes(auth.user.role)) {
+  if (page === 'attendance' && attendanceView === 'explanations') {
+    api('/explanations').then(data => { const box = document.querySelector('[data-explanations]'); if (box && page === 'attendance' && attendanceView === 'explanations') box.innerHTML = portal.explanationsSection(data); }).catch(error => toast(error.message));
+  }
+  if (page === 'attendance' && attendanceView !== 'explanations' && liveData && ['admin', 'hr'].includes(auth.user.role)) {
     const live = document.createElement('div'); live.dataset.liveBlock = ''; live.innerHTML = portal.live(liveData);
     document.querySelector('.content .page-heading')?.after(live);
   }
