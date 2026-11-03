@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { lateIncidents, letterMessage, LETTER_AFTER } from '../src/late-incidents.mjs';
-import { fixture, attend } from './engine.test.mjs';
+import { fixture, attend } from './engine-fixture.mjs';
 
 test('late incidents: 15 minutes or more counts (even when offset); under 15 does not; the 3rd in a month needs a letter', () => {
   const s = fixture(); s.rules[0].graceMinutes = 15;

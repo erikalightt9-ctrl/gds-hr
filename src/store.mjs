@@ -29,6 +29,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS overtime_requests (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, date TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS prior_earnings (employee_id TEXT NOT NULL, month TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, month));
       CREATE TABLE IF NOT EXISTS final_pay (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS thirteenth_overrides(employee_id TEXT NOT NULL, year TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, year));
+      CREATE TABLE IF NOT EXISTS thirteenth_adjustments (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, year TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS thirteenth_payslips (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, year TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS payroll_inputs (employee_id TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, start, end));
       CREATE TABLE IF NOT EXISTS hr_settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS hr_counters (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
@@ -57,13 +60,17 @@ export class Store {
     state.deductions ??= [];   // added after launch; older databases start with none
     state.payrollInputs = this.db.prepare('SELECT data FROM payroll_inputs').all().map(r => JSON.parse(r.data));
     state.priorEarnings = this.db.prepare('SELECT data FROM prior_earnings').all().map(r => JSON.parse(r.data));
+    // 13th month: HR-edited yearly totals, approved adjustments and amounts paid on finalized 13th month payslips.
+    state.thirteenthOverrides = this.db.prepare('SELECT employee_id, year, data FROM thirteenth_overrides').all().map(r => ({ employeeId: r.employee_id, year: r.year, ...JSON.parse(r.data) }));
+    state.thirteenthAdjustments = this.db.prepare("SELECT data FROM thirteenth_adjustments WHERE status='approved'").all().map(r => JSON.parse(r.data));
+    state.thirteenthPayslips = this.db.prepare("SELECT data FROM thirteenth_payslips WHERE status='final'").all().map(r => JSON.parse(r.data));
     const recorded = new Set(state.attendance.map(a => a.id));
     state.openClockIns = this.db.prepare("SELECT id, employee_id, work_date, data FROM clock_events WHERE kind='in'").all().filter(r => !recorded.has(`clock-${r.id}`)).map(r => ({ id: r.id, employeeId: r.employee_id, workDate: r.work_date, time: JSON.parse(r.data).time }));
     state.overtimeRequests = this.db.prepare("SELECT data FROM overtime_requests WHERE status IN ('pending','approved')").all().map(r => JSON.parse(r.data));
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
     return state;
   }
-  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.openClockIns; delete copy.overtimeRequests; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
+  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.overtimeRequests; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
   transaction(fn) {
     if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');

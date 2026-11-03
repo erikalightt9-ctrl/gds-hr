@@ -444,8 +444,13 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));
     const prior = priorBasicFor(state, e.id, start.slice(0, 4));
     const annualBasic = round(annualRows.reduce((s, row) => s + row.applicableBasic, 0) + prior.basic + applicableBasic);
-    const thirteenthAccrued = e.covered13th ? round(annualBasic / 12) : 0;
-    const thirteenthPaid = round(annualRows.reduce((s, row) => s + row.earnings.thirteenth, 0) + prior.thirteenthPaid);
+    // The same yearly figures as the 13th Month page: HR-edited totals win, approved adjustments are added, and amounts
+    // already paid on a finalized 13th month payslip count as paid (never paid twice).
+    const year13 = start.slice(0, 4), edited13 = (state.thirteenthOverrides || []).find(o => o.employeeId === e.id && o.year === year13) || {};
+    const adjustments13 = round((state.thirteenthAdjustments || []).filter(a => a.employeeId === e.id && a.year === year13).reduce((s, a) => s + a.amount, 0));
+    const slipPaid13 = round((state.thirteenthPayslips || []).filter(p => p.employeeId === e.id && p.year === year13).reduce((s, p) => s + p.amountPaid, 0));
+    const thirteenthAccrued = round((edited13.thirteenth ?? (e.covered13th ? round((edited13.totalBasic ?? annualBasic) / 12) : 0)) + adjustments13);
+    const thirteenthPaid = round(annualRows.reduce((s, row) => s + row.earnings.thirteenth, 0) + prior.thirteenthPaid + slipPaid13);
     const thirteenthBalance = Math.max(0, round(thirteenthAccrued - thirteenthPaid));
     if (pay13th) add(earnings, 'thirteenth', thirteenthBalance, `${annualBasic} applicable annual basic${prior.basic ? ` (incl. ${prior.basic} encoded for ${prior.months.length} month${prior.months.length === 1 ? '' : 's'} before the system)` : ''} ÷ 12 − ${thirteenthPaid} already paid`, null, end);
     // Semi-monthly payroll takes half each cutoff by default, or the full monthly amount on one chosen cutoff.

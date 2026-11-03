@@ -91,7 +91,7 @@ test('the employee portal shows the day-specific schedule and arrangement', () =
 
 test('flexible Saturday: any start, never late, 4 hours required, extra hours are not overtime', async () => {
   const { calculatePayroll } = await import('../src/engine.mjs');
-  const { fixture, attend } = await import('./engine.test.mjs');
+  const { fixture, attend } = await import('./engine-fixture.mjs');
   const s = fixture(); s.employees[0].restDays = [0];
   s.employeeProfiles = [{ employeeId: 'EMP-001', section: 'attendance', scheduleEnd: '16:00', hoursPerDay: 8, mealBreakMinutes: 0, daySchedules: [{ day: 6, scheduleStart: '', scheduleEnd: '', hoursPerDay: 4, mealBreakMinutes: 0, arrangement: 'Office', flexible: true }] }];
   s.rules[0].overtimeApproval = 'attendance';

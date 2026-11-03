@@ -17,6 +17,8 @@ import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entit
 import { decideLoanApplication, loanDashboard, setLoanSkips } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
+import { renderThirteenthPdf } from './thirteenth-pdf.mjs';
+import { thirteenthStatement, finalizeThirteenthPayslip, voidThirteenthPayslip, thirteenthPayslip, thirteenthPayslips, addThirteenthAdjustment, reviewThirteenthAdjustment, thirteenthAdjustments } from './thirteenth-payslip.mjs';
 import { renderLeavePdf } from './leave-pdf.mjs';
 import { staffNames, fullNameOf } from './staff-names.mjs';
 import { messageContacts, unreadMessages, conversation, sendMessage, onChat } from './messages.mjs';
@@ -232,7 +234,29 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (otDecision && req.method === 'POST') { send(200, decideOvertime(store, auth.user, otDecision[1], await readBody(req))); return; }
       if (pathname === '/api/contributions/employees' && req.method === 'POST') { send(200, addContributionEmployee(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions' && req.method === 'GET') { send(200, contributionOverview(store, auth.user, url.searchParams.get('month') || '', readSettings(store).company.egovFee ?? 15)); return; }
-      if (pathname === '/api/thirteenth' && req.method === 'GET') { send(200, thirteenthOverview(store, auth.user, url.searchParams.get('year') || '')); return; }
+      if (pathname === '/api/thirteenth' && req.method === 'GET') {
+        const year = url.searchParams.get('year') || '', overview = thirteenthOverview(store, auth.user, year), staff = ['admin', 'payroll', 'hr'].includes(auth.user.role);
+        send(200, { ...overview, payslips: staff ? thirteenthPayslips(store, auth.user, year) : [], adjustments: staff ? thirteenthAdjustments(store, auth.user, year) : [], canPayslip: staff, canFinalize: ['admin', 'payroll'].includes(auth.user.role), canApprove: auth.user.role === 'admin' }); return;
+      }
+      // Separate 13th month payslip: draft (live from the saved records) and finalized (frozen snapshot) PDFs.
+      const pdfOut = (pdf, name, download) => { res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${name.replace(/[^A-Za-z0-9._-]+/g, '-')}"` }); res.end(pdf); };
+      if (pathname === '/api/thirteenth/payslip' && req.method === 'GET') { send(200, thirteenthStatement(store, auth.user, url.searchParams.get('employeeId') || '', url.searchParams.get('year'))); return; }
+      if (pathname === '/api/thirteenth/payslip.pdf' && req.method === 'GET') {
+        const draft = thirteenthStatement(store, auth.user, url.searchParams.get('employeeId') || '', url.searchParams.get('year'));
+        store.log(auth.user, 'export', 'thirteenth-payslip', `${draft.employeeId}:${draft.year}`, null, { format: 'pdf', draft: true });
+        pdfOut(renderThirteenthPdf(draft, { preparedBy: fullNameOf(store, auth.user.username) }), `DRAFT-13th-month-${draft.year}-${draft.employeeId}.pdf`, url.searchParams.get('download')); return;
+      }
+      if (pathname === '/api/thirteenth/payslips' && req.method === 'POST') { send(201, finalizeThirteenthPayslip(store, auth.user, await readBody(req))); return; }
+      const slip13 = pathname.match(/^\/api\/thirteenth\/payslips\/([a-f0-9-]+)(\.pdf|\/void)$/);
+      if (slip13 && slip13[2] === '.pdf' && req.method === 'GET') {
+        const slip = thirteenthPayslip(store, auth.user, slip13[1]);
+        store.log(auth.user, 'export', 'thirteenth-payslip', slip.id, null, { format: 'pdf' });
+        pdfOut(renderThirteenthPdf(slip, { preparedBy: fullNameOf(store, slip.finalizedBy) }), `13th-month-${slip.year}-${slip.employeeId}${slip.status === 'void' ? '-CANCELLED' : ''}.pdf`, url.searchParams.get('download')); return;
+      }
+      if (slip13 && slip13[2] === '/void' && req.method === 'POST') { send(200, voidThirteenthPayslip(store, auth.user, slip13[1], await readBody(req))); return; }
+      if (pathname === '/api/thirteenth/adjustments' && req.method === 'POST') { send(201, addThirteenthAdjustment(store, auth.user, await readBody(req))); return; }
+      const adj13 = pathname.match(/^\/api\/thirteenth\/adjustments\/([a-f0-9-]+)\/review$/);
+      if (adj13 && req.method === 'POST') { send(200, reviewThirteenthAdjustment(store, auth.user, adj13[1], await readBody(req))); return; }
       if (pathname === '/api/holidays/year' && req.method === 'POST') { const b = await readBody(req); send(200, ensureHolidayYear(store, auth.user, b?.year)); return; }
       if (pathname === '/api/holidays/add-year' && req.method === 'POST') { send(200, addNextHolidayYear(store, auth.user)); return; }
       if (pathname === '/api/thirteenth/years' && req.method === 'POST') { send(200, addThirteenthYear(store, auth.user)); return; }
