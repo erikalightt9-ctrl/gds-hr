@@ -86,7 +86,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   y = header('EMPLOYEE INFORMATION', y);
   const daily = slip.payBasis === 'daily';
   const info = [['Employee name', slip.employeeName.toUpperCase()], ['Employee ID', slip.employeeId], ['Designation', designation || '-'],
-    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.creditedHours ? [['Hours credited', `${Math.round(slip.creditedHours * 100) / 100} h`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
+    ['Pay basis', daily ? 'Daily-paid (daily rate x payable days)' : slip.payBasis === 'days-worked' ? 'Paid per day worked' : 'Monthly-paid (fixed monthly salary, 26-day divisor)'], [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.creditedHours ? [['Hours credited', `${Math.round(slip.creditedHours * 100) / 100} h`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
   const KEY = LEFT + 190;
   for (const [label, value] of info) {
     p.line(LEFT, y - 18, RIGHT, y - 18); p.line(KEY, y, KEY, y - 18);
