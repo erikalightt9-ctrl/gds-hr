@@ -29,6 +29,8 @@ function jpegInfo(buffer) {
   }
   return null;
 }
+// Any JPEG file as an image for assemblePdf (e.g. the memo letterhead); null when missing or unreadable.
+export function jpegFile(file) { const data = existsSync(file) ? readFileSync(file) : null, info = data && jpegInfo(data); return info ? { data, ...info } : null; }
 let cachedLogo;
 export function logo() {
   if (cachedLogo !== undefined) return cachedLogo;

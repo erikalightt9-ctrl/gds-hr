@@ -34,6 +34,7 @@ import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
 import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, requestLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, announceDuePayslips, employeeClockEvents, explanationsOverview } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
+import { runTardinessMemos } from './tardiness-memo.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -426,6 +427,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   // Payslips: released and announced at 9:00 AM on the 8th and 22nd (checked every minute).
   const payslipCheck = () => { try { announceDuePayslips(store); } catch (error) { console.error('payslip release check failed:', error.message); } };
   payslipCheck(); setInterval(payslipCheck, 60000).unref();
+  // Monthly tardiness memos: on or after the 5th (Philippine Time) for the previous month; checked every hour.
+  const tardinessCheck = () => { try { const sent = runTardinessMemos(store); if (sent.length) console.log(`Monthly tardiness memos sent: ${sent.map(s => `${s.employeeId} (${s.occurrences})`).join(', ')}.`); } catch (error) { console.error('tardiness memo check failed:', error.message); } };
+  tardinessCheck(); setInterval(tardinessCheck, 3600000).unref();
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });

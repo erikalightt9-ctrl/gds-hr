@@ -69,6 +69,22 @@ export function publishMemo(store, actor, id, input = {}) {
     return updated;
   });
 }
+// A memo the system issues by itself (e.g. the monthly tardiness reminder) to named employees, with an optional PDF
+// attached (`pdf` may be a function of the memo reference): issued at once as version 1, acknowledgement required,
+// recorded as issued by the system. Call inside a transaction; returns the issued memo.
+export function issueSystemMemo(store, { title, category, body, employeeIds, issueDate = localToday(), pdf = null, pdfName = 'memo.pdf', issuedBy = 'system', kind = '' }) {
+  const id = randomUUID(), now = new Date().toISOString(), reference = nextReference(store, issueDate);
+  pdf = typeof pdf === 'function' ? pdf(reference) : pdf;
+  const attachment = pdf ? { id: randomUUID(), name: pdfName.replace('{ref}', reference), mime: 'application/pdf', size: pdf.length, version: 1 } : null;
+  if (attachment) store.db.prepare('INSERT INTO memo_attachments(id,memo_id,version,name,mime,content) VALUES(?,?,1,?,?,?)').run(attachment.id, id, attachment.name, attachment.mime, pdf);
+  const issued = { title, category, reference, issueDate, body, recipients: { mode: 'employees', departments: [], employees: employeeIds }, ackRequired: true, ackDeadline: '', version: 1, publishedAt: now, publishedBy: issuedBy, changeNote: '', attachments: attachment ? [attachment] : [] };
+  const memo = { id, status: 'published', version: 1, versions: [issued], draft: null, attachments: attachment ? [attachment] : [], createdBy: issuedBy, createdAt: now, kind };
+  write(store, memo);
+  const insert = store.db.prepare('INSERT OR IGNORE INTO memo_assignments(memo_id,version,employee_id,assigned_at,acknowledged_at,ack_user) VALUES(?,1,?,?,NULL,NULL)');
+  for (const employeeId of employeeIds) { insert.run(id, employeeId, now); store.notify(employeeId, `New memo: ${title} — please read and acknowledge receipt.`); }
+  store.log({ username: issuedBy }, 'publish', 'memos', id, null, { version: 1, title, recipients: employeeIds.length, reference, kind });
+  return { ...memo, reference };
+}
 // A revision starts from the issued text; it is published separately.
 export function startRevision(store, actor, id) {
   permit(actor, HR_MANAGERS);
