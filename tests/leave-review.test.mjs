@@ -4,7 +4,7 @@ import { Store } from '../src/store.mjs';
 import { completeState } from './helpers.mjs';
 import { applyLeave, attachLeaveProof, reviewLeaveProof, employeeDashboard } from '../src/portal.mjs';
 import { uploadDocument } from '../src/profiles.mjs';
-import { reviewLeave } from '../src/service.mjs';
+import { reviewLeave, saveRecord, deleteRecord } from '../src/service.mjs';
 import { leaveBalance } from '../src/engine.mjs';
 
 const worker = { id: 'w', username: 'employee1', role: 'employee', employeeId: 'EMP-001' };
@@ -37,13 +37,16 @@ test('HR approves, rejects and cancels employee leave; one balance, shown the sa
     assert.equal(mine.balances.find(b => b.typeId === 'sil').available, before - 2, 'employee sees the same balance');
     assert.equal(mine.leaves.find(l => l.id === leave.id).hrRemarks, 'Enjoy');
     assert.throws(() => reviewLeave(store, hr, leave.id, { decision: 'approve' }), /already approved/);
-    assert.throws(() => reviewLeave(store, hr, leave.id, { decision: 'cancel' }), /reason/);
-    reviewLeave(store, hr, leave.id, { decision: 'cancel', remarks: 'Trip moved' });
-    assert.equal(sil(store).available, before, 'cancelling restores the credits');
+    // Approved leave is final: it cannot be cancelled, changed back or deleted.
+    assert.throws(() => reviewLeave(store, hr, leave.id, { decision: 'cancel', remarks: 'Trip moved' }), /final/);
+    const approved = store.read().leaves.find(l => l.id === leave.id);
+    assert.throws(() => saveRecord(store, hr, 'leaves', { ...approved, status: 'cancelled' }), /final/);
+    assert.throws(() => deleteRecord(store, hr, 'leaves', leave.id), /final/);
+    assert.equal(sil(store).available, before - 2, 'the approved days stay used');
     const second = applyLeave(store, worker, { typeId: 'sil', startDate: '2026-11-16', endDate: '2026-11-16', reason: 'Errand' });
     assert.throws(() => reviewLeave(store, hr, second.id, { decision: 'reject' }), /reason/);
     reviewLeave(store, hr, second.id, { decision: 'reject', remarks: 'Peak week' });
-    assert.equal(sil(store).available, before, 'rejected leave does not consume credits');
+    assert.equal(sil(store).available, before - 2, 'rejected leave does not consume credits');
     assert.match(store.db.prepare("SELECT message FROM notifications WHERE employee_id='EMP-001' ORDER BY rowid DESC LIMIT 1").get().message, /rejected — HR remarks: Peak week/);
   } finally { store.close(); }
 });

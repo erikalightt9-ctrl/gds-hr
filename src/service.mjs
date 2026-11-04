@@ -72,6 +72,7 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       if (!type) throw new AppError('Leave type does not exist.');
       if (!type.approvalRequired && value.status === 'pending') value.status = 'approved';
       const prior = state.leaves.find(l => l.id === value.id);
+      if (prior?.status === 'approved' && value.status !== 'approved') throw new AppError('Approved leave is final and cannot be cancelled, rejected or set back to pending.');
       // Proof is required for leave of PROOF_FROM_DAYS days or more; shorter leave needs it only when HR asks.
       value.proofStatus = prior?.proofStatus ?? '';
       for (const key of ['proofNote', 'proofReviewedBy', 'proofReviewedAt']) value[key] = prior?.[key] ?? '';
@@ -149,6 +150,7 @@ export function deleteRecord(store, actor, kind, id) {
     assertUnlocked(state, kind, value);
     if (kind === 'employees') { assertNoEmployeeHistory(store, state, id); store.db.prepare('DELETE FROM employee_profiles WHERE employee_id=?').run(id); }
     else if (['leaveTypes', 'loans', 'rules', 'attendance'].includes(kind)) throw new AppError('This record type cannot be deleted. Preserve its history and use a documented correction.');
+    else if (kind === 'leaves' && value.status === 'approved') throw new AppError('Approved leave is final and cannot be deleted.');
     state[kind] = state[kind].filter(x => x.id !== id); state.version++;
     store.write(state); store.log(actor, 'delete', kind, id, value, null);
   });
@@ -208,15 +210,16 @@ export function reversePayroll(store, actor, runId, input) {
 // always show the same figure and nothing is deducted twice. Cancelling approved leave restores the credits.
 export function reviewLeave(store, actor, id, input) {
   permit(actor, ['admin', 'hr']);
-  const decision = ['approve', 'reject', 'cancel'].includes(input?.decision) ? input.decision : null, remarks = String(input?.remarks ?? '').trim();
-  if (!decision) throw new AppError('Choose approve, reject or cancel.');
+  // Approved leave is final (November 2026 policy): it cannot be cancelled or revoked afterwards.
+  if (input?.decision === 'cancel') throw new AppError('Approved leave is final and cannot be cancelled.');
+  const decision = ['approve', 'reject'].includes(input?.decision) ? input.decision : null, remarks = String(input?.remarks ?? '').trim();
+  if (!decision) throw new AppError('Choose approve or reject.');
   if (remarks.length > 1000) throw new AppError('Keep remarks under 1,000 characters.');
-  if (decision !== 'approve' && remarks.length < 3) throw new AppError(decision === 'reject' ? 'Give the employee a reason for the rejection.' : 'Give a reason for cancelling the approved leave.');
+  if (decision === 'reject' && remarks.length < 3) throw new AppError('Give the employee a reason for the rejection.');
   const leave = store.read().leaves.find(l => l.id === id);
   if (!leave) throw new AppError('Leave request not found.', 404);
-  if (decision !== 'cancel' && leave.status !== 'pending') throw new AppError(`This request is already ${leave.status}.`);
-  if (decision === 'cancel' && leave.status !== 'approved') throw new AppError('Only approved leave can be cancelled here.');
-  const status = { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }[decision];
+  if (leave.status !== 'pending') throw new AppError(`This request is already ${leave.status}.`);
+  const status = { approve: 'approved', reject: 'rejected' }[decision];
   return saveRecord(store, actor, 'leaves', { ...leave, status, hrRemarks: remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(decision === 'approve' ? { eligibilityVerified: true } : {}) });
 }
 export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll(store.read(), start, end, pay13th, employeeIds);

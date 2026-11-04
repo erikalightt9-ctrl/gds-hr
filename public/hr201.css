@@ -1710,3 +1710,10 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ld-block h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #777; margin: 0 0 6px; }
 .ld-reason { font-weight: 600; margin: 0 0 4px; }
 .ld-text { margin: 0; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Leave management folders: decision column and date filters */
+.lm-decided strong { display: block; font-weight: 600; }
+.lm-decided small { display: block; color: #666; margin-top: 2px; }
+.lm-date { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #555; }
+.lm-date input { padding: 6px 8px; border: 1px solid #e3d6b5; border-radius: 8px; font: inherit; }
+@media (max-width: 760px) { .lm-filters { flex-wrap: wrap; } .lm-filters > * { flex: 1 1 140px; } }
