@@ -14,7 +14,7 @@ import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
-import { decideLoanApplication, loanDashboard, setLoanSkips } from './loans.mjs';
+import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
 import { renderThirteenthPdf } from './thirteenth-pdf.mjs';
@@ -279,6 +279,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/office-networks' && req.method === 'POST') { send(200, changeOfficeNetworks(store, auth.user, await readBody(req), visitorIp)); return; }
       const loanSkips = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/skips$/);
       if (loanSkips && req.method === 'POST') { send(200, setLoanSkips(store, auth.user, loanSkips[1], await readBody(req))); return; }
+      const loanSchedule = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/schedule$/);
+      if (loanSchedule && req.method === 'POST') { send(200, setLoanSchedule(store, auth.user, loanSchedule[1], await readBody(req))); return; }
       const releaseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/release$/);
       if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1])); return; }
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);

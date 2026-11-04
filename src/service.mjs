@@ -111,7 +111,12 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       }
     }
     if (kind === 'holidays' && state.holidays.some(h => h.id !== value.id && h.date === value.date)) throw new AppError('A holiday classification already exists for that date. Edit the existing record.');
-    if (kind === 'loans' && previous && state.runs.some(r => r.rows.some(row => row.loanDeductions.some(l => l.loanId === value.id)))) throw new AppError('A loan used in posted payroll is immutable. Record a separately authorized adjustment or new loan.');
+    // A loan used in posted payroll keeps its amounts; only its future schedule (skipped cutoffs, which cutoff it is
+    // deducted in) may change, as that never alters a posted deduction.
+    const prior = previous && kind === 'loans' ? (schemas.loans.safeParse(previous).data || previous) : previous;   // with the same defaults as `value`
+    const differs = k => JSON.stringify(prior[k]) !== JSON.stringify(value[k]);
+    const scheduleOnly = prior && Object.keys({ ...prior, ...value }).every(k => ['skipCutoffs', 'deductOn'].includes(k) || !differs(k)) && ['skipCutoffs', 'deductOn'].some(differs);
+    if (kind === 'loans' && previous && !scheduleOnly && state.runs.some(r => r.rows.some(row => row.loanDeductions.some(l => l.loanId === value.id)))) throw new AppError('A loan used in posted payroll is immutable. Record a separately authorized adjustment or new loan.');
     if (kind === 'loans' && state.loans.some(l => l.id !== value.id && l.employeeId === value.employeeId && l.reference === value.reference)) throw new AppError('Duplicate employee loan reference.');
     if (kind === 'rules') {
       // Approved rates can be corrected until a posted payroll uses them; after that the version is locked for audit integrity.

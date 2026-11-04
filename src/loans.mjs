@@ -121,6 +121,21 @@ export function setLoanSkips(store, actor, loanId, input) {
     return { id: loan.id, skipCutoffs };
   });
 }
+// Which cutoff a loan is deducted in (every cutoff, only the 1st-15th paid on the 22nd, or only the 16th-end). Applies
+// to cutoffs not yet posted; posted payroll keeps what it deducted. A reason is required and the change is audited.
+const scheduleSchema = z.object({ deductOn: z.enum(['every', 'first', 'second']), reason: z.string().trim().min(3, 'Give the reason for the change.').max(500) }).strict();
+export function setLoanSchedule(store, actor, loanId, input) {
+  permit(actor, APPROVERS);
+  const v = scheduleSchema.parse(input);
+  return store.transaction(() => {
+    const loan = store.read().loans.find(l => l.id === loanId);
+    if (!loan) throw new AppError('Loan not found.', 404);
+    if ((loan.deductOn || 'every') === v.deductOn) return { id: loan.id, deductOn: v.deductOn };
+    saveRecord(store, actor, 'loans', { ...loan, deductOn: v.deductOn }, { trusted: true });
+    store.log(actor, 'change-loan-schedule', 'loans', loan.id, { deductOn: loan.deductOn || 'every' }, { deductOn: v.deductOn, reason: v.reason });
+    return { id: loan.id, deductOn: v.deductOn };
+  });
+}
 export const loanStatus = loan => (!loan.authorized ? 'Not authorized' : r2(loan.balance + (loan.interestBalance || 0)) <= 0 ? 'Fully paid' : 'Active');
 export function loanDashboard(store, actor) {
   permit(actor, ['admin', 'payroll', 'hr', 'viewer']);
