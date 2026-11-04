@@ -442,6 +442,17 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .employee-bell .bell-title { display: block; padding: 4px 16px 8px; border-bottom: 1px solid #f0e6cc; }
 .employee-bell .portal-notifications { padding: 0 16px; }
 .employee-bell .portal-notifications li.unread { font-weight: 700; }
+.employee-bell .portal-notifications li:has(.notice-item) { padding: 0; }
+.notice-item { display: block; width: 100%; padding: 14px 24px 14px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; position: relative; white-space: normal; }
+.notice-item::after { content: '›'; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); color: #b51f2b; font-size: 20px; }
+.notice-item:hover, .notice-item:focus-visible { background: #fff7e4; }
+.notice-message { font-size: 16px; line-height: 1.5; margin: 0 0 6px; }
+.notice-when { color: #777; font-size: 12px; margin: 0 0 16px; }
+.notice-rows { border: 1px solid #eadfc4; border-radius: 10px; overflow: hidden; }
+.notice-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 14px; border-bottom: 1px solid #f1ead8; }
+.notice-row:last-child { border-bottom: 0; }
+.notice-row span { color: #666; flex-shrink: 0; }
+.notice-row strong { text-align: right; overflow-wrap: anywhere; font-weight: 600; }
 .confirm-box { text-align: center; padding-top: 8px; }
 .confirm-box .confirm-icon { font-size: 44px; margin: 0 0 6px; }
 .confirm-box p { font-size: 15px; line-height: 1.6; }

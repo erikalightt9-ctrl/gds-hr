@@ -318,7 +318,7 @@ function attendancePage() {
     const avatar = look === 'ok' ? 'ok' : look === 'late' ? 'late' : 'idle';
     return { e, recorded, label, html: `<tr data-dr-row data-dr-name="${esc(`${e.name} ${e.id}`.toLowerCase())}" data-dr-status="${esc(label)}" data-dr-recorded="${recorded ? 'yes' : 'no'}">
       <td><button class="dr-emp" ${view} title="Open this record"><span class="dr-avatar dr-${avatar}">${esc(ini(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.id)}</small></span></button></td>
-      <td>${esc(sched)}</td><td>${esc(clockIn)}</td><td>${esc(clockOut)}</td>
+      <td>${esc(sched)}</td><td>${esc(clockIn)}${a?.location ? `<small class="dr-sub">${esc(a.location)}</small>` : ''}</td><td>${esc(clockOut)}</td>
       <td><span class="dr-pill dr-${look}">${ic(icon)}${esc(label)}</span>${sub ? `<small class="dr-sub">${esc(sub)}</small>` : ''}</td>
       <td>${esc(offset)}</td><td>${approval}</td></tr>` };
   });
@@ -564,7 +564,7 @@ function render() {
       for (const o of list.filter(x => x.status === 'pending' && !x.locked)) {
         const cell = content.querySelector(`[data-lv-req="${CSS.escape(o.employeeId)}"]`); if (!cell) continue;
         const dash = cell.querySelector('.lv-muted'); if (dash) dash.remove();
-        cell.insertAdjacentHTML('beforeend', `<span class="lv-req-group"><span class="lv-req-label">Overtime ${esc(o.date.slice(5))} · ${o.hours} h</span>${can ? `<button class="lv-req ok" data-ot-decision="approve" data-id="${esc(o.id)}" data-hours="${o.worked === null ? o.hours : Math.min(o.hours, o.worked)}" data-filed="${o.hours}">Approve</button><button class="lv-req" data-ot-decision="reject" data-id="${esc(o.id)}">Reject</button>` : ''}</span>`);
+        cell.insertAdjacentHTML('beforeend', `<span class="lv-req-group"><span class="lv-req-label" title="Overtime filed for ${esc(o.date)}, not today">OT filed for ${esc(new Date(`${o.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} · ${o.hours} h</span>${can ? `<button class="lv-req ok" data-ot-decision="approve" data-id="${esc(o.id)}" data-employee="${esc(o.employeeId)}" data-date="${esc(o.date)}" data-worked="${o.worked ?? ''}" data-hours="${o.worked === null ? o.hours : Math.min(o.hours, o.worked)}" data-filed="${o.hours}">Approve</button><button class="lv-req" data-ot-decision="reject" data-id="${esc(o.id)}" data-employee="${esc(o.employeeId)}" data-date="${esc(o.date)}" data-worked="${o.worked ?? ''}" data-hours="${o.hours}" data-filed="${o.hours}">Reject</button>` : ''}</span>`);
       }
     }).catch(error => toast(error.message));
   }
@@ -735,6 +735,31 @@ function taxDialog(row) {
     try { await save([]); dialog.close(); if (await reopenComputation()) savedPopup('Withholding tax reset to the computed amount.'); } catch (error) { toast(error.message); }
   });
 }
+// Approve or reject one overtime filing in a clear confirmation window (replaces the browser prompts).
+function overtimeDecisionDialog({ otDecision: decision, id, employee: employeeId, date, worked, hours, filed }) {
+  const approve = decision === 'approve', name = state.employees.find(e => e.id === employeeId)?.name || employeeId;
+  const workedText = worked === '' ? 'No clock-out yet' : `${worked} h`;
+  openDialog(`${approve ? 'Approve' : 'Reject'} overtime · ${name}`, `<form id="ot-decision-form"><div class="dialog-body">
+    <div class="cards">${card('Date', esc(date), 'Overtime date')}${card('Hours filed', `${esc(filed)} h`, 'Requested by the employee')}${card('Worked past schedule', esc(workedText), 'From time in / out')}</div>
+    ${approve ? `<div class="form-grid"><label class="field">Hours to approve<input type="number" name="hours" min="0.01" step="0.01" required value="${esc(hours)}"></label></div>
+    <p class="legend">You may approve fewer hours than filed. Payroll pays only up to the hours actually worked past the schedule.</p>` : ''}
+    <div class="form-grid"><label class="field">${approve ? 'Note to the employee (optional)' : 'Reason for rejecting (the employee will see this)'}<textarea name="remarks" rows="2" ${approve ? '' : 'required'}></textarea></label></div></div>
+    <div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary" data-ot-submit>${approve ? `✓ Approve ${esc(hours)} h` : '✕ Reject overtime'}</button></div></form>`);
+  const form = dialog.querySelector('#ot-decision-form'), submit = form.querySelector('[data-ot-submit]');
+  if (approve) form.elements.hours.addEventListener('input', () => { submit.textContent = `✓ Approve ${form.elements.hours.value || 0} h`; });
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const remarks = form.elements.remarks.value.trim(), approved = approve ? Number(form.elements.hours.value) : 0;
+    if (approve && !(approved > 0)) { toast('Enter the hours to approve.'); return; }
+    submit.disabled = true;
+    try {
+      await api(`/overtime-requests/${id}/decision`, { decision, remarks, ...(approve ? { hours: approved } : {}) });
+      dialog.close(); await refresh(); render();
+      const message = approve ? `Overtime approved: ${approved} h for ${name} on ${date}. Payroll will include it.` : `Overtime rejected for ${name} on ${date}. The employee has been notified.`;
+      openDialog(approve ? 'Overtime approved' : 'Overtime rejected', `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">${approve ? '✅' : '❌'}</p><p>${esc(message)}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
+    } catch (error) { submit.disabled = false; toast(error.message); }
+  };
+}
 function manualEntryDialog(employeeId) {
   const row = currentRun.rows.find(x => x.employeeId === employeeId), m = row.manualEntry || { mode: 'add', daysWorked: row.workingDays, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: '' };
   const daily = row.payBasis === 'daily';
@@ -824,7 +849,7 @@ function definitions(kind) {
   const approved = field('approved', 'Approved', 'checkbox');
   const fields = {
     employees: [field('id', 'Employee ID', 'text', null, 'A unique, permanent identifier included in payroll and exports.'), field('name', 'Employee name'), field('department', 'Department'), field('monthlySalary', 'Monthly salary (PHP)', 'number'), field('startDate', 'Employment start', 'date'), field('endDate', 'Employment end (optional)', 'optional-date'), field('scheduleStart', 'Normal scheduled start', 'time'), field('restDays', 'Rest days', 'numbers', [[0, 'Sunday'], [1, 'Monday'], [2, 'Tuesday'], [3, 'Wednesday'], [4, 'Thursday'], [5, 'Friday'], [6, 'Saturday']]), field('active', 'Active employee profile', 'checkbox', null, 'Use an employment end date to stop payroll after separation.'), section('Coverage & leave eligibility'), field('coveredOT', 'Covered by overtime policy', 'checkbox'), field('coveredNSD', 'Covered by night differential', 'checkbox'), field('coveredHoliday', 'Covered by regular holiday pay', 'checkbox'), field('covered13th', 'Covered by 13th month pay', 'checkbox'), field('leaveEligibility', 'Eligible leave types (HR verified)', 'multi', leaveOptions, 'Select only entitlements whose eligibility requirements have been verified. Hold Ctrl / Command to select multiple.')],
-    attendance: [commonEmployee, field('date', 'Attendance date', 'date'), field('status', 'Day status', 'select', ['present', 'absent', 'off', 'official-business', 'rest-day-swap']), field('scheduledIn', 'Approved scheduled start', 'time'), field('timeIn', 'Actual time in (for present)', 'optional-time'), field('timeOut', 'Actual time out (for present)', 'optional-time'), field('endNextDay', 'Time out is on the following day', 'checkbox'), field('breaks', 'Unpaid breaks', 'breaks', null, 'Enter each break with its full local date and time. Breaks are excluded from work and night hours.'), section('Exceptions & approval'), field('offsetMinutes', 'Approved offset minutes', 'number'), field('exception', 'Approved explanation / attendance exception', 'checkbox', null, 'Exempts lateness and undertime deductions, such as authorized official business.'), field('explanation', 'Explanation / approval basis', 'optional-textarea'), field('holidayEligible', 'Regular holiday pay eligibility verified', 'checkbox'), approved],
+    attendance: [commonEmployee, field('date', 'Attendance date', 'date'), field('status', 'Day status', 'select', ['present', 'absent', 'off', 'official-business', 'rest-day-swap']), field('scheduledIn', 'Approved scheduled start', 'time'), field('timeIn', 'Actual time in (for present)', 'optional-time'), field('timeOut', 'Actual time out (for present)', 'optional-time'), field('endNextDay', 'Time out is on the following day', 'checkbox'), field('location', 'Work location (optional)', 'optional-text', null, 'Where the day was worked when there is no GPS time in, e.g. from a biometric import.'), field('breaks', 'Unpaid breaks', 'breaks', null, 'Enter each break with its full local date and time. Breaks are excluded from work and night hours.'), section('Exceptions & approval'), field('offsetMinutes', 'Approved offset minutes', 'number'), field('exception', 'Approved explanation / attendance exception', 'checkbox', null, 'Exempts lateness and undertime deductions, such as authorized official business.'), field('explanation', 'Explanation / approval basis', 'optional-textarea'), field('holidayEligible', 'Regular holiday pay eligibility verified', 'checkbox'), approved],
     leaves: [commonEmployee, field('typeId', 'Leave type', 'select', leaveOptions), field('startDate', 'First day', 'date'), field('startTime', 'Start time (first day)', 'optional-time', null, 'Blank = start of the work schedule. A leave covering about half the day (e.g. 14:00–18:00) counts as a half day.'), field('endDate', 'Last day', 'date'), field('endTime', 'End time (last day)', 'optional-time', null, 'Blank = end of the work schedule.'), field('days', 'Leave days (computed)', 'number', null, 'Worked out from the dates and times when saved: whole days count 1, half days 0.5. Rest days do not consume leave.'), field('status', 'Request status', 'select', ['pending', 'approved', 'rejected']), field('reason', 'Reason / notes', 'textarea'), field('documentReference', 'Supporting document reference', 'optional-textarea', null, 'Reference a document in your controlled HR document store. Do not paste public document links.'), field('eligibilityVerified', 'Eligibility verified by HR', 'checkbox')],
     leaveTypes: [field('name', 'Leave type name'), field('category', 'Benefit classification', 'select', ['statutory', 'company']), field('paid', 'Paid leave', 'checkbox'), field('entitledDays', 'Days entitled per year', 'number'), field('minServiceMonths', 'Minimum service (months)', 'number'), field('eligibility', 'Eligibility requirements', 'textarea'), field('accrual', 'Accrual method', 'select', ['annual', 'monthly', 'none']), field('carryOverDays', 'Maximum carry-over days', 'number'), field('expirationMonths', 'Carry-over expires after month', 'number', null, '1 = January, 12 = December. Current-year entitlement expires at year end.'), field('balanceRequired', 'Require sufficient accrued balance', 'checkbox'), field('documentsRequired', 'Supporting documents required', 'checkbox'), field('approvalRequired', 'Approval required', 'checkbox'), field('affectsPayroll', 'Affects payroll', 'checkbox'), field('includedIn13th', 'Paid leave included in 13th-month basic', 'checkbox')],
     holidays: [field('date', 'Holiday date', 'date'), field('name', 'Holiday name'), field('kind', 'Classification', 'select', [['ordinary', 'Ordinary / special working day'], ['special', 'Special non-working holiday'], ['regular', 'Regular holiday'], ['double', 'Double regular holiday'], ['other', 'Other configured holiday']]), field('basis', 'Proclamation / legal or policy basis', 'textarea')],
@@ -1086,18 +1111,7 @@ document.addEventListener('click', async event => {
       const reason = window.prompt('Reason for reversing this posted payroll (kept in the audit trail):'); if (!reason) return;
       currentRun = await api(`/runs/${b.dataset.reverseRun}/reverse`, { reason }); await refresh(); render(); toast('Payroll reversed. Loan balances restored; the cutoff can be corrected and posted again.'); return;
     }
-    if (b.dataset.otDecision) {
-      const decision = b.dataset.otDecision;
-      let hours;
-      if (decision === 'approve') {
-        const answer = window.prompt(`Hours to approve (filed ${b.dataset.filed} h; payroll never pays more than the hours worked beyond the schedule):`, b.dataset.hours); if (answer === null) return;
-        hours = Number(answer); if (!(hours > 0)) { toast('Enter the hours to approve.'); return; }
-      }
-      const remarks = window.prompt(decision === 'approve' ? 'Remarks for the employee (optional):' : 'Reason for not approving (the employee will see this):', '');
-      if (remarks === null) return;
-      await api(`/overtime-requests/${b.dataset.id}/decision`, { decision, remarks, ...(hours ? { hours } : {}) });
-      await refresh(); render(); toast(decision === 'approve' ? 'Overtime approved. Payroll will include it.' : 'Overtime rejected. The employee has been notified.'); return;
-    }
+    if (b.dataset.otDecision) { overtimeDecisionDialog(b.dataset); return; }
     if (b.dataset.leaveDecision) {
       const decision = b.dataset.leaveDecision;
       const remarks = decision === 'approve' ? window.prompt('Approve this leave. Remarks for the employee (optional):', '') : window.prompt(decision === 'reject' ? 'Reason for rejecting (the employee will see this):' : 'Reason for cancelling this approved leave (credits will be restored):', '');

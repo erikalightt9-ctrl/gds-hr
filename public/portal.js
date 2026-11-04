@@ -1,4 +1,5 @@
 import { messagesButton } from './messages.js';
+import { noticeDetail } from './notice-detail.js';
 const componentNames = { basic: 'Basic salary', leavePay: 'Leave pay', regularOT: 'Regular overtime', restDay: 'Rest day pay', restOT: 'Rest day overtime', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday overtime', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Holiday overtime', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday overtime', allowance: 'Allowances', additional: 'Additional pay', thirteenth: '13th month pay', late: 'Late deduction', undertime: 'Undertime', absence: 'Unpaid leave / absence', tax: 'Withholding tax', loans: 'Loan deductions', other: 'Other authorized deductions', SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' };
 // Common reasons for an attendance explanation (late, undertime, missed clock-in/out). "Other" lets the employee type one.
 const EXPLANATION_REASONS = ['Traffic / transportation delay', 'Medical / health reason', 'Family emergency', 'Official business / client meeting', 'Work from home / field work', 'Forgot to time in or time out', 'System or device problem (GPS / app / internet)', 'Weather / natural calamity', 'Approved schedule change'];
@@ -45,9 +46,16 @@ export function createPortal(ctx) {
   const markSeen = (id, at) => { try { localStorage.setItem(SEEN_KEY(id), at); } catch { /* storage unavailable: the count simply stays */ } };
   const bell = (data) => {
     const list = data.notifications || [], seen = lastSeen(data.employee.id), unread = list.filter(n => n.at > seen).length;
-    return `<span class="bell-wrap employee-bell"><button class="icon-button portal-bell tb-btn tb-bell" data-portal-bell aria-label="Notifications${unread ? ` (${unread} new)` : ''}" aria-haspopup="true" aria-expanded="false"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg>${unread ? `<span class="bell-count">${unread > 9 ? '9+' : unread}</span>` : ''}</button><div class="bell-menu hidden" data-portal-bell-menu role="menu"><strong class="bell-title">Notifications</strong><ul class="portal-notifications">${list.slice(0, 20).map(n => `<li class="${n.at > seen ? 'unread' : ''}">${esc(n.message)}<small>${stamp(n.at)}</small></li>`).join('') || '<li>No notifications yet.</li>'}</ul></div></span>`;
+    return `<span class="bell-wrap employee-bell"><button class="icon-button portal-bell tb-btn tb-bell" data-portal-bell aria-label="Notifications${unread ? ` (${unread} new)` : ''}" aria-haspopup="true" aria-expanded="false"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg>${unread ? `<span class="bell-count">${unread > 9 ? '9+' : unread}</span>` : ''}</button><div class="bell-menu hidden" data-portal-bell-menu role="menu"><strong class="bell-title">Notifications</strong><ul class="portal-notifications">${list.slice(0, 20).map((n, i) => `<li class="${n.at > seen ? 'unread' : ''}"><button type="button" class="notice-item" data-notice="${i}">${esc(n.message)}<small>${stamp(n.at)}</small></button></li>`).join('') || '<li>No notifications yet.</li>'}</ul></div></span>`;
   };
   // A confirmation that stays until the employee taps OK (toasts are easy to miss on a phone).
+  // One notification opened from the bell: the full message, when it arrived, the record behind it and a link to it.
+  const showNotice = (notice, data) => {
+    const d = noticeDetail(notice, data);
+    const rows = d.rows.map(([label, value]) => `<div class="notice-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
+    openDialog(`${d.icon} ${d.title}`, `<div class="dialog-body notice-detail"><p class="notice-message">${esc(notice.message)}</p><p class="notice-when">Received ${esc(stamp(notice.at))}</p>${rows ? `<div class="notice-rows">${rows}</div>` : ''}</div>`,
+      `<div class="dialog-foot"><button type="button" data-close>Close</button>${d.tab ? `<button type="button" class="primary" data-portal-tab="${esc(d.tab)}" data-close>Open ${esc(d.tabLabel)} →</button>` : ''}</div>`);
+  };
   const confirmBox = (title, message) => openDialog(title, `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${message}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
   const attachmentSelect = data => `<label class="field">Supporting document<select name="documentId"><option value="">None</option>${data.documents.filter(d => d.status === 'Active').map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</select></label>`;
   // My attendance calendar: one month, each day coloured by its status; clicking a day shows the details below.
@@ -214,7 +222,11 @@ export function createPortal(ctx) {
         event.stopPropagation(); const opening = bellMenu.classList.contains('hidden'); setOpen(opening);
         if (opening && data.notifications?.length) { markSeen(data.employee.id, data.notifications[0].at); bellButton.querySelector('.bell-count')?.remove(); }
       };
-      bellMenu.onclick = event => event.stopPropagation();
+      bellMenu.onclick = event => {
+        event.stopPropagation();
+        const item = event.target.closest('[data-notice]'), notice = item && data.notifications?.[Number(item.dataset.notice)];
+        if (notice) { setOpen(false); showNotice(notice, data); }
+      };
       app.querySelector('.employee-main').addEventListener('click', () => setOpen(false));
     }
     if (isHr) ctx.portalHr.fill(tab, app.querySelector('#portal-hr'));

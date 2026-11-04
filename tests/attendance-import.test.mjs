@@ -31,7 +31,8 @@ test('values from real-world sheets: dates, times and headings are recognised wi
   assert.equal(parseTime('2026-09-16 18:39:12'), '18:39');
   assert.equal(parseTime('5 PM'), '17:00');
   assert.equal(parseTime('25:00'), null);
-  assert.deepEqual(guessMapping(['No.', 'Employee Name', 'Date', 'Time-In', 'Time-Out', 'Remarks']), { employeeId: null, employeeName: 1, date: 2, timeIn: 3, timeOut: 4, punch: null, status: 5 });
+  assert.deepEqual(guessMapping(['No.', 'Employee Name', 'Date', 'Time-In', 'Time-Out', 'Remarks']), { employeeId: null, employeeName: 1, date: 2, timeIn: 3, timeOut: 4, punch: null, status: 5, location: null });
+  assert.equal(guessMapping(['Employee ID', 'Date', 'Time In', 'Time Out', 'Location']).location, 4);
   assert.equal(guessMapping(['AC-No.', 'Name', 'Date/Time']).punch, null, '"Date/Time" is not a plain punch heading');
   assert.equal(guessMapping(['AC-No.', 'Name', 'Date Time']).punch, 2);
 });
@@ -89,6 +90,17 @@ test('biometric punch logs (one row per punch) become one day with first in and 
     const replaced = commitImport(store, hr, upload('fix.csv', again, { replaceExisting: true }));
     assert.equal(replaced.counts.replace, 1);
     assert.equal(store.read().attendance.find(a => a.date === '2026-09-21').timeIn, '08:30');
+  } finally { store.close(); }
+});
+
+test('a Location column is saved on each imported day as a work location label', () => {
+  const store = fixture();
+  try {
+    const csv = Buffer.from('Employee ID,Date,Time In,Time Out,Location\nEMP-001,2026-09-21,08:47,18:39,Grand Hyatt Manila Residences BGC\nEMP-002,2026-09-21,08:30,17:30,\n');
+    assert.equal(commitImport(store, hr, upload('site.csv', csv)).saved, 2);
+    const days = store.read().attendance.filter(a => a.date === '2026-09-21');
+    assert.equal(days.find(a => a.employeeId === 'EMP-001').location, 'Grand Hyatt Manila Residences BGC');
+    assert.equal(days.find(a => a.employeeId === 'EMP-002').location, undefined, 'a blank cell adds no location');
   } finally { store.close(); }
 });
 
