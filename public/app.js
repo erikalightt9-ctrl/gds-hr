@@ -371,8 +371,9 @@ function leaveDetailDialog(id) {
   openDialog(`Leave · ${person?.name || l.employeeId}`, `<div class="dialog-body leave-detail"><p class="sub">${esc(l.employeeId)} · <a href="/api/leaves/${esc(l.id)}.pdf" target="_blank" rel="noopener">Leave application PDF</a></p>
     <div class="notice-rows">${facts.map(([k, v]) => `<div class="notice-row"><span>${k}</span><strong>${esc(String(v))}</strong></div>`).join('')}</div>
     <section class="ld-block"><h3>Reason</h3><p class="ld-reason">${esc(reason || '—')}</p>${explanation ? `<p class="ld-text">${esc(explanation)}</p>` : ''}</section>
-    <section class="ld-block"><h3>Proof</h3>${proofReviewCell(l) || '<span class="legend">None</span>'}${!l.proofStatus && !l.documentReference && l.days >= 2 ? '<p class="legend">Leave of 2 days or more needs proof before it can be approved.</p>' : ''}</section></div>`,
-    '<div class="dialog-foot"><button class="primary" data-close>Close</button></div>');
+    <section class="ld-block"><h3>Proof</h3>${proofReviewCell(l) || '<span class="legend">None</span>'}${!l.proofStatus && !l.documentReference && l.days >= 2 ? '<p class="legend">Leave of 2 days or more needs proof before it can be approved.</p>' : ''}</section>
+    ${l.status === 'pending' && canEdit('leaves') ? '<p class="legend">Wrong dates or times (for example a half day filed as a whole day)? Correct them before deciding; the days are recounted from the times.</p>' : ''}</div>`,
+    `<div class="dialog-foot">${l.status === 'pending' && canEdit('leaves') ? `<button type="button" data-edit="leaves" data-id="${esc(l.id)}">Edit dates / times</button>` : ''}<button class="primary" data-close>Close</button></div>`);
 }
 // HR asks the employee for a supporting document on one leave request; approval waits until it is confirmed.
 function askForLeaveProof(id) {
