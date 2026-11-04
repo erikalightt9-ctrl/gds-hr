@@ -1,7 +1,7 @@
 // 13th Month Pay page: the annual ledger (posted payroll + salary encoded for months before the system),
 // the encoding grid for those earlier months, and the final pay computation for separated employees.
 import { who } from './hr-common.js';
-export function createThirteenthPage({ api, esc, money, table, badge, toast, openDialog, dialog, shell, heading, today }) {
+export function createThirteenthPage({ api, esc, money, table, toast, openDialog, dialog, shell, heading, today }) {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const fmt = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
   const card = (label, value, foot, featured = false) => `<div class="card${featured ? ' featured' : ''}"><div class="card-label">${esc(label)}</div><div class="card-value">${value}</div><div class="card-foot">${esc(foot)}</div></div>`;
@@ -101,7 +101,6 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
         <div class="th-year-band">YEAR ${esc(year)}</div>
         <div class="table-wrap th-grid">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), 'Total earned', '13th month pay'], L.map(gridRow), 'No employees.')}</div>
         ${editable ? '<div class="panel-foot"><div class="actions"><button class="small" id="th-undo" title="Undo (Ctrl+Z)" disabled>↶ Undo</button><button class="small" id="th-redo" title="Redo (Ctrl+Y)" disabled>↷ Redo</button></div><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
-      ${payslipPanel()}
       ${finalPanel()}`);
     const content = document.querySelector('.content');
     content.addEventListener('click', onClick);
@@ -138,26 +137,6 @@ export function createThirteenthPage({ api, esc, money, table, badge, toast, ope
   // ---------- 13th month payslips (one per employee per year) ----------
   const pdfUrl = (emp, download = false) => `/api/thirteenth/payslip.pdf?employeeId=${encodeURIComponent(emp)}&year=${year}${download ? '&download=1' : ''}`;
   const slipUrl = (id, download = false) => `/api/thirteenth/payslips/${id}.pdf${download ? '?download=1' : ''}`;
-  const when = iso => (iso ? new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '—');
-  function payslipPanel() {
-    if (!data.canPayslip) return '';
-    const finals = data.payslips.filter(p => p.status === 'final'), pending = data.adjustments.filter(a => a.status === 'pending');
-    const status = r => {
-      const own = finals.filter(p => p.employeeId === r.employeeId);
-      if (own.length && r.balance <= 0) return badge(`Finalized ${new Date(own[0].finalizedAt).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' })}`, 'good');
-      if (r.balance <= 0 && r.paid > 0) return badge('Paid in payroll', 'good');
-      return badge('Draft', 'pending');
-    };
-    const rows = data.ledger.map(r => [esc(r.name), money(r.accrued), r.adjustments ? money(r.adjustments) : '—', money(r.paid), `<strong>${money(r.balance)}</strong>`, status(r),
-      `<span class="download-links"><a class="button small" data-th-pdf href="${pdfUrl(r.employeeId)}" target="_blank" rel="noopener" title="Open the draft payslip PDF">Preview</a><a class="button small" data-th-pdf href="${pdfUrl(r.employeeId, true)}" title="Download the draft payslip PDF">Download</a>${data.canFinalize && r.balance > 0 ? `<button class="small primary" data-th-finalize="${esc(r.employeeId)}">Finalize</button>` : ''}<button class="small" data-th-adjust="${esc(r.employeeId)}">Adjust</button></span>`]);
-    const name = id => esc(data.ledger.find(r => r.employeeId === id)?.name || id);
-    return `<section class="panel"><div class="panel-head"><div><h2>13th month payslips</h2><p class="legend">Draft payslips are built from the saved records above. Finalizing records the remaining amount as paid, so it cannot be paid again (here or through payroll).</p></div></div>
-      <div class="table-wrap">${table(['Employee', '13th month', 'Adjustments', 'Paid', 'Remaining', 'Status', ''], rows, 'No employees.')}</div>
-      ${pending.length ? `<h3 class="panel-body">Adjustments waiting for approval</h3>${table(['Employee', 'Amount', 'Reason', 'Entered by', ''], pending.map(a => [name(a.employeeId), money(a.amount), esc(a.reason), esc(who(a.createdBy)), data.canApprove ? `<span class="download-links"><button class="small primary" data-th-review="${esc(a.id)}|approve">Approve</button><button class="small" data-th-review="${esc(a.id)}|reject">Reject</button></span>` : '<small>An administrator approves it</small>'])) }` : ''}
-      ${data.payslips.length ? `<h3 class="panel-body">Finalized payslips</h3>${table(['Employee', 'Amount paid', 'Finalized', 'By', 'Status', ''], data.payslips.map(p => [name(p.employeeId), money(p.amountPaid), esc(when(p.finalizedAt)), esc(who(p.finalizedBy)), p.status === 'void' ? `${badge('Cancelled', 'neutral')}<small>${esc(p.voidReason || '')}</small>` : badge('Finalized', 'good'),
-        `<span class="download-links"><a class="button small" href="${slipUrl(p.id)}" target="_blank" rel="noopener">View PDF</a><a class="button small" href="${slipUrl(p.id, true)}">Download</a>${data.canApprove && p.status === 'final' ? `<button class="small" data-th-void="${esc(p.id)}">Cancel</button>` : ''}</span>`]))}` : ''}
-    </section>`;
-  }
   async function finalizeDialog(employeeId) {
     if ([...readGrid()].some(([k, v]) => savedGrid.get(k) !== v)) { toast('Save salary records first: the payslip shows saved records only.'); return; }
     const d = await api(`/thirteenth/payslip?employeeId=${encodeURIComponent(employeeId)}&year=${year}`);
