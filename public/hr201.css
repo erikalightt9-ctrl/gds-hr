@@ -1729,3 +1729,17 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 /* Offset day: not worked because the hours were worked on another day (paid, not absent) */
 .am-mark.am-offset { background: #3d7fc4; color: #fff; }
 
+
+/* Top-bar account menu: logo (initials), name and role, settings icon; My account, Account & access, Sign out */
+.tb-account { position: relative; }
+.tb-account summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 8px 4px 4px; border-radius: 12px; }
+.tb-account summary::-webkit-details-marker { display: none; }
+.tb-account summary:hover, .tb-account[open] summary { background: rgba(217, 184, 92, .16); }
+.tb-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f3d27a, #c8962f); color: #2b2116; font-weight: 800; font-size: 13px; flex: none; }
+.tb-gear { width: 20px; height: 20px; color: var(--ink-soft, #5a4e34); flex: none; }
+.tb-account[open] .tb-gear { color: #a91d29; }
+.tb-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 210px; padding: 6px; border-radius: 12px; background: #fff; border: 1px solid #eadfc4; box-shadow: 0 16px 34px -14px rgba(0, 0, 0, .35); display: grid; z-index: 60; }
+.tb-menu button { border: 0; background: none; text-align: left; padding: 10px 12px; border-radius: 8px; font-weight: 500; color: var(--ink, #1f1f1f); }
+.tb-menu button:hover, .tb-menu button:focus-visible { background: #fff7e4; color: #a91d29; }
+.tb-menu button[data-signout] { border-top: 1px solid #f1ead8; border-radius: 0 0 8px 8px; margin-top: 4px; }
+@media (max-width: 900px) { .tb-account .user-meta { display: none; } .tb-menu { left: 0; right: auto; max-width: calc(100vw - 24px); } }
