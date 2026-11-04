@@ -48,3 +48,22 @@ test('daily-paid: a day not attended is not paid', () => {
   const [a, b] = month(s);
   assert.equal(Math.round((a.earnings.basic + b.earnings.basic) * 100) / 100, 26 * 755);
 });
+
+test('the example: ₱26,000 monthly → 13,000 per cutoff whether it has 13 or 14 workdays; one absence takes off ₱1,000', () => {
+  const full = month(state());
+  assert.deepEqual(full.map(r => r.workingDays), [13, 14], 'Oct 1-15 has 13 workdays, Oct 16-31 has 14');
+  assert.deepEqual(full.map(r => r.earnings.basic), [13000, 13000], 'complete attendance: the full half-month in each cutoff');
+  const s = state(); s.attendance = s.attendance.filter(a => a.date !== '2026-10-20');   // one unpaid absence in the 14-day cutoff
+  const [a, b] = month(s);
+  assert.equal(a.earnings.basic, 13000);
+  assert.equal(b.earnings.basic, 12000, '13,000 - 1,000');
+  assert.equal(a.earnings.basic + b.earnings.basic, 25000);
+  assert.equal(b.deductions.absence, 0, 'the absence lowers basic pay; it is not also a deduction line');
+  assert.ok(b.trace.some(t => t.component === 'basic' && t.amount === -1000 && /Absence \(days credited reduced\)/.test(t.formula)), 'shown in the basic-pay computation');
+});
+
+test('monthly-paid: late time over the threshold lowers that cutoff\'s half-month basic at monthly / 26 per day', () => {
+  const s = state(); Object.assign(s.attendance.find(a => a.date === '2026-10-20'), { timeIn: '09:30' });   // 30 min late, no offset
+  const [, b] = month(s);
+  assert.equal(b.earnings.basic, 13000 - 62.5, '30 / 480 of a day × 1,000');
+});
