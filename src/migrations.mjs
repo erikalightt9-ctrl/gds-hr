@@ -126,6 +126,25 @@ function optionalLeaveProof(store) {
     return changed;
   }));
 }
+// Saturdays are work from home for these staff (November 2026 instruction): counted present without time in / out.
+export const WFH_SATURDAY_STAFF = ['2017-0420', '2024-0930', '2010-1024', '2025-0602', '2026-0907', '2026-0908'];
+function saturdayWorkFromHome(store) {
+  return once(store, 'migration:wfh-saturday-2026-11', () => store.transaction(() => {
+    const system = { username: 'system (WFH Saturdays)' };
+    let changed = 0;
+    for (const id of WFH_SATURDAY_STAFF) {
+      const row = store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='attendance'").get(id);
+      if (!row) continue;
+      const before = JSON.parse(row.data), days = before.daySchedules || [], saturday = days.find(d => d.day === 6);
+      if (saturday?.autoPresent) continue;
+      const after = { ...before, daySchedules: saturday ? days.map(d => (d.day === 6 ? { ...d, arrangement: d.arrangement || 'WFH', autoPresent: true } : d)) : [...days, { day: 6, scheduleStart: '', scheduleEnd: '', hoursPerDay: null, mealBreakMinutes: null, arrangement: 'WFH', flexible: false, autoPresent: true }] };
+      store.db.prepare("UPDATE employee_profiles SET data=? WHERE employee_id=? AND section='attendance'").run(JSON.stringify(after), id);
+      store.log(system, 'set-wfh-saturday', 'profile:attendance', id, before, after); changed++;
+    }
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:wfh-saturday-2026-11');
+    return changed;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store), leaveProofOptional: optionalLeaveProof(store) };
+  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store), leaveProofOptional: optionalLeaveProof(store), wfhSaturday: saturdayWorkFromHome(store) };
 }

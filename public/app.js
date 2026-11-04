@@ -317,6 +317,7 @@ function attendancePage() {
     } else if (open) { recorded = true; look = 'ok'; label = 'Time in recorded'; sub = 'Time out pending'; icon = 'ok'; clockIn = open.time; }
     else if (leave) { look = 'leave'; label = 'On leave'; icon = 'cal'; }
     else if ((e.restDays || []).includes(weekday)) { look = 'rest'; label = 'Rest day'; icon = 'cal'; }
+    else if (day <= today() && (state.employeeProfiles || []).find(p => p.employeeId === e.id && p.section === 'attendance')?.daySchedules?.some(s => s.day === weekday && s.autoPresent)) { recorded = true; look = 'ok'; label = 'Present'; sub = 'Work from home · no time in needed'; icon = 'ok'; clockIn = 'WFH'; }
     else if (day > today()) { look = 'rest'; label = 'Upcoming'; icon = 'cal'; }
     const avatar = look === 'ok' ? 'ok' : look === 'late' ? 'late' : 'idle';
     return { e, recorded, label, html: `<tr data-dr-row data-dr-name="${esc(`${e.name} ${e.id}`.toLowerCase())}" data-dr-status="${esc(label)}" data-dr-recorded="${recorded ? 'yes' : 'no'}">

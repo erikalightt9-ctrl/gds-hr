@@ -29,7 +29,17 @@ export function scheduleOn(employee, profile = {}, date, rule) {
     arrangement: override.arrangement || profile.arrangement || '',
     // Flexible day: any start time; only the regular hours must be rendered. Never late, and no overtime.
     flexible: !!override.flexible,
+    // Work-from-home day counted present without time in / out (e.g. Saturdays for office staff).
+    autoPresent: !!override.autoPresent,
   };
+}
+// The attendance a work-from-home "present without time in / out" day stands for: the scheduled start plus the regular
+// hours (no overtime), approved. Only on a scheduled workday; real attendance or leave always takes precedence.
+export function autoPresentRecord(employee, profile, date, rule) {
+  const s = scheduleOn(employee, profile || {}, date, rule);
+  if (!s.autoPresent || isRest(employee, date)) return null;
+  const start = s.start || '09:00', [h, m] = start.split(':').map(Number), endMin = h * 60 + m + Math.round(s.hoursPerDay * 60);
+  return { id: `wfh-${employee.id}-${date}`, employeeId: employee.id, date, status: 'present', scheduledIn: start, timeIn: start, timeOut: `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`, endNextDay: endMin >= 1440, breaks: [], approved: true, offsetMinutes: 0, exception: false, explanation: 'Work from home: present without time in / out', holidayEligible: true, autoPresent: true };
 }
 export const leaveDates = (employee, type, start, end) => dates(start, end).filter(d => type.dayBasis === 'calendar' || !isRest(employee, d));
 // Leave with times: each counted day is a whole day, or a half day when the leave covers at most 60% of that day's
@@ -247,6 +257,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         record = { id: `open-${openIn.id}`, employeeId: e.id, date: d, status: 'present', scheduledIn: sched.start || openIn.time, timeIn: openIn.time, timeOut: `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`, endNextDay: endMin >= 1440, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true };
         blockers.push(`${prefix}: timed in at ${openIn.time} on ${d} with no time out yet; counted as a scheduled day until the time out is recorded.`);
       }
+      // Work-from-home day set as present without time in / out, unless on approved leave.
+      if (!record && !state.leaves.some(l => l.employeeId === e.id && l.status === 'approved' && l.startDate <= d && l.endDate >= d)) record = autoPresentRecord(e, attendanceProfile, d, r);
       const leave = state.leaves.find(l => l.employeeId === e.id && l.status === 'approved' && l.startDate <= d && l.endDate >= d);
       const rest = isRest(e, d), kind = classification(state, e, d);
       const half = leave && !rest && leaveFraction(leave, d) === 0.5;

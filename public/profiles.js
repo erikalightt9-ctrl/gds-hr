@@ -34,8 +34,8 @@ export function createProfileView(ctx) {
     const cell = (day, key, value) => key === 'arrangement'
       ? `<select name="ds-${day}-${key}" aria-label="${weekdays[day]} arrangement"><option value="">Same</option>${choices.arrangement.map(o => `<option ${o === value ? 'selected' : ''}>${o}</option>`).join('')}</select>`
       : `<input name="ds-${day}-${key}" aria-label="${weekdays[day]} ${esc(title(key))}" type="${key.startsWith('schedule') ? 'time' : 'number'}" ${key.startsWith('schedule') ? '' : `step="any" min="${key === 'hoursPerDay' ? 1 : 0}" max="${key === 'hoursPerDay' ? 16 : 240}"`} value="${esc(value ?? '')}">`;
-    const rows = [1, 2, 3, 4, 5, 6, 0].map(day => { const s = daySchedules.find(v => v.day === day) || {}; return [weekdays[day], ...dayFields.map(key => cell(day, key, s[key])), `<input type="checkbox" name="ds-${day}-flexible" aria-label="${weekdays[day]} flexible time" ${s.flexible ? 'checked' : ''}>`]; });
-    return `<div class="panel-body"><h3>Day-specific schedules</h3><p class="legend">Only fill a day that differs from the schedule above. Blank cells use the base schedule; rest days come from the master record. Flexible time: any start, only the regular hours are required, never late, and extra hours are not overtime.</p>${table(['Day', 'Start', 'End', 'Regular hours', 'Meal break (min)', 'Arrangement', 'Flexible time'], rows)}</div>`;
+    const rows = [1, 2, 3, 4, 5, 6, 0].map(day => { const s = daySchedules.find(v => v.day === day) || {}; return [weekdays[day], ...dayFields.map(key => cell(day, key, s[key])), `<input type="checkbox" name="ds-${day}-flexible" aria-label="${weekdays[day]} flexible time" ${s.flexible ? 'checked' : ''}>`, `<input type="checkbox" name="ds-${day}-autoPresent" aria-label="${weekdays[day]} present without time in or out" ${s.autoPresent ? 'checked' : ''}>`]; });
+    return `<div class="panel-body"><h3>Day-specific schedules</h3><p class="legend">Only fill a day that differs from the schedule above. Blank cells use the base schedule; rest days come from the master record. Flexible time: any start, only the regular hours are required, never late, and extra hours are not overtime. Present without time in/out: a work-from-home day counted as a full regular day even without time in or out (a real time in, leave or HR record takes precedence).</p>${table(['Day', 'Start', 'End', 'Regular hours', 'Meal break (min)', 'Arrangement', 'Flexible time', 'Present without time in/out (WFH)'], rows)}</div>`;
   }
   function readDaySchedules(values) {
     const result = [];
@@ -46,7 +46,8 @@ export function createProfileView(ctx) {
         entry[key] = ['hoursPerDay', 'mealBreakMinutes'].includes(key) ? (raw === '' ? null : Number(raw)) : raw;
       }
       entry.flexible = values[`ds-${day}-flexible`] === 'on'; delete values[`ds-${day}-flexible`];
-      if (entry.flexible || dayFields.some(key => entry[key] !== '' && entry[key] !== null)) result.push(entry);
+      entry.autoPresent = values[`ds-${day}-autoPresent`] === 'on'; delete values[`ds-${day}-autoPresent`];
+      if (entry.flexible || entry.autoPresent || dayFields.some(key => entry[key] !== '' && entry[key] !== null)) result.push(entry);
     }
     return result;
   }

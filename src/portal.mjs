@@ -3,7 +3,7 @@ import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { z } from 'zod';
 import { AppError, permit, saveRecord, PROOF_FROM_DAYS } from './service.mjs';
 import { date, schemas } from './schema.mjs';
-import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, OT_BLOCK } from './engine.mjs';
+import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, autoPresentRecord, OT_BLOCK } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 import { networkStatus, inOfficeArea } from './office-network.mjs';
 import { lateBy, graceFor } from './late-incidents.mjs';
@@ -137,8 +137,11 @@ export function todayAttendance(store, employee, now = new Date()) {
   else if (record?.status === 'off') status = 'Off duty';
   else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
   else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late && !graceLate ? 'Late' : 'Present';
+  // Work-from-home day counted present without time in / out.
+  const autoPresent = !record && !actualIn && ['Awaiting time in', 'Absent'].includes(status) && !!autoPresentRecord(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
+  if (autoPresent) status = 'Present';
   const exceptions = events.filter(e => ['Outside', 'Uncertain'].includes(e.geofence.status) || e.geofence.poorAccuracy).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'}: ${e.geofence.status}, accuracy ±${e.accuracy} m`);
-  return { date: workDate, status, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
+  return { date: workDate, status, autoPresent, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
 }
 function validateAttachment(store, actor, id) { if (id) { const doc = getDocument(store, actor, id); if (doc.employeeId !== actor.employeeId || doc.uploadedBy !== actor.username || doc.type !== 'Leave Supporting' || doc.status !== 'Active') throw new AppError('Use your own active supporting document.', 403); } }
 export function applyLeave(store, actor, input) {
