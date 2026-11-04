@@ -344,7 +344,7 @@ const proofBadges = { required: ['Asked · waiting for employee', 'pending'], su
 function proofReviewCell(l) {
   const open = !['cancelled', 'rejected'].includes(l.status);
   const ask = open && canEdit('leaves') ? `<button class="small" data-proof-request="${esc(l.id)}">Ask for proof</button>` : '';
-  if (!l.proofStatus) return `${l.documentReference ? esc(l.documentReference) : '<span class="legend">Optional</span>'} ${ask}`;
+  if (!l.proofStatus) return `${l.documentReference ? esc(l.documentReference) : ''} ${ask}`.trim();
   const [label, tone] = proofBadges[l.proofStatus] || [l.proofStatus, 'neutral'];
   const uploaded = /^[0-9a-f-]{36}$/.test(l.documentReference || '');
   const view = uploaded && l.proofStatus !== 'required' ? `<a class="small" href="/api/documents/${esc(l.documentReference)}/content" target="_blank" rel="noopener">View proof</a>` : '';
