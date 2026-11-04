@@ -1729,5 +1729,3 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 /* Offset day: not worked because the hours were worked on another day (paid, not absent) */
 .am-mark.am-offset { background: #3d7fc4; color: #fff; }
 
-/* Payroll table: pay basis under the salary or daily rate */
-.pay-basis { display: block; color: #777; font-size: 11px; margin-top: 2px; }
