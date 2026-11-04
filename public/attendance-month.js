@@ -12,7 +12,7 @@ function dayStatus(state, e, date, today, since) {
   if (!e.startDate || date < e.startDate || (e.endDate && date > e.endDate)) return 'none';
   const a = state.attendance.find(x => x.employeeId === e.id && x.date === date);
   if (a) {
-    if (a.status !== 'present') return a.status === 'absent' ? 'absent' : 'leave';
+    if (a.status !== 'present') return a.status === 'absent' ? 'absent' : a.status === 'off' ? 'rest' : 'leave';   // a recorded day off is shown like a rest day
     // Worked part of the day beside a half-day leave: half present, half leave (or half absent until approved).
     const halfLeave = state.leaves.find(l => l.employeeId === e.id && ['approved', 'pending'].includes(l.status) && (l.partialDates || []).includes(date));
     if (halfLeave) return halfLeave.status === 'approved' ? 'half' : 'half-pending';
