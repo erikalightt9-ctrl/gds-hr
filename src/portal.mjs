@@ -154,7 +154,7 @@ export function applyLeave(store, actor, input) {
     if (split.invalidDate) throw new AppError(`The leave time on ${split.invalidDate} is outside your work schedule. Check the start and end times.`);
     const { countedDates, partialDates } = split;
     if (!countedDates.length) throw new AppError('Choose at least one eligible leave day.');
-    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, startTime: value.startTime, endTime: value.endTime, reason: value.reason, days: split.days, countedDates, partialDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : type.documentsRequired ? 'required' : '', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' };
+    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, startTime: value.startTime, endTime: value.endTime, reason: value.reason, days: split.days, countedDates, partialDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : '', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' };
     state.leaves.push(leave); state.version++; store.write(state); store.log(actor, 'apply', 'leaves', leave.id, null, leave); return leave;
   });
 }
@@ -172,6 +172,23 @@ export function attachLeaveProof(store, actor, id, input) {
     Object.assign(leave, { documentReference: value.documentId, proofStatus: 'submitted', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' });
     state.version++; store.write(state); store.log(actor, 'attach-proof', 'leaves', id, before, leave);
     store.notify(null, `${employee.id}: proof uploaded for leave ${leave.startDate} → ${leave.endDate}; awaiting HR review.`);
+    return leave;
+  });
+}
+// HR/Admin asks the employee for a supporting document (e.g. a medical certificate); until it is uploaded and
+// confirmed the leave cannot be approved. Without this request an attachment is optional.
+export function requestLeaveProof(store, actor, id, input) {
+  permit(actor, ['admin', 'hr']);
+  const value = z.object({ note: z.string().trim().min(3, 'Say which document is needed.').max(2000) }).strict().parse(input);
+  return store.transaction(() => {
+    const state = store.read(), leave = state.leaves.find(l => l.id === id);
+    if (!leave) throw new AppError('Leave request not found.', 404);
+    if (['cancelled', 'rejected'].includes(leave.status)) throw new AppError('This leave request is closed.');
+    if (['required', 'submitted', 'verified'].includes(leave.proofStatus)) throw new AppError(leave.proofStatus === 'required' ? 'A supporting document was already asked for.' : 'A supporting document is already on file. Review it instead.');
+    const before = structuredClone(leave);
+    Object.assign(leave, { proofStatus: 'required', proofNote: value.note, proofReviewedBy: actor.username, proofReviewedAt: new Date().toISOString() });
+    state.version++; store.write(state); store.log(actor, 'request-proof', 'leaves', id, before, leave);
+    store.notify(leave.employeeId, `HR asks for a supporting document for your leave ${leave.startDate} → ${leave.endDate}: ${value.note}. Upload it in My leave.`);
     return leave;
   });
 }

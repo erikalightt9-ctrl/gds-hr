@@ -111,6 +111,21 @@ function lateExplanationNotice(store, now = new Date()) {
     return earlier.length;
   }));
 }
+// Leave attachments are optional unless HR asks (November 2026 instruction): open leave requests that were marked
+// "proof needed" automatically by their leave type, never by HR, no longer need proof.
+function optionalLeaveProof(store) {
+  return once(store, 'migration:leave-proof-optional-2026-11', () => store.transaction(() => {
+    const system = { username: 'system (leave proof optional)' }, state = store.read();
+    let changed = 0;
+    for (const l of state.leaves.filter(x => x.proofStatus === 'required' && !x.proofReviewedBy && !x.proofNote && ['pending', 'approved'].includes(x.status))) {
+      store.log(system, 'clear-auto-proof', 'leaves', l.id, { proofStatus: 'required' }, { proofStatus: '' });
+      l.proofStatus = ''; changed++;
+    }
+    if (changed) { state.version++; store.write(state); }
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:leave-proof-optional-2026-11');
+    return changed;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store) };
+  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store), leaveProofOptional: optionalLeaveProof(store) };
 }

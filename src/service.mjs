@@ -70,7 +70,8 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       if (!type) throw new AppError('Leave type does not exist.');
       if (!type.approvalRequired && value.status === 'pending') value.status = 'approved';
       const prior = state.leaves.find(l => l.id === value.id);
-      value.proofStatus = prior?.proofStatus ?? (type.documentsRequired && !value.documentReference.trim() ? 'required' : '');
+      // A supporting document is optional; it is needed only after HR asks for it (Ask for proof).
+      value.proofStatus = prior?.proofStatus ?? '';
       for (const key of ['proofNote', 'proofReviewedBy', 'proofReviewedAt']) value[key] = prior?.[key] ?? '';
       // HR typing a new reference (e.g. a paper certificate received in person) counts as HR confirming it.
       if (prior && ['required', 'rejected'].includes(prior.proofStatus) && value.documentReference.trim() && value.documentReference !== prior.documentReference) {
@@ -90,8 +91,7 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
         const eligibleOn = new Date(`${employee.startDate}T00:00:00Z`);
         eligibleOn.setUTCMonth(eligibleOn.getUTCMonth() + type.minServiceMonths);
         if (value.startDate < eligibleOn.toISOString().slice(0, 10)) throw new AppError('The minimum service requirement for this leave type has not been met.');
-        if (['required', 'rejected'].includes(value.proofStatus)) throw new AppError('Proof (a supporting document such as a medical certificate) is still needed. Ask the employee to upload it, then confirm it before approving.');
-        if (type.documentsRequired && !value.documentReference.trim()) throw new AppError('Supporting document reference is required.');
+        if (['required', 'rejected'].includes(value.proofStatus)) throw new AppError('HR asked for a supporting document for this leave. Wait for the employee to upload it and confirm it before approving.');
         const without = { ...state, leaves: state.leaves.filter(l => l.id !== value.id) };
         if (type.balanceRequired) {
           const reservation = { ...value, countedDates: [] };   // partialDates kept: a half day reserves 0.5
