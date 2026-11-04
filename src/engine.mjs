@@ -484,10 +484,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         overrides.push({ component: o.component, side, original, revised: round(o.amount), delta, reason: o.reason, by: manual.updatedBy, at: manual.updatedAt });
       }
     };
-    override('earnings', earnings, OVERRIDE_EARNINGS);
+    override('earnings', earnings, OVERRIDE_EARNINGS.filter(c => c !== 'basic'));
     override('deductions', deductions, ['absence', 'undertime', 'other', 'sssLoan', 'pagibigLoan', 'salaryDeduction']);
-    // Overrides of basic, absence and undertime also change the basic salary earned (13th month and final pay).
-    const basicOverride = overrides.filter(o => o.component === 'basic').reduce((s, o) => s + o.delta, 0);
     // Absences reduce the attendance credited and therefore basic pay; they are not shown as a deduction.
     const absenceAmount = round(deductions.absence || 0);
     if (absenceAmount) {
@@ -503,6 +501,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       earnings.basic = Math.max(0, round(earnings.basic - undertimeAmount)); deductions.undertime = 0;
       for (const t of trace) if (t.component === 'undertime' && t.side === 'deductions') Object.assign(t, { component: 'basic', side: 'earnings', amount: -t.amount, formula: `${t.formula} (credited time reduced)` });
     }
+    // A basic-pay override is the final basic pay (e.g. days present typed from the HR attendance sheet): it is applied
+    // after absences, lateness and undertime, which it already accounts for. It also changes the basic salary earned.
+    override('earnings', earnings, ['basic']);
+    const basicOverride = overrides.filter(o => o.component === 'basic').reduce((s, o) => s + o.delta, 0), basicOverridden = overrides.some(o => o.component === 'basic');
     const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - undertimeAmount - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride));
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));
     const prior = priorBasicFor(state, e.id, start.slice(0, 4));
@@ -552,7 +554,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0)) * 10000) / 10000, creditedHours: Math.round((creditedMinutes || Math.max(0, daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0)) * (attendanceProfile?.hoursPerDay || r.normalHours || 8) * 60) / 60 * 1e4) / 1e4, undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: basicOverridden && daily ? Math.round(earnings.basic / daily * 10000) / 10000 : Math.round((daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0)) * 10000) / 10000, creditedHours: basicOverridden && daily ? Math.round(earnings.basic / daily * (attendanceProfile?.hoursPerDay || r.normalHours || 8) * 1e4) / 1e4 : Math.round((creditedMinutes || Math.max(0, daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0)) * (attendanceProfile?.hoursPerDay || r.normalHours || 8) * 60) / 60 * 1e4) / 1e4, undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

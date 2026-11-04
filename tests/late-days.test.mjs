@@ -88,3 +88,22 @@ test('the example: 30 minutes late = 7.5 credited hours (0.9375 day); a full app
   const late = offset.late.find(l => l.lateMinutes);
   assert.deepEqual([late.lateMinutes, late.approvedOffset, late.deductibleMinutes], [30, 30, 0], 'late, offset and remaining minutes visible to HR');
 });
+
+test('a basic-pay override moves the credited days with it (e.g. days present typed from the HR attendance sheet)', () => {
+  const s = lateOn(state(), '2026-09-21', '09:00');
+  s.payrollInputs = [{ employeeId: 'E1', start: '2026-09-16', end: '2026-09-30', mode: 'add', hours: {}, reason: 'HR sheet', updatedBy: 'hr1', overrides: [{ component: 'basic', amount: 11440, reason: 'Per HR attendance sheet: 11.44 days' }] }];
+  const row = run(s);
+  assert.equal(row.earnings.basic, 11440);
+  assert.equal(row.creditedDays, 11.44, '13 days credited less 1.56 days removed by the override');
+  assert.equal(row.creditedHours, 91.52);
+});
+
+test('a basic-pay override is final: absences, lateness and undertime are not taken off it again', () => {
+  const s = lateOn(state(), '2026-09-21', '09:40', { timeOut: '17:00' });   // late and undertime on one day
+  s.attendance = s.attendance.filter(a => a.date !== '2026-09-22');           // and one absent day
+  s.payrollInputs = [{ employeeId: 'E1', start: '2026-09-16', end: '2026-09-30', mode: 'add', hours: {}, reason: 'HR sheet', updatedBy: 'hr1', overrides: [{ component: 'basic', amount: 11440, reason: 'Per HR attendance sheet: 11.44 days' }] }];
+  const row = run(s);
+  assert.equal(row.earnings.basic, 11440, 'exactly the typed basic pay');
+  assert.equal(row.applicableBasic, 11440, '13th month basic follows it too');
+  assert.equal(row.creditedDays, 11.44);
+});
