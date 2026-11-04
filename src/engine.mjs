@@ -253,7 +253,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const openIn = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === d);
       let record = state.attendance.find(a => a.employeeId === e.id && a.date === d);
       if (!record && openIn) {
-        const sched = scheduleOn(e, attendanceProfile, d, r), [sh, sm] = (sched.start || openIn.time).split(':').map(Number), endMin = sh * 60 + sm + Math.round(sched.hoursPerDay * 60);
+        const sched = scheduleOn(e, attendanceProfile, d, r), [sh, sm] = (sched.start || openIn.time).split(':').map(Number), [ih, im] = openIn.time.split(':').map(Number);
+        // Counted to the scheduled end; a time in at or after that end (e.g. a time out pressed as a time in) still makes a
+        // valid, flagged day instead of a shift that ends before it starts.
+        const endMin = Math.max(sh * 60 + sm + Math.round(sched.hoursPerDay * 60), ih * 60 + im + 1);
         record = { id: `open-${openIn.id}`, employeeId: e.id, date: d, status: 'present', scheduledIn: sched.start || openIn.time, timeIn: openIn.time, timeOut: `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`, endNextDay: endMin >= 1440, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true };
         blockers.push(`${prefix}: timed in at ${openIn.time} on ${d} with no time out yet; counted as a scheduled day until the time out is recorded.`);
       }
