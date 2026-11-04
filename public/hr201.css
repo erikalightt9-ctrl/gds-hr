@@ -1725,3 +1725,6 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 /* Work-from-home days counted present without time in / out */
 .am-mark.am-wfh { background: #2e9a5a; box-shadow: inset 0 0 0 2px #b9e3c8; }
 .lv-wfh { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e3f4e8; color: #1d6b37; font-size: 12px; font-weight: 600; }
+
+/* Offset day: not worked because the hours were worked on another day (paid, not absent) */
+.am-mark.am-offset { background: #3d7fc4; color: #fff; }

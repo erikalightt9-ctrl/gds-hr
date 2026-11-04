@@ -298,6 +298,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       if (record.status !== 'present') {
         if (record.status === 'official-business') { add(earnings, 'basic', 0, 'Approved official business; salary already included in cutoff basic', record, d); continue; }
         if (record.status === 'rest-day-swap') { add(earnings, 'basic', 0, `Rest-day swap (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
+        // Offset: the day is not worked because the hours were worked on another day; paid, not absent.
+        if (record.status === 'offset') { daysPresent++; presentOrLeave.add(d); add(earnings, 'basic', 0, `Offset (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
         const holiday = kind.replace('-rest', '');
         if (['special', 'regular', 'double', 'other'].includes(holiday)) {
           const paidRate = (holiday === 'special' || holiday === 'other' || (e.coveredHoliday && record.holidayEligible)) ? r[`${holiday}Unworked`] : 0;

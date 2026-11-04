@@ -134,6 +134,7 @@ export function todayAttendance(store, employee, now = new Date()) {
   if (leave) status = 'On leave';
   else if (record?.status === 'official-business') status = 'Official business';
   else if (record?.status === 'rest-day-swap') status = 'Rest-day swap';
+  else if (record?.status === 'offset') status = 'Offset';
   else if (record?.status === 'off') status = 'Off duty';
   else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
   else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late && !graceLate ? 'Late' : 'Present';
