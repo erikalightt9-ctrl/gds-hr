@@ -2,7 +2,7 @@ import { who } from './hr-common.js';
 const labels = { contributions: 'Government contribution overrides', personal: 'Personal Information', employment: 'Employment', government: 'Government IDs', attendance: 'Attendance', leave: 'Leave', payroll: 'Payroll', bank: 'Bank Details', loans: 'Loans', documents: 'Documents', emergency: 'Emergency Contact', audit: 'Audit History' };
 const fields = {
   personal: ['lastName', 'firstName', 'middleName', 'suffix', 'sex', 'birthDate', 'civilStatus', 'nationality', 'mobile', 'personalEmail', 'address'],
-  employment: ['position', 'employmentStatus', 'regularizationDate', 'employmentType', 'supervisor', 'workLocation', 'businessEmail', 'employeeStatus'],
+  employment: ['position', 'employmentStatus', 'regularizationDate', 'employmentType', 'supervisor', 'workLocation', 'businessEmail', 'employeeStatus', 'resignationDate'],
   government: ['sss', 'philHealth', 'pagIbig', 'tin', 'otherId', 'expiry'],
   emergency: ['name', 'relationship', 'contact', 'alternateContact', 'address'],
   attendance: ['scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'paidFrom', 'approvedLocation', 'latitude', 'longitude', 'radiusMeters', 'arrangement', 'policy'],
