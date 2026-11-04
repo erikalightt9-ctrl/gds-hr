@@ -10,7 +10,7 @@ import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingShee
 import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './roles.mjs';
 import { celebrationsOn, celebrationsThisMonth, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
-import { fileOvertime, cancelOvertime, myOvertime } from './overtime.mjs';
+import { fileOvertime, cancelOvertime, editOvertime, myOvertime } from './overtime.mjs';
 import { saveSchedule } from './work-schedule.mjs';
 
 const BIG = 28_500_000;
@@ -45,6 +45,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if (pathname === '/api/hr/me/overtime' && method === 'GET') { send(200, myOvertime(store, actor)); return true; }
     if (pathname === '/api/hr/me/overtime' && method === 'POST') { send(201, fileOvertime(store, actor, await readBody(req))); return true; }
     if ((p = m(/^\/api\/hr\/me\/overtime\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelOvertime(store, actor, p[1])); return true; }
+    if ((p = m(/^\/api\/hr\/me\/overtime\/([a-f0-9-]+)$/)) && method === 'POST') { send(200, editOvertime(store, actor, p[1], await readBody(req))); return true; }
     if (pathname === '/api/hr/me/loans' && method === 'GET') { send(200, myLoans(store, actor)); return true; }
     if (pathname === '/api/hr/me/loans' && method === 'POST') { send(201, applyLoan(store, actor, await readBody(req))); return true; }
     if ((p = m(/^\/api\/hr\/me\/loans\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelLoanApplication(store, actor, p[1])); return true; }

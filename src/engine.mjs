@@ -84,6 +84,16 @@ export function attendanceMinutes(record) {
   const next = new Date(Date.parse(record.date) + dayMs).toISOString().slice(0, 10);
   return workMinutes(`${record.date}T${record.timeIn}`, `${record.endNextDay ? next : record.date}T${record.timeOut}`, record.breaks);
 }
+// The period an overtime filing covers, as [start, end) minute stamps on the same scale as attendanceMinutes.
+// An end at or before the start is on the next day. Filings without times (older records) cover the whole date.
+export function overtimeWindow(filing) {
+  const startOfDay = Date.parse(`${filing.date}T00:00:00Z`);
+  if (!filing.startTime || !filing.endTime) return [startOfDay, startOfDay + dayMs];
+  const start = Date.parse(`${filing.date}T${filing.startTime}:00Z`);
+  let end = Date.parse(`${filing.date}T${filing.endTime}:00Z`);
+  if (end <= start) end += dayMs;
+  return [start, end];
+}
 function earnedEntitlement(e, t, asOf) {
   if (e.draft || !e.startDate) return 0;
   const eligibilityDate = new Date(`${e.startDate}T00:00:00Z`);
@@ -313,22 +323,39 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // Policy "separate" (the default): time after the schedule is overtime only up to the hours the employee filed
       // and HR approved; clocking out late without a filing is not paid. A pending filing blocks posting.
       const separateOT = (r.overtimeApproval || 'separate') === 'separate', filings = (state.overtimeRequests || []).filter(o => o.employeeId === e.id && o.date === d);
-      const approvedOTMinutes = filings.filter(o => o.status === 'approved').reduce((s, o) => s + o.approvedHours * 60, 0);
-      if (separateOT && e.coveredOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime filings before posting.`);
-      let unfiledMinutes = 0, belowBlock = 0;
+      const approvedFilings = filings.filter(o => o.status === 'approved'), gatedOT = separateOT && e.coveredOT;
+      const approvedOTMinutes = approvedFilings.reduce((s, o) => s + Math.round(o.approvedHours * 60), 0);
+      if (gatedOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime applications before posting.`);
+      let unfiledMinutes = 0, belowBlock = 0, paidOT = 0;
+      // A minute after the schedule is approved overtime when it falls inside an approved filing's period (each filing
+      // pays at most its approved hours, unpaid breaks already excluded); older filings without times use their hours
+      // from the end of the schedule. Without the approval policy every minute after the schedule counts.
+      const windows = approvedFilings.filter(o => o.startTime).map(o => ({ range: overtimeWindow(o), budget: Math.round(o.approvedHours * 60) }));
+      let untimedBudget = approvedFilings.filter(o => !o.startTime).reduce((s, o) => s + Math.round(o.approvedHours * 60), 0);
+      const eligible = minutes.map((m, index) => {
+        if (flexible || index < normalHours * 60) return false;
+        if (!gatedOT) return true;
+        const w = windows.find(x => x.budget > 0 && m >= x.range[0] && m < x.range[1]);
+        if (w) { w.budget--; return true; }
+        if (untimedBudget > 0) { untimedBudget--; return true; }
+        return false;
+      });
+      const eligibleOT = eligible.filter(Boolean).length;
+      // Approved overtime that attendance does not support is flagged for HR before posting.
+      if (gatedOT && approvedOTMinutes - eligibleOT >= OT_BLOCK) blockers.push(`${prefix}: approved overtime on ${d} is ${round(approvedOTMinutes / 60)} h but attendance shows ${round(eligibleOT / 60)} h worked within the approved period. Adjust the approved hours in Attendance → Overtime applications before posting.`);
       // Overtime counts in whole 30-minute blocks, rounded down (40 min = 30 min; 1 h 15 min = 1 h; under 30 min = none).
-      const otWorked = flexible ? 0 : Math.max(0, minutes.length - normalHours * 60);
-      const otPayable = Math.floor(Math.min(otWorked, separateOT && e.coveredOT ? approvedOTMinutes : otWorked) / OT_BLOCK) * OT_BLOCK;
+      const otPayable = Math.floor(eligibleOT / OT_BLOCK) * OT_BLOCK;
       minutes.forEach((m, index) => {
         const date = new Date(m).toISOString().slice(0, 10), c0 = classification(state, e, date), c = perDayWorked && c0 === 'rest' ? 'ordinary' : c0;
         const ot = !flexible && index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
-        if (ot && separateOT && e.coveredOT && index - normalHours * 60 >= approvedOTMinutes) { unfiledMinutes++; return; }
-        if (ot && index - normalHours * 60 >= otPayable) { belowBlock++; return; }
+        if (ot && !eligible[index]) { unfiledMinutes++; return; }
+        if (ot && paidOT >= otPayable) { belowBlock++; return; }
+        if (ot) paidOT++;
         const key = `${date}/${c}/${ot}/${night}`;
         const group = groups.get(key) || { date, c, ot, night, count: 0 }; group.count++; groups.set(key, group);
       });
       if (belowBlock) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `${belowBlock} min overtime not paid: overtime counts in whole 30-minute blocks`, sourceKind: 'attendance', sourceId: record.id, date: d });
-      if (unfiledMinutes) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `${round(unfiledMinutes / 60)} h after the schedule${approvedOTMinutes ? ` beyond the ${round(approvedOTMinutes / 60)} h approved` : ''} without approved overtime filing: not paid`, sourceKind: 'attendance', sourceId: record.id, date: d, quantity: round(unfiledMinutes / 60) });
+      if (unfiledMinutes) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `${round(unfiledMinutes / 60)} h after the schedule${approvedOTMinutes ? ` outside the approved overtime period or beyond the ${round(approvedOTMinutes / 60)} h approved` : ''} without approved overtime filing: not paid`, sourceKind: 'attendance', sourceId: record.id, date: d, quantity: round(unfiledMinutes / 60) });
       for (const g of groups.values()) {
         const mult = dayRate(g.c, r), overtime = g.c === 'ordinary' ? r.ordinaryOT : r.premiumOT;
         const fullRate = mult * (g.ot ? overtime : 1), hours = g.count / 60;
@@ -346,6 +373,11 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         else if (!g.ot) add(earnings, 'basic', 0, `${round(hours)} regular hours; salary already included in cutoff basic`, record, g.date, round(hours), 1);
         if (g.night && e.coveredNSD) add(earnings, 'nsd', hours * hourly * fullRate * r.nsd, `${round(hours)} night h × ${round(hourly)} × ${mult}${g.ot ? ` × ${overtime}` : ''} × ${r.nsd} differential only`, record, g.date, round(hours), fullRate * (1 + r.nsd));
       }
+    }
+    // Approved overtime on a day with no worked attendance cannot be paid; HR records the attendance or rejects it.
+    if (e.coveredOT && manual?.mode !== 'replace') for (const o of (state.overtimeRequests || []).filter(o => o.employeeId === e.id && o.status === 'approved' && o.date >= start && o.date <= end && employed.includes(o.date))) {
+      const worked = state.attendance.some(a => a.employeeId === e.id && a.date === o.date && a.status === 'present') || (state.openClockIns || []).some(c => c.employeeId === e.id && c.workDate === o.date);
+      if (!worked && ((ruleOn(state, o.date) || r).overtimeApproval || 'separate') === 'separate') blockers.push(`${prefix}: approved overtime on ${o.date} (${o.approvedHours} h) has no attendance record. Record the attendance or change the overtime decision in Attendance → Overtime applications.`);
     }
     if (manual) {
       const m = manual, src = { id: `manual-${e.id}-${start}`, sourceKind: 'payroll-inputs' }, tag = `Manual entry by ${m.updatedBy}${m.reason ? ` (${m.reason})` : ''}`;

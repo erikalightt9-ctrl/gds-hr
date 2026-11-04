@@ -20,6 +20,7 @@ import { createLoansPage } from './loans-ui.js';
 import { createThirteenthPage } from './thirteenth-ui.js';
 import { monthSheet } from './attendance-month.js';
 import { createContributionsPage } from './contributions-ui.js';
+import { createOvertimeUi } from './overtime-ui.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 // Salary day of a cutoff: 1st-15th → the 22nd; 16th-end → the 8th of the next month (same rule as src/paydays.mjs).
 const payDateFor = (start, end) => { const y = Number(start.slice(0, 4)), m = Number(start.slice(5, 7)); if (start.slice(8, 10) === '01' && Number(end.slice(8, 10)) <= 15) return `${start.slice(0, 7)}-22`; return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-08`; };
@@ -258,6 +259,7 @@ const breakdown = createBreakdown({ esc, money, table, openDialog, dialog, actio
 } });
 const loansUi = createLoansPage({ ...hrCtx, canEdit: kind => canEdit(kind), editButton: (k, id) => editButton(k, id), addButton: (k, label) => addButton(k, label), downloads: k => downloads(k) });
 const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(k) });
+const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh() });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
@@ -282,12 +284,13 @@ function employeesPage() {
   return heading('Your people', 'Open an employee to view their complete, connected profile.', addButton('employees', 'Add employee')) + `${state.employees.some(e => e.draft) ? '<div class="notice">Draft profiles are excluded from payroll until salary, joining date, department, schedule, and benefit coverage are completed.</div>' : ''}<section class="panel"><div class="panel-head"><h2>Employee directory</h2>${downloads('employees')}${badge(`${list.length} employees`, 'neutral')}</div>${searchToolbar(`<label class="field">Employee filter<select id="employee-status-filter">${statuses.map(s => `<option ${s === employeeStatusFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></label>`)}${table(['Employee', 'Position', 'Monthly salary', 'Joined', 'Status', ''], list.map(e => [`<button class="employee-link" data-profile="${esc(e.id)}">${employee(e.id)}</button>`, esc(e.profile.position || 'Position required'), e.monthlySalary === null ? 'Not set' : money(e.monthlySalary), e.startDate || 'Not set', badge(e.draft ? 'Draft · needs details' : e.profile.employeeStatus || (e.active ? 'Active' : 'Inactive'), e.draft ? 'pending' : '') + `<small>${esc(e.profile.employmentStatus || '')}</small>`, `<button class="small" data-profile="${esc(e.id)}">Open profile</button>`]))}</section>`;
 }
 function attendancePage() {
-  const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Timecard · against pay</button>${['admin', 'hr'].includes(auth.user.role) ? `<button data-attendance-view="explanations" class="${attendanceView === 'explanations' ? 'active' : ''}">Explanations</button>` : ''}</div>`;
+  const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Timecard · against pay</button>${['admin', 'hr'].includes(auth.user.role) ? `<button data-attendance-view="explanations" class="${attendanceView === 'explanations' ? 'active' : ''}">Explanations</button>` : ''}${['admin', 'hr', 'payroll'].includes(auth.user.role) ? `<button data-attendance-view="overtime" class="${attendanceView === 'overtime' ? 'active' : ''}">Overtime applications</button>` : ''}</div>`;
   // Subsidiary filter (All / each company) for the monthly sheet and the daily records.
   const companyPick = `<label class="att-company">Subsidiary <select data-att-company><option value="">All subsidiaries</option>${companies().map(c => `<option ${c === attCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
   const top = heading('Attendance', '') + views + (['month', 'records'].includes(attendanceView) ? companyPick : '');
   if (attendanceView === 'timecard') return top + timecard.panel(state);
   if (attendanceView === 'explanations') return top + '<div data-explanations><div class="loading">Loading explanations…</div></div>';
+  if (attendanceView === 'overtime') return top + overtimeUi.panel();
   if (attendanceView === 'month') return top + monthSheet({ state, esc, today: today(), month: attendanceMonth || today().slice(0, 7), search: filter, company: attCompany });
   // Daily attendance records: one date, every employee (with day / today navigation, search, status and record tabs).
   const day = recordsDate || today(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
@@ -562,7 +565,8 @@ function render() {
   if (page === 'attendance' && attendanceView === 'explanations') {
     api('/explanations').then(data => { const box = document.querySelector('[data-explanations]'); if (box && page === 'attendance' && attendanceView === 'explanations') box.innerHTML = portal.explanationsSection(data); }).catch(error => toast(error.message));
   }
-  if (page === 'attendance' && attendanceView !== 'explanations' && liveData && ['admin', 'hr'].includes(auth.user.role)) {
+  if (page === 'attendance' && attendanceView === 'overtime') { const box = document.querySelector('[data-overtime-apps]'); if (box) overtimeUi.fill(box); }
+  if (page === 'attendance' && !['explanations', 'overtime'].includes(attendanceView) && liveData && ['admin', 'hr'].includes(auth.user.role)) {
     const live = document.createElement('div'); live.dataset.liveBlock = ''; live.innerHTML = portal.live(liveData);
     document.querySelector('.content .page-heading')?.after(live);
   }
@@ -574,17 +578,6 @@ function render() {
   }
   if (page === 'payroll' && ['admin', 'hr', 'payroll', 'viewer'].includes(auth.user.role)) {
     thirteenthUi.section(y => { annualYear = y; page = 'annual'; render(); }).then(box => { if (page === 'payroll') document.querySelector('.content')?.append(box); }).catch(error => toast(error.message));
-  }
-  if (page === 'attendance' && ['admin', 'hr', 'payroll'].includes(auth.user.role)) {
-    api('/overtime-requests').then(list => {
-      const content = document.querySelector('.content'); if (page !== 'attendance' || !content) return;
-      const can = ['admin', 'hr'].includes(auth.user.role);
-      for (const o of list.filter(x => x.status === 'pending' && !x.locked)) {
-        const cell = content.querySelector(`[data-lv-req="${CSS.escape(o.employeeId)}"]`); if (!cell) continue;
-        const dash = cell.querySelector('.lv-muted'); if (dash) dash.remove();
-        cell.insertAdjacentHTML('beforeend', `<span class="lv-req-group"><span class="lv-req-label" title="Overtime filed for ${esc(o.date)}, not today">OT filed for ${esc(new Date(`${o.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} · ${o.hours} h</span>${can ? `<button class="lv-req ok" data-ot-decision="approve" data-id="${esc(o.id)}" data-employee="${esc(o.employeeId)}" data-date="${esc(o.date)}" data-worked="${o.worked ?? ''}" data-hours="${o.worked === null ? o.hours : Math.min(o.hours, o.worked)}" data-filed="${o.hours}">Approve</button><button class="lv-req" data-ot-decision="reject" data-id="${esc(o.id)}" data-employee="${esc(o.employeeId)}" data-date="${esc(o.date)}" data-worked="${o.worked ?? ''}" data-hours="${o.hours}" data-filed="${o.hours}">Reject</button>` : ''}</span>`);
-      }
-    }).catch(error => toast(error.message));
   }
   if (page === 'overview') {
     if (liveData) { const live = document.createElement('div'); live.innerHTML = portal.live(liveData); document.querySelector('.content').append(live); }
@@ -752,31 +745,6 @@ function taxDialog(row) {
   form.querySelector('[data-tax-reset]')?.addEventListener('click', async () => {
     try { await save([]); dialog.close(); if (await reopenComputation()) savedPopup('Withholding tax reset to the computed amount.'); } catch (error) { toast(error.message); }
   });
-}
-// Approve or reject one overtime filing in a clear confirmation window (replaces the browser prompts).
-function overtimeDecisionDialog({ otDecision: decision, id, employee: employeeId, date, worked, hours, filed }) {
-  const approve = decision === 'approve', name = state.employees.find(e => e.id === employeeId)?.name || employeeId;
-  const workedText = worked === '' ? 'No clock-out yet' : `${worked} h`;
-  openDialog(`${approve ? 'Approve' : 'Reject'} overtime · ${name}`, `<form id="ot-decision-form"><div class="dialog-body">
-    <div class="cards">${card('Date', esc(date), 'Overtime date')}${card('Hours filed', `${esc(filed)} h`, 'Requested by the employee')}${card('Worked past schedule', esc(workedText), 'From time in / out')}</div>
-    ${approve ? `<div class="form-grid"><label class="field">Hours to approve<input type="number" name="hours" min="0.01" step="0.01" required value="${esc(hours)}"></label></div>
-    <p class="legend">You may approve fewer hours than filed. Payroll pays only up to the hours actually worked past the schedule.</p>` : ''}
-    <div class="form-grid"><label class="field">${approve ? 'Note to the employee (optional)' : 'Reason for rejecting (the employee will see this)'}<textarea name="remarks" rows="2" ${approve ? '' : 'required'}></textarea></label></div></div>
-    <div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary" data-ot-submit>${approve ? `✓ Approve ${esc(hours)} h` : '✕ Reject overtime'}</button></div></form>`);
-  const form = dialog.querySelector('#ot-decision-form'), submit = form.querySelector('[data-ot-submit]');
-  if (approve) form.elements.hours.addEventListener('input', () => { submit.textContent = `✓ Approve ${form.elements.hours.value || 0} h`; });
-  form.onsubmit = async event => {
-    event.preventDefault();
-    const remarks = form.elements.remarks.value.trim(), approved = approve ? Number(form.elements.hours.value) : 0;
-    if (approve && !(approved > 0)) { toast('Enter the hours to approve.'); return; }
-    submit.disabled = true;
-    try {
-      await api(`/overtime-requests/${id}/decision`, { decision, remarks, ...(approve ? { hours: approved } : {}) });
-      dialog.close(); await refresh(); render();
-      const message = approve ? `Overtime approved: ${approved} h for ${name} on ${date}. Payroll will include it.` : `Overtime rejected for ${name} on ${date}. The employee has been notified.`;
-      openDialog(approve ? 'Overtime approved' : 'Overtime rejected', `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">${approve ? '✅' : '❌'}</p><p>${esc(message)}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
-    } catch (error) { submit.disabled = false; toast(error.message); }
-  };
 }
 function manualEntryDialog(employeeId) {
   const row = currentRun.rows.find(x => x.employeeId === employeeId), m = row.manualEntry || { mode: 'add', daysWorked: row.workingDays, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: '' };
@@ -1129,7 +1097,6 @@ document.addEventListener('click', async event => {
       const reason = window.prompt('Reason for reversing this posted payroll (kept in the audit trail):'); if (!reason) return;
       currentRun = await api(`/runs/${b.dataset.reverseRun}/reverse`, { reason }); await refresh(); render(); toast('Payroll reversed. Loan balances restored; the cutoff can be corrected and posted again.'); return;
     }
-    if (b.dataset.otDecision) { overtimeDecisionDialog(b.dataset); return; }
     if (b.dataset.leaveBalance) { leaveBalanceDialog(b.dataset.leaveBalance); return; }
     if (b.dataset.leaveDecision) {
       const decision = b.dataset.leaveDecision;

@@ -1641,3 +1641,48 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .lb-requests { list-style: none; margin: 0; padding: 0; }
 .lb-requests li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid #f1ead8; }
 @media (max-width: 760px) { .lb-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Overtime applications: HR list + review window, employee "My overtime" cards */
+.ot-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 16px 20px 0; }
+.ot-summary button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border: 1px solid #eadfc4; border-radius: 12px; background: #fffdf8; text-align: left; font-size: 12px; color: #555; }
+.ot-summary button strong { font-size: 22px; color: #171717; }
+.ot-summary button.active { border-color: #d9b85c; background: #fff0c9; color: #911a24; }
+.ot-filters { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; padding: 16px 20px; }
+.ot-list { display: flex; flex-direction: column; padding: 0 20px 20px; }
+.ot-item { display: grid; grid-template-columns: 1.4fr 1.4fr 1.2fr 1fr; gap: 14px; align-items: center; width: 100%; padding: 14px 12px; border: 0; border-top: 1px solid #f1ead8; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.ot-item:hover, .ot-item:focus-visible { background: #fff7e4; }
+.ot-item > span { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.ot-item small { color: #777; font-size: 12px; }
+.ot-item .ot-flag { color: #a91d29; }
+.ot-empty { padding: 20px 12px; }
+.ot-review .ot-review-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ot-reason { margin: 14px 0; line-height: 1.5; }
+.ot-reason span { display: block; font-size: 12px; color: #777; }
+.ot-flags { border: 1px solid #f3c2c6; background: #fff1f2; color: #8f1823; border-radius: 10px; padding: 8px 12px; margin: 12px 0; }
+.ot-flags p { margin: 4px 0; }
+.ot-decide { border: 1px solid #eadfc4; border-radius: 12px; padding: 12px 14px; margin: 14px 0; display: grid; gap: 10px; }
+.ot-decide legend { font-weight: 600; padding: 0 6px; }
+.ot-history ul { margin: 8px 0 0; padding-left: 18px; }
+.ot-history li { margin: 6px 0; }
+.ot-history small { display: block; color: #666; }
+.ot-form-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ot-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; padding: 16px 20px 20px; }
+.ot-card { border: 1px solid #eadfc4; border-radius: 14px; padding: 14px 16px; background: #fffdf8; }
+.ot-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ot-card p { margin: 8px 0; }
+.ot-card-reason { color: #444; overflow-wrap: anywhere; }
+.ot-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ot-card-actions details { flex-basis: 100%; font-size: 12px; color: #555; }
+.ot-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.ot-pending { background: #fff0c9; color: #8a6400; }
+.ot-approved { background: #e3f4e8; color: #1d6b37; }
+.ot-rejected { background: #fde4e6; color: #a91d29; }
+.ot-cancelled { background: #eee; color: #666; }
+@media (max-width: 760px) {
+  .ot-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 14px 0; }
+  .ot-filters { grid-template-columns: 1fr 1fr; padding: 12px 14px; }
+  .ot-filters label:first-child { grid-column: 1 / -1; }
+  .ot-list { padding: 0 8px 14px; }
+  .ot-item { grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .ot-mine { padding: 12px 14px 16px; }
+}
