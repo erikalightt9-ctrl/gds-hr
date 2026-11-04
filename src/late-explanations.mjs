@@ -7,6 +7,9 @@ import { scheduleOn, ruleOn } from './engine.mjs';
 import { lateBy } from './late-incidents.mjs';
 
 export const EXPLAIN_AFTER_MINUTES = 15;
+// Attendance before this date was imported from the biometric records (January-August 2026, before the system):
+// it never asks for an explanation. The records, any explanations already submitted and payroll are unchanged.
+export const EXPLAIN_FROM = '2026-09-01';
 const profileOf = (state, id) => (state.employeeProfiles || []).find(p => p.employeeId === id && p.section === 'attendance') || {};
 const explainedDays = store => new Set(store.db.prepare('SELECT employee_id, data FROM attendance_explanations').all().map(r => `${r.employee_id}|${JSON.parse(r.data).date}`));
 
@@ -21,7 +24,7 @@ function lateOn(state, employee, date, timeIn, recordedStart) {
 export function explanationsDue(store, state = store.read(), { employeeId = null } = {}) {
   const explained = explainedDays(store), people = new Map(state.employees.map(e => [e.id, e])), due = new Map();
   const consider = (employee, date, timeIn, recordedStart, source) => {
-    if (!employee || (employeeId && employee.id !== employeeId) || !timeIn || explained.has(`${employee.id}|${date}`)) return;
+    if (!employee || date < EXPLAIN_FROM || (employeeId && employee.id !== employeeId) || !timeIn || explained.has(`${employee.id}|${date}`)) return;
     const late = lateOn(state, employee, date, timeIn, recordedStart);
     if (!late || late.lateMinutes < EXPLAIN_AFTER_MINUTES) return;
     due.set(`${employee.id}|${date}`, { employeeId: employee.id, employeeName: employee.name, date, scheduledIn: late.scheduledIn, timeIn, lateMinutes: late.lateMinutes, source });

@@ -97,3 +97,14 @@ test('payroll lateness is the same whether or not an explanation was submitted (
     assert.deepEqual(row(), before);
   } finally { store.close(); }
 });
+
+test('attendance before September 2026 (imported from the biometric records) never asks for an explanation', () => {
+  const store = fixture(s => {
+    for (const [d, t] of [['2026-01-05', '09:00'], ['2026-08-31', '08:45']]) s.attendance.push({ ...s.attendance[0], id: `bio-${d}`, date: d, timeIn: t, timeOut: '17:00' });
+  });
+  try {
+    assert.deepEqual(dates(explanationsDue(store)), ['2026-09-01', '2026-09-03']);
+    runMigrations(store);
+    assert.match(store.db.prepare("SELECT message FROM notifications WHERE message LIKE '%earlier late arrival%'").get().message, /^2 earlier/);
+  } finally { store.close(); }
+});
