@@ -174,11 +174,11 @@ test('half-day leave: the leave half is paid (or deducted when unpaid); the work
     return calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
   };
   const paid = run('sil');
-  assert.equal(paid.deductions.undertime, 0, 'the leave half is not undertime');
+  assert.equal(paid.undertimeAmount, 0, 'the leave half is not undertime');
   assert.equal(paid.absenceAmount, 0, 'paid half day: nothing deducted');
   const unpaid = run('unpaid');
   assert.equal(Math.round((unpaid.absenceAmount - paid.absenceAmount) * 100) / 100, 681.82, 'unpaid half day reduces basic by half a day (1,363.64 / 2)');
-  assert.equal(unpaid.deductions.undertime, 0);
+  assert.equal(unpaid.undertimeAmount, 0);
 });
 
 test('late time not made up reduces credited days, not a deduction line', () => {
@@ -193,11 +193,11 @@ test('late time not made up reduces credited days, not a deduction line', () => 
 test('a cutoff waiver removes late and undertime deductions; the minutes stay on record', () => {
   const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:30', timeOut: '15:00' })]; withOtherDays(s);
   const before = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-  assert.ok(before.late[0].deductibleMinutes > 0 && before.deductions.undertime > 0);
+  assert.ok(before.late[0].deductibleMinutes > 0 && before.undertimeAmount > 0);
   s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveLate: true, waiveUndertime: true, reason: 'Waived', updatedBy: 'admin' }];
   const after = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
   assert.equal(after.late[0].lateMinutes, 30); assert.equal(after.late[0].deductibleMinutes, 0);
-  assert.equal(after.deductions.undertime, 0); assert.equal(after.earnings.basic, 15000);
+  assert.equal(after.undertimeAmount, 0); assert.equal(after.earnings.basic, 15000);
 });
 
 test('a loan set to the 1st-15th cutoff is deducted only there; every-cutoff loans each cutoff', () => {

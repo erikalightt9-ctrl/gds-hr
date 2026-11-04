@@ -239,6 +239,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     let holidayBase = 0, excludedLeave = 0, additionalBasic = 0, daysPresent = 0, leaveDays = 0;
     const presentOrLeave = new Set();   // dates worked or on approved leave (a half day counts once): the HR "days present"
     let lateDaysLost = 0, lateReduction = 0, lateMinutesUnoffset = 0;   // late time lowers credited days, never a separate deduction
+    // Credited working time: each worked day's scheduled minutes (its own schedule, unpaid breaks excluded) less the late
+    // and undertime minutes not covered by an offset or exception. Undertime lowers it like lateness; it is not a deduction.
+    let creditedMinutes = 0, undertimeLost = 0;
+    const undertimeLog = [];
     const add = (side, component, amount, formula, source, date, quantity = null, multiplier = null) => {
       const rounded = round(amount);
       side[component] = round(side[component] + rounded);
@@ -302,7 +306,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         if (record.status === 'official-business') { add(earnings, 'basic', 0, 'Approved official business; salary already included in cutoff basic', record, d); continue; }
         if (record.status === 'rest-day-swap') { add(earnings, 'basic', 0, `Rest-day swap (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
         // Offset: the day is not worked because the hours were worked on another day; paid, not absent.
-        if (record.status === 'offset') { daysPresent++; presentOrLeave.add(d); add(earnings, 'basic', 0, `Offset (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
+        if (record.status === 'offset') { daysPresent++; presentOrLeave.add(d); creditedMinutes += scheduleOn(e, attendanceProfile, d, r).hoursPerDay * 60; add(earnings, 'basic', 0, `Offset (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
         const holiday = kind.replace('-rest', '');
         if (['special', 'regular', 'double', 'other'].includes(holiday)) {
           const paidRate = (holiday === 'special' || holiday === 'other' || (e.coveredHoliday && record.holidayEligible)) ? r[`${holiday}Unworked`] : 0;
@@ -335,7 +339,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         add(earnings, 'basic', -deduction, `Late ${deductibleMinutes} min not offset ÷ ${dayMinutes} min day = ${Math.round(lostDay * 10000) / 10000} day × ${daily} (days credited reduced)`, record, d);
       }
       const under = rest || record.exception ? 0 : Math.max(0, normalHours * 60 - minutes.length - lateMinutes - leaveCoverMinutes);
-      if (r.deductUndertime && under && !manual?.waiveUndertime) add(deductions, 'undertime', under / 60 * hourly, `${under} minutes ÷ 60 × ${hourly}`, record, d);
+      const underLost = r.deductUndertime && under && !manual?.waiveUndertime ? under : 0;
+      if (underLost) { add(deductions, 'undertime', under / 60 * hourly, `Undertime ${under} min not covered ÷ 60 × ${hourly}`, record, d); undertimeLost += under; undertimeLog.push({ date: d, minutes: under, amount: round(under / 60 * hourly) }); }
+      creditedMinutes += Math.max(0, normalHours * 60 - (deduction ? deductibleMinutes : 0) - underLost);
       const groups = new Map();
       // Policy "separate" (the default): time after the schedule is overtime only up to the hours the employee filed
       // and HR approved; clocking out late without a filing is not paid. A pending filing blocks posting.
@@ -412,7 +418,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
           lateDaysLost += m.lateMinutes / dayMinutes; lateReduction += amount; lateMinutesUnoffset += m.lateMinutes;
           add(earnings, 'basic', -amount, `${tag}: late ${m.lateMinutes} min ÷ 60 × ${hourly} (days credited reduced)`, src, end);
         }
-        if (m.undertimeMinutes) add(deductions, 'undertime', m.undertimeMinutes / 60 * hourly, `${tag}: undertime ${m.undertimeMinutes} min ÷ 60 × ${hourly}`, src, end);
+        if (m.undertimeMinutes) { add(deductions, 'undertime', m.undertimeMinutes / 60 * hourly, `${tag}: undertime ${m.undertimeMinutes} min ÷ 60 × ${hourly}`, src, end); undertimeLost += m.undertimeMinutes; undertimeLog.push({ date: end, minutes: m.undertimeMinutes, amount: round(m.undertimeMinutes / 60 * hourly), manual: true }); }
       }
       // Hours typed by HR, priced with the approved multipliers. Holiday hours are on a scheduled workday, so the
       // day itself is already in the salary and only the premium is added.
@@ -489,7 +495,15 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       if (!daysPresent && !leaveDays && earnings.basic < 1) earnings.basic = 0;   // no day credited: no centavo residue from rounding
       for (const t of trace) if (t.component === 'absence' && t.side === 'deductions') Object.assign(t, { component: 'basic', side: 'earnings', amount: -t.amount, formula: `Absence (days credited reduced): ${t.formula}` });
     }
-    const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - deductions.undertime - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride));
+    // Undertime not covered lowers the credited time and therefore basic pay, like lateness; it is not a deduction line.
+    const undertimeAmount = round(deductions.undertime || 0);
+    // Credited time follows what is actually charged: an undertime override (e.g. waived to 0) restores those minutes.
+    if (creditedMinutes && hourly) creditedMinutes += undertimeLost - undertimeAmount / hourly * 60;
+    if (undertimeAmount) {
+      earnings.basic = Math.max(0, round(earnings.basic - undertimeAmount)); deductions.undertime = 0;
+      for (const t of trace) if (t.component === 'undertime' && t.side === 'deductions') Object.assign(t, { component: 'basic', side: 'earnings', amount: -t.amount, formula: `${t.formula} (credited time reduced)` });
+    }
+    const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - undertimeAmount - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride));
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));
     const prior = priorBasicFor(state, e.id, start.slice(0, 4));
     const annualBasic = round(annualRows.reduce((s, row) => s + row.applicableBasic, 0) + prior.basic + applicableBasic);
@@ -538,7 +552,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const totalDeductions = round(Object.values(deductions).reduce((s, n) => s + n, 0)), net = round(gross - totalDeductions);
     const loanBalance = round(state.loans.filter(l => l.employeeId === e.id).reduce((sum, l) => sum + l.balance, 0) - deductions.loans);
     if (net < 0) blockers.push(`${prefix}: net salary is negative. Review authorized deductions.`);
-    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost) * 10000) / 10000, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays: Math.round((daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0)) * 10000) / 10000, creditedHours: Math.round((creditedMinutes || Math.max(0, daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0)) * (attendanceProfile?.hoursPerDay || r.normalHours || 8) * 60) / 60 * 1e4) / 1e4, undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

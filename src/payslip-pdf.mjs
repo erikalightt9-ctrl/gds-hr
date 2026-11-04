@@ -61,6 +61,8 @@ function hoursByComponent(rows = []) {
   return out;
 }
 const hrs = h => (h ? `${Math.round(h * 100) / 100}` : '');
+// Credited days are shown to 2 decimals (0.9375 -> 0.94); pay itself is computed at full precision.
+const days2 = n => (n === null || n === undefined || n === '' ? '-' : (Math.round(Number(n) * 100) / 100).toFixed(2));
 
 export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } = {}) {
   const p = new Page(), e = slip.earnings || {}, d = slip.deductions || {}, hours = hoursByComponent(slip.workBreakdown);
@@ -82,7 +84,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   y = header('EMPLOYEE INFORMATION', y);
   const daily = slip.payBasis === 'daily';
   const info = [['Employee name', slip.employeeName.toUpperCase()], ['Employee ID', slip.employeeId], ['Designation', designation || '-'],
-    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', String(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent ?? '-')], ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
+    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.creditedHours ? [['Hours credited', `${Math.round(slip.creditedHours * 100) / 100} h`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
   const KEY = LEFT + 190;
   for (const [label, value] of info) {
     p.line(LEFT, y - 18, RIGHT, y - 18); p.line(KEY, y, KEY, y - 18);
@@ -95,7 +97,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   p.fill(COLOR.goldTint, LEFT, y - 20, WIDTH, 20); p.stroke(LEFT, y - 20, WIDTH, 20);
   p.text('PARTICULARS', LEFT + 10, y - 14, { size: 9, bold: true }); p.text('DAYS / HOURS', (C1 + C3) / 2, y - 14, { size: 9, bold: true, align: 'center' }); p.text('AMOUNT', RIGHT - 12, y - 14, { size: 9, bold: true, align: 'right' }); y -= 20;
   const rows = [
-    ['Days worked (regular)', slip.daysWorked ?? slip.creditedDays ?? slip.daysPresent, 'DAY', e.basic],
+    ['Days worked (regular)', days2(slip.daysWorked ?? slip.creditedDays ?? slip.daysPresent), 'DAY', e.basic],
     ...(e.leavePay ? [['Paid leave', slip.paidLeaveDays || '', 'DAY', e.leavePay]] : []),
     ['Overtime', hrs(hours.regularOT), 'HRS', e.regularOT],
     ['Rest day / RDOT', hrs((hours.restDay || 0) + (hours.restOT || 0)), 'HRS', (e.restDay || 0) + (e.restOT || 0)],

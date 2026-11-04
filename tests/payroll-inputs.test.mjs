@@ -35,7 +35,7 @@ test('replace mode pays from typed figures without attendance and clears missing
     const result = run(store), row = result.rows[0], daily = row.dailyRate, hourly = row.hourlyRate;
     assert.ok(!result.blockers.some(b => /EMP-001.*Missing attendance/.test(b)));
     near(row.absenceAmount, daily, 'row.absenceAmount');
-    near(row.deductions.undertime, hourly, 'row.deductions.undertime');
+    near(row.undertimeAmount, hourly, 'row.undertimeAmount');
     near(row.lateReduction, 0.5 * hourly, 'row.lateReduction');
     assert.equal(row.daysPresent, row.workingDays - 1);
     near(row.earnings.regularOT, 2 * hourly * 1.25, 'row.earnings.regularOT');

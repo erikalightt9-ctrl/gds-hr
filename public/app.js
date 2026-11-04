@@ -749,7 +749,7 @@ function basicPayDialog(employeeId) {
     <fieldset class="net-side"><legend>How basic pay is computed</legend>
       ${fact(daily ? 'Daily rate' : 'Monthly salary', money(daily ? row.dailyRate : row.monthlySalary), daily ? 'Daily-paid' : 'Monthly-paid')}
       ${fact('Daily rate used', money(row.dailyRate))}${fact('Hourly rate used', money(row.hourlyRate))}
-      ${fact('Scheduled workdays', row.workingDays)}${fact('Days present', row.daysPresent)}${fact('Days credited', row.creditedDays ?? row.daysPresent, row.lateDaysLost ? `${row.lateDaysLost} day lost to late` : '')}
+      ${fact('Scheduled workdays', row.workingDays)}${fact('Days present', row.daysPresent)}${fact('Days credited', (Math.round((row.creditedDays ?? row.daysPresent) * 100) / 100).toFixed(2), [row.creditedHours ? `${Math.round(row.creditedHours * 100) / 100} h credited` : '', row.lateDaysLost ? `${row.lateDaysLost} day lost to late` : '', row.undertimeMinutes ? `${row.undertimeMinutes} min undertime (₱${row.undertimeAmount})` : ''].filter(Boolean).join(' · '))}
       ${fact('Leave days', row.leaveDays)}${fact('Late (not offset)', `${row.lateMinutesUnoffset || 0} min`)}${fact('Cutoff salary base', money(base), daily ? 'Daily rate × scheduled days' : 'Half of the monthly salary')}
     </fieldset>
     <fieldset class="net-side"><legend>Amounts</legend>${fact('Absences', money(row.absenceAmount || 0), 'Already taken off the days credited')}${input('earnings', 'basic', 'Basic pay (days credited)')}${input('deductions', 'undertime', 'Undertime')}
