@@ -346,13 +346,31 @@ function proofReviewCell(l) {
   const by = l.proofStatus === 'rejected' && l.proofNote ? `<small>${esc(l.proofNote)}</small>` : '';
   return `${badge(label, tone)} ${view}${by}${review}`;
 }
+// One employee's leave balances: every leave type they are eligible for, how each balance is made up, and this
+// year's requests per type.
+function leaveBalanceDialog(employeeId) {
+  const person = state.employees.find(e => e.id === employeeId), year = today().slice(0, 4);
+  const own = balances.filter(b => b.employeeId === employeeId && person?.leaveEligibility.includes(b.typeId));
+  const STATUS = { approved: ['Approved', ''], pending: ['Pending', 'pending'], rejected: ['Rejected', 'rejected'], cancelled: ['Cancelled', 'neutral'] };
+  const sections = own.map(b => {
+    const type = state.leaveTypes.find(t => t.id === b.typeId);
+    const requests = state.leaves.filter(l => l.employeeId === employeeId && l.typeId === b.typeId && (l.startDate.startsWith(year) || l.endDate.startsWith(year))).sort((x, y) => y.startDate.localeCompare(x.startDate));
+    const pendingDays = requests.filter(l => l.status === 'pending').reduce((s, l) => s + (Number(l.days) || 0), 0);
+    const facts = [['Entitled this year', b.entitled], ['Carry-over', `${b.carry}${b.expired ? ` (${b.expired} expired)` : ''}`], ['Used before the system', b.usedBefore || 0], ['Used / reserved', b.used], ['Pending requests', pendingDays]];
+    const list = requests.length ? `<ul class="lb-requests">${requests.map(l => { const [label, tone] = STATUS[l.status] || [l.status, 'neutral']; return `<li><span>${esc(l.startDate)}${l.endDate !== l.startDate ? ` → ${esc(l.endDate)}` : ''}</span><span>${esc(String(l.days ?? ''))} day${Number(l.days) === 1 ? '' : 's'}</span>${badge(label, tone)}</li>`; }).join('')}</ul>` : '<p class="legend">No requests this year.</p>';
+    return `<section class="lb-type"><div class="lb-type-head"><h3>${esc(type?.name || b.typeId)}</h3>${badge(`${b.available} days available`)}</div>
+      <div class="lb-facts">${facts.map(([k, v]) => `<div><span>${k}</span><strong>${esc(String(v))}</strong></div>`).join('')}</div>${list}</section>`;
+  }).join('');
+  const total = own.reduce((s, b) => s + (Number(b.available) || 0), 0);
+  openDialog(`Leave balances · ${person?.name || employeeId}`, `<div class="dialog-body"><p class="sub">${esc(employeeId)} · As of ${today()} · ${total} day${total === 1 ? '' : 's'} available in total</p>${sections || '<p class="legend">This employee is not eligible for any leave type.</p>'}</div>`, '<div class="dialog-foot"><button class="primary" data-close>Close</button></div>');
+}
 function leavePage() {
   const pending = state.leaves.filter(l => l.status === 'pending').length;
   const LM = { clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>', check: '<path d="m5 12.5 4.2 4.2L19 7"/>', doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>', people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>', ok: '<circle cx="12" cy="12" r="9"/><path d="m8 12.3 2.8 2.8L16.5 9.4"/>', left: '<path d="m15 6-6 6 6 6"/>', right: '<path d="m9 6 6 6-6 6"/>' };
   const lmIcon = (k, cls = '') => `<svg class="lm-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${LM[k]}</svg>`;
   const lmCard = (k, title, value, foot) => `<div class="lm-card"><span class="lm-card-ico">${lmIcon(k)}</span><div><span>${title}</span><strong>${value}</strong><small>${foot}</small></div></div>`;
   let content = heading('Leave management', '<span class="lm-tagline">Time away, taken care of.</span>Review requests, track balances, and keep payroll in sync.') + `<div class="lm-cards">${lmCard('clock', 'Pending requests', pending, 'Ready for HR review')}${lmCard('check', 'Approved requests', state.leaves.filter(l => l.status === 'approved').length, 'Connected to payroll')}${lmCard('doc', 'Leave types', state.leaveTypes.length, 'Statutory and company benefits')}${lmCard('people', 'Paid leave types', state.leaveTypes.filter(t => t.paid).length, 'Eligibility verified per employee')}</div><div class="lm-tabs"><button data-tab="requests" class="${subtab === 'requests' ? 'active' : ''}">Leave requests <span class="lm-count">${state.leaves.length}</span></button><button data-tab="balances" class="${subtab === 'balances' ? 'active' : ''}">Balances</button><button data-tab="types" class="${subtab === 'types' ? 'active' : ''}">Leave policies</button></div>`;
-  if (subtab === 'balances') content += `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · Approved requests reserve days</span></div>${searchToolbar()}${table(['Employee', 'Leave type', 'Entitled', 'Carry-over', 'Used / reserved', 'Available'], filtered(balances).filter(b => state.employees.find(e => e.id === b.employeeId)?.leaveEligibility.includes(b.typeId)).map(b => [employee(b.employeeId), esc(state.leaveTypes.find(t => t.id === b.typeId)?.name), b.entitled, b.carry, b.used, badge(`${b.available} days`)]))}</section>`;
+  if (subtab === 'balances') content += `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · Approved requests reserve days</span></div>${searchToolbar()}${table(['Employee', 'Leave type', 'Entitled', 'Carry-over', 'Used / reserved', 'Available'], filtered(balances).filter(b => state.employees.find(e => e.id === b.employeeId)?.leaveEligibility.includes(b.typeId)).map(b => [`<button class="link-cell" data-leave-balance="${esc(b.employeeId)}" title="View leave balance details">${employee(b.employeeId)}</button>`, esc(state.leaveTypes.find(t => t.id === b.typeId)?.name), b.entitled, b.carry, b.used, badge(`${b.available} days`)]))}</section>`;
   else if (subtab === 'types') content += `<section class="panel"><div class="panel-head"><div><h2>Leave type configuration</h2><p>Statutory classification alone does not establish an employee’s entitlement.</p></div>${addButton('leaveTypes', 'Add leave type')}</div>${table(['Leave type', 'Category', 'Pay', 'Entitlement', 'Accrual', ''], state.leaveTypes.map(t => [esc(t.name), badge(t.category, 'neutral'), t.paid ? 'Paid' : 'Unpaid', `${t.entitledDays} days`, esc(t.accrual), editButton('leaveTypes', t.id)]))}</section>`;
   else {
     const canDecide = ['admin', 'hr'].includes(auth.user.role);
@@ -1112,6 +1130,7 @@ document.addEventListener('click', async event => {
       currentRun = await api(`/runs/${b.dataset.reverseRun}/reverse`, { reason }); await refresh(); render(); toast('Payroll reversed. Loan balances restored; the cutoff can be corrected and posted again.'); return;
     }
     if (b.dataset.otDecision) { overtimeDecisionDialog(b.dataset); return; }
+    if (b.dataset.leaveBalance) { leaveBalanceDialog(b.dataset.leaveBalance); return; }
     if (b.dataset.leaveDecision) {
       const decision = b.dataset.leaveDecision;
       const remarks = decision === 'approve' ? window.prompt('Approve this leave. Remarks for the employee (optional):', '') : window.prompt(decision === 'reject' ? 'Reason for rejecting (the employee will see this):' : 'Reason for cancelling this approved leave (credits will be restored):', '');

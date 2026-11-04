@@ -1626,3 +1626,18 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .lv-filters { grid-template-columns: minmax(200px, 1fr) repeat(3, minmax(150px, 190px)); }
 @media (max-width: 1200px) { .lv-filters { grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(120px, 160px)); } .lv-search { grid-column: auto; } }
 @media (max-width: 720px) { .lv-filters { grid-template-columns: 1fr 1fr; } .lv-search { grid-column: 1 / -1; } }
+
+/* Leave balances: clickable employee name and the per-type details window */
+.link-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.link-cell .name { color: #a91d29; text-decoration: underline; text-underline-offset: 3px; }
+.link-cell:hover .name, .link-cell:focus-visible .name { color: #7d1520; }
+.lb-type { border: 1px solid #eadfc4; border-radius: 12px; padding: 14px 16px; margin-top: 14px; }
+.lb-type-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lb-type-head h3 { margin: 0; font-size: 16px; }
+.lb-facts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.lb-facts div { background: #fffaf0; border-radius: 8px; padding: 8px 10px; }
+.lb-facts span { display: block; font-size: 11px; color: #777; }
+.lb-facts strong { font-size: 18px; }
+.lb-requests { list-style: none; margin: 0; padding: 0; }
+.lb-requests li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid #f1ead8; }
+@media (max-width: 760px) { .lb-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
