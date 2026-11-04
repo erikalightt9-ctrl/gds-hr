@@ -56,6 +56,8 @@ Open http://127.0.0.1:3401 and use `demo.admin` / `Demo-preview-only-2026`. This
 
 ## Access & deployment
 
+**Keep the public site online (office PC, once):** in PowerShell opened with *Run as administrator*, from this folder, run `powershell -ExecutionPolicy Bypass -File scripts\install-online.ps1`. It registers the Windows task "GDS HR Online", which starts `scripts\start-online.ps1` (HR app + Cloudflare tunnel, each restarted if it stops) at every Windows start-up before anyone signs in, and turns off sleep while plugged in. `-Remove` undoes it. Logs: `data\logs`.
+
 Roles: Admin configures policies and users; HR maintains employees, attendance, leave, and holidays; Payroll maintains authorized loans/adjustments and posts payroll; Viewer reads shared HR and payroll reports, not private profile sections. Viewer is not an employee self-service account. Government IDs and bank details are readable only by Admin/HR/Payroll. Personal information and emergency contacts are Admin/HR only. HR/Admin edit government IDs; Payroll/Admin edit bank and payroll settings. Restricted audit events follow the same permissions, enforced on the server.
 
 Passwords are salted with scrypt; browser sessions use HttpOnly/SameSite cookies, expire after eight hours, and require CSRF tokens for changes. Password changes revoke existing sessions. Login/setup attempts are rate-limited. Record inputs use strict server-side schemas. Audit events retain actor, timestamp, and before/after values. XLSX strings cannot execute as formulas.
