@@ -79,3 +79,12 @@ test('an undertime override (e.g. waived to 0) keeps credited time in step with 
   assert.equal(row.earnings.basic, 13000, 'nothing charged');
   assert.equal(row.creditedHours, 104); assert.equal(row.creditedDays, 13);
 });
+
+test('the example: 30 minutes late = 7.5 credited hours (0.9375 day); a full approved 30-minute offset restores 8 hours', () => {
+  const none = run(lateOn(state(), '2026-09-21', '09:30', { timeOut: '18:00' }));
+  assert.equal(none.creditedHours, 13 * 8 - 0.5); assert.equal(none.earnings.basic, 13000 - 62.5);
+  const offset = run(lateOn(state(), '2026-09-21', '09:30', { timeOut: '18:00', offsetMinutes: 30, explanation: 'Approved offset' }));
+  assert.equal(offset.creditedHours, 13 * 8); assert.equal(offset.creditedDays, 13); assert.equal(offset.earnings.basic, 13000);
+  const late = offset.late.find(l => l.lateMinutes);
+  assert.deepEqual([late.lateMinutes, late.approvedOffset, late.deductibleMinutes], [30, 30, 0], 'late, offset and remaining minutes visible to HR');
+});

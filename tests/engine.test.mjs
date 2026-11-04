@@ -23,15 +23,15 @@ test('NSD crosses midnight and excludes timed breaks', () => {
   assert.equal(nightMinutes('2026-09-01T22:00', '2026-09-02T02:00', []), 240);
   assert.equal(nightMinutes('2026-09-01T21:00', '2026-09-02T07:00', [{ start: '2026-09-02T01:00', end: '2026-09-02T02:00' }]), 420);
 });
-test('ordinary OT and lateness are independently traced; late time made up after the shift is offset', () => {
+test('ordinary OT and lateness are independently traced; staying after the shift is not an offset unless approved', () => {
   const s = fixture(); s.rules[0].graceMinutes = 0; s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })]; withOtherDays(s);
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15');
   const row = p.rows[0];
   assert.equal(row.earnings.regularOT, 426.14);
   assert.equal(row.deductions.late, undefined, 'no separate late deduction');
-  assert.equal(row.earnings.basic, 15000, 'the 15 late minutes are offset by staying after the scheduled end');
-  assert.equal(row.creditedDays, 11);
-  assert.equal(row.late[0].lateMinutes, 15); assert.equal(row.late[0].workedOffset, 15); assert.equal(row.late[0].deductibleMinutes, 0);
+  assert.equal(row.earnings.basic, 15000 - 42.61, 'the 15 late minutes lower credited time; staying late is not an approved offset');
+  assert.equal(row.creditedDays, 10.9688);
+  assert.equal(row.late[0].lateMinutes, 15); assert.equal(row.late[0].workedAfter, 15, 'shown to HR'); assert.equal(row.late[0].deductibleMinutes, 15);
   assert.equal(row.late[0].sourceId, '2026-09-01');
 });
 test('approved exception and offset protect covered late time', () => {
