@@ -352,6 +352,28 @@ function proofReviewCell(l) {
   const by = ['required', 'rejected'].includes(l.proofStatus) && l.proofNote ? `<small>${esc(l.proofNote)}</small>` : '';
   return `${badge(label, tone)} ${view}${by}${review}`;
 }
+// Leave requests list: a short note under the reason only when the proof needs attention (details open on click).
+function proofHint(l) {
+  if (['cancelled', 'rejected'].includes(l.status)) return '';
+  if (l.proofStatus === 'submitted') return '<small class="lm-proof-hint review">📎 Proof to review</small>';
+  if (['required', 'rejected'].includes(l.proofStatus)) return '<small class="lm-proof-hint wait">Proof needed</small>';
+  return '';
+}
+// One leave request in full: type, dates, days, reason and explanation, credits, decision, and the proof with its
+// actions (view, confirm / reject, ask for proof).
+function leaveDetailDialog(id) {
+  const l = state.leaves.find(x => x.id === id); if (!l) return;
+  const person = state.employees.find(e => e.id === l.employeeId), type = state.leaveTypes.find(t => t.id === l.typeId)?.name || l.typeId;
+  const bal = balances.find(b => b.employeeId === l.employeeId && b.typeId === l.typeId);
+  const [reason, ...rest] = String(l.reason || '').split(' — '), explanation = rest.join(' — ');
+  const dates = `${l.startDate}${l.endDate !== l.startDate ? ` to ${l.endDate}` : ''}${l.startTime || l.endTime ? ` · ${l.startTime || 'Start'} – ${l.endTime || 'End'}` : ''}`;
+  const facts = [['Leave type', type], ['Dates', dates], ['Days', `${l.days}${(l.partialDates || []).length ? ' (half day)' : ''}`], ['Available credits', bal ? (bal.perOccasion ? 'Per occasion' : `${bal.available} days`) : '—'], ['Status', l.status.charAt(0).toUpperCase() + l.status.slice(1)], ...(l.hrRemarks ? [['HR remarks', l.hrRemarks]] : [])];
+  openDialog(`Leave · ${person?.name || l.employeeId}`, `<div class="dialog-body leave-detail"><p class="sub">${esc(l.employeeId)} · <a href="/api/leaves/${esc(l.id)}.pdf" target="_blank" rel="noopener">Leave application PDF</a></p>
+    <div class="notice-rows">${facts.map(([k, v]) => `<div class="notice-row"><span>${k}</span><strong>${esc(String(v))}</strong></div>`).join('')}</div>
+    <section class="ld-block"><h3>Reason</h3><p class="ld-reason">${esc(reason || '—')}</p>${explanation ? `<p class="ld-text">${esc(explanation)}</p>` : ''}</section>
+    <section class="ld-block"><h3>Proof</h3>${proofReviewCell(l) || '<span class="legend">None</span>'}${!l.proofStatus && !l.documentReference && l.days >= 2 ? '<p class="legend">Leave of 2 days or more needs proof before it can be approved.</p>' : ''}</section></div>`,
+    '<div class="dialog-foot"><button class="primary" data-close>Close</button></div>');
+}
 // HR asks the employee for a supporting document on one leave request; approval waits until it is confirmed.
 function askForLeaveProof(id) {
   const l = state.leaves.find(x => x.id === id); if (!l) return;
@@ -403,13 +425,13 @@ function leavePage() {
       const decision = canDecide && l.status === 'pending' ? `<span class="row-actions"><button class="lm-btn primary" data-leave-decision="approve" data-id="${esc(l.id)}">Approve</button><button class="lm-btn" data-leave-decision="reject" data-id="${esc(l.id)}">Reject</button></span>` : canDecide && l.status === 'approved' ? `<button class="lm-btn" data-leave-decision="cancel" data-id="${esc(l.id)}">Cancel leave</button>` : '—';
       return `<tr data-lm-row data-lm-name="${esc(`${person?.name || ''} ${l.employeeId} ${type} ${l.reason || ''}`.toLowerCase())}" data-lm-status="${esc(l.status)}">
         <td><a class="lm-emp" href="/api/leaves/${esc(l.id)}.pdf" target="_blank" rel="noopener" title="Open the leave application PDF"><span class="lm-avatar">${esc(ini(person?.name || l.employeeId))}</span><span><strong>${esc(person?.name || l.employeeId)}</strong><small>${esc(l.employeeId)}</small></span></a></td>
-        <td>${esc(type)}</td><td class="lm-dates">${dates}</td><td>${l.days}</td><td class="lm-reason">${esc(l.reason || '—')}</td>
+        <td>${esc(type)}</td><td class="lm-dates">${dates}</td><td>${l.days}</td><td class="lm-reason"><button class="lm-reason-btn" data-leave-detail="${esc(l.id)}" title="View leave details and proof">${esc(l.reason || 'View details')}</button>${proofHint(l)}</td>
         <td>${bal ? (bal.perOccasion ? 'Per occasion' : `${bal.available} day${bal.available === 1 ? '' : 's'}`) : '—'}</td>
         <td><span class="lm-status lm-${STATUS_LOOK[l.status] || 'off'}"><i></i>${esc(l.status.charAt(0).toUpperCase() + l.status.slice(1))}</span></td>
-        <td>${proofReviewCell(l)}</td><td>${decision}</td></tr>`;
+        <td>${decision}</td></tr>`;
     }).join('');
     content += `<section class="lm-panel"><div class="lm-panel-head"><div><h2>Leave requests</h2><p>Manage employee time off and approvals.</p></div><div class="lm-filters"><label class="lm-search">${lmIcon('search')}<input type="search" data-lm-search placeholder="Search employees or keywords" aria-label="Search employees or keywords"></label><select data-lm-status aria-label="Status"><option value="">Status: All</option><option value="pending">Status: Pending</option><option value="approved">Status: Approved</option><option value="rejected">Status: Rejected</option><option value="cancelled">Status: Cancelled</option></select></div></div>
-      <div class="lm-table-wrap"><table class="lm-table"><thead><tr><th>Employee</th><th>Leave type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Available credits</th><th>Status</th><th>Proof</th><th>Decision</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="empty">No leave requests yet.</td></tr>'}</tbody></table></div>
+      <div class="lm-table-wrap"><table class="lm-table"><thead><tr><th>Employee</th><th>Leave type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Available credits</th><th>Status</th><th>Decision</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="empty">No leave requests yet.</td></tr>'}</tbody></table></div>
       <div class="lm-foot"><span data-lm-count>${list.length} request${list.length === 1 ? '' : 's'}</span><span class="lm-pager"><button disabled aria-label="Previous page">${lmIcon('left')}</button><span>1 of 1</span><button disabled aria-label="Next page">${lmIcon('right')}</button></span></div>
       <div class="lm-note">${lmIcon('ok')}Approved leave is automatically reflected in credits and payroll.</div></section>`;
   }
@@ -1121,13 +1143,15 @@ document.addEventListener('click', async event => {
       await api(`/leaves/${b.dataset.id}/decision`, { decision, remarks });
       await refresh(); render(); toast({ approve: 'Leave approved. Credits and payroll are updated.', reject: 'Leave rejected. The employee has been notified.', cancel: 'Leave cancelled and credits restored.' }[decision]); return;
     }
+    if (b.dataset.leaveDetail) { leaveDetailDialog(b.dataset.leaveDetail); return; }
     if (b.dataset.proofRequest) { askForLeaveProof(b.dataset.proofRequest); return; }
     if (b.dataset.proofReview) {
       const decision = b.dataset.decision;
       const note = decision === 'rejected' ? window.prompt('Why is this proof not accepted? The employee will see this message.') : '';
       if (note === null) return;
       await api(`/leaves/${b.dataset.proofReview}/proof-review`, { decision, note: note || '' });
-      await refresh(); render(); toast(decision === 'verified' ? 'Proof confirmed. You can now approve the leave.' : 'The employee was asked for a new proof.');
+      await refresh(); render(); if (dialog.open) leaveDetailDialog(b.dataset.proofReview);
+      toast(decision === 'verified' ? 'Proof confirmed. You can now approve the leave.' : 'The employee was asked for a new proof.');
     }
     if (b.hasAttribute('data-copy') && currentRun) {
       const rows = [['Employee ID', 'Employee Name', 'Monthly Salary', 'Working Days', 'Days Present', 'Days Credited', 'Late Minutes Not Offset', 'Leave Days / Notes', 'Overtime', 'Adjustment', '13th Month Pay', 'Special Holiday', 'Regular Holiday', 'Gross', 'Deductions', 'Net Salary', 'Loan Balance', 'Loan Date', 'Loan Terms'], ...currentRun.rows.map(r => [r.employeeId, r.employeeName, r.monthlySalary, r.workingDays, r.daysPresent, r.creditedDays ?? r.daysPresent, r.lateMinutesUnoffset ?? 0, `${r.leaveDays}: ${r.leaveNotes.join('; ')}`, r.earnings.regularOT + r.earnings.restOT + r.earnings.specialOT + r.earnings.regularHolidayOT + r.earnings.otherOT, r.earnings.additional + r.earnings.allowance, r.earnings.thirteenth, r.earnings.specialHoliday, r.earnings.regularHoliday, r.gross, r.totalDeductions, r.net, r.loanBalance, r.loanDeductions.map(l => l.startDate).join('; '), r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('; ')])];

@@ -112,3 +112,17 @@ test('open leave requests marked proof needed automatically (never by HR) are cl
     assert.equal(runMigrations(store).leaveProofOptional, 0, 'runs once');
   } finally { store.close(); }
 });
+
+test('leave of 2 days or more needs proof when applied, and cannot be approved without it', () => {
+  const store = fixture();
+  try {
+    const two = applyLeave(store, worker, { ...sick, startDate: '2026-09-21', endDate: '2026-09-22' });
+    assert.equal(two.days, 2); assert.equal(two.proofStatus, 'required'); assert.match(two.proofNote, /2 days or more/);
+    const approve = l => saveRecord(store, admin, 'leaves', { id: l.id, employeeId: l.employeeId, typeId: l.typeId, startDate: l.startDate, endDate: l.endDate, days: l.days, reason: l.reason, documentReference: l.documentReference, status: 'approved', eligibilityVerified: true });
+    assert.throws(() => approve(two), /supporting document is needed/);
+    const one = applyLeave(store, worker, { ...sick, startDate: '2026-09-23', endDate: '2026-09-23' });
+    assert.equal(one.proofStatus, '', 'a 1-day leave stays optional');
+    const withDoc = applyLeave(store, worker, { ...sick, startDate: '2026-09-24', endDate: '2026-09-25', documentId: upload(store).id });
+    assert.equal(withDoc.proofStatus, 'submitted', 'attached when applying');
+  } finally { store.close(); }
+});

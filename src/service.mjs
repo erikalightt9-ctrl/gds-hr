@@ -4,6 +4,8 @@ import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, 
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
+// Leave of this many days or more needs a supporting document (November 2026 policy); shorter leave only when HR asks.
+export const PROOF_FROM_DAYS = 2;
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }
 export const entityRoles = { employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], leaveTypes: ['admin'], holidays: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'], deductions: ['admin', 'hr'], rules: ['admin', 'hr'] };
 function overlaps(a, b, c, d) { return a <= d && b >= c; }
@@ -70,7 +72,7 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       if (!type) throw new AppError('Leave type does not exist.');
       if (!type.approvalRequired && value.status === 'pending') value.status = 'approved';
       const prior = state.leaves.find(l => l.id === value.id);
-      // A supporting document is optional; it is needed only after HR asks for it (Ask for proof).
+      // Proof is required for leave of PROOF_FROM_DAYS days or more; shorter leave needs it only when HR asks.
       value.proofStatus = prior?.proofStatus ?? '';
       for (const key of ['proofNote', 'proofReviewedBy', 'proofReviewedAt']) value[key] = prior?.[key] ?? '';
       // HR typing a new reference (e.g. a paper certificate received in person) counts as HR confirming it.
@@ -91,7 +93,8 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
         const eligibleOn = new Date(`${employee.startDate}T00:00:00Z`);
         eligibleOn.setUTCMonth(eligibleOn.getUTCMonth() + type.minServiceMonths);
         if (value.startDate < eligibleOn.toISOString().slice(0, 10)) throw new AppError('The minimum service requirement for this leave type has not been met.');
-        if (['required', 'rejected'].includes(value.proofStatus)) throw new AppError('HR asked for a supporting document for this leave. Wait for the employee to upload it and confirm it before approving.');
+        if (['required', 'rejected'].includes(value.proofStatus)) throw new AppError('A supporting document is needed for this leave. Wait for the employee to upload it and confirm it, or record the document received in Supporting document reference.');
+        if (value.days >= PROOF_FROM_DAYS && !value.proofStatus && !value.documentReference.trim()) throw new AppError(`Leave of ${PROOF_FROM_DAYS} days or more needs proof. Ask the employee for it, or record the document received in Supporting document reference.`);
         const without = { ...state, leaves: state.leaves.filter(l => l.id !== value.id) };
         if (type.balanceRequired) {
           const reservation = { ...value, countedDates: [] };   // partialDates kept: a half day reserves 0.5

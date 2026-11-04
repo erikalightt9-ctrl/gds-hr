@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { z } from 'zod';
-import { AppError, permit, saveRecord } from './service.mjs';
+import { AppError, permit, saveRecord, PROOF_FROM_DAYS } from './service.mjs';
 import { date, schemas } from './schema.mjs';
 import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, OT_BLOCK } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
@@ -155,7 +155,7 @@ export function applyLeave(store, actor, input) {
     if (split.invalidDate) throw new AppError(`The leave time on ${split.invalidDate} is outside your work schedule. Check the start and end times.`);
     const { countedDates, partialDates } = split;
     if (!countedDates.length) throw new AppError('Choose at least one eligible leave day.');
-    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, startTime: value.startTime, endTime: value.endTime, reason: value.reason, days: split.days, countedDates, partialDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : '', proofNote: '', proofReviewedBy: '', proofReviewedAt: '' };
+    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, startTime: value.startTime, endTime: value.endTime, reason: value.reason, days: split.days, countedDates, partialDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : split.days >= PROOF_FROM_DAYS ? 'required' : '', proofNote: split.days >= PROOF_FROM_DAYS && !value.documentId ? `Leave of ${PROOF_FROM_DAYS} days or more needs a supporting document.` : '', proofReviewedBy: '', proofReviewedAt: '' };
     state.leaves.push(leave); state.version++; store.write(state); store.log(actor, 'apply', 'leaves', leave.id, null, leave); return leave;
   });
 }

@@ -57,7 +57,8 @@ test('leave approval requires eligibility, balance, non-overlap and no recorded 
   l.eligibilityVerified = true;
   saveRecord(db, admin, 'leaves', l);   // a supporting document is optional unless HR asks for one
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave2' }), /overlap/);
-  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /Insufficient/);
+  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /2 days or more needs proof/, 'leave of 2 days or more needs proof');
+  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7, documentReference: 'MEDCERT-1' }), /Insufficient/);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave4', startDate: '2026-09-01', endDate: '2026-09-01' }), /conflicts/);
   assert.equal(saveRecord(db, admin, 'leaves', { ...l, days: 2 }).days, 1, 'days are derived from the dates, not typed');
   deleteRecord(db, admin, 'leaves', l.id);
@@ -105,7 +106,7 @@ test('calendar-day leave crosses years and consumes annual balances by actual da
   const db = new Store(':memory:'); const s = completeState();
   const t = s.leaveTypes.find(t => t.id === 'vacation'); t.dayBasis = 'calendar'; t.entitledDays = 10;
   db.write(s);
-  const leave = { id: 'cross-year', employeeId: 'EMP-001', typeId: 'vacation', startDate: '2026-12-30', endDate: '2027-01-03', days: 5, reason: 'Calendar test', documentReference: '', status: 'approved', eligibilityVerified: true };
+  const leave = { id: 'cross-year', employeeId: 'EMP-001', typeId: 'vacation', startDate: '2026-12-30', endDate: '2027-01-03', days: 5, reason: 'Calendar test', documentReference: 'HR-DOC-5', status: 'approved', eligibilityVerified: true };
   saveRecord(db, admin, 'leaves', leave);
   assert.equal(db.read().leaves[0].days, 5); db.close();
 });
