@@ -1,6 +1,6 @@
 // Attendance → Overtime applications (HR / Admin decide; Payroll reads): every application with filters, the hours
 // attendance shows inside the filed period, flags to settle before posting, a review window and HR filing.
-import { who } from './hr-common.js';
+import { who, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS } from './hr-common.js';
 
 const STATUS = { pending: ['Pending', 'pending'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'], cancelled: ['Cancelled', 'neutral'] };
 const fmtDay = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -97,15 +97,16 @@ export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, c
         <label class="field">Date<input type="date" name="date" required></label><label class="field">Unpaid break (minutes)<input type="number" name="breakMinutes" min="0" max="480" step="5" value="0"></label>
         <label class="field">Start<input type="time" name="startTime" required></label><label class="field">End<input type="time" name="endTime" required></label>
         <p class="full ot-total" data-ot-total>—</p>
-        <label class="field full">Work done / reason<textarea name="reason" rows="2" required minlength="3" maxlength="1000"></textarea></label>
+        ${reasonPicker(OVERTIME_REASONS, '', { detailsLabel: 'Work done / explanation' })}
         <p class="full legend">Recorded as approved. The employee is notified.</p></form>`,
       '<div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary" form="ot-hr-file">Record approved overtime</button></div>');
     const form = dialog.querySelector('#ot-hr-file');
+    bindReasonPickers(form.parentElement);
     form.addEventListener('input', () => { form.querySelector('[data-ot-total]').textContent = describeTotal(form.elements.startTime.value, form.elements.endTime.value, form.elements.breakMinutes.value); });
     form.onsubmit = async event => {
       event.preventDefault(); const f = new FormData(form);
       try {
-        await api('/overtime-requests', { employeeId: f.get('employeeId'), date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), breakMinutes: Number(f.get('breakMinutes') || 0), reason: String(f.get('reason')).trim() });
+        await api('/overtime-requests', { employeeId: f.get('employeeId'), date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), breakMinutes: Number(f.get('breakMinutes') || 0), reason: readReason(form) });
         dialog.close(); await fill(box); onChanged?.(); toast('Overtime recorded as approved.');
       } catch (error) { toast(error.message); }
     };

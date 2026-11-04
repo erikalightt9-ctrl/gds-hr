@@ -1,5 +1,5 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
-import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS } from './hr-common.js';
 import { describeTotal } from './overtime-ui.js';
 
 export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message) }) {
@@ -82,7 +82,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
         <label class="field">Start of overtime<input type="time" name="startTime" required value="${esc(e.startTime || '')}"></label>
         <label class="field">End of overtime<input type="time" name="endTime" required value="${esc(e.endTime || '')}"></label>
         <div class="field full ot-total"><strong data-ot-hours>—</strong><span class="ot-night" data-ot-night></span><small>An end time earlier than the start counts as the next day.</small></div>
-        <label class="field full">Work to be done / reason<textarea name="reason" rows="2" required minlength="3" maxlength="1000">${esc(e.reason || '')}</textarea></label>
+        ${reasonPicker(OVERTIME_REASONS, e.reason || '', { detailsLabel: 'Work to be done / explanation' })}
         <label class="field full">Supporting attachment (optional)<input type="file" name="file" accept="application/pdf,image/png,image/jpeg"><small>${e.documentId ? 'An attachment is already on file; choose a file only to replace it. ' : ''}PDF, PNG or JPEG · up to 5 MB</small></label>
         <div class="full ot-form-actions"><button class="primary">${editing ? 'Save changes' : 'Submit for approval'}</button>${editing ? '<button type="button" data-ot-edit-cancel>Discard changes</button>' : ''}</div></form>
       ${nightSummary}</section>
@@ -102,7 +102,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       let night = 0; for (let m = start; m < start + span; m++) { const hr = Math.floor((m % 1440) / 60); if (hr >= 22 || hr < 6) night++; }
       form.querySelector('[data-ot-night]').textContent = night ? `🌙 Up to ${Math.round(night / 60 * 100) / 100} h night differential (10 PM – 6 AM), computed automatically` : '';
     };
-    form.addEventListener('input', compute); compute();
+    form.addEventListener('input', compute); compute(); bindReasonPickers(box);
     form.onsubmit = async event => {
       event.preventDefault(); const f = new FormData(form), file = form.elements.file.files[0], submit = form.querySelector('button.primary');
       submit.disabled = true;
@@ -113,7 +113,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
           const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Unable to read the file.')); reader.readAsDataURL(file); });
           documentId = (await api('/me/documents', { type: 'Leave Supporting', name: file.name, mime: file.type, data, expiry: '', remarks: 'Overtime support' })).id;
         }
-        const body = { date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), breakMinutes: Number(f.get('breakMinutes') || 0), reason: String(f.get('reason')).trim(), documentId };
+        const body = { date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), breakMinutes: Number(f.get('breakMinutes') || 0), reason: readReason(form), documentId };
         const saved = await api(editing ? `/hr/me/overtime/${editing.id}` : '/hr/me/overtime', body);
         confirm(editing ? 'Overtime application updated' : 'Overtime submitted', `Your overtime for <strong>${esc(saved.date)}</strong> (${esc(period(saved))}, ${saved.hours} h) was ${editing ? 'updated' : 'sent to HR'}.<br>Status: <strong>Pending HR approval</strong>.`);
         await fill('overtime201', box);

@@ -1,5 +1,6 @@
 import { messagesButton } from './messages.js';
 import { noticeDetail } from './notice-detail.js';
+import { reasonPicker, bindReasonPickers, readReason, LEAVE_REASONS } from './hr-common.js';
 const componentNames = { basic: 'Basic salary', leavePay: 'Leave pay', regularOT: 'Regular overtime', restDay: 'Rest day pay', restOT: 'Rest day overtime', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday overtime', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Holiday overtime', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday overtime', allowance: 'Allowances', additional: 'Additional pay', thirteenth: '13th month pay', late: 'Late deduction', undertime: 'Undertime', absence: 'Unpaid leave / absence', tax: 'Withholding tax', loans: 'Loan deductions', other: 'Other authorized deductions', SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' };
 // Common reasons for an attendance explanation (late, undertime, missed clock-in/out). "Other" lets the employee type one.
 const EXPLANATION_REASONS = ['Traffic / transportation delay', 'Medical / health reason', 'Family emergency', 'Official business / client meeting', 'Work from home / field work', 'Forgot to time in or time out', 'System or device problem (GPS / app / internet)', 'Weather / natural calamity', 'Approved schedule change'];
@@ -136,7 +137,7 @@ export function createPortal(ctx) {
     return api('/me/documents', { type: 'Leave Supporting', name: file.name, mime: file.type, data, expiry: '', remarks: 'Leave proof' });
   }
   function leaveContent(data) {
-    return `<section class="panel"><div class="panel-head"><h2>Apply for leave</h2></div><form data-employee-leave><div class="panel-body form-grid"><label class="field">Leave type<select name="typeId" required>${data.balances.map(b => `<option value="${esc(b.typeId)}">${esc(b.name)}</option>`).join('')}</select></label>${field('startDate', 'Start date', 'date', today(), 'required')}${field('startTime', 'Start time', 'time', data.today?.scheduledIn || '09:00', 'required')}${field('endDate', 'End date', 'date', today(), 'required')}${field('endTime', 'End time', 'time', data.today?.scheduledOut || '18:00', 'required')}<p class="field-hint full">For a half day, set the times (e.g. 14:00 to 18:00). About half a workday or less counts as 0.5 day.</p>${field('reason', 'Reason', 'text', '', 'required minlength="3" maxlength="2000"')}<label class="field">Proof / supporting document<input type="file" name="proofFile" accept="application/pdf,image/png,image/jpeg"><small class="field-hint">Optional. Attach one if you have it; HR will ask if a document is needed.</small></label></div><div class="panel-foot"><button class="primary" ${data.employee.draft || !data.balances.length ? 'disabled' : ''}>Submit leave request</button></div></form></section><section class="panel"><div class="panel-head"><h2>My leave applications</h2>${downloads('my-leaves')}</div>${(() => {
+    return `<section class="panel"><div class="panel-head"><h2>Apply for leave</h2></div><form data-employee-leave><div class="panel-body form-grid"><label class="field">Leave type<select name="typeId" required>${data.balances.map(b => `<option value="${esc(b.typeId)}">${esc(b.name)}</option>`).join('')}</select></label>${field('startDate', 'Start date', 'date', today(), 'required')}${field('startTime', 'Start time', 'time', data.today?.scheduledIn || '09:00', 'required')}${field('endDate', 'End date', 'date', today(), 'required')}${field('endTime', 'End time', 'time', data.today?.scheduledOut || '18:00', 'required')}<p class="field-hint full">For a half day, set the times (e.g. 14:00 to 18:00). About half a workday or less counts as 0.5 day.</p>${reasonPicker(LEAVE_REASONS)}<label class="field">Proof / supporting document<input type="file" name="proofFile" accept="application/pdf,image/png,image/jpeg"><small class="field-hint">Optional. Attach one if you have it; HR will ask if a document is needed.</small></label></div><div class="panel-foot"><button class="primary" ${data.employee.draft || !data.balances.length ? 'disabled' : ''}>Submit leave request</button></div></form></section><section class="panel"><div class="panel-head"><h2>My leave applications</h2>${downloads('my-leaves')}</div>${(() => {
       // Dates · time · type of leave · days · status (newest first); HR remarks under the status, proof / cancel at the end.
       const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
       const STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
@@ -232,6 +233,7 @@ export function createPortal(ctx) {
     if (isHr) ctx.portalHr.fill(tab, app.querySelector('#portal-hr'));
     if (tab === 'dashboard') ctx.portalHr?.celebrations(app.querySelector('.employee-main'));
     ctx.portalHr?.compliance(app, tab === 'dashboard');
+    bindReasonPickers(app);
     app.querySelectorAll('form').forEach(form => { form.oninput = () => { dirty = true; }; form.onchange = () => { dirty = true; }; form.onsubmit = submitForm; });
     app.querySelector('[data-reason-select]')?.addEventListener('change', event => { const other = app.querySelector('[data-reason-other]'); const show = event.target.value === 'Other'; other.classList.toggle('hidden', !show); other.querySelector('input').required = show; });
     async function submitForm(event) {
@@ -241,6 +243,7 @@ export function createPortal(ctx) {
         const values = Object.fromEntries(new FormData(form));
         if (form.hasAttribute('data-employee-leave')) {
           const file = form.elements.proofFile?.files[0]; delete values.proofFile;
+          values.reason = readReason(values); delete values.reasonChoice; delete values.reasonOther; delete values.reasonDetails;
           if (file) values.documentId = (await uploadProof(file)).id;
           await api('/me/leaves', values);
           const typeName = data.balances?.find(x => x.typeId === values.typeId)?.name || 'Leave';
@@ -347,6 +350,18 @@ export function createPortal(ctx) {
     panel.querySelector('[data-lv-count]').textContent = `${shown} employee${shown === 1 ? '' : 's'} total`;
   };
   for (const type of ['input', 'change']) document.addEventListener(type, e => { const panel = e.target.closest?.('.lv'); if (panel && e.target.matches('[data-lv-search], [data-lv-status], [data-lv-loc], [data-lv-company]')) filterLive(panel); });
+  // Live attendance → Reason: today's out-of-office, late explanation, leave and overtime reasons for one employee,
+  // each with its explanation, attachment and leave proof.
+  const PROOF = { required: 'HR asked for a document', submitted: 'Proof submitted · awaiting HR', verified: 'Proof confirmed by HR', rejected: 'New proof requested' };
+  function showReasons(e) {
+    const ICON = { 'out-of-office': '📍', late: '⏰', leave: '🌴', overtime: '⏱️' };
+    const block = r => `<section class="lv-reason-card"><div class="lv-reason-card-head"><strong>${ICON[r.kind] || '📝'} ${esc(r.title)}</strong>${r.status ? `<span class="badge ${r.status === 'Approved' ? '' : r.status === 'Rejected' ? 'rejected' : 'pending'}">${esc(r.status)}</span>` : ''}</div>
+      <p class="lv-reason-label">${esc(r.label)}</p>${r.detail ? `<p class="legend">${esc(r.detail)}</p>` : ''}
+      <p class="lv-reason-text">${r.explanation ? esc(r.explanation) : '<span class="legend">No further explanation given.</span>'}</p>
+      ${r.kind === 'leave' && r.proof ? `<p class="legend">${esc(PROOF[r.proof] || r.proof)}${r.proofNote ? ` · ${esc(r.proofNote)}` : ''}</p>` : ''}
+      ${r.documentId ? `<a class="button" href="/api/documents/${esc(r.documentId)}/content" target="_blank" rel="noopener">📎 ${r.kind === 'leave' ? 'View proof of leave' : 'View attachment'}</a>` : ''}</section>`;
+    openDialog(`Reasons today · ${e.name}`, `<div class="dialog-body"><p class="sub">${esc(e.employeeId)} · ${esc(e.status)}${e.actualIn ? ` · in ${esc(e.actualIn)}` : ''}${e.actualOut ? ` · out ${esc(e.actualOut)}` : ''}</p>${(e.reasons || []).map(block).join('')}</div>`, '<div class="dialog-foot"><button class="primary" data-close>Close</button></div>');
+  }
   function live(data, { countsOnly = false } = {}) {
     const statuses = ['All', 'Present', 'Late', 'Absent', 'On leave', 'Missing time out'];
     const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => e.status === s).length);
@@ -362,6 +377,7 @@ export function createPortal(ctx) {
         <td><span class="lv-pill lv-${look}">${icon(pill)}${esc(e.status)}</span></td>
         <td class="lv-time">${esc(e.actualIn || '—')}</td><td class="lv-time">${esc(e.actualOut || '—')}</td>
         <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}" title="${esc(ev.place || 'View location')}">${icon('pin')}<span>${esc(ev.atOffice ? 'Office' : ev.place ? ev.place.split(',').slice(0, 2).join(',') : 'View location')}</span></button>` : '<span class="lv-muted">No location</span>'}</td>
+        <td class="lv-reasons">${(e.reasons || []).length ? `<button class="lv-reason" data-live-reason="${esc(e.employeeId)}" title="View the explanation, attachments and proof">${(e.reasons || []).slice(0, 2).map(r => `<span class="lv-reason-chip lv-reason-${esc(r.kind)}">${esc(r.label)}</span>`).join('')}${e.reasons.length > 2 ? `<span class="lv-reason-more">+${e.reasons.length - 2}</span>` : ''}</button>` : '<span class="lv-muted">—</span>'}</td>
         <td class="lv-requests" data-lv-req="${esc(e.employeeId)}">${requests.join('') || '<span class="lv-muted">—</span>'}</td></tr>`;
     };
     const html = `<section class="panel live-panel lv">
@@ -371,7 +387,7 @@ export function createPortal(ctx) {
         <select data-lv-company aria-label="Subsidiary"><option value="">All subsidiaries</option>${[...new Set([...(data.companies || []), ...data.employees.map(e => e.department)].filter(Boolean))].sort().map(c => `<option>${esc(c)}</option>`).join('')}</select>
         <select data-lv-status aria-label="Status"><option value="">Status</option>${[...new Set(data.employees.map(e => e.status))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select>
         <select data-lv-loc aria-label="Location"><option value="">Location</option><option value="yes">With location</option><option value="no">No location</option></select></div>
-      <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Action</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="6" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
+      <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Reason</th><th>Action</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="7" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
       <p class="lv-foot" data-lv-count>${filtered.length} employee${filtered.length === 1 ? '' : 's'} total</p></section>`;
     if (!countsOnly) return html;
     // Dashboard: today's attendance at a glance.
@@ -433,6 +449,7 @@ export function createPortal(ctx) {
     }
     if (button.dataset.cancelLeave) { await api(`/me/leaves/${button.dataset.cancelLeave}/cancel`, {}); await refresh(); render(); confirmBox('Leave request cancelled', 'Your pending leave request was cancelled. No leave credits were used.'); }
     if (button.dataset.ownPayslip) { currentPayslip = await api(`/me/payslips/${button.dataset.ownPayslip}`); render(); }
+    if (button.dataset.liveReason) { const person = liveData?.employees?.find(x => x.employeeId === button.dataset.liveReason); if (person) showReasons(person); return; }
     if (button.dataset.location) { const event = [...(historyOverride || employeeData?.history || []), ...(liveData?.history || [])].find(e => e.id === button.dataset.location); if (event) map(event); }
     if (button.hasAttribute('data-earlier-history')) { const current = historyOverride || employeeData.history; const earlier = await api(`/me/history?before=${encodeURIComponent(current.at(-1).id)}`); historyOverride = [...current, ...earlier]; historyEnd = earlier.length < 200; render(); }
     if (button.dataset.liveFilter) { liveFilter = button.dataset.liveFilter; render(); }

@@ -147,3 +147,27 @@ export function bindCelebrationPhotos(root) {
 let staffNameMap = {};
 export const setStaffNames = map => { staffNameMap = map || {}; };
 export const who = value => { const text = String(value ?? ''), m = text.match(/^(\S+)(.*)$/); return m && staffNameMap[m[1]] ? `${staffNameMap[m[1]]}${m[2]}` : text; };
+
+// Reason picker shared by employee forms (leave, overtime): a dropdown of usual reasons with "Other", and an explanation
+// box. Saved as one text "Reason — explanation" so the reason can be shown short (Live attendance) and in full on click.
+export const LEAVE_REASONS = ['Personal matter', 'Illness / medical', 'Medical appointment', 'Family emergency', 'Vacation / rest', 'Bereavement', 'Government or legal errand', 'School / child-related'];
+export const OVERTIME_REASONS = ['Month-end / cut-off deadline', 'Client or project deadline', 'Covering for an absent colleague', 'System maintenance / deployment', 'Inventory or audit', 'Travel / driving assignment', 'Company event'];
+const escText = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+export function reasonPicker(choices, value = '', { label = 'Reason', detailsLabel = 'Explanation' } = {}) {
+  const [choice, ...rest] = String(value || '').split(' — '), known = choices.includes(choice), other = value && !known ? choice : '';
+  return `<label class="field">${label}<select name="reasonChoice" data-pick-select required><option value="">Choose a reason…</option>${choices.map(c => `<option ${c === choice ? 'selected' : ''}>${escText(c)}</option>`).join('')}<option value="Other" ${other ? 'selected' : ''}>Other (please specify)</option></select></label>
+    <label class="field ${other ? '' : 'hidden'}" data-pick-other>Other reason<input name="reasonOther" maxlength="200" value="${escText(other)}" ${other ? 'required' : ''}></label>
+    <label class="field full">${detailsLabel}<textarea name="reasonDetails" rows="2" required minlength="3" maxlength="1500" placeholder="Explain briefly">${escText(known || other ? rest.join(' — ') : value)}</textarea></label>`;
+}
+export function bindReasonPickers(root) {
+  root.querySelectorAll('[data-pick-select]').forEach(select => select.addEventListener('change', () => {
+    const other = select.closest('form').querySelector('[data-pick-other]'), show = select.value === 'Other';
+    other.classList.toggle('hidden', !show); other.querySelector('input').required = show;
+  }));
+}
+// Reads the picker from a form (or plain values) into "Reason — explanation".
+export function readReason(values) {
+  const get = k => String((values.elements ? values.elements[k]?.value : values[k]) ?? '').trim();
+  const choice = get('reasonChoice') === 'Other' ? get('reasonOther') : get('reasonChoice');
+  return [choice, get('reasonDetails')].filter(Boolean).join(' — ');
+}

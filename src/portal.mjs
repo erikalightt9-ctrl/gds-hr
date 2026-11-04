@@ -9,6 +9,7 @@ import { networkStatus, inOfficeArea } from './office-network.mjs';
 import { lateBy, graceFor } from './late-incidents.mjs';
 import { explanationsDue, EXPLAIN_AFTER_MINUTES } from './late-explanations.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
+import { reasonsFor } from './live-reasons.mjs';
 
 export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default('') }).strict();
 const note = z.string().trim().min(3).max(2000);
@@ -317,7 +318,8 @@ export function liveDashboard(store, actor, now = new Date()) {
   const state = store.read();
   // Only people who clock in: not drafts (incomplete or remittance-only profiles such as the CEO), not archived, not separated.
   // Inactive employees (resigned, separated, set inactive) are not listed.
-  const employees = state.employees.filter(e => !e.draft && !e.archived && e.active !== false && (!e.endDate || e.endDate >= local(now).slice(0, 10))).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now) })).filter(e => e.status !== 'Inactive');
+  const day = local(now).slice(0, 10);
+  const employees = state.employees.filter(e => !e.draft && !e.archived && e.active !== false && (!e.endDate || e.endDate >= day)).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now), reasons: reasonsFor(store, state, e.id, day) })).filter(e => e.status !== 'Inactive');
   const history = withPlace(store, store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data)));
   const companies = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').departments || []; } catch { return []; } })();
   return { companies, employees, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
