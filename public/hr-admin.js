@@ -138,7 +138,7 @@ export function createAdmin(ctx) {
     box.addEventListener('click', event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-net-add')) show({ action: 'add-current', label: 'Office Wi-Fi' });
-      if (b.dataset.netRemove && window.confirm(`Remove ${b.dataset.netRemove}? Time in from that network will need Out of office.`)) show({ action: 'remove', ip: b.dataset.netRemove });
+      if (b.dataset.netRemove && window.confirm(`Remove ${b.dataset.netRemove}? Time in from that network will need Off-site work.`)) show({ action: 'remove', ip: b.dataset.netRemove });
     });
     await show();
   }

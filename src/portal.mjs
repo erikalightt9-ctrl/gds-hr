@@ -56,10 +56,10 @@ export function geofence(reading, workplace) {
 }
 export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
-  // Office Wi-Fi rule: time in / out from the office network; anywhere else it is "Out of office" with a reason for HR.
+  // Office Wi-Fi rule: time in / out from the office network; anywhere else it is "Off-site work" with a reason for HR.
   const network = networkStatus(store, ip);
   const officeArea = inOfficeArea(store, value.latitude, value.longitude, value.accuracy);
-  if (value.mode === 'office' && network.configured && !network.office && !officeArea) throw new AppError('You are not at the office (not on the office Wi-Fi and your location is outside the office). Choose Out of office and give the reason.');
+  if (value.mode === 'office' && network.configured && !network.office && !officeArea) throw new AppError('You are not at the office (not on the office Wi-Fi and your location is outside the office). Choose Off-site work and give the reason.');
   if (value.mode === 'outside' && value.reason.length < 5) throw new AppError('Give the reason you are out of the office (at least 5 characters).');
   return store.transaction(() => {
     const retry = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(value.requestId);
@@ -101,7 +101,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
         store.notify(null, `${employee.id} ${employee.name}: timed in ${lateMin} minutes late on ${workDate}. Explanation required.`);
       }
     }
-    store.notify(null, value.mode === 'outside' ? `${employee.id}: out of office time ${value.kind} at ${event.time}. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
+    store.notify(null, value.mode === 'outside' ? `${employee.id}: off-site work time ${value.kind} at ${event.time}. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
     store.log(actor, `time-${value.kind}`, 'clock', event.id, null, event);
     return event;
   });

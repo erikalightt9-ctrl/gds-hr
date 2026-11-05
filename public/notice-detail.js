@@ -8,7 +8,7 @@ const statusText = status => STATUS[status] || status || '';
 // [pattern, title, icon, portal tab, details(match, data, notice) → [label, value][]]
 const KINDS = [
   [/^Time (in|out) recorded at (\d{2}:\d{2})/, 'Time in / out', '🕒', 'attendance', (m, data, n) => clockRows(data, manilaDate(n.at), m[1], m[2])],
-  [/out-of-office time (in|out) on (\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2}) was (\w+)/i, 'Out of office time in / out', '📍', 'attendance', (m, data) => [...clockRows(data, m[2], m[1], m[3]), ['HR decision', m[4][0].toUpperCase() + m[4].slice(1)]]],
+  [/out-of-office time (in|out) on (\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2}) was (\w+)/i, 'Off-site work time in / out', '📍', 'attendance', (m, data) => [...clockRows(data, m[2], m[1], m[3]), ['HR decision', m[4][0].toUpperCase() + m[4].slice(1)]]],
   [/HR updated attendance for (\d{4}-\d{2}-\d{2})/, 'Attendance updated by HR', '🕒', 'attendance', (m, data) => attendanceRows(data, m[1])],
   [/explanation|late on \d{4}/i, 'Attendance explanation', '📝', 'explanations', (m, data, n) => explanationRows(data, n.message.match(DATE)?.[1])],
   [/leave/i, 'Leave', '🌴', 'leave', (m, data, n) => leaveRows(data, n.message.match(DATE)?.[1])],
@@ -26,7 +26,7 @@ const TAB_LABEL = { attendance: 'Attendance', explanations: 'Attendance explanat
 function clockRows(data, date, kind, time) {
   const event = (data.history || []).find(e => e.workDate === date && e.kind === kind && e.time === time) || (data.history || []).find(e => e.kind === kind && e.time === time);
   if (!event) return [['Date', date], [kind === 'out' ? 'Time out' : 'Time in', time]];
-  return [['Date', event.workDate], [kind === 'out' ? 'Time out' : 'Time in', event.time], ['Where', event.outOfOffice ? 'Out of office' : event.atOffice ? 'Office' : 'Recorded'],
+  return [['Date', event.workDate], [kind === 'out' ? 'Time out' : 'Time in', event.time], ['Where', event.outOfOffice ? 'Off-site work' : event.atOffice ? 'Office' : 'Recorded'],
     ...(event.place ? [['Location', event.place]] : []), ...(event.reason ? [['Reason', event.reason]] : [])];
 }
 function attendanceRows(data, date) {

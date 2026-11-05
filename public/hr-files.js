@@ -210,7 +210,7 @@ export function createFiles(ctx) {
   function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Subsidiary', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
   // Attendance history for one month: recorded attendance and approved leave, newest first.
   let attMonth = '';
-  // Time in / out records (out of office: reason, time recorded, location), loaded per employee and month.
+  // Time in / out records (off-site work: reason, time recorded, location), loaded per employee and month.
   const clockCache = new Map();
   function clockEventsHtml(id, month) {
     const key = `${id}|${month}`;
@@ -224,7 +224,7 @@ export function createFiles(ctx) {
     const away = list.filter(e => e.outOfOffice);
     const where = e => (e.latitude === null || e.latitude === undefined ? 'No GPS reading' : `<a href="https://www.google.com/maps/search/?api=1&query=${e.latitude},${e.longitude}" target="_blank" rel="noopener noreferrer">${esc(e.place || `${e.latitude}, ${e.longitude}`)}</a><small> ±${esc(e.accuracy)} m</small>`);
     const stampOf = iso => new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
-    return `<h3>Out of office time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
+    return `<h3>Off-site work time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
   }
   function attendanceHtml(id) {
     const state = ctx.getState(), month = attMonth || ctx.today().slice(0, 7);

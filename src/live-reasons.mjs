@@ -11,7 +11,7 @@ export function reasonsFor(store, state, employeeId, day) {
   const events = store.db.prepare('SELECT data FROM clock_events WHERE employee_id=? AND work_date=? ORDER BY rowid').all(employeeId, day).map(r => JSON.parse(r.data));
   for (const e of events.filter(x => x.outOfOffice)) {
     const r = split(e.reason);
-    reasons.push({ kind: 'out-of-office', title: `Out of office time ${e.kind}`, label: r.label || 'Out of office', explanation: r.explanation || e.reason || '', detail: `Time ${e.kind} at ${e.time}`, status: '', documentId: '' });
+    reasons.push({ kind: 'out-of-office', title: `Off-site work time ${e.kind}`, label: r.label || 'Off-site work', explanation: r.explanation || e.reason || '', detail: `Time ${e.kind} at ${e.time}`, status: '', documentId: '' });
   }
   const explanation = store.db.prepare('SELECT data FROM attendance_explanations WHERE employee_id=? ORDER BY rowid DESC').all(employeeId).map(r => JSON.parse(r.data)).find(x => x.date === day && x.status !== 'rejected');
   if (explanation) reasons.push({ kind: 'late', title: 'Late arrival explanation', label: explanation.reason || 'Late', explanation: explanation.explanation || '', detail: explanation.requestedOffset ? `Requested offset ${explanation.requestedOffset} min` : '', status: STATUS[explanation.status] || explanation.status, documentId: document(explanation.documentId) });
