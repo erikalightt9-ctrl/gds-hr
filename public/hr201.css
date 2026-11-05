@@ -1745,3 +1745,18 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 @media (max-width: 900px) { .tb-account .user-meta { display: none; } .tb-menu { left: 0; right: auto; max-width: calc(100vw - 24px); } }
 
 .pm-row:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Today's attendance: Office attendance and Off-site work as two separate sections. */
+.att-mode { margin-top: 14px; padding: 14px; border: 1px solid #efe4d2; border-radius: 16px; background: #fffdf8; }
+.att-mode h3 { margin: 0 0 6px; font-size: 16px; }
+.att-mode .net-status { margin: 0 0 8px; }
+.att-mode .clock-btn:disabled { opacity: .5; cursor: not-allowed; }
+.att-offsite .legend { margin: 0 0 4px; }
+.oof-loc { padding: 12px; border-radius: 12px; background: #faf6ee; }
+.oof-label { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #8f1420; }
+.oof-address { margin: 4px 0 8px; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.oof-loc textarea { width: 100%; margin: 6px 0; }
+.oof-loc .loc-map { margin: 8px 0; }
+.oof-warn { margin: 6px 0; color: #8f1420; font-size: 14px; }
+.oof-confirm { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.oof-error { margin: 0; padding: 8px 10px; border-radius: 10px; background: #fdecee; color: #8f1420; }

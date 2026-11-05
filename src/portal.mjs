@@ -6,12 +6,35 @@ import { date, schemas } from './schema.mjs';
 import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, autoPresentRecord, OT_BLOCK } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 import { networkStatus, inOfficeArea } from './office-network.mjs';
+import { cachedAddress, reverseGeocode, DEFAULT_ACCURACY_LIMIT } from './geocode.mjs';
 import { lateBy, graceFor } from './late-incidents.mjs';
 import { explanationsDue, EXPLAIN_AFTER_MINUTES } from './late-explanations.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 import { reasonsFor } from './live-reasons.mjs';
 
-export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default('') }).strict();
+export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default(''),
+  // Off-site work: the address shown to the employee and confirmed (or corrected) by them; the device connection as the
+  // browser reports it (Android only; empty elsewhere).
+  address: z.string().trim().max(500).default(''), addressConfirmed: z.boolean().default(false),
+  connection: z.object({ type: z.string().trim().max(30).default(''), effectiveType: z.string().trim().max(10).default('') }).strict().nullable().default(null) }).strict();
+export const OFFICE_ONLY_MESSAGE = 'Office attendance is only available when connected to the company\u2019s authorized office Wi-Fi network. If you are working outside the office, use Off-site work.';
+const normal = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// Signals for HR review on a clock event. Browsers cannot report mock-location apps, so suspicious readings are
+// flagged instead: 0 m accuracy, accuracy above the limit, a corrected or typed address, impossible travel.
+export function clockFlags(value, { limit, detected, previous, now }) {
+  const flags = [];
+  if (value.accuracy === 0) flags.push('GPS accuracy reported as 0 m (possible simulated location)');
+  if (value.mode === 'outside') {
+    if (value.accuracy > limit) flags.push(`Low GPS accuracy: \u00b1${Math.round(value.accuracy)} m (limit ${limit} m)`);
+    if (!detected) flags.push('Address not found automatically; typed by the employee');
+    else if (normal(value.address) && normal(value.address) !== normal(detected.formatted)) flags.push('Address corrected by the employee');
+  }
+  if (previous?.latitude != null && value.latitude != null) {
+    const km = distanceMeters(previous.latitude, previous.longitude, value.latitude, value.longitude) / 1000, hours = Math.max(1 / 60, (now.getTime() - Date.parse(previous.recordedAt)) / 3600000);
+    if (km > 5 && km / hours > 200) flags.push(`Impossible travel: ${Math.round(km)} km from the time in within ${Math.round(hours * 60)} min`);
+  }
+  return flags;
+}
 const note = z.string().trim().min(3).max(2000);
 const documentId = z.string().max(80).default('');
 const local = now => new Date(now.getTime() + 8 * 3600000).toISOString();
@@ -27,7 +50,7 @@ function withPlace(store, events) {
   return events.map(e => {
     if (e.latitude === null || e.latitude === undefined) return e;
     const office = company.officeAddress && (e.onOfficeNetwork || e.inOfficeArea || (company.officeLatitude !== null && company.officeLatitude !== undefined && distanceMeters(e.latitude, e.longitude, company.officeLatitude, company.officeLongitude) <= (company.officeRadius || 150)));
-    return { ...e, place: office ? company.officeAddress : cached.get(e.id) || '', atOffice: !!office };
+    return { ...e, place: office && e.attendanceType !== 'offsite' ? company.officeAddress : e.address || cached.get(e.id) || '', atOffice: !!office && e.attendanceType !== 'offsite' };
   });
 }
 function ownEmployee(store, actor) {
@@ -54,17 +77,24 @@ export function geofence(reading, workplace) {
   const status = distance + reading.accuracy <= workplace.radiusMeters ? 'Within' : distance - reading.accuracy > workplace.radiusMeters ? 'Outside' : 'Uncertain';
   return { status, distance: Math.round(distance), radius: workplace.radiusMeters, poorAccuracy: reading.accuracy > Math.min(100, workplace.radiusMeters) };
 }
-export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
+export function punch(store, actor, input, now = new Date(), { ip = '', userAgent = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
-  // Office Wi-Fi rule: time in / out from the office network; anywhere else it is "Off-site work" with a reason for HR.
+  // Office attendance: only from the authorized office Wi-Fi (recognised by its public internet address, not the Wi-Fi
+  // name). No office network saved yet = set-up mode, not restricted. Off-site work: any connection, GPS and a confirmed
+  // address required.
   const network = networkStatus(store, ip);
   const officeArea = inOfficeArea(store, value.latitude, value.longitude, value.accuracy);
-  if (value.mode === 'office' && network.configured && !network.office && !officeArea) throw new AppError('You are not at the office (not on the office Wi-Fi and your location is outside the office). Choose Off-site work and give the reason.');
-  if (value.mode === 'outside' && value.reason.length < 5) throw new AppError('Give the reason you are out of the office (at least 5 characters).');
+  if (value.mode === 'office' && network.configured && !network.office) throw new AppError(OFFICE_ONLY_MESSAGE);
+  if (value.mode === 'outside' && value.reason.length < 5) throw new AppError('Give the reason you are working off-site (at least 5 characters).');
+  const limit = companyOf(store).offsiteAccuracyMeters || DEFAULT_ACCURACY_LIMIT;
+  const detected = value.mode === 'outside' ? cachedAddress(store, value.latitude, value.longitude) : null;
+  if (value.mode === 'outside' && !value.addressConfirmed) throw new AppError('Check the address shown and confirm your location before submitting.');
+  if (value.mode === 'outside' && !value.address && !detected) throw new AppError('Your address could not be found automatically. Type the address where you are, then confirm it.');
   return store.transaction(() => {
     const retry = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(value.requestId);
     if (retry) { if (retry.employee_id !== employee.id || JSON.parse(retry.data).kind !== value.kind) throw new AppError('Clock request does not belong to this employee.', 403); return JSON.parse(retry.data); }
-    if (Math.abs(now.getTime() - Date.parse(value.capturedAt)) > 120000) throw new AppError('Location reading is stale. Capture your current location again.');
+    // Off-site work leaves time to read and confirm the address (5 minutes); office time in / out 2 minutes.
+    if (Math.abs(now.getTime() - Date.parse(value.capturedAt)) > (value.mode === 'outside' ? 300000 : 120000)) throw new AppError('Location reading is stale. Capture your current location again.');
     const state = store.read(), history = rows(store, 'clock_events', employee.id), latest = history[0], day = local(now).slice(0, 10);
     ready(employee, day);
     const workplace = profileOf(state, employee.id, 'attendance'), employment = profileOf(state, employee.id, 'employment');
@@ -83,7 +113,13 @@ export function punch(store, actor, input, now = new Date(), { ip = '' } = {}) {
     }
     const workDate = clockIn?.workDate || day;
     if (state.runs.some(r => r.start <= workDate && r.end >= workDate && r.rows.some(row => row.employeeId === employee.id))) throw new AppError('This attendance belongs to posted payroll. Contact HR.');
-    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, inOfficeArea: officeArea, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason } : {}), approvedLocation: workplace.approvedLocation || '', address: null, clockInId: clockIn?.id || null };
+    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, inOfficeArea: officeArea, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason } : {}), approvedLocation: workplace.approvedLocation || '', clockInId: clockIn?.id || null,
+      attendanceType: value.mode === 'outside' ? 'offsite' : 'office', accuracyLimit: limit,
+      network: { verified: network.office, configured: network.configured, ip: String(ip || '').replace(/^::ffff:/, '').slice(0, 64), connection: value.connection },
+      device: { userAgent: String(userAgent || '').slice(0, 300) },
+      address: value.mode === 'outside' ? value.address || detected.formatted : null, addressDetected: detected?.formatted || '', addressParts: detected?.parts || null, addressSource: detected?.source || '',
+      addressCorrected: value.mode === 'outside' && !!detected && !!value.address && normal(value.address) !== normal(detected.formatted),
+      flags: clockFlags(value, { limit, detected, previous: clockIn || null, now }) };
     if (clockIn) {
       if (state.attendance.some(a => a.employeeId === employee.id && a.date === workDate)) throw new AppError('HR has already entered a record for this day. Ask HR to reconcile it.');
       const approvedExplanation = rows(store, 'attendance_explanations', employee.id).find(e => e.date === workDate && e.status === 'approved');
@@ -345,6 +381,15 @@ export function correctClock(store, actor, input) {
   return saved;
   });
 }
+// Off-site work, step 1: the employee's current GPS reading -> the most precise readable address the map service has.
+// The result is cached on the server, so the time in / out stores the address the server found (not device text).
+const locateSchema = z.object({ latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000) }).strict();
+export async function locateAddress(store, actor, input, options = {}) {
+  ownEmployee(store, actor);
+  const value = locateSchema.parse(input), limit = companyOf(store).offsiteAccuracyMeters || DEFAULT_ACCURACY_LIMIT;
+  const found = await reverseGeocode(store, value.latitude, value.longitude, options);
+  return { ...found, latitude: value.latitude, longitude: value.longitude, accuracy: Math.round(value.accuracy), limit, lowAccuracy: value.accuracy > limit };
+}
 export async function locationAddress(store, actor, eventId, provider = process.env.HR_GEOCODING_URL) {
   const row = store.db.prepare('SELECT data,employee_id FROM clock_events WHERE id=?').get(eventId);
   if (!row || (actor.role === 'employee' ? row.employee_id !== actor.employeeId : !['admin', 'hr'].includes(actor.role))) throw new AppError('Location not found.', 404);
@@ -449,7 +494,8 @@ export function outOfOfficeReview(store, eventId) { ensureReviews(store); const 
 export function employeeClockEvents(store, actor, employeeId, month) {
   permit(actor, ['admin', 'hr']);
   if (!/^\d{4}-\d{2}$/.test(String(month || ''))) throw new AppError('Choose a month.');
-  const events = store.db.prepare('SELECT data FROM clock_events WHERE employee_id=? AND work_date LIKE ? ORDER BY rowid DESC').all(String(employeeId), `${month}-%`).map(r => JSON.parse(r.data));
+  // One employee, or everyone when no employee is chosen (Attendance -> Time in / out records).
+  const events = (employeeId ? store.db.prepare('SELECT data FROM clock_events WHERE employee_id=? AND work_date LIKE ? ORDER BY rowid DESC').all(String(employeeId), `${month}-%`) : store.db.prepare('SELECT data FROM clock_events WHERE work_date LIKE ? ORDER BY rowid DESC LIMIT 5000').all(`${month}-%`)).map(r => JSON.parse(r.data));
   return withPlace(store, events).map(e => { const review = e.outOfOffice ? outOfOfficeReview(store, e.id) : null; return review ? { ...e, earlierDecision: review } : e; });
 }
 

@@ -109,6 +109,7 @@ export function createPortal(ctx) {
 
   // Line icons for the time card buttons (white on red).
   const svg = d => `<svg class="btn-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const OFFICE_ONLY = 'Office attendance is only available when connected to the company’s authorized office Wi-Fi network.';
   const ICON = {
     in: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="M3 4l3 3"/>'),
     out: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l-3 2"/><path d="M21 4l-3 3"/>'),
@@ -187,12 +188,17 @@ export function createPortal(ctx) {
       : due.length ? `<div class="pm-alert">${alertIcon}<div><strong>Written explanation required</strong><small>You timed in 15 minutes or more after your scheduled start on:</small><small>${due.slice(0, 6).map(d => `${esc(d.date)} (${d.lateMinutes} min late)`).join(' · ')}${due.length > 6 ? ` and ${due.length - 6} more` : ''}</small></div><button class="pm-link" data-portal-tab="explanations">Submit explanation →</button></div>` : '';
     const graceBox = !lateBox && t.graceLate && !t.actualOut ? `<div class="pm-alert pm-grace">${alertIcon}<div><strong>${t.graceLate} minute${t.graceLate === 1 ? '' : 's'} late · within the grace period</strong><small>Stay until ${esc(t.offsetUntil)} to offset it. Minutes not offset are deducted from your salary.</small></div></div>` : '';
     const tile = (label, value) => `<div class="pm-tile"><span>${label}</span><strong>${value}</strong></div>`;
-    const netLine = net.configured ? `<p class="net-status ${net.office ? 'ok' : 'away'}">${net.office ? '📶 Connected to the office Wi-Fi' : '📍 Not on the office Wi-Fi: time in still works at the office (your location is checked)'}</p>` : '';
+    // Office attendance needs the authorized office Wi-Fi (checked by the server); no network saved = not restricted.
+    const officeOk = !net.configured || net.office;
+    const netLine = `<p class="net-status ${officeOk ? 'ok' : 'away'}">${net.office ? '📶 Verified: connected to the authorized office Wi-Fi' : net.configured ? `📵 ${OFFICE_ONLY}` : '📶 Office Wi-Fi check is not set up yet'}</p>`;
     return `<section class="pm-card pm-attend"><div class="pm-attend-head"><div><h2>Today’s attendance</h2><p>Work schedule ${esc(t.scheduledIn || '—')} – ${esc(t.scheduledOut || '—')}${t.arrangement === 'WFH' ? ' · Work from home' : t.arrangement === 'Hybrid' ? ' · Hybrid' : ''}</p></div><span class="pm-chip pm-${chip}">${esc(t.status)}</span></div>
       ${lateBox}${graceBox}
       <div class="pm-tiles">${tile('Actual time in', esc(t.actualIn || '—'))}${tile('Actual time out', esc(t.actualOut || '—'))}${tile('Working hours', `${t.hours} h`)}${tile('Undertime', `${t.undertime} min`)}</div>
-      <div class="clock-actions pm-actions">${netLine}<button class="primary clock-btn" data-clock="${kind}" ${done ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button><small>${away ? `At the office you can time ${kind} normally (your location is checked). Away from the office, use Off-site work and give the reason.` : 'Uses your current device location. Allow location access when prompted.'}</small></div>
-      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-file-overtime>${ICON.overtime}<span>Apply for overtime</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}<button class="pm-row" data-clock-outside="${kind}" ${done ? 'disabled title="Time in and time out are already recorded for today"' : ''}>${ICON.away}<span>Off-site work time ${kind}</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button></section>`;
+      <div class="att-mode"><h3>🏢 Office attendance</h3>${netLine}
+        <div class="clock-actions pm-actions"><button class="primary clock-btn" data-clock="${kind}" ${done || !officeOk ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button>${away && !done ? '<button class="small" data-net-recheck>Check the connection again</button>' : ''}<small>${officeOk ? 'Server time is recorded, with your device location as an extra check.' : 'Connect to the office Wi-Fi and check again.'}</small></div></div>
+      <div class="att-mode att-offsite"><h3>📍 Off-site work</h3><p class="legend">For official duties outside the office. Any internet connection works; your GPS location and exact address are recorded and must be confirmed.</p>
+        <button class="clock-btn clock-outside" data-clock-outside="${kind}" ${done ? 'disabled title="Time in and time out are already recorded for today"' : ''}>${ICON.away}<span>Off-site work time ${kind}</span></button></div>
+      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-file-overtime>${ICON.overtime}<span>Apply for overtime</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
   }
   function draw(data, auth) {
     if (!data) return;
@@ -294,23 +300,99 @@ export function createPortal(ctx) {
       if (!navigator.geolocation) throw new Error('This browser does not support location capture. Contact HR.');
       if (!pendingClock || pendingClock.kind !== kind || pendingClock.mode !== extra.mode) {
         const location = await capturePosition();
-        pendingClock = { kind, ...extra, requestId: crypto.randomUUID(), latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: location.coords.accuracy, capturedAt: new Date(location.timestamp).toISOString() };
+        pendingClock = { kind, ...extra, connection: connectionInfo(), requestId: crypto.randomUUID(), latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: location.coords.accuracy, capturedAt: new Date(location.timestamp).toISOString() };
       }
       const recordedAt = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date());
-      await api('/me/clock', pendingClock); pendingClock = null; dirty = false; await refresh(); render();
+      await clockApi(pendingClock); pendingClock = null; dirty = false; await refresh(); render();
       confirmBox(`Time ${kind} submitted`, `Your <strong>${extra.mode === 'outside' ? 'off-site work ' : ''}time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location${extra.mode === 'outside' ? ' and your reason' : ''}.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
     } catch (error) {
       if (!/fetch|network|connect/i.test(error.message)) pendingClock = null; dirty = false; button.disabled = false;
       // Not at the office: say so plainly and offer the Off-site work time in / out (with a reason).
-      if (extra.mode === 'office' && /not at the office|not connected to the office/i.test(error.message)) {
+      if (extra.mode === 'office' && /authorized office Wi-Fi|not at the office/i.test(error.message)) {
         button.textContent = `Time ${kind}`;
-        openDialog('You are not at the office', `<div class="dialog-body"><p>Your phone is not on the office Wi-Fi and your location is outside the office.</p><p>If you are working outside (for example at a client or another site), use <strong>Off-site work time ${kind}</strong>: give the reason and it is recorded at once with your exact location.</p></div>`, `<div class="dialog-foot"><button data-close>Cancel</button><button class="primary" data-go-outside="${kind}">Off-site work time ${kind}</button></div>`);
+        openDialog('Office attendance unavailable', `<div class="dialog-body"><p>${esc(OFFICE_ONLY)}</p><p>If you are working outside (for example at a client or another site), use <strong>Off-site work time ${kind}</strong>: your exact location and address are captured and confirmed by you.</p></div>`, `<div class="dialog-foot"><button data-close>Cancel</button><button class="primary" data-go-outside="${kind}">Off-site work time ${kind}</button></div>`);
         dialog.querySelector('[data-go-outside]').onclick = () => { dialog.close(); document.querySelector(`[data-clock-outside="${kind}"]`)?.click(); };
         return;
       }
       toast(error.message); button.textContent = `Retry time ${kind}`;
     }
   }
+  // Off-site work time in / out. GPS (high accuracy) -> the server finds the readable address -> the employee checks it,
+  // may correct the wording (never the coordinates), confirms, and submits. Nothing is recorded until then.
+  const OFFSITE_PURPOSES = ['Client meeting', 'Field work / site visit', 'Bank or government errand', 'Delivery or pick-up', 'Training or seminar', 'Work from home (approved)', 'Company event', 'Other'];
+  function offsiteDialog(kind) {
+    let reading = null, found = null;
+    dirty = true;
+    openDialog(`Off-site work time ${kind}`, `<form class="dialog-body form-grid" id="oof-form">
+      <label class="field full">Purpose<select name="purpose" required><option value="">Choose the purpose…</option>${OFFSITE_PURPOSES.map(x => `<option>${x}</option>`).join('')}</select></label>
+      <label class="field full">Reason / details<textarea name="details" required minlength="3" maxlength="450" placeholder="e.g. Meeting with ABC Corp. until 3 PM"></textarea></label>
+      <div class="full oof-loc" data-oof-loc><p class="muted">Getting your exact location…</p></div>
+      <label class="full oof-confirm"><input type="checkbox" name="confirm" required disabled> I confirm this is my current location</label>
+      <p class="full oof-error" data-oof-error hidden></p>
+      <button class="primary full" type="submit" disabled>Submit off-site time ${kind}</button></form>`, '<div class="dialog-foot"><button data-close>Cancel</button></div>');
+    const form = dialog.querySelector('#oof-form'), box = form.querySelector('[data-oof-loc]'), confirm = form.elements.confirm, submit = form.querySelector('button[type="submit"]'), errorBox = form.querySelector('[data-oof-error]');
+    dialog.addEventListener('close', () => { dirty = false; }, { once: true });
+    const showError = message => { errorBox.textContent = message; errorBox.hidden = !message; };
+    const ready = () => { submit.disabled = !(reading && confirm.checked && (found?.formatted || form.elements.address?.value.trim())); };
+    async function locate() {
+      reading = null; found = null; confirm.checked = false; confirm.disabled = true; ready(); showError('');
+      box.innerHTML = '<p class="muted">Getting your exact location… allow location access if asked.</p>';
+      try {
+        if (!navigator.geolocation) throw new Error('This browser cannot capture your location. Use another browser or contact HR.');
+        const position = await capturePosition();
+        reading = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, capturedAt: new Date(position.timestamp).toISOString() };
+        box.innerHTML = '<p class="muted">Finding the street address…</p>';
+        found = await api('/me/locate', { latitude: reading.latitude, longitude: reading.longitude, accuracy: reading.accuracy })
+          .catch(error => ({ formatted: '', error: `Address lookup failed (${error.message}).`, accuracy: Math.round(reading.accuracy), limit: 50, lowAccuracy: reading.accuracy > 50 }));
+      } catch (error) {
+        reading = null;
+        box.innerHTML = `<p class="oof-warn">${esc(error.message)}</p><button type="button" class="small" data-oof-retry>Try again</button>`;
+        return;
+      }
+      const x = reading.longitude, y = reading.latitude, bounds = [x - .002, y - .002, x + .002, y + .002].join(',');
+      const missing = found.missing?.length ? `<p class="oof-warn">The map service did not return the ${esc(found.missing.join(', '))}. Check the address and add what is missing.</p>` : '';
+      box.innerHTML = `<p class="oof-label">Off-site location</p>
+        ${found.formatted ? `<p class="oof-address" data-oof-address>${esc(found.formatted)}</p>${missing}<button type="button" class="small" data-oof-correct>Correct the address</button>` : `<p class="oof-warn">${esc(found.error || 'No address was found for this location.')} Type the full address where you are; HR will review it against your GPS reading.</p>`}
+        <textarea name="address" maxlength="450" rows="3" ${found.formatted ? 'hidden' : 'required'} placeholder="Unit / floor, building, street, barangay, city, province">${esc(found.formatted || '')}</textarea>
+        <p class="legend">GPS ${y.toFixed(6)}, ${x.toFixed(6)} · accuracy ±${esc(found.accuracy)} m${found.source ? ` · address from ${esc(found.source)}` : ''}</p>
+        ${found.lowAccuracy ? `<p class="oof-warn">Accuracy ±${esc(found.accuracy)} m is above the ${esc(found.limit)} m limit. Move to an open area or near a window and try again; if you submit anyway, HR will be asked to review it.</p>` : ''}
+        <div class="loc-map"><iframe class="attendance-map" title="Your location" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&amp;layer=mapnik&amp;marker=${encodeURIComponent(`${y},${x}`)}"></iframe></div>
+        <button type="button" class="small" data-oof-retry>Detect my location again</button>`;
+      confirm.disabled = false; ready();
+    }
+    form.addEventListener('click', event => {
+      if (event.target.closest('[data-oof-retry]')) locate();
+      if (event.target.closest('[data-oof-correct]')) { const area = form.elements.address; area.hidden = false; area.focus(); event.target.closest('[data-oof-correct]').remove(); }
+    });
+    form.addEventListener('input', ready); form.addEventListener('change', ready);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (!reading) { showError('Your location has not been captured yet.'); return; }
+      const f = new FormData(form), reason = `${String(f.get('purpose') || '').trim()} — ${String(f.get('details') || '').trim()}`;
+      const typed = String(f.get('address') || '').trim();
+      submit.disabled = true; submit.textContent = 'Submitting…'; showError('');
+      try {
+        await clockApi({ kind, requestId: crypto.randomUUID(), ...reading, mode: 'outside', reason, address: typed && typed !== found?.formatted ? typed : '', addressConfirmed: true, connection: connectionInfo() });
+        const recordedAt = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date());
+        dialog.close(); dirty = false; await refresh(); render();
+        confirmBox(`Off-site time ${kind} submitted`, `Your <strong>off-site work time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded at:<br><strong>${esc(typed || found?.formatted || '')}</strong>`);
+      } catch (error) {
+        showError(/stale/i.test(error.message) ? 'Your location reading is more than 5 minutes old. Detect your location again, then submit.' : error.message);
+        submit.textContent = `Submit off-site time ${kind}`; ready();
+      }
+    };
+    locate();
+  }
+  // A server that has not been restarted since this screen changed rejects the new fields: send the earlier ones.
+  const LEGACY_CLOCK_KEYS = ['kind', 'requestId', 'latitude', 'longitude', 'accuracy', 'capturedAt', 'mode', 'reason'];
+  async function clockApi(payload) {
+    try { return await api('/me/clock', payload); } catch (error) {
+      if (!/unrecognized key/i.test(error.message)) throw error;
+      return api('/me/clock', Object.fromEntries(Object.entries(payload).filter(([k]) => LEGACY_CLOCK_KEYS.includes(k))));
+    }
+  }
+  // The browser's own report of the connection (Android Chrome); other browsers do not share it.
+  function connectionInfo() { const c = navigator.connection; return c ? { type: String(c.type || '').slice(0, 30), effectiveType: String(c.effectiveType || '').slice(0, 10) } : null; }
   function map(event) {
     if (event.latitude === null) { toast('This HR correction has no device GPS reading. The original time-in remains in history.'); return; }
     const x = event.longitude, y = event.latitude, bounds = [Math.max(-180, x - .003), Math.max(-90, y - .003), Math.min(180, x + .003), Math.min(90, y + .003)].join(',');
@@ -438,19 +520,8 @@ export function createPortal(ctx) {
     if (button.hasAttribute('data-file-overtime')) { tab = 'overtime201'; dirty = false; render(); window.scrollTo({ top: 0 }); return; }   // the overtime tab opens with the application form
     if (button.hasAttribute('data-file-unpaid')) { tab = 'leave'; dirty = false; render(); preselectLeave(''); /* opens the leave form; the employee picks the leave type */ }
     if (button.dataset.clock) await clock(button.dataset.clock, button);
-    if (button.dataset.clockOutside) {
-      // Off-site work: recorded at once with the reason, the time and the location (no approval needed).
-      const kind = button.dataset.clockOutside;
-      const PURPOSES = ['Client meeting', 'Field work / site visit', 'Bank or government errand', 'Delivery or pick-up', 'Training or seminar', 'Work from home (approved)', 'Company event', 'Other'];
-      openDialog(`Off-site work time ${kind}`, `<form class="dialog-body form-grid" id="oof-form"><p class="full">You are timing ${kind} outside the office. Your reason, the time and your location are recorded.</p><label class="field full">Purpose<select name="purpose" required><option value="">Choose the purpose…</option>${PURPOSES.map(x => `<option>${x}</option>`).join('')}</select></label><label class="field full">Reason / details<textarea name="details" required minlength="3" maxlength="450" placeholder="e.g. Meeting with ABC Corp. in Makati until 3 PM"></textarea></label><button class="primary full" type="submit">Submit time ${kind}</button></form>`);
-      dialog.querySelector('#oof-form').onsubmit = async event => {
-        event.preventDefault();
-        const f = new FormData(event.target), reason = `${String(f.get('purpose') || '').trim()} — ${String(f.get('details') || '').trim()}`;   // e.g. "Client meeting — ABC Corp. in Makati"
-        const submit = event.target.querySelector('button[type="submit"]');
-        dialog.close();
-        await clock(kind, document.querySelector(`[data-clock-outside="${kind}"]`) || submit, { mode: 'outside', reason });
-      };
-    }
+    if (button.hasAttribute('data-net-recheck')) { const fresh = await api('/me/dashboard'); await refresh(); render(); toast(fresh.network?.office ? 'Connected to the office Wi-Fi.' : 'Still not on the office Wi-Fi.'); return; }
+    if (button.dataset.clockOutside) { offsiteDialog(button.dataset.clockOutside); return; }
     if (button.dataset.cancelLeave) { await api(`/me/leaves/${button.dataset.cancelLeave}/cancel`, {}); await refresh(); render(); confirmBox('Leave request cancelled', 'Your pending leave request was cancelled. No leave credits were used.'); }
     if (button.dataset.ownPayslip) { currentPayslip = await api(`/me/payslips/${button.dataset.ownPayslip}`); render(); }
     if (button.dataset.liveReason) { const person = liveData?.employees?.find(x => x.employeeId === button.dataset.liveReason); if (person) showReasons(person); return; }
