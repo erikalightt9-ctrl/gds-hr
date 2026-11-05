@@ -30,14 +30,18 @@ test('office attendance: only from the authorized office Wi-Fi (public address),
   } finally { store.close(); }
 });
 
-test('office area no longer replaces the Wi-Fi check: inside the office radius but off the office network is refused', () => {
+test('office GPS area: inside the office radius but off the saved Wi-Fi address is accepted and flagged; outside is refused', () => {
   const store = fixture(), now = new Date('2026-09-01T00:05:00Z');
   try {
     changeOfficeNetworks(store, admin, { action: 'add-current' }, OFFICE);
     const row = store.db.prepare('SELECT id, data FROM hr_settings LIMIT 1').get(), settings = row ? JSON.parse(row.data) : { company: {} };
     settings.company = { ...settings.company, officeAddress: '104 Paseo de Roxas, San Lorenzo, Makati City', officeLatitude: 14.55, officeLongitude: 121.02, officeRadius: 150 };
     if (row) store.db.prepare('UPDATE hr_settings SET data=? WHERE id=?').run(JSON.stringify(settings), row.id); else store.db.prepare('INSERT INTO hr_settings(id, data) VALUES(1, ?)').run(JSON.stringify(settings));
-    assert.throws(() => punch(store, worker, reading('in', '33333333-3333-4333-8333-333333333333', now), now, { ip: HOME }), /authorized office Wi-Fi/);
+    const inOffice = punch(store, worker, reading('in', '33333333-3333-4333-8333-333333333333', now), now, { ip: HOME });
+    assert.equal(inOffice.attendanceType, 'office'); assert.equal(inOffice.officeBy, 'gps'); assert.equal(inOffice.network.verified, false);
+    assert.ok(inOffice.flags.includes('Office Wi-Fi not verified: accepted by the office GPS area'));
+    const far = new Date('2026-09-01T09:05:00Z');
+    assert.throws(() => punch(store, worker, reading('out', '34444444-4444-4444-8444-444444444444', far, { latitude: 14.65, longitude: 121.10 }), far, { ip: HOME }), /authorized office Wi-Fi network or inside the office/);
   } finally { store.close(); }
 });
 

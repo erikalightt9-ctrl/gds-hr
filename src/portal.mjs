@@ -18,7 +18,7 @@ export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.
   // browser reports it (Android only; empty elsewhere).
   address: z.string().trim().max(500).default(''), addressConfirmed: z.boolean().default(false),
   connection: z.object({ type: z.string().trim().max(30).default(''), effectiveType: z.string().trim().max(10).default('') }).strict().nullable().default(null) }).strict();
-export const OFFICE_ONLY_MESSAGE = 'Office attendance is only available when connected to the company\u2019s authorized office Wi-Fi network. If you are working outside the office, use Off-site work.';
+export const OFFICE_ONLY_MESSAGE = 'Office attendance is only available when connected to the company\u2019s authorized office Wi-Fi network or inside the office (GPS). If you are working outside the office, use Off-site work.';
 const normal = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 // Signals for HR review on a clock event. Browsers cannot report mock-location apps, so suspicious readings are
 // flagged instead: 0 m accuracy, accuracy above the limit, a corrected or typed address, impossible travel.
@@ -80,12 +80,13 @@ export function geofence(reading, workplace) {
 }
 export function punch(store, actor, input, now = new Date(), { ip = '', userAgent = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
-  // Office attendance: only from the authorized office Wi-Fi (recognised by its public internet address, not the Wi-Fi
-  // name). No office network saved yet = set-up mode, not restricted. Off-site work: any connection, GPS and a confirmed
-  // address required.
+  // Office attendance: the authorized office Wi-Fi (recognised by its public internet address, not the Wi-Fi name) or,
+  // because the office reaches the internet through more than one address, a GPS reading inside the office radius;
+  // GPS-only office records are flagged "Wi-Fi not verified" for HR. No office network saved yet = not restricted.
+  // Off-site work: any connection, GPS and a confirmed address required.
   const network = networkStatus(store, ip);
   const officeArea = inOfficeArea(store, value.latitude, value.longitude, value.accuracy);
-  if (value.mode === 'office' && network.configured && !network.office) throw new AppError(OFFICE_ONLY_MESSAGE);
+  if (value.mode === 'office' && network.configured && !network.office && !officeArea) throw new AppError(OFFICE_ONLY_MESSAGE);
   if (value.mode === 'outside' && value.reason.length < 5) throw new AppError('Give the reason you are working off-site (at least 5 characters).');
   const limit = companyOf(store).offsiteAccuracyMeters || DEFAULT_ACCURACY_LIMIT;
   const detected = value.mode === 'outside' ? cachedAddress(store, value.latitude, value.longitude) : null;
@@ -128,7 +129,8 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
       address: value.mode === 'outside' ? value.address || detected.formatted : null, addressDetected: detected?.formatted || '', addressParts: detected?.parts || null, addressSource: detected?.source || '',
       addressCorrected: value.mode === 'outside' && !!detected && !!value.address && normal(value.address) !== normal(detected.formatted),
       ...(additional || clockIn?.additionalSession ? { additionalSession: true } : {}),
-      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : [])] };
+      ...(value.mode === 'office' && network.configured && !network.office ? { officeBy: 'gps' } : value.mode === 'office' && network.office ? { officeBy: 'wifi' } : {}),
+      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : []), ...(value.mode === 'office' && network.configured && !network.office ? ['Office Wi-Fi not verified: accepted by the office GPS area'] : [])] };
     if (clockIn?.additionalSession) {
       // Closing an additional session: the day's record now ends at this time out; the gap is an unpaid break.
       const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);

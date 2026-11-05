@@ -13,7 +13,7 @@ export function createClockRecordsUi({ api, esc, badge, openDialog, employees, t
   const network = e => {
     if (isCorrection(e)) return '<span class="muted">—</span>';
     const verified = e.network ? e.network.verified : e.onOfficeNetwork, conn = e.network?.connection?.type || e.network?.connection?.effectiveType;
-    return `${verified ? badge('Office Wi-Fi verified', '') : badge('Not office Wi-Fi', 'neutral')}${conn ? `<small>${esc(conn)}</small>` : ''}`;
+    return `${verified ? badge('Office Wi-Fi verified', '') : e.officeBy === 'gps' ? badge('Office by GPS · Wi-Fi not verified', 'pending') : badge('Not office Wi-Fi', 'neutral')}${conn ? `<small>${esc(conn)}</small>` : ''}`;
   };
   const rows = () => list.filter(e => (!filters.employee || e.employeeId === filters.employee) && (!filters.type || typeOf(e) === filters.type) && (!filters.flagged || e.flags?.length));
 
