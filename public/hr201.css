@@ -1762,3 +1762,17 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .oof-error { margin: 0; padding: 8px 10px; border-radius: 10px; background: #fdecee; color: #8f1420; }
 
 .att-done { display: block; margin-top: 8px; color: #1f6b3a; font-weight: 600; }
+
+/* Attendance requests */
+.ar-list { display: grid; gap: 10px; }
+.ar-item { padding: 12px 14px; border: 1px solid #efe4d2; border-radius: 14px; background: #fffdf8; }
+.ar-item header { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.ar-item p { margin: 6px 0; }
+.ar-history { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+.ar-history li { margin-bottom: 4px; }
+.ar-facts { display: grid; grid-template-columns: minmax(120px, 30%) 1fr; gap: 6px 12px; margin: 0 0 10px; }
+.ar-facts dt { font-weight: 700; color: #6b5d4a; }
+.ar-facts dd { margin: 0; }
+.ar-check { display: flex; gap: 8px; align-items: center; }
+.ar-decide { margin-top: 12px; padding-top: 12px; border-top: 1px solid #efe4d2; }
+.ar-tiles { flex-wrap: wrap; }

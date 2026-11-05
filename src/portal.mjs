@@ -11,6 +11,7 @@ import { lateBy, graceFor } from './late-incidents.mjs';
 import { explanationsDue, EXPLAIN_AFTER_MINUTES } from './late-explanations.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 import { reasonsFor } from './live-reasons.mjs';
+import { leaveReference } from './attendance-requests.mjs';
 
 export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default(''),
   // Off-site work: the address shown to the employee and confirmed (or corrected) by them; the device connection as the
@@ -211,7 +212,7 @@ export function applyLeave(store, actor, input) {
     if (split.invalidDate) throw new AppError(`The leave time on ${split.invalidDate} is outside your work schedule. Check the start and end times.`);
     const { countedDates, partialDates } = split;
     if (!countedDates.length) throw new AppError('Choose at least one eligible leave day.');
-    const leave = { id: randomUUID(), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, startTime: value.startTime, endTime: value.endTime, reason: value.reason, days: split.days, countedDates, partialDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : split.days >= PROOF_FROM_DAYS ? 'required' : '', proofNote: split.days >= PROOF_FROM_DAYS && !value.documentId ? `Leave of ${PROOF_FROM_DAYS} days or more needs a supporting document.` : '', proofReviewedBy: '', proofReviewedAt: '' };
+    const leave = { id: randomUUID(), reference: leaveReference(store), employeeId: employee.id, typeId: type.id, startDate: value.startDate, endDate: value.endDate, startTime: value.startTime, endTime: value.endTime, reason: value.reason, days: split.days, countedDates, partialDates, documentReference: value.documentId, eligibilityVerified: false, status: 'pending', proofStatus: value.documentId ? 'submitted' : split.days >= PROOF_FROM_DAYS ? 'required' : '', proofNote: split.days >= PROOF_FROM_DAYS && !value.documentId ? `Leave of ${PROOF_FROM_DAYS} days or more needs a supporting document.` : '', proofReviewedBy: '', proofReviewedAt: '' };
     state.leaves.push(leave); state.version++; store.write(state); store.log(actor, 'apply', 'leaves', leave.id, null, leave); return leave;
   });
 }

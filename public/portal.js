@@ -146,13 +146,13 @@ export function createPortal(ctx) {
       const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
       const STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
       const list = data.leaves.slice().sort((a, b) => b.startDate.localeCompare(a.startDate));
-      return table(['Dates', 'Time', 'Type of leave', 'Days', 'Reason', 'Status', ''], list.map(l => [l.startDate === l.endDate ? nice(l.startDate) : `${nice(l.startDate)} – ${nice(l.endDate)}`, l.startTime || l.endTime ? `${esc(l.startTime || '—')} – ${esc(l.endTime || '—')}` : 'Whole day', esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId), l.days, `<span class="wrap">${esc(l.reason || '—')}</span>`, `${esc(STATUS[l.status] || l.status)}${l.decidedAt && l.status !== 'pending' ? `<small>${esc(STATUS[l.status] || l.status)} on ${esc(new Date(l.decidedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' }))}</small>` : ''}${l.hrRemarks ? `<small class="wrap">HR: ${esc(l.hrRemarks)}</small>` : ''}`, `${proofCell(l) === '—' ? '' : proofCell(l)}${l.status === 'pending' ? ` <button class="small" data-cancel-leave="${esc(l.id)}">Cancel request</button>` : ''}`]));
+      return table(['Dates', 'Time', 'Type of leave', 'Days', 'Reason', 'Status', ''], list.map(l => [`${l.startDate === l.endDate ? nice(l.startDate) : `${nice(l.startDate)} – ${nice(l.endDate)}`}${l.reference ? `<small>${esc(l.reference)}</small>` : ''}`, l.startTime || l.endTime ? `${esc(l.startTime || '—')} – ${esc(l.endTime || '—')}` : 'Whole day', esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId), l.days, `<span class="wrap">${esc(l.reason || '—')}</span>`, `${esc(STATUS[l.status] || l.status)}${l.decidedAt && l.status !== 'pending' ? `<small>${esc(STATUS[l.status] || l.status)} on ${esc(new Date(l.decidedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' }))}</small>` : ''}${l.hrRemarks ? `<small class="wrap">HR: ${esc(l.hrRemarks)}</small>` : ''}`, `${proofCell(l) === '—' ? '' : proofCell(l)}${l.status === 'pending' ? ` <button class="small" data-cancel-leave="${esc(l.id)}">Cancel request</button>` : ''}`]));
     })()}</section><section class="panel"><div class="panel-head"><h2>My leave credits</h2></div>${table(['Leave type', 'Entitled', 'Used / reserved', 'Pending', 'Remaining after pending'], data.balances.map(b => b.perOccasion ? [esc(b.name), b.maxDays ? `Per occasion · up to ${b.maxDays} days` : 'As needed', b.used, b.pending, b.maxDays ? 'Filed per event' : 'No limit'] : [esc(b.name), b.entitled, b.used, b.pending, b.remaining]))}<p class="panel-foot">Pending requests are shown separately. Approval determines the official balance; future approved leave already reserves days.</p></section>`;
   }
   // History, explanations and supporting documents all concern attendance, so they share one tab.
   function attendanceContent(data) {
-    const views = [['history', 'My attendance records', '🕒'], ['explanations', 'Explanations', '📝'], ['documents', 'Supporting documents', '📁']];
-    const body = attendanceView === 'explanations' ? explanationContent(data) : attendanceView === 'documents' ? documentContent(data) : history(data);
+    const views = [['history', 'My attendance records', '🕒'], ['requests', 'Requests', '📨'], ['explanations', 'Explanations', '📝'], ['documents', 'Supporting documents', '📁']];
+    const body = attendanceView === 'requests' ? '<div data-my-requests><div class="loading">Loading your requests…</div></div>' : attendanceView === 'explanations' ? explanationContent(data) : attendanceView === 'documents' ? documentContent(data) : history(data);
     return `<nav class="portal-subtabs" aria-label="Attendance">${views.map(([id, label, icon]) => `<button data-attendance-view="${id}" class="${id === attendanceView ? 'active' : ''}" ${id === attendanceView ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span> ${label}</button>`).join('')}</nav><div id="attendance-${attendanceView}" class="attendance-section">${body}</div>`;
   }
   // One explanation with its comments; the employee gets a reply box when HR sent it back.
@@ -200,7 +200,7 @@ export function createPortal(ctx) {
         <div class="clock-actions pm-actions"><button class="primary clock-btn" data-clock="${kind}" ${done || !officeOk ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button>${away && !done ? '<button class="small" data-net-recheck>Check the connection again</button>' : ''}<small>${done ? doneNote : officeOk ? 'Server time is recorded, with your device location as an extra check.' : 'Connect to the office Wi-Fi and check again.'}</small></div></div>
       <div class="att-mode att-offsite"><h3>📍 Off-site work</h3><p class="legend">For official duties outside the office. Any internet connection works; your GPS location and exact address are recorded and must be confirmed.</p>
         <button class="clock-btn clock-outside" data-clock-outside="${kind}" ${data.employee.draft ? 'disabled' : ''}>${ICON.away}<span>Off-site work time ${kind}${done ? ' · extra session' : ''}</span></button>${done ? '<small class="att-done">Opens an additional session after today\u2019s time out (for example to offset lateness). HR reviews the hours.</small>' : ''}</div>
-      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-file-overtime>${ICON.overtime}<span>Apply for overtime</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
+      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-file-overtime>${ICON.overtime}<span>Apply for overtime</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-ar-request>${ICON.leave}<span>Forgot to time in / out? Request a correction</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
   }
   function draw(data, auth) {
     if (!data) return;
@@ -242,6 +242,8 @@ export function createPortal(ctx) {
       app.querySelector('.employee-main').addEventListener('click', () => setOpen(false));
     }
     if (isHr) ctx.portalHr.fill(tab, app.querySelector('#portal-hr'));
+    const requestBox = app.querySelector('[data-my-requests]');
+    if (requestBox) requestsUi().then(ui => ui.fill(requestBox)).catch(() => { requestBox.innerHTML = '<p class="muted">Requests are available after the HR server restarts.</p>'; });
     if (tab === 'dashboard') ctx.portalHr?.celebrations(app.querySelector('.employee-main'));
     ctx.portalHr?.compliance(app, tab === 'dashboard');
     bindReasonPickers(app);
@@ -393,6 +395,9 @@ export function createPortal(ctx) {
       return api('/me/clock', Object.fromEntries(Object.entries(payload).filter(([k]) => LEGACY_CLOCK_KEYS.includes(k))));
     }
   }
+  // Attendance requests (loaded on first use, so the portal never depends on this file being served).
+  let requestsModule = null;
+  const requestsUi = async () => requestsModule || (requestsModule = (await import('./requests-ui.js')).createEmployeeRequests({ api, esc, openDialog, dialog, toast, confirmBox, onLeave: () => { tab = 'leave'; dirty = false; render(); preselectLeave(''); } }));
   // The browser's own report of the connection (Android Chrome); other browsers do not share it.
   function connectionInfo() { const c = navigator.connection; return c ? { type: String(c.type || '').slice(0, 30), effectiveType: String(c.effectiveType || '').slice(0, 10) } : null; }
   function map(event) {
@@ -519,6 +524,7 @@ export function createPortal(ctx) {
     if (button.dataset.calDay) { calDay = button.dataset.calDay; render(); return; }
     if (button.dataset.attendanceView) { attendanceView = button.dataset.attendanceView; dirty = false; render(); }
     if (button.dataset.attendanceJump) { attendanceView = button.dataset.attendanceJump; dirty = false; render(); }
+    if (button.hasAttribute('data-ar-request')) { try { (await requestsUi()).openForm('', () => { tab = 'attendance'; attendanceView = 'requests'; dirty = false; render(); }); } catch { toast('Requests are available after the HR server restarts.'); } return; }
     if (button.hasAttribute('data-file-overtime')) { tab = 'overtime201'; dirty = false; render(); window.scrollTo({ top: 0 }); return; }   // the overtime tab opens with the application form
     if (button.hasAttribute('data-file-unpaid')) { tab = 'leave'; dirty = false; render(); preselectLeave(''); /* opens the leave form; the employee picks the leave type */ }
     if (button.dataset.clock) await clock(button.dataset.clock, button);
