@@ -302,9 +302,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         const type = state.leaveTypes.find(t => t.id === leave.typeId), normal = scheduleOn(e, attendanceProfile, d, r).hoursPerDay;
         leaveDays += 0.5; presentOrLeave.add(d); leaveNotes.push(`${d}: ${type?.name || leave.typeId} (half day${leave.startTime ? ` ${leave.startTime}-${leave.endTime}` : ''})`);
         if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', adjDaily / 2, `${round(adjDaily)} × 0.5 unpaid half-day leave`, leave, d);
-        else if (type?.paid) { paidLeaveDays += 0.5; add(earnings, 'basic', -adjDaily / 2, `${round(adjDaily)} × 0.5 day moved to leave pay`, leave, d); add(earnings, 'leavePay', adjDaily / 2, `Approved ${type.name} (half day): 0.5 day × ${round(adjDaily)}`, leave, d); }
+        else if (type?.paid) { paidLeaveDays += 0.5; add(earnings, 'basic', -daily / 2, `${round(daily)} × 0.5 day moved to leave pay (already in the half-month)`, leave, d); add(earnings, 'leavePay', daily / 2, `Approved ${type.name} (half day): 0.5 day × ${round(daily)}`, leave, d); }
         else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId} (half day); salary already included in cutoff basic`, leave, d);
-        if (type?.paid && !type.includedIn13th) excludedLeave += adjDaily / 2;
+        if (type?.paid && !type.includedIn13th) excludedLeave += daily / 2;
         leaveCoverMinutes = normal * 30;
         // Morning leave: lateness is measured from the end of the leave.
         if (leave.endTime && leave.startDate === d && (!leave.startTime || leave.startTime <= (record?.scheduledIn || '00:00'))) leaveShiftStart = leave.endTime;
@@ -315,7 +315,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         leaveDays++; presentOrLeave.add(d); leaveNotes.push(`${d}: ${type?.name || leave.typeId}`);
         if (type?.affectsPayroll && !type.paid) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 unpaid leave day`, leave, d);
         // Paid leave is shown on its own line (Leave pay), taken out of basic pay; the total is unchanged.
-        else if (type?.paid) { paidLeaveDays += 1; add(earnings, 'basic', -adjDaily, `${round(adjDaily)} × 1 day moved to leave pay`, leave, d); add(earnings, 'leavePay', adjDaily, `Approved ${type.name}: 1 day × ${round(adjDaily)}`, leave, d); }
+        else if (type?.paid) { paidLeaveDays += 1; add(earnings, 'basic', -daily, `${round(daily)} × 1 day moved to leave pay (already in the half-month)`, leave, d); add(earnings, 'leavePay', daily, `Approved ${type.name}: 1 day × ${round(daily)}`, leave, d); }
         else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId}; salary already included in cutoff basic`, leave, d);
         if (type?.paid && !type.includedIn13th) excludedLeave += daily;
         if (record?.status === 'present') blockers.push(`${prefix}: attendance conflicts with leave on ${d}.`);
@@ -536,13 +536,13 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     override('earnings', earnings, ['basic']);
     const basicOverride = overrides.filter(o => o.component === 'basic').reduce((s, o) => s + o.delta, 0), basicOverridden = overrides.some(o => o.component === 'basic');
     const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - undertimeAmount - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride));
-    // Days credited. Monthly-paid: the half-month is worth half the divisor's days (13); days lost are the basic taken off
-    // (absences, lateness, undertime, leave moved to its own line, or an override) at the adjustment rate. Others: days
-    // present less the late / undertime fraction, or basic / daily rate when the basic was overridden.
+    // Days credited (worked; paid leave days are counted separately). A typed basic: basic / daily rate. Monthly-paid: the
+    // half-month is worth half the divisor's days (13), less paid leave days, less the unpaid basic taken off (absences,
+    // lateness, undertime) at the adjustment rate. Others: days present less the late / undertime fraction.
     const dayHours = attendanceProfile?.hoursPerDay || r.normalHours || 8, round4 = n => Math.round(n * 10000) / 10000;
     const monthlyCredit = !dailyPaid && !perDayWorked && factor === 0.5 && adjDaily;
     const creditedDays = basicOverridden && daily ? round4(earnings.basic / daily)
-      : monthlyCredit ? round4(Math.max(0, r.dailyDivisor / 2 - (e.monthlySalary * factor - earnings.basic) / adjDaily))
+      : monthlyCredit ? round4(Math.max(0, r.dailyDivisor / 2 * (allScheduled.length ? scheduled.length / allScheduled.length : 0) - paidLeaveDays - (baseline - earnings.basic - (earnings.leavePay || 0)) / adjDaily))
       : round4(daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0));
     const creditedHours = monthlyCredit || basicOverridden ? round4(creditedDays * dayHours) : round4((creditedMinutes || Math.max(0, creditedDays) * dayHours * 60) / 60);
     const annualRows = state.runs.filter(run => run.status === 'posted' && run.start.slice(0, 4) === start.slice(0, 4)).flatMap(run => run.rows.filter(row => row.employeeId === e.id));

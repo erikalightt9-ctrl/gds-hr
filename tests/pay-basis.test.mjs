@@ -84,3 +84,21 @@ test('daily-paid: the 27 / 26 divisor does not apply', () => {
   assert.equal(b.adjustmentDivisor, null);
   assert.equal(b.earnings.basic, 13 * 755);
 });
+
+test('guide example: two approved paid-leave days are worth monthly / 26 each and stay inside the ₱13,000 half-month (31-day month)', () => {
+  const s = state(); s.employees[0].leaveEligibility = ['sil'];
+  s.leaves = ['2026-10-20', '2026-10-21'].map(d => ({ id: `lv-${d}`, employeeId: 'E1', typeId: 'sil', startDate: d, endDate: d, days: 1, startTime: '', endTime: '', reason: 'Rest', status: 'approved', eligibilityVerified: true }));
+  s.attendance = s.attendance.filter(a => !['2026-10-20', '2026-10-21'].includes(a.date));
+  const [, b] = month(s);
+  assert.equal(b.earnings.leavePay, 2000, '2 days × 26,000 / 26');
+  assert.equal(b.earnings.basic + b.earnings.leavePay, 13000, 'not counted twice: the half-month stays 13,000');
+  assert.equal(b.paidLeaveDays, 2);
+  assert.equal(b.creditedDays + b.paidLeaveDays, 13, 'days present: 11 worked + 2 paid leave');
+});
+
+test('monthly-paid hired mid-cutoff: days credited follow the share of the half-month worked (8 of 14 workdays)', () => {
+  const s = state(); s.employees[0].startDate = '2026-10-23';   // Oct 23-24 and 26-31: 8 of the cutoff's 14 workdays
+  const [, b] = month(s);
+  assert.equal(b.earnings.basic, 7428.57, '13,000 × 8 / 14');
+  assert.equal(b.creditedDays, 7.4286, '13 days × 8 / 14');
+});
