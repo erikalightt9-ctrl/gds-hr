@@ -16,6 +16,8 @@ function fixture(edit = () => {}) {
   for (const [d, t] of [['2026-09-01', '08:20'], ['2026-09-02', '08:10'], ['2026-09-03', '08:15']]) s.attendance.find(a => a.date === d).timeIn = t;
   Object.assign(s.attendance.find(a => a.date === '2026-09-04'), { timeIn: '08:30', exception: true });
   edit(s); store.write(s);
+  // These tests use September 2026 dates; explanations normally start on Nov 1, 2026.
+  store.db.prepare('INSERT INTO hr_settings(id, data) VALUES(1, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify({ company: { lateExplanationsFrom: '2026-01-01' } }));
   return store;
 }
 const dates = list => list.map(d => d.date).sort();
@@ -95,5 +97,13 @@ test('payroll lateness is the same whether or not an explanation was submitted (
     const before = row();
     submitExplanation(store, worker, explain('2026-09-03'));
     assert.deepEqual(row(), before);
+  } finally { store.close(); }
+});
+
+test('late days before Nov 1, 2026 (the default start) are not asked for', () => {
+  const store = fixture();
+  try {
+    store.db.prepare('DELETE FROM hr_settings').run();
+    assert.equal(explanationsDue(store).length, 0, 'September lateness is not asked for');
   } finally { store.close(); }
 });
