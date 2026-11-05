@@ -181,7 +181,7 @@ export function createPortal(ctx) {
   function clockSection(data) {
     const t = data.today;
     const returned = (data.explanations || []).find(e => e.status === 'returned'), due = data.explanationsDue || [];
-    const kind = t.open ? 'out' : 'in', done = data.employee.draft || (t.actualOut && t.date === today()), net = data.network || {}, away = net.configured && !net.office;
+    const kind = t.open ? 'out' : 'in', done = data.employee.draft || (!t.open && t.actualOut && t.date === today()), net = data.network || {}, away = net.configured && !net.office;
     const chip = { Late: 'late', Present: 'ok', 'Missing time out': 'late', Absent: 'late', 'On leave': 'leave' }[t.status] || 'idle';
     const alertIcon = '<svg class="pm-ico pm-alert-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>';
     const lateBox = returned ? `<div class="pm-alert">${alertIcon}<div><strong>HR sent back your explanation</strong><small>${esc((returned.comments || []).at(-1)?.text || '')}</small></div><button class="pm-link" data-portal-tab="explanations">Reply to HR →</button></div>`
@@ -191,7 +191,7 @@ export function createPortal(ctx) {
     // Office attendance needs the authorized office Wi-Fi (checked by the server); no network saved = not restricted.
     const officeOk = !net.configured || net.office;
     // Both buttons stay closed once today's time in and time out are recorded; say so (a disabled button gives no reason).
-    const doneNote = data.employee.draft ? 'HR must complete your employment record first.' : `✅ Today's time in (${esc(t.actualIn || '—')}) and time out (${esc(t.actualOut || '—')}) are already recorded. Time in again tomorrow.`;
+    const doneNote = data.employee.draft ? 'HR must complete your employment record first.' : `✅ Today's time in (${esc(t.actualIn || '—')}) and time out (${esc(t.actualOut || '—')}) are already recorded. For extra work outside the office (for example an offset), use Off-site work time in.`;
     const netLine = `<p class="net-status ${officeOk ? 'ok' : 'away'}">${net.office ? '📶 Verified: connected to the authorized office Wi-Fi' : net.configured ? `📵 ${OFFICE_ONLY}` : '📶 Office Wi-Fi check is not set up yet'}</p>`;
     return `<section class="pm-card pm-attend"><div class="pm-attend-head"><div><h2>Today’s attendance</h2><p>Work schedule ${esc(t.scheduledIn || '—')} – ${esc(t.scheduledOut || '—')}${t.arrangement === 'WFH' ? ' · Work from home' : t.arrangement === 'Hybrid' ? ' · Hybrid' : ''}</p></div><span class="pm-chip pm-${chip}">${esc(t.status)}</span></div>
       ${lateBox}${graceBox}
@@ -199,7 +199,7 @@ export function createPortal(ctx) {
       <div class="att-mode"><h3>🏢 Office attendance</h3>${netLine}
         <div class="clock-actions pm-actions"><button class="primary clock-btn" data-clock="${kind}" ${done || !officeOk ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button>${away && !done ? '<button class="small" data-net-recheck>Check the connection again</button>' : ''}<small>${done ? doneNote : officeOk ? 'Server time is recorded, with your device location as an extra check.' : 'Connect to the office Wi-Fi and check again.'}</small></div></div>
       <div class="att-mode att-offsite"><h3>📍 Off-site work</h3><p class="legend">For official duties outside the office. Any internet connection works; your GPS location and exact address are recorded and must be confirmed.</p>
-        <button class="clock-btn clock-outside" data-clock-outside="${kind}" ${done ? 'disabled' : ''}>${ICON.away}<span>Off-site work time ${kind}</span></button>${done ? `<small class="att-done">${doneNote}</small>` : ''}</div>
+        <button class="clock-btn clock-outside" data-clock-outside="${kind}" ${data.employee.draft ? 'disabled' : ''}>${ICON.away}<span>Off-site work time ${kind}${done ? ' · extra session' : ''}</span></button>${done ? '<small class="att-done">Opens an additional session after today\u2019s time out (for example to offset lateness). HR reviews the hours.</small>' : ''}</div>
       ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-file-overtime>${ICON.overtime}<span>Apply for overtime</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
   }
   function draw(data, auth) {

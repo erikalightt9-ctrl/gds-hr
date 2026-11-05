@@ -99,10 +99,17 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
     ready(employee, day);
     const workplace = profileOf(state, employee.id, 'attendance'), employment = profileOf(state, employee.id, 'employment');
     if (['Suspended', 'Resigned', 'Terminated', 'Inactive'].includes(employment.employeeStatus)) throw new AppError('Your employment status requires HR review before attendance can be recorded.');
-    let clockIn;
+    let clockIn, additional = false;
     if (value.kind === 'in') {
       if (latest?.kind === 'in' && !staleOpen(latest, day, now)) throw new AppError('You already have an open time-in. Time out or contact HR.');
-      if (history.some(e => e.workDate === day && e.kind === 'in') || state.attendance.some(a => a.employeeId === employee.id && a.date === day)) throw new AppError('Attendance already exists for today. Ask HR for a correction.');
+      const dayRecord = state.attendance.find(a => a.employeeId === employee.id && a.date === day);
+      if (history.some(e => e.workDate === day && e.kind === 'in') || dayRecord) {
+        // Extra work outside after the day's time out (e.g. to offset lateness): an additional off-site session that
+        // extends the same day's record; the gap between the sessions is unpaid. HR reviews it (record not approved).
+        const after = dayRecord?.timeIn && dayRecord.timeOut && !dayRecord.endNextDay && local(now).slice(11, 16) > dayRecord.timeOut;
+        if (value.mode !== 'outside' || !after || latest?.kind === 'in') throw new AppError(value.mode === 'outside' ? 'Attendance already exists for today. Ask HR for a correction.' : 'Attendance already exists for today. For extra work outside the office (e.g. an offset), use Off-site work time in.');
+        additional = true;
+      }
       if (state.leaves.some(l => l.employeeId === employee.id && l.status === 'approved' && (l.countedDates || []).includes(day) && !(l.partialDates || []).includes(day))) throw new AppError('You are on approved leave today. Ask HR to review before clocking in.');
     } else {
       if (latest?.kind !== 'in') throw new AppError('Record time-in before time-out.');
@@ -119,8 +126,17 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
       device: { userAgent: String(userAgent || '').slice(0, 300) },
       address: value.mode === 'outside' ? value.address || detected.formatted : null, addressDetected: detected?.formatted || '', addressParts: detected?.parts || null, addressSource: detected?.source || '',
       addressCorrected: value.mode === 'outside' && !!detected && !!value.address && normal(value.address) !== normal(detected.formatted),
-      flags: clockFlags(value, { limit, detected, previous: clockIn || null, now }) };
-    if (clockIn) {
+      ...(additional || clockIn?.additionalSession ? { additionalSession: true } : {}),
+      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : [])] };
+    if (clockIn?.additionalSession) {
+      // Closing an additional session: the day's record now ends at this time out; the gap is an unpaid break.
+      const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
+      if (!record || day !== workDate) throw new AppError('An additional session must end on the same day. Ask HR to record the time out.');
+      const updated = schemas.attendance.parse({ ...record, timeOut: event.time, approved: false, breaks: [...record.breaks, { start: `${workDate}T${record.timeOut}`, end: `${workDate}T${clockIn.time}` }], explanation: `${record.explanation} · Additional off-site session ${clockIn.time}-${event.time}: ${clockIn.reason || ''}`.slice(0, 1000) });
+      attendanceMinutes(updated);
+      state.attendance = state.attendance.map(a => (a === record ? updated : a)); state.version++; store.write(state);
+      store.log(actor, 'extend-from-clock', 'attendance', record.id, record, updated);
+    } else if (clockIn) {
       if (state.attendance.some(a => a.employeeId === employee.id && a.date === workDate)) throw new AppError('HR has already entered a record for this day. Ask HR to reconcile it.');
       const approvedExplanation = rows(store, 'attendance_explanations', employee.id).find(e => e.date === workDate && e.status === 'approved');
       const record = schemas.attendance.parse({ id: `clock-${clockIn.id}`, employeeId: employee.id, date: workDate, status: 'present', scheduledIn: (s => (s.flexible ? clockIn.time : s.start))(scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate)), timeIn: clockIn.time, timeOut: event.time, endNextDay: day !== workDate, breaks: [], approved: false, offsetMinutes: approvedExplanation?.approvedOffset || 0, exception: false, explanation: approvedExplanation?.explanation || 'Employee clock events: HR must review exact unpaid breaks and approve.', holidayEligible: false });
@@ -130,7 +146,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
     }
     store.db.prepare('INSERT INTO clock_events VALUES(?,?,?,?,?)').run(event.id, employee.id, value.kind, workDate, JSON.stringify(event));
     // Late 15 minutes or more against the day's schedule: the employee must explain it (Attendance → Explanations).
-    if (value.kind === 'in') {
+    if (value.kind === 'in' && !additional) {
       const daySched = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate), lateMin = daySched.flexible ? 0 : lateBy(event.time, daySched.start);
       if (lateMin >= EXPLAIN_AFTER_MINUTES && !rows(store, 'attendance_explanations', employee.id).some(e => e.date === workDate)) {
         store.notify(employee.id, `You timed in ${lateMin} minutes late on ${workDate} (scheduled ${daySched.start}). Please submit a written explanation in Attendance → Explanations.`);

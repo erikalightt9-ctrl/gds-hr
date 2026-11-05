@@ -65,7 +65,7 @@ export class Store {
     state.thirteenthAdjustments = this.db.prepare("SELECT data FROM thirteenth_adjustments WHERE status='approved'").all().map(r => JSON.parse(r.data));
     state.thirteenthPayslips = this.db.prepare("SELECT data FROM thirteenth_payslips WHERE status='final'").all().map(r => JSON.parse(r.data));
     const recorded = new Set(state.attendance.map(a => a.id));
-    state.openClockIns = this.db.prepare("SELECT id, employee_id, work_date, data FROM clock_events WHERE kind='in'").all().filter(r => !recorded.has(`clock-${r.id}`)).map(r => ({ id: r.id, employeeId: r.employee_id, workDate: r.work_date, time: JSON.parse(r.data).time }));
+    state.openClockIns = this.db.prepare("SELECT id, employee_id, work_date, data FROM clock_events WHERE kind='in'").all().filter(r => !recorded.has(`clock-${r.id}`) && !JSON.parse(r.data).additionalSession).map(r => ({ id: r.id, employeeId: r.employee_id, workDate: r.work_date, time: JSON.parse(r.data).time }));
     state.overtimeRequests = this.db.prepare("SELECT data FROM overtime_requests WHERE status IN ('pending','approved')").all().map(r => JSON.parse(r.data));
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
     return state;

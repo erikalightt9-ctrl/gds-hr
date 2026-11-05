@@ -92,3 +92,21 @@ test('off-site work: no address found and none typed is refused; an unreachable 
     assert.throws(() => punch(store, worker, offsite('in', '77777777-7777-4777-8777-777777777777', now, { latitude: 14.6, longitude: 121.1 }), now, { ip: HOME }), /Type the address/);
   } finally { store.close(); }
 });
+
+test('off-site work after the day\'s time out opens an additional session that extends the same day (gap unpaid, HR reviews)', async () => {
+  const store = fixture(), day = '2026-09-01', at = hhmm => new Date(`${day}T${hhmm}:00+08:00`);
+  try {
+    await reverseGeocode(store, 14.55, 121.02, { fetchImpl: fakeFetch(NOMINATIM) });
+    punch(store, worker, reading('in', '81111111-1111-4111-8111-111111111111', at('09:00')), at('09:00'), { ip: HOME });
+    punch(store, worker, reading('out', '82222222-2222-4222-8222-222222222222', at('18:00')), at('18:00'), { ip: HOME });
+    assert.throws(() => punch(store, worker, reading('in', '83333333-3333-4333-8333-333333333333', at('19:00')), at('19:00'), { ip: HOME }), /use Off-site work time in/, 'office: still one session a day');
+    const extraIn = punch(store, worker, offsite('in', '84444444-4444-4444-8444-444444444444', at('19:00')), at('19:00'), { ip: HOME });
+    assert.equal(extraIn.additionalSession, true); assert.ok(extraIn.flags.some(f => /Additional off-site session/.test(f)));
+    assert.ok(!store.read().openClockIns.some(c => c.id === extraIn.id), 'not treated as an open time-in by payroll');
+    punch(store, worker, offsite('out', '85555555-5555-4555-8555-555555555555', at('20:30')), at('20:30'), { ip: HOME });
+    const record = store.read().attendance.find(a => a.employeeId === 'EMP-001' && a.date === day);
+    assert.equal(record.timeIn, '09:00'); assert.equal(record.timeOut, '20:30'); assert.equal(record.approved, false, 'HR reviews it');
+    assert.deepEqual(record.breaks.at(-1), { start: `${day}T18:00`, end: `${day}T19:00` }, 'the gap between sessions is unpaid');
+    assert.match(record.explanation, /Additional off-site session 19:00-20:30/);
+  } finally { store.close(); }
+});
