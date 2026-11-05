@@ -484,7 +484,7 @@ function payrollPage() {
   // Daily-paid staff: the scheduled days of the cutoff (13), as on the HR attendance summary.
   // Days present = days credited (after lateness, undertime and any override such as the HR attendance sheet) plus paid
   // leave days (leave pay / daily rate); older rows without credited days fall back to the attendance count.
-  const paidDays = r => (r.creditedDays === undefined ? (r.daysPresentWithLeave ?? r.daysPresent) : r.creditedDays + ((r.adjustmentRate || r.dailyRate) ? (r.earnings.leavePay || 0) / (r.adjustmentRate || r.dailyRate) : 0));
+  const paidDays = r => (r.creditedDays === undefined ? (r.daysPresentWithLeave ?? r.daysPresent) : r.creditedDays + (r.paidLeaveDays ?? ((r.adjustmentRate || r.dailyRate) ? (r.earnings.leavePay || 0) / (r.adjustmentRate || r.dailyRate) : 0)));
   const monthWorkDays = r => (r.payBasis === 'daily' ? r.workingDays : latestRules()?.dailyDivisor ?? 26);
   const fixed2 = n => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Leave days / notes as HR writes them: "SIL - 10/13/26", "Absent 10/2, 10/8".

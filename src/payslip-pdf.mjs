@@ -63,11 +63,21 @@ function hoursByComponent(rows = []) {
   return out;
 }
 const hrs = h => (h ? `${Math.round(h * 100) / 100}` : '');
-// Credited days are shown to 2 decimals (0.9375 -> 0.94); pay itself is computed at full precision.
-const days2 = n => (n === null || n === undefined || n === '' ? '-' : (Math.round(Number(n) * 100) / 100).toFixed(2));
+// Days are shown to at most 2 decimals without trailing zeros (8, 12.53, 0.94); pay is computed at full precision.
+const days2 = n => (n === null || n === undefined || n === '' ? '-' : String(Math.round(Number(n) * 100) / 100));
+const SHORT_MONTHS = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+// "05 Nov. 2026" in Philippine time.
+export const releaseDate = at => { const [y, m, d] = new Date(new Date(at).getTime() + 8 * 3600e3).toISOString().slice(0, 10).split('-').map(Number); return `${String(d).padStart(2, '0')} ${SHORT_MONTHS[m - 1]} ${y}`; };
 
-export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } = {}) {
-  const p = new Page(), e = slip.earnings || {}, d = slip.deductions || {}, hours = hoursByComponent(slip.workBreakdown);
+// Rest day work in whole days (e.g. 12 h on a 12-hour schedule = 1 DAY); rest day overtime or part days in hours.
+function restDayRow(hours, hoursPerDay, value) {
+  const day = hours.restDay || 0, ot = hours.restOT || 0, perDay = Number(hoursPerDay) || 0;
+  if (day && !ot && perDay && Number.isInteger(Math.round(day / perDay * 100) / 100)) return ['Rest day / RDOT', days2(day / perDay), 'DAY', value];
+  return ['Rest day / RDOT', hrs(day + ot), 'HRS', value];
+}
+
+export function renderPayslipPdf(slip, { draft = slip.draft, designation = '', now = new Date() } = {}) {
+  const p = new Page(), e = slip.earnings || {}, d = slip.deductions || {}, hours = slip.quantities || hoursByComponent(slip.workBreakdown);
   const image = logo();
   let y = H - 40;
   // Header: the 菲龍集團 GDS Capital logo, title, period and release date.
@@ -77,7 +87,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   p.text('PAYSLIP', W / 2, y - 14, { size: 20, bold: true, align: 'center' }); y -= 24;
   p.line(W / 2 - 60, y, W / 2 + 60, y, COLOR.gold, 1.2); y -= 18;
   p.text('Period covered:', RIGHT - 190, y, { size: 9.5, bold: true }); p.text(period(slip.start, slip.end), RIGHT - 12, y, { align: 'right' }); y -= 15;
-  p.text('Release date:', RIGHT - 190, y, { size: 9.5, bold: true }); p.text(draft ? 'Not yet released' : slip.postedAt ? longDate(slip.postedAt) : '-', RIGHT - 12, y, { align: 'right' }); y -= 12;
+  p.text('Release date:', RIGHT - 190, y, { size: 9.5, bold: true }); p.text(releaseDate(draft ? now : slip.releasedAt || slip.postedAt || now), RIGHT - 12, y, { align: 'right' }); y -= 12;
   if (draft) { y -= 6; p.fill(COLOR.red, LEFT, y - 18, WIDTH, 18); p.text('DRAFT - FOR REVIEW ONLY, NOT YET POSTED', W / 2, y - 12.5, { size: 10, bold: true, color: COLOR.white, align: 'center' }); y -= 18; }
   y -= 10;
 
@@ -86,7 +96,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   y = header('EMPLOYEE INFORMATION', y);
   const daily = slip.payBasis === 'daily';
   const info = [['Employee name', slip.employeeName.toUpperCase()], ['Employee ID', slip.employeeId], ['Designation', designation || '-'],
-    ['Pay basis', daily ? 'Daily-paid (daily rate x payable days)' : slip.payBasis === 'days-worked' ? 'Paid per day worked' : 'Monthly-paid (fixed monthly salary, 26-day divisor)'], [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.creditedHours ? [['Hours credited', `${Math.round(slip.creditedHours * 100) / 100} h`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
+    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
   const KEY = LEFT + 190;
   for (const [label, value] of info) {
     p.line(LEFT, y - 18, RIGHT, y - 18); p.line(KEY, y, KEY, y - 18);
@@ -102,7 +112,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
     ['Days worked (regular)', days2(slip.daysWorked ?? slip.creditedDays ?? slip.daysPresent), 'DAY', e.basic],
     ...(e.leavePay ? [['Paid leave', slip.paidLeaveDays || '', 'DAY', e.leavePay]] : []),
     ['Overtime', hrs(hours.regularOT), 'HRS', e.regularOT],
-    ['Rest day / RDOT', hrs((hours.restDay || 0) + (hours.restOT || 0)), 'HRS', (e.restDay || 0) + (e.restOT || 0)],
+    restDayRow(hours, slip.hoursPerDay, (e.restDay || 0) + (e.restOT || 0)),
     ['Night differential', hrs(hours.nsd), 'HRS', e.nsd],
     ['Special holiday', hrs((hours.specialHoliday || 0) + (hours.specialOT || 0)), 'HRS', (e.specialHoliday || 0) + (e.specialOT || 0)],
     ['Regular holiday', hrs((hours.regularHoliday || 0) + (hours.regularHolidayOT || 0)), 'HRS', (e.regularHoliday || 0) + (e.regularHolidayOT || 0)],
