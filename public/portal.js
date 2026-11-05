@@ -114,6 +114,7 @@ export function createPortal(ctx) {
     out: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l-3 2"/><path d="M21 4l-3 3"/>'),
     away: svg('<circle cx="13" cy="4" r="2"/><path d="M8 21l3-6 3 2v4"/><path d="M6 12l3-4 4 1 3 4h3"/><path d="M11 15l-2-4"/>'),
     leave: svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M9 15l2 2 4-4"/>'),
+    overtime: svg(MENU_ICON.overtime201),
   };
   // Credited days to 2 decimals (0.9375 -> 0.94); pay itself is computed at full precision.
   const days2 = n => (n === null || n === undefined ? 'Unavailable' : (Math.round(Number(n) * 100) / 100).toFixed(2));
@@ -190,8 +191,8 @@ export function createPortal(ctx) {
     return `<section class="pm-card pm-attend"><div class="pm-attend-head"><div><h2>Today’s attendance</h2><p>Work schedule ${esc(t.scheduledIn || '—')} – ${esc(t.scheduledOut || '—')}${t.arrangement === 'WFH' ? ' · Work from home' : t.arrangement === 'Hybrid' ? ' · Hybrid' : ''}</p></div><span class="pm-chip pm-${chip}">${esc(t.status)}</span></div>
       ${lateBox}${graceBox}
       <div class="pm-tiles">${tile('Actual time in', esc(t.actualIn || '—'))}${tile('Actual time out', esc(t.actualOut || '—'))}${tile('Working hours', `${t.hours} h`)}${tile('Undertime', `${t.undertime} min`)}</div>
-      <div class="clock-actions pm-actions">${netLine}<button class="primary clock-btn" data-clock="${kind}" ${done ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button>${done ? '' : `<button class="clock-btn clock-outside pm-outline" data-clock-outside="${kind}">${ICON.away}<span>Out of office time ${kind}</span></button>`}<small>${away ? `At the office you can time ${kind} normally (your location is checked). Away from the office, use Out of office (needs HR approval).` : 'Uses your current device location. Allow location access when prompted.'}</small></div>
-      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
+      <div class="clock-actions pm-actions">${netLine}<button class="primary clock-btn" data-clock="${kind}" ${done ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button>${done ? '' : `<button class="clock-btn clock-outside pm-outline" data-clock-outside="${kind}">${ICON.away}<span>Out of office time ${kind}</span></button>`}<small>${away ? `At the office you can time ${kind} normally (your location is checked). Away from the office, use Out of office and give the reason.` : 'Uses your current device location. Allow location access when prompted.'}</small></div>
+      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-file-overtime>${ICON.overtime}<span>Apply for overtime</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
   }
   function draw(data, auth) {
     if (!data) return;
@@ -434,6 +435,7 @@ export function createPortal(ctx) {
     if (button.dataset.calDay) { calDay = button.dataset.calDay; render(); return; }
     if (button.dataset.attendanceView) { attendanceView = button.dataset.attendanceView; dirty = false; render(); }
     if (button.dataset.attendanceJump) { attendanceView = button.dataset.attendanceJump; dirty = false; render(); }
+    if (button.hasAttribute('data-file-overtime')) { tab = 'overtime201'; dirty = false; render(); window.scrollTo({ top: 0 }); return; }   // the overtime tab opens with the application form
     if (button.hasAttribute('data-file-unpaid')) { tab = 'leave'; dirty = false; render(); preselectLeave(''); /* opens the leave form; the employee picks the leave type */ }
     if (button.dataset.clock) await clock(button.dataset.clock, button);
     if (button.dataset.clockOutside) {
