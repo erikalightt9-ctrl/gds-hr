@@ -17,6 +17,8 @@ const inputSchema = z.object({
   hours: z.object(Object.fromEntries(HOUR_FIELDS.map(k => [k, hours]))).strict(),
   reason: z.string().trim().max(500).default('Manual entry'),
   waiveLate: z.boolean().default(false), waiveUndertime: z.boolean().default(false),   // no late / undertime deductions this cutoff
+  // HR accepts these checks for this cutoff instead of fixing the records; pay is calculated exactly as before.
+  waiveOpenTimeIn: z.boolean().default(false), waiveOvertimeCheck: z.boolean().default(false),
   overrides: z.array(z.object({ component: z.enum([...OVERRIDE_EARNINGS, ...OVERRIDE_DEDUCTIONS]), amount: z.number().min(0).max(1e8), reason: z.string().trim().max(500).default('') }).strict()).max(20).default([]),
 }).strict().refine(v => new Set(v.overrides.map(o => o.component)).size === v.overrides.length, 'Override each item only once.').refine(v => v.end >= v.start && v.start.slice(0, 7) === v.end.slice(0, 7), 'Choose a cutoff within one month.');
 

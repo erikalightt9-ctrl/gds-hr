@@ -90,3 +90,16 @@ test('overtime past midnight is paid within the approved period, with night diff
     assert.ok(row.earnings.nsd > 0, 'night differential applies');
   } finally { store.close(); }
 });
+
+test('HR can waive the unsupported-overtime check for a cutoff: only the supported hours are paid', () => {
+  const store = fixture(leaveAt('19:00'));
+  try {
+    const short = fileOvertime(store, worker, { date: day, startTime: '18:00', endTime: '21:00', reason: 'Event (demo)' });
+    decideOvertime(store, hr, short.id, { decision: 'approve' });
+    store.db.prepare('INSERT INTO payroll_inputs(employee_id,start,end,data) VALUES(?,?,?,?)').run('EMP-001', '2026-09-01', '2026-09-15', JSON.stringify({ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveOvertimeCheck: true, updatedBy: 'hr1' }));
+    const computed = run(store);
+    assert.ok(!computed.blockers.some(b => /approved overtime on 2026-09-01/.test(b)), 'waived');
+    assert.equal(otHours(computed.rows[0]), 1, 'still only the hour worked inside the approved period');
+    assert.ok(computed.rows[0].trace.some(x => /Waived by hr1: approved overtime on 2026-09-01 is 3 h; only 1 h/.test(x.formula)));
+  } finally { store.close(); }
+});

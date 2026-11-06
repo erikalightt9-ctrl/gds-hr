@@ -289,7 +289,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         // valid, flagged day instead of a shift that ends before it starts.
         const endMin = Math.max(sh * 60 + sm + Math.round(sched.hoursPerDay * 60), ih * 60 + im + 1);
         record = { id: `open-${openIn.id}`, employeeId: e.id, date: d, status: 'present', scheduledIn: sched.start || openIn.time, timeIn: openIn.time, timeOut: `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`, endNextDay: endMin >= 1440, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true };
-        blockers.push(`${prefix}: timed in at ${openIn.time} on ${d} with no time out yet; counted as a scheduled day until the time out is recorded.`);
+        if (manual?.waiveOpenTimeIn) trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `Waived by ${manual.updatedBy}: time in ${openIn.time} on ${d} with no time out counted as a scheduled day`, sourceKind: 'payroll-inputs', sourceId: `${e.id}:${start}`, date: d });
+        else blockers.push(`${prefix}: timed in at ${openIn.time} on ${d} with no time out yet; counted as a scheduled day until the time out is recorded.`);
       }
       // Work-from-home day set as present without time in / out, unless on approved leave.
       if (!record && !state.leaves.some(l => l.employeeId === e.id && l.status === 'approved' && l.startDate <= d && l.endDate >= d)) record = autoPresentRecord(e, attendanceProfile, d, r);
@@ -392,7 +393,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       });
       const eligibleOT = eligible.filter(Boolean).length;
       // Approved overtime that attendance does not support is flagged for HR before posting.
-      if (gatedOT && approvedOTMinutes - eligibleOT >= OT_BLOCK) blockers.push(`${prefix}: approved overtime on ${d} is ${round(approvedOTMinutes / 60)} h but attendance shows ${round(eligibleOT / 60)} h worked within the approved period. Adjust the approved hours in Attendance → Overtime applications before posting.`);
+      // HR may waive this check for the cutoff: only the overtime attendance supports is paid either way.
+      if (gatedOT && approvedOTMinutes - eligibleOT >= OT_BLOCK && manual?.waiveOvertimeCheck) trace.push({ component: 'overtime', side: 'earnings', amount: 0, formula: `Waived by ${manual.updatedBy}: approved overtime on ${d} is ${round(approvedOTMinutes / 60)} h; only ${round(eligibleOT / 60)} h supported by attendance is paid`, sourceKind: 'payroll-inputs', sourceId: `${e.id}:${start}`, date: d });
+      else if (gatedOT && approvedOTMinutes - eligibleOT >= OT_BLOCK) blockers.push(`${prefix}: approved overtime on ${d} is ${round(approvedOTMinutes / 60)} h but attendance shows ${round(eligibleOT / 60)} h worked within the approved period. Adjust the approved hours in Attendance → Overtime applications before posting.`);
       // Overtime counts in whole 30-minute blocks, rounded down (40 min = 30 min; 1 h 15 min = 1 h; under 30 min = none).
       const otPayable = Math.floor(eligibleOT / OT_BLOCK) * OT_BLOCK;
       minutes.forEach((m, index) => {

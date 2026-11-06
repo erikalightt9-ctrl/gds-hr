@@ -238,3 +238,16 @@ test('overtime is paid in whole 30-minute blocks, rounded down (40 min = 30; 1 h
   assert.equal(ot('16:29'), 0, '29 minutes -> not overtime');
   assert.ok(Math.abs(ot('16:30') - hour / 2) < 0.02, 'exactly 30 minutes counts');
 });
+
+test('HR can waive the open time-in check for a cutoff: pay is unchanged, the blocker becomes a trace note', () => {
+  const s = fixture(); s.attendance = [attend('2026-09-02')]; withOtherDays(s);
+  s.attendance = s.attendance.filter(a => a.date !== '2026-09-01');
+  s.openClockIns = [{ id: 'ci-1', employeeId: 'EMP-001', workDate: '2026-09-01', time: '08:30' }];
+  const before = calculatePayroll(s, '2026-09-01', '2026-09-15');
+  s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveOpenTimeIn: true, updatedBy: 'hr1' }];
+  const after = calculatePayroll(s, '2026-09-01', '2026-09-15');
+  assert.ok(before.blockers.some(b => /no time out yet/.test(b)));
+  assert.ok(!after.blockers.some(b => /no time out yet/.test(b)), 'waived');
+  assert.equal(after.rows[0].net, before.rows[0].net, 'pay unchanged');
+  assert.ok(after.rows[0].trace.some(t => /Waived by hr1: time in 08:30 on 2026-09-01/.test(t.formula)));
+});
