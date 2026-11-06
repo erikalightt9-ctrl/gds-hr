@@ -284,8 +284,7 @@ export function createPortal(ctx) {
   }
   // Reads a fresh device position. A precise fix is tried first; if the device times out
   // (common indoors), one standard-accuracy attempt follows. Each failure says what to fix.
-  function capturePosition() {
-    const read = options => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
+  function geoError(error) {
     const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
     const reasons = {
       1: ios ? 'Location permission is blocked for Safari. On your iPhone open Settings → Privacy & Security → Location Services → Safari Websites, choose "While Using the App", then reload this page and tap Allow.'
@@ -293,7 +292,11 @@ export function createPortal(ctx) {
       2: 'Your device could not determine its location. Turn on Wi-Fi and location services, move near a window, and try again.',
       3: 'Finding your location took too long. Move near a window or turn on Wi-Fi, then try again.',
     };
-    const fail = error => new Error(`${reasons[error?.code] || 'Location could not be captured.'} No attendance was recorded.`);
+    return new Error(`${reasons[error?.code] || 'Location could not be captured.'} No attendance was recorded.`);
+  }
+  function capturePosition() {
+    const read = options => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
+    const fail = geoError;
     return read({ enableHighAccuracy: true, maximumAge: 0, timeout: 15000 })
       .catch(error => error?.code === 3 ? read({ enableHighAccuracy: false, maximumAge: 0, timeout: 15000 }) : Promise.reject(error))
       .catch(error => Promise.reject(fail(error)));
@@ -321,6 +324,26 @@ export function createPortal(ctx) {
       toast(error.message); button.textContent = `Retry time ${kind}`;
     }
   }
+  // Live GPS for off-site work: listen to the device's readings and stop at the first one within the accuracy goal;
+  // after WATCH_MS take the best reading so far (a reading above the limit is still recorded but flagged for HR).
+  // With no reading at all, one standard-accuracy attempt follows. Usually 2-8 seconds instead of up to 30.
+  const GPS_GOAL_METERS = 50, WATCH_MS = 8000;
+  function watchBestPosition({ onProgress = () => {} } = {}) {
+    return new Promise((resolve, reject) => {
+      let best = null, done = false, id = null;
+      const finish = (ok, value) => { if (done) return; done = true; clearTimeout(timer); if (id !== null) navigator.geolocation.clearWatch(id); (ok ? resolve : reject)(value); };
+      const timer = setTimeout(() => {
+        if (best) { finish(true, best); return; }
+        if (id !== null) { navigator.geolocation.clearWatch(id); id = null; }
+        navigator.geolocation.getCurrentPosition(position => finish(true, position), error => finish(false, geoError(error)), { enableHighAccuracy: false, maximumAge: 0, timeout: 10000 });
+      }, WATCH_MS);
+      id = navigator.geolocation.watchPosition(position => {
+        if (!best || position.coords.accuracy < best.coords.accuracy) best = position;
+        onProgress(best.coords.accuracy);
+        if (best.coords.accuracy <= GPS_GOAL_METERS) finish(true, best);
+      }, error => { if (error?.code === 1) finish(false, geoError(error)); }, { enableHighAccuracy: true, maximumAge: 0, timeout: WATCH_MS });
+    });
+  }
   // Off-site work time in / out. GPS (high accuracy) -> the server finds the readable address -> the employee checks it,
   // may correct the wording (never the coordinates), confirms, and submits. Nothing is recorded until then.
   const OFFSITE_PURPOSES = ['Client meeting', 'Field work / site visit', 'Bank or government errand', 'Delivery or pick-up', 'Training or seminar', 'Work from home (approved)', 'Company event', 'Other'];
@@ -343,7 +366,7 @@ export function createPortal(ctx) {
       box.innerHTML = '<p class="muted">Getting your exact location… allow location access if asked.</p>';
       try {
         if (!navigator.geolocation) throw new Error('This browser cannot capture your location. Use another browser or contact HR.');
-        const position = await capturePosition();
+        const position = await watchBestPosition({ onProgress: accuracy => { box.innerHTML = `<p class="muted">Getting your exact location… ±${Math.round(accuracy)} m${accuracy > GPS_GOAL_METERS ? ' (improving)' : ''}</p>`; } });
         reading = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, capturedAt: new Date(position.timestamp).toISOString() };
         box.innerHTML = '<p class="muted">Finding the street address…</p>';
         found = await api('/me/locate', { latitude: reading.latitude, longitude: reading.longitude, accuracy: reading.accuracy })
