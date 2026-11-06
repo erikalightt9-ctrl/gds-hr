@@ -695,7 +695,7 @@ function netPayDialog(employeeId, focus = 'net') {
   const box = (side, [key, label, locked]) => {
     if (key === 'salaryDeduction' && salaryLoanModule) locked = true;
     const value = shown(side, key), always = ['basic', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'sssLoan', 'pagibigLoan', 'salaryDeduction'].includes(key);
-    const computed = key === 'basic' && original(key) !== undefined ? original(key) - (row.absenceAmount || 0) : original(key);
+    const computed = original(key);
     if (!value && computed === undefined && !always && (locked || !['allowance', 'additional', 'regularOT', 'nsd', 'absence', 'undertime', 'other'].includes(key))) return '';
     return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${locked || !editable ? ' locked' : ''}"><span>${esc(label)}</span>
       <input type="number" step="0.01" min="0" name="${esc(key)}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${locked || !editable ? 'readonly tabindex="-1"' : ''} aria-label="${esc(label)}">
@@ -725,7 +725,7 @@ function netPayDialog(employeeId, focus = 'net') {
     event.preventDefault();
     const allowed = new Set(['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance', 'absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'sssLoan', 'pagibigLoan', 'salaryDeduction']);
     const reason = '';
-    const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Math.round((Number(i.value || 0) + (i.name === 'basic' ? row.absenceAmount || 0 : 0)) * 100) / 100, reason }));
+    const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Math.round(Number(i.value || 0) * 100) / 100, reason }));
     const base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: 'Net pay adjustment' };
     // Keep every saved amount this form does not show (e.g. a locked absence); only the boxes shown are replaced.
     const kept = (base.overrides || []).filter(o => !allowed.has(o.component) || !form.elements[o.component] || form.elements[o.component].readOnly);
@@ -753,7 +753,7 @@ function basicPayDialog(employeeId) {
   computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
   const original = key => (row.overrides || []).find(o => o.component === key)?.original;
   const fact = (label, value, note = '') => `<div class="net-box locked"><span>${esc(label)}</span><strong class="fact-value">${value}</strong>${note ? `<small>${note}</small>` : ''}</div>`;
-  const input = (side, key, label) => { const value = row[side][key] || 0, computed = key === 'basic' && original(key) !== undefined ? original(key) - (row.absenceAmount || 0) : original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}>${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`; };
+  const input = (side, key, label) => { const value = row[side][key] || 0, computed = original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}>${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`; };
   const daily = row.payBasis === 'daily', base = daily ? row.dailyRate * row.workingDays : row.monthlySalary * (currentRun.start.endsWith('-01') || currentRun.start.endsWith('-16') ? 0.5 : 1);
   openDialog(`Basic pay · ${row.employeeName}`, `<form id="basic-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · ${currentRun.id ? 'Posted (read-only)' : 'Draft (not yet posted)'}</p>
     <fieldset class="net-side"><legend>How basic pay is computed</legend>
@@ -777,7 +777,7 @@ function basicPayDialog(employeeId) {
   form.onsubmit = async event => {
     event.preventDefault();
     const reason = '';
-    const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Math.round((Number(form.elements[k].value || 0) + (k === 'basic' ? row.absenceAmount || 0 : 0)) * 100) / 100, reason }));
+    const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Math.round(Number(form.elements[k].value || 0) * 100) / 100, reason }));
     try { await saveOverrides(row, shown, changed, 'Basic pay adjustment'); dialog.close(); dialog.classList.remove('wide-dialog'); if (await reopenComputation()) savedPopup(changed.length ? 'Basic pay updated. Changes are labelled Manual.' : 'Saved.'); } catch (error) { toast(error.message); }
   };
 }
