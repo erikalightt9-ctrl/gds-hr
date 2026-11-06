@@ -5,7 +5,17 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const LOGO_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/payslip-logo.jpg');
+const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public');
+const LOGO_FILE = path.join(PUBLIC, 'payslip-logo.jpg');
+// Payslips of employees under another company (Settings -> subsidiaries / department) use that company's logo.
+const COMPANY_LOGOS = { PDMN: path.join(PUBLIC, 'payslip-logo-pdmn.jpg') };
+const companyLogos = {};
+export function companyLogo(company) {
+  const file = COMPANY_LOGOS[String(company || '').trim().toUpperCase()];
+  if (!file) return logo();
+  if (!(file in companyLogos)) companyLogos[file] = jpegFile(file);
+  return companyLogos[file] || logo();
+}
 export const W = 595, H = 842, LEFT = 40, RIGHT = 555, WIDTH = RIGHT - LEFT;
 export const COLOR = { ink: '0.13 0.13 0.13', muted: '0.42 0.42 0.42', line: '0.78 0.74 0.68', red: '0.71 0.12 0.17', redText: '0.80 0.18 0.20', gold: '0.85 0.72 0.36', goldTint: '0.99 0.95 0.84', band: '0.97 0.96 0.94', net: '1 0.90 0.45', white: '1 1 1' };
 
@@ -78,7 +88,7 @@ function restDayRow(hours, hoursPerDay, value) {
 
 export function renderPayslipPdf(slip, { draft = slip.draft, designation = '', now = new Date() } = {}) {
   const p = new Page(), e = slip.earnings || {}, d = slip.deductions || {}, hours = slip.quantities || hoursByComponent(slip.workBreakdown);
-  const image = logo();
+  const image = companyLogo(slip.company);
   let y = H - 40;
   // Header: the 菲龍集團 GDS Capital logo, title, period and release date.
   p.stroke(LEFT, 40, WIDTH, H - 80, COLOR.gold);

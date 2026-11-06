@@ -440,7 +440,8 @@ export function designationOf(store, employeeId) {
   const row = store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='employment'").get(employeeId);
   return row ? JSON.parse(row.data).position || '' : '';
 }
-export function payslipFromRow(run, row, { designation = '' } = {}) {
+export function employeeCompany(store, employeeId) { return store.read().employees.find(e => e.id === employeeId)?.department || ''; }
+export function payslipFromRow(run, row, { designation = '', company = '' } = {}) {
   const loans = (row.loanDeductions || []).map(l => ({ type: l.type || run.sources?.loans?.find(source => source.id === l.loanId)?.type || 'Loan', reference: l.reference || '', amount: l.amount, previousBalance: l.previousBalance, remainingBalance: l.remainingBalance }));
   // Use the posted employee row only; never recompute historical payslips from current rates.
   const computation = (row.trace || []).map(({ component, side, amount, formula, date }) => ({ component, side, amount, formula, date }));
@@ -469,7 +470,7 @@ export function payslipFromRow(run, row, { designation = '' } = {}) {
   const paidLeaveDays = (row.trace || []).filter(t => t.component === 'leavePay' && t.amount > 0).reduce((n, t) => n + (Number(/([\d.]+) day/.exec(t.formula)?.[1]) || 0), 0);
   const worked = Math.round(((row.creditedDays ?? row.daysPresent ?? 0) - (paidLeaveDays ? (row.leaveNotes || []).filter(n => /\(half day/.test(n)).length * 0.5 : 0)) * 10000) / 10000;
   const daysCredited = Math.round((worked + paidLeaveDays) * 10000) / 10000;
-  return { leaves, paidLeaveDays, daysWorked: worked, daysCredited, creditedHours: row.creditedHours ?? null, quantities: row.quantities || null, hoursPerDay: row.hoursPerDay || null, releasedAt: run.releasedAt || null, draft: run.status !== 'posted', designation, payBasis: row.payBasis || 'monthly', workBreakdown: row.workBreakdown || [], contributionBasis: row.contributionBasis || null, id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
+  return { leaves, paidLeaveDays, daysWorked: worked, daysCredited, creditedHours: row.creditedHours ?? null, quantities: row.quantities || null, hoursPerDay: row.hoursPerDay || null, releasedAt: run.releasedAt || null, draft: run.status !== 'posted', company, designation, payBasis: row.payBasis || 'monthly', workBreakdown: row.workBreakdown || [], contributionBasis: row.contributionBasis || null, id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
 }
 // At 9:00 AM on salary day the server releases finalized payslips and tells each employee once (bell notice).
 export function announceDuePayslips(store, now = new Date()) {
@@ -490,7 +491,7 @@ export function ownPayslip(store, actor, runId) {
   if (!row) throw new AppError('Payslip not found.', 404);
   if (!payslipReleased(run, manilaNow())) throw new AppError(`This payslip will be available on salary day, ${payDateFor(run.start, run.end)}, at 9:00 AM.`, 403);
   store.log(actor, 'view-payslip', 'payslip', run.id, null, { employeeId: employee.id });
-  return payslipFromRow(run, row, { designation: designationOf(store, row.employeeId) });
+  return payslipFromRow(run, row, { designation: designationOf(store, row.employeeId), company: employeeCompany(store, row.employeeId) });
 }
 // Admin/HR/Payroll review of any employee's posted payslip.
 export function staffPayslip(store, actor, runId, employeeId) {
@@ -498,7 +499,7 @@ export function staffPayslip(store, actor, runId, employeeId) {
   const run = store.read().runs.find(r => r.id === runId && r.status === 'posted'), row = run?.rows.find(r => r.employeeId === employeeId);
   if (!row) throw new AppError('Payslip not found.', 404);
   store.log(actor, 'view-payslip', 'payslip', run.id, null, { employeeId });
-  return payslipFromRow(run, row, { designation: designationOf(store, row.employeeId) });
+  return payslipFromRow(run, row, { designation: designationOf(store, row.employeeId), company: employeeCompany(store, row.employeeId) });
 }
 export function payslipPdf(payslip, { draft = payslip.draft } = {}) {
   return renderPayslipPdf(payslip, { draft, designation: payslip.designation });

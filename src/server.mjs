@@ -32,7 +32,7 @@ import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, locateAddress, punch, applyLeave, attachLeaveProof, reviewLeaveProof, requestLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, announceDuePayslips, employeeClockEvents, explanationsOverview } from './portal.mjs';
+import { employeeDashboard, locateAddress, punch, applyLeave, attachLeaveProof, reviewLeaveProof, requestLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, employeeCompany, locationAddress, earlierHistory, announceDuePayslips, employeeClockEvents, explanationsOverview } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
 import { runTardinessMemos } from './tardiness-memo.mjs';
 import { submitAttendanceRequest, ownAttendanceRequests, cancelAttendanceRequest, replyAttendanceRequest, attendanceRequestsOverview, startReview, requestInformation, addRemark, rejectAttendanceRequest, approveAttendanceRequest, remindOverdueRequests } from './attendance-requests.mjs';
@@ -383,7 +383,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         if (!row) throw new AppError('This employee is not included in payroll for that cutoff.', 404);
         store.log(auth.user, 'preview-payslip', 'payslip', 'preview', null, { employeeId: row.employeeId, start: p.start, end: p.end });
         res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="draft-payslip-${row.employeeId}-${p.start}-${p.end}.pdf"` });
-        res.end(payslipPdf(payslipFromRow({ ...run, id: 'preview', status: 'preview' }, row, { designation: designationOf(store, row.employeeId) }), { draft: true })); return;
+        res.end(payslipPdf(payslipFromRow({ ...run, id: 'preview', status: 'preview' }, row, { designation: designationOf(store, row.employeeId), company: employeeCompany(store, row.employeeId) }), { draft: true })); return;
       }
       const staffSlip = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/payslips\/([A-Za-z0-9_-]+)\.pdf$/);
       if (staffSlip && req.method === 'GET') {

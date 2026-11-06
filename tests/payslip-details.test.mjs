@@ -30,3 +30,11 @@ test('the payslip lists hours / days for each line, rest day in days, whole days
   assert.ok(!pdf.includes('Pay basis') && !pdf.includes('8.00)'), 'no pay-basis row; whole days without decimals');
   assert.match(pdf, /\(Rest day \/ RDOT\) Tj ET[\s\S]*?\(1\) Tj[\s\S]*?\(DAY\)/, 'rest day of 12 h on a 12-hour schedule = 1 DAY');
 });
+
+test('payslips of PDMN employees use the PDMN logo; others keep the GDS logo', async () => {
+  const { companyLogo, logo } = await import('../src/payslip-pdf.mjs');
+  const pdmn = companyLogo('PDMN'), gds = companyLogo('GDS Capital HQ');
+  assert.ok(pdmn && pdmn.data.length !== logo().data.length, 'a different image for PDMN');
+  assert.deepEqual([pdmn.width, pdmn.height], [317, 133]);
+  assert.equal(gds, logo()); assert.equal(companyLogo(''), logo());
+});
