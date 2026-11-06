@@ -157,7 +157,7 @@ export function createPortal(ctx) {
   }
   // One explanation with its comments; the employee gets a reply box when HR sent it back.
   function explanationCard(e, view) {
-    const STATUS = { pending: ['Waiting for HR review', 'pending'], returned: ['Sent back by HR · reply needed', 'rejected'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'] };
+    const STATUS = { pending: ['Waiting for HR review', 'pending'], returned: ['Sent back by HR · reply needed', 'rejected'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'], waived: ['Waived · not required (Jan–Oct 2026)', 'neutral'] };
     const [label, kind] = STATUS[e.status] || [e.status, 'neutral'];
     const thread = (e.comments || []).map(c => `<div class="expl-comment ${c.side}"><strong>${c.side === 'hr' ? 'HR' : view === 'employee' ? 'You' : 'Employee'}</strong> · <small>${esc(stamp(c.at))}</small><p>${esc(c.text)}</p></div>`).join('');
     const reply = view === 'employee' && e.status === 'returned' ? `<form class="expl-reply" data-explanation-reply="${esc(e.id)}"><textarea name="comment" required minlength="3" maxlength="2000" placeholder="Reply to HR"></textarea><button class="primary">Send reply</button></form>` : '';
@@ -523,6 +523,7 @@ export function createPortal(ctx) {
       <section class="panel"><div class="panel-head"><div><h2>Waiting for the employee</h2><p class="legend">Time in 15 minutes or more after the scheduled start of that day, with no explanation yet.</p></div><span class="badge pending">${data.due.length}</span></div>
         ${table(['Date', 'Employee', 'Scheduled', 'Time in', 'Late'], data.due.map(d => [esc(day(d.date)), `${esc(d.employeeName)} <small>${esc(d.employeeId)}</small>`, esc(d.scheduledIn), esc(d.timeIn), `${d.lateMinutes} min`]), 'Every late arrival has an explanation.')}</section>
       ${byStatus('returned').length ? `<section class="panel"><div class="panel-head"><h2>Sent back to the employee</h2></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}
+      ${byStatus('waived').length ? `<section class="panel"><details><summary class="panel-head"><h2>Waived · Jan 1 – Oct 31, 2026</h2><span class="badge neutral">${byStatus('waived').length}</span></summary><p class="legend">No explanation is required for these dates. What the employees wrote is kept.</p><div class="panel-body expl-list">${byStatus('waived').map(e => card(e)).join('')}</div></details></section>` : ''}
       <section class="panel"><div class="panel-head"><h2>Reviewed</h2></div><div class="panel-body expl-list">${reviewed.slice(0, 50).map(e => card(e)).join('') || '<p class="muted">Nothing to show yet.</p>'}</div></section>`;
   }
   // Opens the leave form with a type chosen, e.g. the dashboard's unpaid leave / absence shortcut.

@@ -9,8 +9,12 @@ import { lateBy } from './late-incidents.mjs';
 export const EXPLAIN_AFTER_MINUTES = 15;
 // Explanations are asked for lateness from this date on; earlier late days are not (HR decision, Nov 2026).
 export const EXPLAIN_FROM = '2026-11-01';
+// HR waiver: no explanation is required for late arrivals dated Jan 1 - Oct 31, 2026 (by attendance date), whatever
+// the minutes late or offsets. Late minutes, offsets, payroll and tardiness memos are not affected.
+export const WAIVED_FROM = '2026-01-01', WAIVED_TO = '2026-10-31';
+export const isWaivedDate = date => date >= WAIVED_FROM && date <= WAIVED_TO;
 // Settings -> Company may hold another start date (lateExplanationsFrom).
-const explainFrom = store => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').company?.lateExplanationsFrom || EXPLAIN_FROM; } catch { return EXPLAIN_FROM; } };
+export const explainFrom = store => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').company?.lateExplanationsFrom || EXPLAIN_FROM; } catch { return EXPLAIN_FROM; } };
 const profileOf = (state, id) => (state.employeeProfiles || []).find(p => p.employeeId === id && p.section === 'attendance') || {};
 const explainedDays = store => new Set(store.db.prepare('SELECT employee_id, data FROM attendance_explanations').all().map(r => `${r.employee_id}|${JSON.parse(r.data).date}`));
 

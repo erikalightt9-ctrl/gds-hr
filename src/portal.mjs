@@ -8,7 +8,7 @@ import { getDocument } from './profiles.mjs';
 import { networkStatus, inOfficeArea } from './office-network.mjs';
 import { cachedAddress, reverseGeocode, DEFAULT_ACCURACY_LIMIT } from './geocode.mjs';
 import { lateBy, graceFor } from './late-incidents.mjs';
-import { explanationsDue, EXPLAIN_AFTER_MINUTES } from './late-explanations.mjs';
+import { explanationsDue, EXPLAIN_AFTER_MINUTES, explainFrom } from './late-explanations.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 import { reasonsFor } from './live-reasons.mjs';
 import { leaveReference } from './attendance-requests.mjs';
@@ -285,6 +285,7 @@ export function submitExplanation(store, actor, input) {
   ready(employee, value.date); validateAttachment(store, actor, value.documentId);
   return store.transaction(() => {
     if (rows(store, 'attendance_explanations', employee.id).some(e => e.date === value.date && e.status !== 'rejected')) throw new AppError('An explanation already exists for this day.');
+    if (value.date < explainFrom(store)) throw new AppError('No explanation is needed for this date: the requirement is waived for late arrivals from January 1 to October 31, 2026.');
     const explanation = { ...value, id: randomUUID(), employeeId: employee.id, submittedAt: new Date().toISOString(), status: 'pending', approvedOffset: 0 };
     store.db.prepare('INSERT INTO attendance_explanations VALUES(?,?,?)').run(explanation.id, employee.id, JSON.stringify(explanation));
     store.notify(null, `${employee.id} ${employee.name}: submitted an attendance explanation for ${value.date}. Review it in Attendance → Explanations.`);

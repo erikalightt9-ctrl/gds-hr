@@ -107,3 +107,20 @@ test('late days before Nov 1, 2026 (the default start) are not asked for', () =>
     assert.equal(explanationsDue(store).length, 0, 'September lateness is not asked for');
   } finally { store.close(); }
 });
+
+test('waiver: explanations dated Jan 1 - Oct 31, 2026 still waiting become Waived (text kept); decided ones and November stay; none can be filed', async () => {
+  const { waiveEarlyExplanations } = await import('../src/migrations.mjs');
+  const store = fixture();
+  try {
+    const add = (id, date, status) => store.db.prepare('INSERT INTO attendance_explanations(id, employee_id, data) VALUES(?,?,?)').run(id, 'EMP-001', JSON.stringify({ id, employeeId: 'EMP-001', date, reason: 'Traffic', explanation: 'EDSA', status }));
+    add('w1', '2026-09-01', 'pending'); add('w2', '2026-10-31', 'returned'); add('w3', '2026-08-01', 'approved'); add('w4', '2026-11-02', 'pending');
+    assert.equal(waiveEarlyExplanations(store), 2);
+    const status = id => JSON.parse(store.db.prepare('SELECT data FROM attendance_explanations WHERE id=?').get(id).data);
+    assert.equal(status('w1').status, 'waived'); assert.equal(status('w1').explanation, 'EDSA', 'what the employee wrote is kept');
+    assert.equal(status('w2').status, 'waived'); assert.equal(status('w3').status, 'approved'); assert.equal(status('w4').status, 'pending');
+    assert.equal(waiveEarlyExplanations(store), 0, 'runs once');
+    store.db.prepare('DELETE FROM hr_settings').run();
+    assert.throws(() => submitExplanation(store, worker, explain('2026-10-15')), /waived/);
+    assert.equal(explanationsDue(store).length, 0, 'nothing due for those dates, even after corrections');
+  } finally { store.close(); }
+});

@@ -8,7 +8,8 @@ import { saveProfile } from '../src/profiles.mjs';
 import { saveRecord, preview, postPayroll } from '../src/service.mjs';
 import { createApp } from '../src/server.mjs';
 const worker = { id: 'worker', username: 'employee1', role: 'employee', employeeId: 'EMP-001' };
-function fixture() { const store = new Store(':memory:'); const state = completeState(); state.attendance = []; store.write(state); return store; }
+// These tests use September 2026 dates; late explanations normally start on Nov 1, 2026 (Jan-Oct is waived).
+function fixture() { const store = new Store(':memory:'); const state = completeState(); state.attendance = []; store.write(state); store.db.prepare('INSERT INTO hr_settings(id, data) VALUES(1, ?)').run(JSON.stringify({ company: { lateExplanationsFrom: '2026-01-01' } })); return store; }
 const reading = (kind, id, now) => ({ kind, requestId: id, latitude: 14.55, longitude: 121.02, accuracy: 15, capturedAt: now.toISOString() });
 test('clock events are immutable, server-timed, idempotent and become payroll attendance on checkout', () => {
   const store = fixture();
