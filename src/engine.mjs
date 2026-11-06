@@ -544,7 +544,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // lateness, undertime) at the adjustment rate. Others: days present less the late / undertime fraction.
     const dayHours = attendanceProfile?.hoursPerDay || r.normalHours || 8, round4 = n => Math.round(n * 10000) / 10000;
     const monthlyCredit = !dailyPaid && !perDayWorked && factor === 0.5 && adjDaily;
-    const creditedDays = basicOverridden && daily ? round4(earnings.basic / daily)
+    // A manual "replace" entry with typed days worked and a typed basic: the days credited are the days HR typed.
+    const creditedDays = basicOverridden && manual?.mode === 'replace' && manual.daysWorked ? round4(manual.daysWorked)
+      : basicOverridden && daily ? round4(earnings.basic / daily)
       : monthlyCredit ? round4(Math.max(0, r.dailyDivisor / 2 * (allScheduled.length ? scheduled.length / allScheduled.length : 0) - paidLeaveDays - (baseline - earnings.basic - (earnings.leavePay || 0)) / adjDaily))
       : round4(daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0));
     const creditedHours = monthlyCredit || basicOverridden ? round4(creditedDays * dayHours) : round4((creditedMinutes || Math.max(0, creditedDays) * dayHours * 60) / 60);

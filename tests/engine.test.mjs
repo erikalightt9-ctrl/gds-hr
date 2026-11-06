@@ -251,3 +251,11 @@ test('HR can waive the open time-in check for a cutoff: pay is unchanged, the bl
   assert.equal(after.rows[0].net, before.rows[0].net, 'pay unchanged');
   assert.ok(after.rows[0].trace.some(t => /Waived by hr1: time in 08:30 on 2026-09-01/.test(t.formula)));
 });
+
+test('a manual "replace" entry with typed days worked and a typed basic credits exactly the typed days', () => {
+  const s = fixture(); withOtherDays(s);
+  s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'replace', daysWorked: 9, absenceDays: 2, lateMinutes: 0, undertimeMinutes: 0, hours: {}, updatedBy: 'hr1',
+    overrides: [{ component: 'basic', amount: 5000, reason: 'Semi-monthly / scheduled days x days present' }] }];
+  const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(row.earnings.basic, 5000); assert.equal(row.creditedDays, 9);
+});
