@@ -1,6 +1,7 @@
 // HTTP routes for the HR 201 modules (/api/hr/...). Every handler enforces its own permission on the server.
 import { AppError, permit } from './service.mjs';
 import { explanationsDue } from './late-explanations.mjs';
+import { CATEGORIES as REQUEST_CATEGORIES } from './attendance-requests.mjs';
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
@@ -89,8 +90,9 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if (['admin', 'hr'].includes(actor.role)) { const pending = store.read().leaves.filter(l => l.status === 'pending'), leaves = pending.length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave', date: span(pending.map(l => l.startDate)) }); }
     // Attendance requests (forgot time in / out, failed time in, system error, ...) waiting for HR, in Attendance → Requests.
     if (['admin', 'hr'].includes(actor.role)) {
-      const reqDates = store.db.prepare("SELECT date FROM attendance_requests WHERE status IN ('pending','review')").all().map(r => r.date), requests = reqDates.length;
-      if (requests) items.push({ text: `${requests} attendance request${requests === 1 ? '' : 's'} waiting for HR action`, nav: 'requests', date: span(reqDates) });
+      // One item per request, so each new request lights up the bell with the employee's name.
+      for (const r of store.db.prepare("SELECT data FROM attendance_requests WHERE status IN ('pending','review') ORDER BY rowid").all().map(x => JSON.parse(x.data)))
+        items.push({ text: `${r.employeeName}: attendance request ${r.reference} (${REQUEST_CATEGORIES[r.category] || r.category}) waiting for approval`, nav: 'requests', date: fmt(r.date) });
     }
     // Late arrivals (15+ minutes): explanations to review and those the employees still owe, in Attendance → Explanations.
     if (['admin', 'hr'].includes(actor.role)) {
