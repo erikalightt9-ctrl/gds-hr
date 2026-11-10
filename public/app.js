@@ -179,6 +179,8 @@ let bellItems = [];
 const bellKey = () => `gds-hr-bell-seen:${auth?.user?.id || ''}`;
 function bellSeen() { try { return JSON.parse(localStorage.getItem(bellKey()) || '[]'); } catch { return []; } }
 function markBellSeen() { try { localStorage.setItem(bellKey(), JSON.stringify(bellItems.map(item => item.text))); } catch { /* storage unavailable: the number stays */ } document.querySelector('[data-bell-count]')?.classList.add('hidden'); }
+// The bell list is counted live on the server; it is refreshed on every page draw, on opening and every minute.
+setInterval(() => { if (document.visibilityState === 'visible') loadBell(); }, 60000);
 async function loadBell() {
   if (!hrContext) return;
   try {
@@ -1115,6 +1117,8 @@ document.addEventListener('click', async event => {
     if (b.hasAttribute('data-toggle-sidebar')) { sidebarCollapsed = !sidebarCollapsed; try { localStorage.setItem('hr-sidebar', sidebarCollapsed ? 'collapsed' : 'open'); } catch { /* preference only */ } document.querySelector('.shell')?.classList.toggle('collapsed', sidebarCollapsed); b.setAttribute('aria-expanded', String(!sidebarCollapsed)); return; }
     if (b.hasAttribute('data-bell')) {
       const menu = document.querySelector('[data-bell-menu]');
+      // Fresh list on every open: resolved / approved items are gone at once.
+      if (menu.classList.contains('hidden')) await loadBell();
       menu.innerHTML = bellItems.length ? bellItems.map((item, i) => `<button role="menuitem" data-bell-item="${i}">${esc(item.text)}<small class="bell-date">${esc(item.date || `As of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}`)}</small></button>`).join('') : '<p class="muted">Nothing needs your attention.</p>';
       menu.classList.toggle('hidden'); if (!menu.classList.contains('hidden')) markBellSeen(); return;
     }
