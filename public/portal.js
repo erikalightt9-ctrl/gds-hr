@@ -512,18 +512,19 @@ export function createPortal(ctx) {
   }
   // HR / Admin: Attendance → Explanations. Late arrivals still waiting for the employee's explanation, explanations to
   // review (with the Review button), those sent back, and decisions already made.
-  function explanationsSection(data) {
+  // view 'reviewed' (its own Attendance tab) shows only the decided explanations; the Explanations tab shows the rest.
+  function explanationsSection(data, view = 'open') {
     explanationList = data.explanations;
     const name = id => data.names[id] || id, day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     const byStatus = st => data.explanations.filter(e => e.status === st);
     const card = (e, action = '') => `<div class="expl-hr"><p class="expl-who"><strong>${esc(name(e.employeeId))}</strong> <small>${esc(e.employeeId)}</small></p>${explanationCard(e, 'hr')}${action}</div>`;
     const reviewed = data.explanations.filter(e => ['approved', 'rejected'].includes(e.status));
+    if (view === 'reviewed') return `<section class="panel"><div class="panel-head"><div><h2>Reviewed</h2><p class="legend">Late arrival explanations HR has approved or rejected.</p></div><span class="badge neutral">${reviewed.length}</span></div><div class="panel-body expl-list">${reviewed.map(e => card(e)).join('') || '<p class="muted">Nothing to show yet.</p>'}</div></section>`;
     return `<section class="panel"><div class="panel-head"><div><h2>To review</h2><p class="legend">Explanations submitted by employees.</p></div><span class="badge pending">${byStatus('pending').length}</span></div>
         <div class="panel-body expl-list">${byStatus('pending').map(e => card(e, `<button class="primary small" data-review-explanation="${esc(e.id)}">Review</button>`)).join('') || '<p class="muted">Nothing to review.</p>'}</div></section>
       <section class="panel"><div class="panel-head"><div><h2>Waiting for the employee</h2><p class="legend">Time in 15 minutes or more after the scheduled start of that day, with no explanation yet.</p></div><span class="badge pending">${data.due.length}</span></div>
         ${table(['Date', 'Employee', 'Scheduled', 'Time in', 'Late'], data.due.map(d => [esc(day(d.date)), esc(d.employeeName), esc(d.scheduledIn), esc(d.timeIn), `${d.lateMinutes} min`]), 'Every late arrival has an explanation.')}</section>
-      ${byStatus('returned').length ? `<section class="panel"><div class="panel-head"><h2>Sent back to the employee</h2></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}
-      <section class="panel"><div class="panel-head"><h2>Reviewed</h2></div><div class="panel-body expl-list">${reviewed.slice(0, 50).map(e => card(e)).join('') || '<p class="muted">Nothing to show yet.</p>'}</div></section>`;
+      ${byStatus('returned').length ? `<section class="panel"><div class="panel-head"><h2>Sent back to the employee</h2></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}`;
   }
   // Opens the leave form with a type chosen, e.g. the dashboard's unpaid leave / absence shortcut.
   function preselectLeave(typeId, attempts = 20) {
