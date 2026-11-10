@@ -269,6 +269,7 @@ const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (l
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   if (nav.page === 'explanations') { attendanceView = 'explanations'; nav = { ...nav, page: 'attendance' }; }
+  if (nav.page === 'requests') { attendanceView = 'requests'; nav = { ...nav, page: 'attendance' }; }
   page = nav.page;
   if (page === 'files') return files.directory({ status: nav.status || '', docs: nav.docs || '' });
   if (page === 'employee201') return files.openProfile(nav.id, nav.tab || 'overview');

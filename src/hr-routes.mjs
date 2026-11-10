@@ -87,6 +87,11 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     const fmt = d => new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     const span = dates => { const s = dates.filter(Boolean).sort(); return s.length ? (s[0] === s.at(-1) ? fmt(s[0]) : `${fmt(s[0])} – ${fmt(s.at(-1))}`) : ''; };
     if (['admin', 'hr'].includes(actor.role)) { const pending = store.read().leaves.filter(l => l.status === 'pending'), leaves = pending.length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave', date: span(pending.map(l => l.startDate)) }); }
+    // Attendance requests (forgot time in / out, failed time in, system error, ...) waiting for HR, in Attendance → Requests.
+    if (['admin', 'hr'].includes(actor.role)) {
+      const reqDates = store.db.prepare("SELECT date FROM attendance_requests WHERE status IN ('pending','review')").all().map(r => r.date), requests = reqDates.length;
+      if (requests) items.push({ text: `${requests} attendance request${requests === 1 ? '' : 's'} waiting for HR action`, nav: 'requests', date: span(reqDates) });
+    }
     // Late arrivals (15+ minutes): explanations to review and those the employees still owe, in Attendance → Explanations.
     if (['admin', 'hr'].includes(actor.role)) {
       const reviewDates = store.db.prepare("SELECT json_extract(data,'$.date') d FROM attendance_explanations WHERE json_extract(data,'$.status')='pending'").all().map(r => r.d), toReview = reviewDates.length;
