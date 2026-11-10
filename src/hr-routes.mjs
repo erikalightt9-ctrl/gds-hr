@@ -83,14 +83,17 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   if (pathname === '/api/hr/notifications' && method === 'GET') {
     permit(actor, DASHBOARD);
     const items = [];
-    if (['admin', 'hr'].includes(actor.role)) { const leaves = store.read().leaves.filter(l => l.status === 'pending').length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave' }); }
+    // Each item says which dates it covers (one date or first - last).
+    const fmt = d => new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const span = dates => { const s = dates.filter(Boolean).sort(); return s.length ? (s[0] === s.at(-1) ? fmt(s[0]) : `${fmt(s[0])} – ${fmt(s.at(-1))}`) : ''; };
+    if (['admin', 'hr'].includes(actor.role)) { const pending = store.read().leaves.filter(l => l.status === 'pending'), leaves = pending.length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave', date: span(pending.map(l => l.startDate)) }); }
     // Late arrivals (15+ minutes): explanations to review and those the employees still owe, in Attendance → Explanations.
     if (['admin', 'hr'].includes(actor.role)) {
-      const toReview = store.db.prepare("SELECT COUNT(*) n FROM attendance_explanations WHERE json_extract(data,'$.status')='pending'").get().n;
-      if (toReview) items.push({ text: `${toReview} attendance explanation${toReview === 1 ? '' : 's'} to review`, nav: 'explanations' });
+      const reviewDates = store.db.prepare("SELECT json_extract(data,'$.date') d FROM attendance_explanations WHERE json_extract(data,'$.status')='pending'").all().map(r => r.d), toReview = reviewDates.length;
+      if (toReview) items.push({ text: `${toReview} attendance explanation${toReview === 1 ? '' : 's'} to review`, nav: 'explanations', date: span(reviewDates) });
       const due = explanationsDue(store), today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }), now = due.filter(d => d.date >= today).length, earlier = due.length - now;
-      if (now) items.push({ text: `${now} late time in${now === 1 ? '' : 's'} today need${now === 1 ? 's' : ''} an explanation from the employee`, nav: 'explanations' });
-      if (earlier) items.push({ text: `${earlier} earlier late arrival${earlier === 1 ? '' : 's'} (15+ minutes) still need${earlier === 1 ? 's' : ''} an explanation`, nav: 'explanations' });
+      if (now) items.push({ text: `${now} late time in${now === 1 ? '' : 's'} today need${now === 1 ? 's' : ''} an explanation from the employee`, nav: 'explanations', date: fmt(today) });
+      if (earlier) items.push({ text: `${earlier} earlier late arrival${earlier === 1 ? '' : 's'} (15+ minutes) still need${earlier === 1 ? 's' : ''} an explanation`, nav: 'explanations', date: span(due.filter(d => d.date < today).map(d => d.date)) });
     }
     if (HR_TEAM.includes(actor.role)) {
       const docs = documentSummary(store, actor), sheets = pendingSheets(store);

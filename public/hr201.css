@@ -1776,3 +1776,4 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ar-check { display: flex; gap: 8px; align-items: center; }
 .ar-decide { margin-top: 12px; padding-top: 12px; border-top: 1px solid #efe4d2; }
 .ar-tiles { flex-wrap: wrap; }
+.bell-date { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 500; color: var(--muted, #6b6b6b); }
