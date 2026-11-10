@@ -24,7 +24,11 @@ test('submit: reference number, Pending HR approval, notices; nothing in attenda
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ location: '' }), NOW), /exact place/);
     assert.throws(() => submitAttendanceRequest(store, worker, { category: 'failed', date: '2026-09-02', timeIn: '09:00', reason: 'Wi-Fi was down all morning' }, NOW), /Describe the problem/);
     assert.throws(() => submitAttendanceRequest(store, worker, { category: 'offsite', date: '2026-09-02', timeIn: '09:00', location: 'Client site', reason: 'Forgot to time in' }, NOW), /purpose/);
-    assert.equal(ownAttendanceRequests(store, worker).length, 2);
+    assert.throws(() => submitAttendanceRequest(store, worker, { category: 'system', date: '2026-09-02', timeIn: '09:00', reason: 'The app showed an error' }, NOW), /Describe the problem/);
+    const system = submitAttendanceRequest(store, worker, { category: 'system', transaction: 'in', date: '2026-09-02', timeIn: '09:00', problem: 'The time in button showed a server error', reason: 'System error' }, NOW);
+    assert.equal(system.category, 'system');
+    assert.ok(store.db.prepare('SELECT message FROM notifications').all().some(n => /System error \(app, website or server problem\)/.test(n.message)));
+    assert.equal(ownAttendanceRequests(store, worker).length, 3);
     const notices = store.db.prepare('SELECT message FROM notifications').all().map(n => n.message);
     assert.ok(notices.some(m => /AR-2026-0001.*submitted/.test(m)) && notices.some(m => /new attendance request AR-2026-0001/.test(m)));
   } finally { store.close(); }
