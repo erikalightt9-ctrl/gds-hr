@@ -111,6 +111,22 @@ function lateExplanationNotice(store, now = new Date()) {
     return earlier.length;
   }));
 }
+// Leave proof is optional (November 2026): open leave requests marked "proof needed" no longer wait for one.
+// Uploaded proofs and HR reviews are kept; every change is audited.
+function leaveProofOptional(store) {
+  return once(store, 'migration:leave-proof-optional-2026-11', () => store.transaction(() => {
+    const system = { username: 'system (leave proof optional)' }, state = store.read();
+    let changed = 0;
+    for (const l of state.leaves) {
+      if (l.proofStatus !== 'required') continue;
+      store.log(system, 'proof-optional', 'leaves', l.id, { proofStatus: 'required' }, { proofStatus: '' });
+      l.proofStatus = ''; changed++;
+    }
+    if (changed) { state.version++; store.write(state); }
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:leave-proof-optional-2026-11');
+    return changed;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store) };
+  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store), leaveProof: leaveProofOptional(store) };
 }

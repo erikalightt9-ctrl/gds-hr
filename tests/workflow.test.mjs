@@ -50,12 +50,12 @@ test('stale preview cannot overwrite changed inputs', () => {
   assert.throws(() => postPayroll(db, admin, p), /changed/);
   assert.equal(db.read().loans[0].balance, 1200); db.close();
 });
-test('leave approval requires eligibility, documents, balance, non-overlap and no recorded work', () => {
+test('leave approval requires eligibility, balance, non-overlap and no recorded work (documents are optional)', () => {
   const db = new Store(':memory:'); db.write(completeState());
   const l = { id: 'leave1', employeeId: 'EMP-001', typeId: 'sil', startDate: '2026-09-16', endDate: '2026-09-16', days: 1, reason: 'Rest', documentReference: '', status: 'approved', eligibilityVerified: false };
   assert.throws(() => saveRecord(db, admin, 'leaves', l), /eligibility/);
   l.eligibilityVerified = true;
-  assert.throws(() => saveRecord(db, admin, 'leaves', l), /document/);
+  saveRecord(db, admin, 'leaves', l);   // no supporting document needed
   l.documentReference = 'HR-DOC-123'; saveRecord(db, admin, 'leaves', l);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave2' }), /overlap/);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /Insufficient/);
