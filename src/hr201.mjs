@@ -24,7 +24,7 @@ export const DEFAULT_REQUIREMENTS = [
   ['sss', 'SSS number', 'Government registration', true, false, false],
   ['philhealth', 'PhilHealth number', 'Government registration', true, false, false],
   ['pagibig', 'Pag-IBIG MID number', 'Government registration', true, false, false],
-  ['nbi', 'NBI clearance', 'Pre-employment', true, true, false],
+  ['nbi', 'NBI clearance', 'Pre-employment', true, false, false],   // kept on file from hiring; not renewed (Nov 2026)
   ['medical', 'Pre-employment medical certificate', 'Medical', false, true, true],
   ['evaluation', 'Performance evaluation', 'Performance', false, false, false],
   ['training-cert', 'Training certificates', 'Training', false, false, false],

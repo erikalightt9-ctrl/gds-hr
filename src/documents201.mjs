@@ -20,9 +20,11 @@ const canSee = (actor, req) => (actor.role === 'maker' ? !isSalaryRequirement(re
 export function applicableRequirements(settings, employee, job) {
   return settings.documentRequirements.filter(r => (!r.departments.length || r.departments.includes(employee.department)) && (!r.classifications.length || r.classifications.includes(job.employmentStatus || '')));
 }
-function statusOf(doc, today) {
+// A file expires only when its requirement is set to expire (Settings → requirements); a pre-employment record kept on
+// file (e.g. the NBI clearance submitted when hired) keeps its expiry date for reference but never turns Expired.
+function statusOf(doc, today, req = { expires: true }) {
   if (!doc) return 'Missing';
-  if (doc.expiryDate && doc.expiryDate < today && doc.reviewStatus !== 'Rejected') return 'Expired';
+  if (req.expires && doc.expiryDate && doc.expiryDate < today && doc.reviewStatus !== 'Rejected') return 'Expired';
   return doc.reviewStatus;
 }
 // The checklist for one employee. `actor` decides whether restricted items show file details.
@@ -34,12 +36,12 @@ export function checklistFor(store, actor, employee, settings = readSettings(sto
     const na = overrides.get(req.id);
     // Government registrations are complied by the number on file (the number itself is never shown here).
     const number = NUMBER_REQUIREMENTS[req.id];
-    const status = na ? 'Not Applicable' : number ? (String(gov[number.field] || '').trim() ? 'Verified' : 'Missing') : statusOf(current, today);
+    const status = na ? 'Not Applicable' : number ? (String(gov[number.field] || '').trim() ? 'Verified' : 'Missing') : statusOf(current, today, req);
     const due = req.dueDays !== null && req.dueDays !== undefined && employee.startDate ? addDays(employee.startDate, req.dueDays) : '';
     const hidden = !canSee(actor, req);
     return {
       requirement: req, status, due, overdue: status === 'Missing' && req.required && !!due && due < today,
-      expiringSoon: status === 'Verified' && !!current?.expiryDate && current.expiryDate <= addDays(today, settings.reminders.expiryDays),
+      expiringSoon: status === 'Verified' && req.expires && !!current?.expiryDate && current.expiryDate <= addDays(today, settings.reminders.expiryDays),
       notApplicable: na || null, restricted: req.restricted, hidden, numberOnly: !!number,
       current: hidden ? null : current, versions: hidden ? [] : versions,
     };

@@ -73,6 +73,10 @@ test('uploading and verifying a required document updates completion and the das
     reviewDocument(store, hr, idDoc.id, { decision: 'Verified' });
     assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'valid-id').status, 'Expired');
     assert.throws(() => reviewDocument(store, hr, idDoc.id, { decision: 'Rejected' }), /reason/);
+    // NBI clearance is kept on file from hiring: a past expiry date never makes it Expired.
+    const nbi = upload201(store, hr, id, { requirementId: 'nbi', name: 'nbi.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2018-04-04' });
+    reviewDocument(store, hr, nbi.id, { decision: 'Verified' });
+    assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'nbi').status, 'Verified', 'NBI does not expire');
     setNotApplicable(store, hr, id, 'nbi', { notApplicable: true, reason: 'Transferred from affiliate with clearance on file' });
     assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'nbi').status, 'Not Applicable');
     assert.throws(() => upload201(store, hr, id, { requirementId: 'contract', name: 'x.pdf', mime: 'application/pdf', data: Buffer.from('not a pdf').toString('base64') }), /does not match/);
