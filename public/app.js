@@ -1121,10 +1121,11 @@ document.addEventListener('click', async event => {
       const menu = document.querySelector('[data-bell-menu]');
       // Fresh list on every open: resolved / approved items are gone at once.
       if (menu.classList.contains('hidden')) await loadBell();
-      menu.innerHTML = bellItems.length ? bellItems.map((item, i) => `<button role="menuitem" data-bell-item="${i}">${esc(item.text)}<small class="bell-date">${esc(item.date || `As of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}`)}</small></button>`).join('') : '<p class="muted">Nothing needs your attention.</p>';
+      menu.innerHTML = bellItems.length ? bellItems.map((item, i) => `<button role="menuitem" data-bell-item="${i}" title="Open"><span class="bell-go" aria-hidden="true">›</span>${esc(item.text)}<small class="bell-date">${esc(item.date || `As of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}`)}</small></button>`).join('') : '<p class="muted">Nothing needs your attention.</p>';
       menu.classList.toggle('hidden'); if (!menu.classList.contains('hidden')) markBellSeen(); return;
     }
-    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; await goTo({ page: item.nav, docs: item.filter }); return; }
+    // A bell item opens the page (and tab) where it is handled, at the top, and closes the bell.
+    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'leave') subtab = 'requests'; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter }); window.scrollTo({ top: 0 }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
     if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }
