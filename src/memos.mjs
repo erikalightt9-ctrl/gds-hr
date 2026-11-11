@@ -153,9 +153,11 @@ function assignmentStats(store, memo, allowed = null) {
 export function listMemos(store, actor) {
   permit(actor, [...HR_TEAM, 'viewer', 'dept_manager']);
   const team = actor.role === 'dept_manager' ? new Set(scopeEmployees(store, actor).map(e => e.id)) : null;
+  // Names on the list itself, so HR sees who received the memo and who has not acknowledged it without opening it.
+  const names = new Map(store.read().employees.map(e => [e.id, e.name])), nameOf = id => names.get(id) || id;
   return store.db.prepare('SELECT data FROM memos').all().map(r => JSON.parse(r.data))
     .filter(m => HR_TEAM.includes(actor.role) || m.status !== 'draft')
-    .map(m => { const issued = m.versions.at(-1), stats = m.version ? assignmentStats(store, m, team) : null; return { id: m.id, status: m.status, version: m.version, title: issued?.title || m.draft?.title, category: issued?.category || m.draft?.category, reference: issued?.reference || m.draft?.reference || '', issueDate: issued?.issueDate || m.draft?.issueDate, ackRequired: issued?.ackRequired ?? m.draft?.ackRequired, ackDeadline: issued?.ackDeadline || '', revisionInProgress: m.status === 'published' && !!m.draft, recipients: stats?.recipients ?? 0, acknowledged: stats?.acknowledged ?? 0, pending: issued?.ackRequired ? stats?.pending ?? 0 : 0 }; })
+    .map(m => { const issued = m.versions.at(-1), stats = m.version ? assignmentStats(store, m, team) : null; return { id: m.id, status: m.status, version: m.version, title: issued?.title || m.draft?.title, category: issued?.category || m.draft?.category, reference: issued?.reference || m.draft?.reference || '', issueDate: issued?.issueDate || m.draft?.issueDate, ackRequired: issued?.ackRequired ?? m.draft?.ackRequired, ackDeadline: issued?.ackDeadline || '', revisionInProgress: m.status === 'published' && !!m.draft, recipients: stats?.recipients ?? 0, acknowledged: stats?.acknowledged ?? 0, pending: issued?.ackRequired ? stats?.pending ?? 0 : 0, recipientNames: (stats?.rows || []).map(r => nameOf(r.employee_id)), pendingNames: issued?.ackRequired ? (stats?.rows || []).filter(r => !r.acknowledged_at).map(r => nameOf(r.employee_id)) : [] }; })
     .filter(m => !team || m.recipients)
     .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''));
 }
