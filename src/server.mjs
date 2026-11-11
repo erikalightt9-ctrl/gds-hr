@@ -449,7 +449,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });
-  app.requestTimeout = 15000; app.headersTimeout = 10000;
+  // Headers must arrive within 10 s (slow-header protection); the whole request, uploads included, within 2 minutes:
+  // a 5 MB scan over a slow mobile or office upload through the tunnel can take well over 15 s (error 408).
+  app.requestTimeout = 120000; app.headersTimeout = 10000;
   app.listen(port, host, () => {
     console.log(`GDS CAPITAL INC. HR is running at ${origin}`);
     console.log(mailer ? `Password reset emails are sent from ${mailer.from}.` : 'Password reset email is not configured (set HR_SMTP_* in .env); recovery goes to HR.');
