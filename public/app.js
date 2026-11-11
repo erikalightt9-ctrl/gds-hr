@@ -401,9 +401,24 @@ function askForLeaveProof(id) {
 }
 // One employee's leave balances: every leave type they are eligible for, how each balance is made up, and this
 // year's requests per type.
-function leaveBalanceDialog(employeeId) {
+// Annual balances: one row per employee, one column per leave group. Each cell is days entitled (incl. carry-over) / days
+// used; Unpaid leave / absent shows the days taken. Clicking a cell opens that leave's details for the employee.
+const BALANCE_COLUMNS = [['Service incentive leave', ['sil']], ['Vacation leave', ['vacation']], ['Unpaid leave / absent', ['unpaid']], ['Bereavement leave', ['bereavement']], ['Maternity / Paternity leave', ['maternity', 'paternity']], ['Solo parent leave', ['solo-parent']], ['Special leave for women (RA 9710)', ['special-women']]];
+function balanceMatrix() {
+  const q = filter.trim().toLowerCase();
+  const people = state.employees.filter(e => !e.archived && !e.draft && e.leaveEligibility.length && (!q || `${e.name} ${e.id} ${e.employeeNumber || ''}`.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+  const cell = (e, ids) => {
+    const own = balances.filter(b => b.employeeId === e.id && ids.includes(b.typeId) && e.leaveEligibility.includes(b.typeId));
+    if (!own.length) return '<span class="muted">—</span>';
+    const sum = k => own.reduce((s, b) => s + (Number(b[k]) || 0), 0), used = sum('used');   // already includes days used before the system
+    const text = ids.includes('unpaid') ? `${used}` : `${sum('entitled') + sum('carry')}/${used}`;
+    return `<button class="link-cell bal-cell" data-leave-balance="${esc(e.id)}" data-leave-types="${esc(ids.join(','))}" title="Entitled / used · click for details">${text}</button>`;
+  };
+  return `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · entitled / used (days) · click a number for the details</span></div>${searchToolbar()}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
+}
+function leaveBalanceDialog(employeeId, typeIds = null) {
   const person = state.employees.find(e => e.id === employeeId), year = today().slice(0, 4);
-  const own = balances.filter(b => b.employeeId === employeeId && person?.leaveEligibility.includes(b.typeId));
+  const own = balances.filter(b => b.employeeId === employeeId && person?.leaveEligibility.includes(b.typeId) && (!typeIds || typeIds.includes(b.typeId)));
   const STATUS = { approved: ['Approved', ''], pending: ['Pending', 'pending'], rejected: ['Rejected', 'rejected'], cancelled: ['Cancelled', 'neutral'] };
   const sections = own.map(b => {
     const type = state.leaveTypes.find(t => t.id === b.typeId);
@@ -428,7 +443,7 @@ function leavePage() {
   const inFolder = s => state.leaves.filter(l => l.status === s).length;
   let content = heading('Leave management', '<span class="lm-tagline">Time away, taken care of.</span>Review requests, track balances, and keep payroll in sync.') + `<div class="lm-cards">${lmCard('clock', 'Pending requests', pending, pending ? 'Waiting for HR review' : 'Nothing waiting')}${lmCard('check', 'Approved requests', inFolder('approved'), 'Connected to payroll')}${lmCard('doc', 'Rejected requests', inFolder('rejected'), 'Kept with remarks')}${lmCard('people', 'Leave types', state.leaveTypes.length, 'Statutory and company benefits')}</div>
     <div class="lm-tabs">${LEAVE_FOLDERS.map(([tab, s, label]) => `<button data-tab="${tab}" class="${subtab === tab ? 'active' : ''}">${label}${s === 'pending' ? ` <span class="lm-count">${pending}</span>` : ''}</button>`).join('')}<button data-tab="balances" class="${subtab === 'balances' ? 'active' : ''}">Balances</button><button data-tab="types" class="${subtab === 'types' ? 'active' : ''}">Leave policies</button></div>`;
-  if (subtab === 'balances') content += `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · Approved requests reserve days</span></div>${searchToolbar()}${table(['Employee', 'Leave type', 'Entitled', 'Carry-over', 'Used / reserved', 'Available'], filtered(balances).filter(b => state.employees.find(e => e.id === b.employeeId)?.leaveEligibility.includes(b.typeId)).map(b => [`<button class="link-cell" data-leave-balance="${esc(b.employeeId)}" title="View leave balance details">${employee(b.employeeId)}</button>`, esc(state.leaveTypes.find(t => t.id === b.typeId)?.name), b.entitled, b.carry, b.used, badge(`${b.available} days`)]))}</section>`;
+  if (subtab === 'balances') content += balanceMatrix();
   else if (subtab === 'types') content += `<section class="panel"><div class="panel-head"><div><h2>Leave type configuration</h2><p>Statutory classification alone does not establish an employee’s entitlement.</p></div>${addButton('leaveTypes', 'Add leave type')}</div>${table(['Leave type', 'Category', 'Pay', 'Entitlement', 'Accrual', ''], state.leaveTypes.map(t => [esc(t.name), badge(t.category, 'neutral'), t.paid ? 'Paid' : 'Unpaid', `${t.entitledDays} days`, esc(t.accrual), editButton('leaveTypes', t.id)]))}</section>`;
   else {
     const [, status, folderLabel] = LEAVE_FOLDERS.find(([tab]) => tab === subtab) || LEAVE_FOLDERS[0], decided = status !== 'pending';
@@ -1168,7 +1183,7 @@ document.addEventListener('click', async event => {
       const reason = window.prompt('Reason for reversing this posted payroll (kept in the audit trail):'); if (!reason) return;
       currentRun = await api(`/runs/${b.dataset.reverseRun}/reverse`, { reason }); await refresh(); render(); toast('Payroll reversed. Loan balances restored; the cutoff can be corrected and posted again.'); return;
     }
-    if (b.dataset.leaveBalance) { leaveBalanceDialog(b.dataset.leaveBalance); return; }
+    if (b.dataset.leaveBalance) { leaveBalanceDialog(b.dataset.leaveBalance, b.dataset.leaveTypes ? b.dataset.leaveTypes.split(',') : null); return; }
     if (b.dataset.leaveDecision) {
       const decision = b.dataset.leaveDecision;
       const remarks = decision === 'approve' ? window.prompt('Approve this leave. Remarks for the employee (optional):', '') : window.prompt(decision === 'reject' ? 'Reason for rejecting (the employee will see this):' : 'Reason for cancelling this approved leave (credits will be restored):', '');
