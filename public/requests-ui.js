@@ -58,7 +58,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
   function openForm(category = '', done = () => {}) {
     openDialog('New attendance request', `<form class="dialog-body form-grid" id="ar-form">
       <label class="field full">Request<select name="category" required><option value="">Choose…</option>${Object.entries(CATEGORIES).map(([k, v]) => `<option value="${k}" ${k === category ? 'selected' : ''}>${esc(v)}</option>`).join('')}<option value="leave">Leave application</option></select></label>
-      <label class="field">Date<input type="date" name="date" required min="${daysAgo(30)}" max="${manilaToday()}" value="${manilaToday()}"></label>
+      <label class="field">Date (within 3 days)<input type="date" name="date" required min="${daysAgo(3)}" max="${manilaToday()}" value="${manilaToday()}"></label>
       <label class="field" data-show="failed system other">Transaction<select name="transaction"><option value="in">Time in</option><option value="out">Time out</option><option value="both">Time in and time out</option></select></label>
       <label class="field" data-show="forgot-in failed system other offsite">Requested time in<input type="time" name="timeIn"></label>
       <label class="field" data-show="forgot-out failed system other offsite forgot-in">Requested time out<input type="time" name="timeOut"></label>

@@ -19,7 +19,7 @@ test('submit: reference number, Pending HR approval, notices; nothing in attenda
     assert.equal(dayRecord(store, '2026-09-02'), undefined, 'never automatically approved');
     assert.equal(submitAttendanceRequest(store, worker, forgotIn({ date: '2026-09-01' }), NOW).reference, 'AR-2026-0002');
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn(), NOW), /already have an open request/);
-    assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ date: '2026-07-20' }), NOW), /30 days/);
+    assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ date: '2026-08-30' }), NOW), /within 3 days/);
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ date: '2026-09-04' }), NOW), /today or earlier/);
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ location: '' }), NOW), /exact place/);
     assert.throws(() => submitAttendanceRequest(store, worker, { category: 'failed', date: '2026-09-02', timeIn: '09:00', reason: 'Wi-Fi was down all morning' }, NOW), /Describe the problem/);

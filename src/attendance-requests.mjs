@@ -18,7 +18,7 @@ function assertShiftLength({ timeIn, timeOut, endNextDay }) {
   if (timeIn && timeOut && endNextDay && timeOut > timeIn) throw new AppError(`${timeIn} – ${timeOut} on the next day is more than 24 hours. Untick "Time out on the next day" unless the work ended after midnight.`);
 }
 export const STATUS_LABELS = { pending: 'Pending HR approval', review: 'Under review', info: 'Additional information required', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled by employee' };
-export const FILING_DAYS = 30;
+export const FILING_DAYS = 3;   // a correction is valid only within 3 days of the date to correct
 export const REVIEW_HOURS = 48;
 const OPEN = ['pending', 'review', 'info'];
 const time = z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal('')]).default('');
@@ -60,7 +60,7 @@ export function submitAttendanceRequest(store, actor, input, now = new Date()) {
   const employee = employeeOf(store, actor), v = submitSchema.parse(input), today = local(now).slice(0, 10);
   const earliest = local(new Date(now.getTime() - FILING_DAYS * 86400000)).slice(0, 10);
   if (v.date > today) throw new AppError('Attendance requests are for today or earlier days.');
-  if (v.date < earliest) throw new AppError(`Requests can be filed up to ${FILING_DAYS} days back. Contact HR for older dates.`);
+  if (v.date < earliest) throw new AppError(`Attendance correction requests are valid only within ${FILING_DAYS} days of the date to correct. Contact HR for older dates.`);
   if (v.category === 'forgot-in' && !v.timeIn) throw new AppError('Enter the time you started work.');
   if (v.category === 'forgot-out' && !v.timeOut) throw new AppError('Enter the time you finished work.');
   if ([...PROBLEM_CATEGORIES, 'offsite'].includes(v.category) && !v.timeIn && !v.timeOut) throw new AppError('Enter the requested time in and / or time out.');
