@@ -235,7 +235,7 @@ export function createFiles(ctx) {
     for (const a of state.attendance.filter(x => x.employeeId === id && x.date.startsWith(month))) {
       const late = a.status === 'present' && mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? Math.max(0, mins(a.timeIn) - mins(a.scheduledIn)) : 0;
       const status = a.status === 'present' ? (late >= Math.max(1, grace) ? 'Late' : 'Present') : a.status === 'absent' ? 'Absent' : a.status === 'off' ? 'Off' : a.status.replace(/-/g, ' ');
-      rows.set(a.date, { date: a.date, status, timeIn: a.timeIn, timeOut: a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '', late, note: a.explanation || '' });
+      rows.set(a.date, { date: a.date, status, timeIn: a.timeIn, timeOut: a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '', late, note: /^Employee clock events:/.test(a.explanation || '') ? '' : a.explanation || '' });   // the automatic time in / out note is not a remark
     }
     for (const l of state.leaves.filter(x => x.employeeId === id && x.status === 'approved')) for (const d of (l.countedDates || []).filter(x => x.startsWith(month))) {
       const half = (l.partialDates || []).includes(d), row = rows.get(d) || { date: d, timeIn: '', timeOut: '', late: 0, note: '' };

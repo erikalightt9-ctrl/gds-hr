@@ -927,7 +927,7 @@ async function applyLateOffset(recordId, unoffsetMinutes) {
   if (!reason || reason.trim().length < 3) { toast('An offset needs a reason.'); return; }
   try {
     // An offset must carry an explanation on the record; the approval reason serves when none exists yet.
-    await api('/records/attendance', { ...record, offsetMinutes: record.offsetMinutes + add, explanation: record.explanation?.trim() ? record.explanation : reason.trim(), correctionReason: reason.trim() });
+    await api('/records/attendance', { ...record, offsetMinutes: record.offsetMinutes + add, explanation: record.explanation?.trim() && !/^Employee clock events:/.test(record.explanation) ? record.explanation : reason.trim(), correctionReason: reason.trim() });
     await refresh(); render(); toast(`${add} min offset approved for ${record.date}.`);
   } catch (error) { toast(error.message); }
 }
