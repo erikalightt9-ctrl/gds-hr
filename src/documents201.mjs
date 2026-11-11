@@ -70,6 +70,11 @@ const uploadSchema = z.object({
   replaceReason: z.string().trim().max(500).default(''), remarks: z.string().trim().max(500).default(''),
   idType: z.string().trim().max(80).default(''),
 }).strict();
+// A Government-issued ID file is named after the chosen ID (e.g. "Passport ID.jpg"); the original name is kept as originalName.
+export function idFileName(idType, mime) {
+  const ext = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg' }[mime];
+  return `${/\bID\b|I-Card|license/i.test(idType) ? idType : `${idType} ID`}.${ext}`;
+}
 export function validFile(mime, bytes) {
   return mime === 'application/pdf' ? bytes.subarray(0, 5).toString() === '%PDF-' : mime === 'image/png' ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
 }
@@ -92,7 +97,7 @@ export function upload201(store, actor, employeeId, input) {
     if (previous && !self && previous.reviewStatus === 'Verified' && v.replaceReason.length < 3) throw new AppError('Give a reason for replacing a verified document.');
     const meta = {
       id: randomUUID(), employeeId, type: TYPE, requirementId: req.id, requirementName: req.name, category: req.category, restricted: req.restricted,
-      name: v.name, mime: v.mime, size: bytes.length, version: (previous?.version || 0) + 1, replaces: previous?.id || null, replaceReason: v.replaceReason,
+      name: req.id === 'valid-id' ? idFileName(v.idType, v.mime) : v.name, ...(req.id === 'valid-id' ? { originalName: v.name } : {}), mime: v.mime, size: bytes.length, version: (previous?.version || 0) + 1, replaces: previous?.id || null, replaceReason: v.replaceReason,
       issueDate: v.issueDate, expiryDate: v.expiryDate, expiry: v.expiryDate, remarks: v.remarks, idType: req.id === 'valid-id' ? v.idType : '',
       uploadedAt: new Date().toISOString(), uploadedBy: actor.username, reviewStatus: 'Submitted', reviewer: '', reviewedAt: '', reviewNote: '', status: 'Active',
     };

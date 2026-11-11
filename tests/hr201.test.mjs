@@ -69,6 +69,7 @@ test('uploading and verifying a required document updates completion and the das
     assert.throws(() => upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF }), /Choose which ID/, 'the ID type is required');
     const idDoc = upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2020-01-01', idType: 'Passport' });
     assert.equal(idDoc.idType, 'Passport', 'the ID type is kept with the file');
+    assert.equal(idDoc.name, 'Passport ID.pdf', 'the file is named after the chosen ID'); assert.equal(idDoc.originalName, 'id.pdf');
     reviewDocument(store, hr, idDoc.id, { decision: 'Verified' });
     assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'valid-id').status, 'Expired');
     assert.throws(() => reviewDocument(store, hr, idDoc.id, { decision: 'Rejected' }), /reason/);
