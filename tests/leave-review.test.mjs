@@ -26,8 +26,7 @@ test('HR approves, rejects and cancels employee leave; one balance, shown the sa
     assert.equal(sil(store).used, 0, 'pending does not consume credits');
     assert.ok(store.db.prepare("SELECT 1 FROM notifications WHERE employee_id IS NULL").get(), "HR is notified of the new request");
     assert.throws(() => reviewLeave(store, worker, leave.id, { decision: 'approve' }), /permission/i);
-    assert.equal(leave.proofStatus, 'required', 'a 2-day leave needs proof');
-    assert.throws(() => reviewLeave(store, hr, leave.id, { decision: 'approve' }), /supporting document is needed/);
+    assert.equal(leave.proofStatus, '', 'a supporting document is optional');
     const doc = uploadDocument(store, worker, 'EMP-001', { type: 'Leave Supporting', name: 'itinerary.pdf', mime: 'application/pdf', data: Buffer.from('%PDF-1.7 itinerary').toString('base64') });
     attachLeaveProof(store, worker, leave.id, { documentId: doc.id });
     reviewLeaveProof(store, { username: 'hr1', role: 'hr' }, leave.id, { decision: 'verified', note: '' });

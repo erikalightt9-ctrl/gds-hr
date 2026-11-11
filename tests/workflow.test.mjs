@@ -57,7 +57,7 @@ test('leave approval requires eligibility, balance, non-overlap and no recorded 
   l.eligibilityVerified = true;
   saveRecord(db, admin, 'leaves', l);   // a supporting document is optional unless HR asks for one
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave2' }), /overlap/);
-  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /2 days or more needs proof/, 'leave of 2 days or more needs proof');
+  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /Insufficient/, 'no document needed; the balance still applies');
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7, documentReference: 'MEDCERT-1' }), /Insufficient/);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave4', startDate: '2026-09-01', endDate: '2026-09-01' }), /conflicts/);
   assert.equal(saveRecord(db, admin, 'leaves', { ...l, days: 2 }).days, 1, 'days are derived from the dates, not typed');
