@@ -425,7 +425,7 @@ export function createFiles(ctx) {
       if (file.size > limit * 1024 * 1024) { toast(`Files can be up to ${limit} MB.`); return; }
       const button = form.querySelector('.primary'); button.disabled = true; button.textContent = 'Uploading…';
       try {
-        await api(`/hr/employees/${encodeURIComponent(profileId)}/documents`, { requirementId: item.requirement.id, name: file.name, mime: file.type, data: await readFile(file), issueDate: form.elements.issueDate.value, expiryDate: form.elements.expiryDate.value, replaceReason: form.elements.replaceReason?.value || '', remarks: form.elements.remarks.value, idType: form.elements.idType?.value || '' });
+        await api(`/hr/employees/${encodeURIComponent(profileId)}/documents`, { requirementId: item.requirement.id, name: file.name, mime: file.type, data: await readFile(file), issueDate: form.elements.issueDate.value, expiryDate: form.elements.expiryDate.value, replaceReason: form.elements.replaceReason?.value || '', remarks: form.elements.remarks.value, ...(form.elements.idType ? { idType: form.elements.idType.value } : {}) });   // idType only for the Government-issued ID
         dialog.close(); toast('Document uploaded. Review it to count it as complete.'); await drawProfile();
       } catch (error) { toast(error.message); button.disabled = false; button.textContent = 'Upload'; }
     };
