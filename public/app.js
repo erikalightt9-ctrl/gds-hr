@@ -60,7 +60,9 @@ Object.assign(names, { SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IB
 const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'], deductions: ['admin', 'hr'] })[kind]?.includes(auth.user.role);
 async function api(path, body, method = body ? 'POST' : 'GET') {
   const res = await fetch(`/api${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth?.csrf || '' }, body: body ? JSON.stringify(body) : undefined });
-  const data = await res.json();
+  // A reply that is not JSON (connection cut, tunnel or proxy error page) gets a readable message instead of a parse error.
+  const data = await res.json().catch(() => null);
+  if (!data) throw new Error(res.ok ? 'The server sent an unreadable reply. Refresh the page and check whether it was saved.' : `The server did not complete the request (error ${res.status}). Check your connection and try again; for uploads, use a PDF, JPG or PNG up to 5 MB.`);
   if (!res.ok) {
     if (res.status === 401 && path !== '/login') { auth = { user: null }; renderLogin(); }
     throw new Error(data.error || 'Request failed.');

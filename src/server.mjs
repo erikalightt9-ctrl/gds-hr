@@ -417,7 +417,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (res.headersSent) { res.end(); return; }
       if (error instanceof z.ZodError) { send(400, { error: error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ') }); return; }
       const status = error instanceof AppError ? error.status : 500;
-      if (status === 500) console.error('HR request failed:', error.name);
+      if (status === 500) console.error('HR request failed:', error.name, String(error.message || '').slice(0, 200), req.method, String(req.url || '').split('?')[0]);
       send(status, { error: status === 500 ? 'The request could not be completed. Check the server and try again.' : error.message });
     }
   });
