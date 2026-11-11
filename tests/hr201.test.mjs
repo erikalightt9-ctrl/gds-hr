@@ -66,7 +66,9 @@ test('uploading and verifying a required document updates completion and the das
     const item = employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'contract');
     assert.equal(item.versions.length, 2); assert.equal(item.status, 'Submitted');
     // Expired documents are not complete.
-    const idDoc = upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2020-01-01' });
+    assert.throws(() => upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF }), /Choose which ID/, 'the ID type is required');
+    const idDoc = upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2020-01-01', idType: 'Passport' });
+    assert.equal(idDoc.idType, 'Passport', 'the ID type is kept with the file');
     reviewDocument(store, hr, idDoc.id, { decision: 'Verified' });
     assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'valid-id').status, 'Expired');
     assert.throws(() => reviewDocument(store, hr, idDoc.id, { decision: 'Rejected' }), /reason/);

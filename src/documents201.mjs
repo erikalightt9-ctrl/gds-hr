@@ -61,11 +61,14 @@ export function employeeChecklist(store, actor, employeeId) {
 }
 
 // ---------- Upload, review, Not Applicable ----------
+// Government-issued ID: the uploader says which ID it is (the same list is in public/hr-common.js).
+export const VALID_ID_TYPES = ['Passport', 'PhilSys National ID', 'UMID', 'SSS ID', 'TIN ID', "Driver's license", 'PRC ID', 'PhilHealth ID', 'Pag-IBIG ID', 'Postal ID', "Voter's ID", 'ACR I-Card (foreign national)', 'Senior citizen ID', 'PWD ID', 'Other government ID'];
 const uploadSchema = z.object({
   requirementId: z.string().regex(/^[a-z0-9-]{1,60}$/), name: z.string().trim().min(1).max(180).refine(v => !/[\x00-\x1f\\/]/.test(v), 'Invalid file name'),
   mime: z.enum(['application/pdf', 'image/png', 'image/jpeg']), data: z.string().min(1).max(28000000).regex(/^[A-Za-z0-9+/]*={0,2}$/),
   issueDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default(''), expiryDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default(''),
   replaceReason: z.string().trim().max(500).default(''), remarks: z.string().trim().max(500).default(''),
+  idType: z.string().trim().max(80).default(''),
 }).strict();
 export function validFile(mime, bytes) {
   return mime === 'application/pdf' ? bytes.subarray(0, 5).toString() === '%PDF-' : mime === 'image/png' ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
@@ -83,19 +86,20 @@ export function upload201(store, actor, employeeId, input) {
   if (!bytes.length || bytes.length > settings.uploads.documentMB * 1024 * 1024) throw new AppError(`Choose a file up to ${settings.uploads.documentMB} MB.`);
   if (!validFile(v.mime, bytes)) throw new AppError('The file content does not match a PDF, PNG or JPEG.');
   if (v.expiryDate && v.issueDate && v.expiryDate < v.issueDate) throw new AppError('Expiry date is before the issue date.');
+  if (req.id === 'valid-id' && !VALID_ID_TYPES.includes(v.idType)) throw new AppError('Choose which ID you are uploading (e.g. Passport, UMID, TIN ID).');
   return store.transaction(() => {
     const previous = docsOf(store, employeeId).filter(d => d.requirementId === req.id).sort((a, b) => b.version - a.version)[0];
     if (previous && !self && previous.reviewStatus === 'Verified' && v.replaceReason.length < 3) throw new AppError('Give a reason for replacing a verified document.');
     const meta = {
       id: randomUUID(), employeeId, type: TYPE, requirementId: req.id, requirementName: req.name, category: req.category, restricted: req.restricted,
       name: v.name, mime: v.mime, size: bytes.length, version: (previous?.version || 0) + 1, replaces: previous?.id || null, replaceReason: v.replaceReason,
-      issueDate: v.issueDate, expiryDate: v.expiryDate, expiry: v.expiryDate, remarks: v.remarks,
+      issueDate: v.issueDate, expiryDate: v.expiryDate, expiry: v.expiryDate, remarks: v.remarks, idType: req.id === 'valid-id' ? v.idType : '',
       uploadedAt: new Date().toISOString(), uploadedBy: actor.username, reviewStatus: 'Submitted', reviewer: '', reviewedAt: '', reviewNote: '', status: 'Active',
     };
     store.db.prepare('INSERT INTO employee_documents VALUES(?,?,?,?)').run(meta.id, employeeId, JSON.stringify(meta), bytes);
     store.db.prepare('DELETE FROM requirement_overrides WHERE employee_id=? AND requirement_id=?').run(employeeId, req.id);
     if (self) store.notify(null, `${employee.name} uploaded “${req.name}” from their account. Waiting for HR review.`);
-    store.log(actor, previous ? 'replace' : 'upload', `document:${TYPE}`, employeeId, previous ? { id: previous.id, version: previous.version } : null, { id: meta.id, requirement: req.name, version: meta.version, reason: v.replaceReason });
+    store.log(actor, previous ? 'replace' : 'upload', `document:${TYPE}`, employeeId, previous ? { id: previous.id, version: previous.version } : null, { id: meta.id, requirement: req.name, version: meta.version, reason: v.replaceReason, ...(meta.idType ? { idType: meta.idType } : {}) });
     return meta;
   });
 }

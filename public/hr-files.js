@@ -1,6 +1,6 @@
 // Employee 201 Files: directory (search, filters, sort, pagination) and the tabbed employee profile with the
 // digital 201 document checklist.
-import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who, idTypeSelect } from './hr-common.js';
 
 const PAGE_SIZE = 10;
 const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['attendance', 'Attendance', '🕒'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
@@ -358,15 +358,16 @@ export function createFiles(ctx) {
   }
   function documentsTab(record, checklist) {
     const manage = can().manage && !record.archived, approve = can().approve;
-    const groups = [...new Set(checklist.items.map(i => i.requirement.category))];
+    // Government numbers already on file (Government IDs) need nothing more, so they are not listed; missing ones still are.
+    const shown = checklist.items.filter(i => !(i.numberOnly && i.status === 'Verified'));
+    const groups = [...new Set(shown.map(i => i.requirement.category))];
     return `<section class="panel checklist-panel"><div class="panel-head"><div><h2>Digital 201 checklist</h2><p>Completion counts only current, verified, required documents.</p></div>${progress(checklist.percent, `${checklist.completeCount}/${checklist.requiredCount} verified`)}</div>
-      ${groups.map(g => `<h3 class="hr-group-title">${esc(g)}</h3>${table(['Requirement', 'Status', 'Due / expiry', 'Current file', 'Reviewed', 'Actions'], checklist.items.filter(i => i.requirement.category === g).map(i => {
+      ${groups.map(g => `<h3 class="hr-group-title">${esc(g)}</h3>${table(['Requirement', 'Status', 'Due / expiry', 'Current file', 'Actions'], shown.filter(i => i.requirement.category === g).map(i => {
         const c = i.current;
         return [`${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}${i.restricted ? ' <small>🔒 restricted</small>' : ''}`,
           `${i.numberOnly ? badge(i.status === 'Verified' ? 'Number on file' : i.status === 'Missing' ? 'No number yet' : i.status, DOC_BADGE[i.status]) : badge(i.status, DOC_BADGE[i.status])}${i.overdue ? ' <small class="danger-text">overdue</small>' : ''}${i.expiringSoon ? ' <small>expiring soon</small>' : ''}${i.notApplicable ? `<small>${esc(i.notApplicable.reason)}</small>` : ''}`,
           c?.expiryDate ? `Expires ${fmtDate(c.expiryDate)}` : i.due && ['Missing', 'Rejected'].includes(i.status) ? `Due ${fmtDate(i.due)}` : '—',
-          i.numberOnly ? '<span class="muted">Number only · no file needed</span>' : i.hidden ? '<span class="muted">Restricted</span>' : c ? `<a href="/api/hr/documents/${c.id}/content" target="_blank" rel="noopener">${esc(c.name)}</a><small>v${c.version} · ${fmtDate(c.uploadedAt)} · ${esc(who(c.uploadedBy))}</small>` : '—',
-          c?.reviewer ? `${esc(c.reviewer)}<small>${fmtDate(c.reviewedAt)}${c.reviewNote ? ` · ${esc(c.reviewNote)}` : ''}</small>` : '—',
+          i.numberOnly ? '<span class="muted">Number only · no file needed</span>' : i.hidden ? '<span class="muted">Restricted</span>' : c ? `<a href="/api/hr/documents/${c.id}/content" target="_blank" rel="noopener">${esc(c.name)}</a><small>${c.idType ? `${esc(c.idType)} · ` : ''}${fmtDate(c.uploadedAt)}</small>` : '—',
           `<span class="row-actions">${manage && !i.hidden && !i.numberOnly ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${c && !i.hidden ? `<a class="small download-link" href="/api/hr/documents/${c.id}/content?download=1">Download</a>` : ''}${i.versions.length > 1 ? `<button class="small" data-versions="${esc(i.requirement.id)}">Versions (${i.versions.length})</button>` : ''}${approve ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? 'Mark applicable' : 'Not applicable'}</button>` : ''}</span>`];
       }))}`).join('')}</section>`;
   }
@@ -411,6 +412,7 @@ export function createFiles(ctx) {
     const c = item.current, needsReason = c && c.reviewStatus === 'Verified';
     openDialog(`${c ? 'Replace' : 'Upload'}: ${item.requirement.name}`, `<form id="doc-upload"><div class="dialog-body form-grid">
       <label class="field full">File (PDF, JPG or PNG, up to ${ctx.context().uploads.documentMB} MB)<input type="file" name="file" accept="application/pdf,image/png,image/jpeg" required></label>
+      ${item.requirement.id === 'valid-id' ? `<label class="field full">Which ID is this?${idTypeSelect(esc, 'idType', 'required')}</label>` : ''}
       <label class="field">Issue date (optional)<input type="date" name="issueDate"></label><label class="field">Expiry date ${item.requirement.expires ? '' : '(optional)'}<input type="date" name="expiryDate" ${item.requirement.expires ? 'required' : ''}></label>
       ${c ? `<label class="field full">Reason for replacing${needsReason ? '' : ' (optional)'}<input name="replaceReason" ${needsReason ? 'required minlength="3"' : ''} maxlength="500" placeholder="e.g. Signed copy received"></label>` : ''}
       <label class="field full">Remarks (optional)<input name="remarks" maxlength="500"></label>
@@ -423,7 +425,7 @@ export function createFiles(ctx) {
       if (file.size > limit * 1024 * 1024) { toast(`Files can be up to ${limit} MB.`); return; }
       const button = form.querySelector('.primary'); button.disabled = true; button.textContent = 'Uploading…';
       try {
-        await api(`/hr/employees/${encodeURIComponent(profileId)}/documents`, { requirementId: item.requirement.id, name: file.name, mime: file.type, data: await readFile(file), issueDate: form.elements.issueDate.value, expiryDate: form.elements.expiryDate.value, replaceReason: form.elements.replaceReason?.value || '', remarks: form.elements.remarks.value });
+        await api(`/hr/employees/${encodeURIComponent(profileId)}/documents`, { requirementId: item.requirement.id, name: file.name, mime: file.type, data: await readFile(file), issueDate: form.elements.issueDate.value, expiryDate: form.elements.expiryDate.value, replaceReason: form.elements.replaceReason?.value || '', remarks: form.elements.remarks.value, idType: form.elements.idType?.value || '' });
         dialog.close(); toast('Document uploaded. Review it to count it as complete.'); await drawProfile();
       } catch (error) { toast(error.message); button.disabled = false; button.textContent = 'Upload'; }
     };

@@ -150,6 +150,9 @@ export const who = value => { const text = String(value ?? ''), m = text.match(/
 
 // Reason picker shared by employee forms (leave, overtime): a dropdown of usual reasons with "Other", and an explanation
 // box. Saved as one text "Reason — explanation" so the reason can be shown short (Live attendance) and in full on click.
+// Government-issued ID types (the same list is in src/documents201.mjs VALID_ID_TYPES).
+export const VALID_ID_TYPES = ['Passport', 'PhilSys National ID', 'UMID', 'SSS ID', 'TIN ID', "Driver's license", 'PRC ID', 'PhilHealth ID', 'Pag-IBIG ID', 'Postal ID', "Voter's ID", 'ACR I-Card (foreign national)', 'Senior citizen ID', 'PWD ID', 'Other government ID'];
+export const idTypeSelect = (esc, name = 'idType', attrs = '') => `<select name="${name}" ${attrs}><option value="">Choose the ID…</option>${VALID_ID_TYPES.map(t => `<option>${esc(t)}</option>`).join('')}</select>`;
 export const LEAVE_REASONS = ['Personal matter', 'Illness / medical', 'Medical appointment', 'Family emergency', 'Vacation / rest', 'Bereavement', 'Government or legal errand', 'School / child-related'];
 export const OVERTIME_REASONS = ['Month-end / cut-off deadline', 'Client or project deadline', 'Covering for an absent colleague', 'System maintenance / deployment', 'Inventory or audit', 'Travel / driving assignment', 'Company event'];
 const escText = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

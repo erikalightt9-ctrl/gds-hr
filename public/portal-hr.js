@@ -1,5 +1,5 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
-import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS, idTypeSelect } from './hr-common.js';
 import { describeTotal } from './overtime-ui.js';
 
 export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message) }) {
@@ -220,20 +220,23 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   function documents(box, list) {
     const due = toComply(list);
     box.innerHTML = `${due.length ? `<div class="compliance-alert" role="alert"><div><strong>⚠️ ${due.length} required document${due.length === 1 ? ' is' : 's are'} not yet complied</strong><ol class="comply-list">${due.map(i => `<li>${esc(i.requirement.name)}${i.numberOnly ? ' <small>(enter the number in My data sheet)</small>' : i.status === 'Missing' ? '' : ` <small>(${esc(STATUS_TEXT[i.status])})</small>`}</li>`).join('')}</ol><p class="legend">Upload ${due.length === 1 ? 'it' : 'each one'} below. The notice is lifted as soon as the file is uploaded; HR then reviews it.</p></div></div>` : `<div class="notice success">All required documents are uploaded${list.completeCount < list.requiredCount ? '; HR is reviewing the rest' : ' and verified'}.</div>`}<section class="panel"><div class="panel-head"><div><h2>My 201 documents</h2><p>Upload what HR asked for. HR checks each file before it counts as complete.</p></div><span class="legend">${list.completeCount} of ${list.requiredCount} required documents verified</span></div>
-      <div class="doc-cards">${list.items.length ? list.items.map(i => {
+      <div class="doc-cards">${list.items.some(i => !(i.numberOnly && i.status === 'Verified')) ? list.items.filter(i => !(i.numberOnly && i.status === 'Verified')).map(i => {
         // One card per requirement so the upload button is always on screen (phones included).
         const upload = i.numberOnly
           ? (i.status === 'Missing' ? '<button class="primary doc-upload" data-portal-tab="datasheet">Enter number</button>' : '')
-          : ['Missing', 'Rejected', 'Expired'].includes(i.status) ? `<label class="doc-upload button-like primary-like">📤 Upload file<input type="file" data-up="${esc(i.requirement.id)}" accept="application/pdf,image/png,image/jpeg" hidden></label>` : '';
+          : ['Missing', 'Rejected', 'Expired'].includes(i.status) ? `${i.requirement.id === 'valid-id' ? `<label class="doc-idtype">Which ID will you upload?${idTypeSelect(esc, 'idType', 'data-idtype')}</label>` : ''}<label class="doc-upload button-like primary-like">📤 Upload file<input type="file" data-up="${esc(i.requirement.id)}" accept="application/pdf,image/png,image/jpeg" hidden></label>` : '';
         const when = i.current?.expiryDate ? `Expires ${fmtDate(i.current.expiryDate)}` : i.due ? `Due ${fmtDate(i.due)}` : '';
         const file = i.versions[0] ? `<a href="/api/hr/me/documents/${i.versions[0].id}/content" target="_blank" rel="noopener">${esc(i.versions[0].name)}</a>` : '';
-        return `<article class="doc-card${['Missing', 'Rejected', 'Expired'].includes(i.status) ? ' due' : ''}"><div class="doc-card-head"><strong>${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}</strong>${badge(statusText(i), DOC_BADGE[i.status])}</div>${i.current?.reviewNote && i.status === 'Rejected' ? `<p class="doc-note">${esc(i.current.reviewNote)}</p>` : ''}${when || file ? `<p class="doc-meta">${[when, file && `Your upload: ${file}`].filter(Boolean).join(' · ')}</p>` : ''}${upload}</article>`;
+        return `<article class="doc-card${['Missing', 'Rejected', 'Expired'].includes(i.status) ? ' due' : ''}"><div class="doc-card-head"><strong>${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}</strong>${badge(statusText(i), DOC_BADGE[i.status])}</div>${i.current?.reviewNote && i.status === 'Rejected' ? `<p class="doc-note">${esc(i.current.reviewNote)}</p>` : ''}${when || file ? `<p class="doc-meta">${[when, i.current?.idType && `ID: ${esc(i.current.idType)}`, file && `Your upload: ${file}`].filter(Boolean).join(' · ')}</p>` : ''}${upload}</article>`;
       }).join('') : '<p class="muted">No documents are required right now.</p>'}</div>
       <p class="panel-body legend">PDF, JPG or PNG. Sensitive documents (such as medical records) are handled directly by HR.</p></section>`;
     box.onchange = async event => {
       const input = event.target.closest('[data-up]'); if (!input) return;
       const file = input.files[0]; if (!file) return;
-      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); documents(box, await api('/hr/me/documents')); } catch (error) { toast(error.message); }
+      // Government-issued ID: the employee first says which ID it is (Passport, UMID, TIN ID, ...).
+      const idType = input.dataset.up === 'valid-id' ? box.querySelector('[data-idtype]')?.value || '' : '';
+      if (input.dataset.up === 'valid-id' && !idType) { input.value = ''; toast('Choose which ID you are uploading first.'); box.querySelector('[data-idtype]')?.focus(); return; }
+      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file), ...(idType ? { idType } : {}) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); documents(box, await api('/hr/me/documents')); } catch (error) { toast(error.message); }
     };
   }
   // Employee dashboard: details still missing from their record, with a button to fill them in (data sheet).
