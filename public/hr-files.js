@@ -364,7 +364,7 @@ export function createFiles(ctx) {
     return `<section class="panel checklist-panel"><div class="panel-head"><div><h2>Digital 201 checklist</h2><p>Completion counts only current, verified, required documents.</p></div>${progress(checklist.percent, `${checklist.completeCount}/${checklist.requiredCount} verified`)}</div>
       ${groups.map(g => `<h3 class="hr-group-title">${esc(g)}</h3>${table(['Requirement', 'Status', 'Due / expiry', 'Current file', 'Actions'], shown.filter(i => i.requirement.category === g).map(i => {
         const c = i.current;
-        return [`${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}${i.restricted ? ' <small>🔒 restricted</small>' : ''}`,
+        return [`${esc(i.requirement.name)}${i.restricted ? ' <small>🔒 restricted</small>' : ''}`,
           `${i.numberOnly ? badge(i.status === 'Verified' ? 'Number on file' : i.status === 'Missing' ? 'No number yet' : i.status, DOC_BADGE[i.status]) : badge(i.status, DOC_BADGE[i.status])}${i.overdue ? ' <small class="danger-text">overdue</small>' : ''}${i.expiringSoon ? ' <small>expiring soon</small>' : ''}${i.notApplicable ? `<small>${esc(i.notApplicable.reason)}</small>` : ''}`,
           c?.expiryDate ? `Expires ${fmtDate(c.expiryDate)}` : i.due && ['Missing', 'Rejected'].includes(i.status) ? `Due ${fmtDate(i.due)}` : '—',
           i.numberOnly ? '<span class="muted">Number only · no file needed</span>' : i.hidden ? '<span class="muted">Restricted</span>' : c ? `<a href="/api/hr/documents/${c.id}/content" target="_blank" rel="noopener">${esc(c.name)}</a><small>${c.idType ? `${esc(c.idType)} · ` : ''}${fmtDate(c.uploadedAt)}</small>` : '—',
