@@ -13,6 +13,10 @@ import { getDocument } from './profiles.mjs';
 export const CATEGORIES = { 'forgot-in': 'Forgot to time in', 'forgot-out': 'Forgot to time out', failed: 'Failed or incorrect office time in / out', system: 'System error (app, website or server problem)', offsite: 'Off-site work reconsideration', other: 'Other reason' };
 // Like a failed time in / out: transaction, requested times and a description of the problem.
 export const PROBLEM_CATEGORIES = ['failed', 'system', 'other'];
+// "Ends the next day" with a time out later than the time in would be a shift over 24 hours (e.g. 09:00 – 18:05 next day).
+function assertShiftLength({ timeIn, timeOut, endNextDay }) {
+  if (timeIn && timeOut && endNextDay && timeOut > timeIn) throw new AppError(`${timeIn} – ${timeOut} on the next day is more than 24 hours. Untick "Time out on the next day" unless the work ended after midnight.`);
+}
 export const STATUS_LABELS = { pending: 'Pending HR approval', review: 'Under review', info: 'Additional information required', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled by employee' };
 export const FILING_DAYS = 30;
 export const REVIEW_HOURS = 48;
@@ -64,6 +68,7 @@ export function submitAttendanceRequest(store, actor, input, now = new Date()) {
   if ((v.category === 'forgot-in' || v.category === 'offsite') && !v.location) throw new AppError('Enter the exact place where you worked.');
   if (v.category === 'offsite' && !v.purpose) throw new AppError('Enter the purpose of the off-site assignment.');
   if (v.timeIn && v.timeOut && !v.endNextDay && v.timeOut <= v.timeIn) throw new AppError('The time out must be after the time in (tick "ends the next day" for overnight work).');
+  assertShiftLength(v);
   return store.transaction(() => {
     ensure(store);
     const state = store.read();
@@ -165,6 +170,7 @@ export function approveAttendanceRequest(store, actor, id, input, now = new Date
   return hrAction(store, actor, id, r => {
     if (!OPEN.includes(r.status)) throw new AppError('This request is already decided.');
     const approved = { timeIn: v.timeIn || r.timeIn, timeOut: v.timeOut || r.timeOut, endNextDay: v.endNextDay ?? r.endNextDay };
+    assertShiftLength(approved);
     const changed = approved.timeIn !== r.timeIn || approved.timeOut !== r.timeOut || approved.endNextDay !== r.endNextDay;
     if (changed && v.remarks.length < 5) throw new AppError('Approving a different time than filed needs a remark (at least 5 characters).');
     const state = store.read(), employee = state.employees.find(e => e.id === r.employeeId);

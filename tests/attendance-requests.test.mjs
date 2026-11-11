@@ -82,3 +82,13 @@ test('reject needs a reason and leaves the record unchanged; cancel by employee;
     assert.deepEqual(remindOverdueRequests(store, later), [], 'one reminder per request per day');
   } finally { store.close(); }
 });
+
+test('"next day" with a later time out is refused as over 24 hours, on filing and on approval, with a clear message', () => {
+  const store = fixture();
+  try {
+    assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ endNextDay: true }), NOW), /more than 24 hours.*Untick/);
+    const r = submitAttendanceRequest(store, worker, forgotIn(), NOW);
+    assert.throws(() => approveAttendanceRequest(store, admin, r.id, { endNextDay: true, remarks: 'Checking the next-day box' }), /more than 24 hours/);
+    assert.equal(approveAttendanceRequest(store, admin, r.id, { remarks: '' }).status, 'approved', 'as filed it approves');
+  } finally { store.close(); }
+});
