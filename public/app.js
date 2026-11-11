@@ -40,6 +40,7 @@ let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun
 let employeeStatusFilter = 'All Employees';
 let attendanceView = 'month'; // 'month' (monthly sheet), 'records' (one day, all employees) or 'timecard' (one employee beside pay)
 let attendanceMonth = '';      // Attendance → Monthly: YYYY-MM shown (blank = this month)
+let balCompany = '', balStatus = 'active';   // Leave → Balances filters: subsidiary ('' = all) and active / inactive / ''
 let payrollEmployee = '', attCompany = '';   // attCompany: subsidiary filter on the attendance pages   // '' = all, an employee ID, or 'company:<subsidiary>'
 // Subsidiaries with employees on payroll; a company payroll is generated, totalled and finalized on its own.
 const companies = () => [...new Set([...(hrContext?.departments || []), ...state.employees.filter(e => !e.archived && e.department).map(e => e.department)])].sort();
@@ -406,7 +407,9 @@ function askForLeaveProof(id) {
 const BALANCE_COLUMNS = [['Service incentive leave', ['sil']], ['Vacation leave', ['vacation']], ['Unpaid leave / absent', ['unpaid']], ['Bereavement leave', ['bereavement']], ['Maternity / Paternity leave', ['maternity', 'paternity']], ['Solo parent leave', ['solo-parent']], ['Special leave for women (RA 9710)', ['special-women']]];
 function balanceMatrix() {
   const q = filter.trim().toLowerCase();
-  const people = state.employees.filter(e => !e.archived && !e.draft && e.leaveEligibility.length && (!q || `${e.name} ${e.id} ${e.employeeNumber || ''}`.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+  const isActive = e => !e.archived && e.active !== false;
+  const people = state.employees.filter(e => !e.draft && e.leaveEligibility.length && (!balCompany || e.department === balCompany) && (!balStatus || (balStatus === 'active') === isActive(e)) && (!q || `${e.name} ${e.id} ${e.employeeNumber || ''}`.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+  const filters = `<div class="bal-filters"><label class="field">Company<select data-bal-company><option value="">All companies</option>${companies().map(c => `<option ${c === balCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label><label class="field">Status<select data-bal-status>${[['active', 'Active'], ['inactive', 'Not active'], ['', 'All']].map(([v, l]) => `<option value="${v}" ${v === balStatus ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`;
   const cell = (e, ids) => {
     const own = balances.filter(b => b.employeeId === e.id && ids.includes(b.typeId) && e.leaveEligibility.includes(b.typeId));
     if (!own.length) return '<span class="muted">—</span>';
@@ -414,7 +417,7 @@ function balanceMatrix() {
     const text = ids.includes('unpaid') ? `${used}` : `${sum('entitled') + sum('carry')}/${used}`;
     return `<button class="link-cell bal-cell" data-leave-balance="${esc(e.id)}" data-leave-types="${esc(ids.join(','))}" title="Entitled / used · click for details">${text}</button>`;
   };
-  return `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · entitled / used (days) · click a number for the details</span></div>${searchToolbar()}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
+  return `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · entitled / used (days) · click a number for the details</span></div>${searchToolbar(filters)}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
 }
 function leaveBalanceDialog(employeeId, typeIds = null) {
   const person = state.employees.find(e => e.id === employeeId), year = today().slice(0, 4);
@@ -1286,6 +1289,7 @@ function filterDaily() {
 }
 document.addEventListener('input', event => { if (event.target.matches?.('[data-dr-search]')) filterDaily(); });
 document.addEventListener('change', event => { if (event.target.matches?.('[data-att-company]')) { attCompany = event.target.value; render(); } });
+document.addEventListener('change', event => { if (event.target.matches?.('[data-bal-company]')) { balCompany = event.target.value; render(); } else if (event.target.matches?.('[data-bal-status]')) { balStatus = event.target.value; render(); } });
 document.addEventListener('click', event => { const b = event.target.closest?.('[data-dr-tab]'); if (!b) return; b.parentElement.querySelectorAll('[data-dr-tab]').forEach(x => x.classList.toggle('active', x === b)); filterDaily(); });
 document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } if (event.target.matches?.('[data-dr-status]')) filterDaily(); if (event.target.id === 'records-date' && event.target.value) { recordsDate = event.target.value; render(); } if (event.target.id === 'hol-year') { const y = event.target.value.trim(); if (!/^\d{4}$/.test(y)) { toast('Type the year as YYYY, e.g. 2028.'); return; } const show = () => { holidayYear = y; render(); }; if (canEdit('holidays') && !state.holidays.some(h => h.date.startsWith(`${y}-`))) api('/holidays/year', { year: y }).then(async r => { await refresh(); show(); if (r.added) toast(`${y} holidays added (${r.added} dates). Add Eid'l Fitr and Eid'l Adha when proclaimed.`); }).catch(e => toast(e.message)); else show(); } });
 setupInstall();

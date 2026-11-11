@@ -1789,3 +1789,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .memo-who { font-weight: 600; }
 .memo-who + small { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.4; }
 .bal-cell { font-weight: 700; font-variant-numeric: tabular-nums; }
+.bal-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-right: auto; }
+.bal-filters .field { min-width: 180px; }
