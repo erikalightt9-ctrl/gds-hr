@@ -11,6 +11,12 @@ export function createMemos(ctx) {
   async function render(openId = null) {
     shell(heading('Memos', 'Loading…') + '<div class="loading">Loading memos…</div>');
     [memos, people] = await Promise.all([api('/hr/memos'), ctx.context().can.manage ? api('/hr/employees') : Promise.resolve([])]);
+    // Servers started before the names were added to the list: read them from each issued memo's details instead.
+    memos = await Promise.all(memos.map(async m => {
+      if (m.recipientNames || !m.version) return m;
+      try { const v = (await api(`/hr/memos/${m.id}`)).versions.at(-1), rows = v?.assignments || [], name = a => a.name || a.employeeId; return { ...m, recipientNames: rows.map(name), pendingNames: m.ackRequired ? rows.filter(a => !a.acknowledgedAt).map(name) : [] }; }
+      catch { return m; }
+    }));
     draw();
     if (openId) detail(openId);
   }
