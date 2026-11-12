@@ -180,6 +180,13 @@ function shell(content) {
   syncRoute();
 }
 let bellItems = [];
+// Bell → documents to review: bring the employee's Review buttons into view and mark them.
+function showReviewButtons() {
+  const buttons = [...document.querySelectorAll('[data-review]')];
+  if (!buttons.length) { window.scrollTo({ top: 0 }); toast('Nothing is waiting for review in this 201 file any more.'); return; }
+  buttons.forEach(b => b.classList.add('bell-target'));
+  buttons[0].scrollIntoView({ block: 'center' }); buttons[0].focus({ preventScroll: true });
+}
 const bellKey = () => `gds-hr-bell-seen:${auth?.user?.id || ''}`;
 function bellSeen() { try { return JSON.parse(localStorage.getItem(bellKey()) || '[]'); } catch { return []; } }
 function markBellSeen() { try { localStorage.setItem(bellKey(), JSON.stringify(bellItems.map(item => item.text))); } catch { /* storage unavailable: the number stays */ } document.querySelector('[data-bell-count]')?.classList.add('hidden'); }
@@ -1148,7 +1155,7 @@ document.addEventListener('click', async event => {
       menu.classList.toggle('hidden'); if (!menu.classList.contains('hidden')) markBellSeen(); return;
     }
     // A bell item opens the page (and tab) where it is handled, at the top, and closes the bell.
-    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'leave') subtab = 'requests'; if (item.nav === 'requests') requestToOpen = (item.text.match(/AR-\d{4}-\d{4}/) || [''])[0]; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter }); window.scrollTo({ top: 0 }); return; }
+    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'employee201') { await goTo({ page: 'employee201', id: item.id, tab: item.tab || 'requirements' }); showReviewButtons(); return; } if (item.nav === 'leave') subtab = 'requests'; if (item.nav === 'requests') requestToOpen = (item.text.match(/AR-\d{4}-\d{4}/) || [''])[0]; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter }); window.scrollTo({ top: 0 }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
     if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }

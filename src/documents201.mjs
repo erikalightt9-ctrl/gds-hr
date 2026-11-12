@@ -159,18 +159,21 @@ export function document201Content(store, actor, docId) {
 export function documentSummary(store, actor, employees = scopeEmployees(store, actor).filter(e => !e.archived)) {
   const settings = readSettings(store), today = localToday(), rows = [];
   let missingDocuments = 0, employeesMissing = 0, expired = 0, expiringSoon = 0, pendingReview = 0, overdue = 0;
+  const toReview = [];   // one entry per employee with uploads waiting for HR review (bell items open that 201 file)
   for (const e of employees) {
     const list = checklistFor(store, actor, e, settings, today);
     const missing = list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status));
     missingDocuments += missing.length; if (missing.length) employeesMissing++;
     expired += list.items.filter(i => i.status === 'Expired').length;
     expiringSoon += list.items.filter(i => i.expiringSoon).length;
-    pendingReview += list.items.filter(i => ['Submitted', 'Under Review'].includes(i.status)).length;
+    const reviewing = list.items.filter(i => ['Submitted', 'Under Review'].includes(i.status));
+    pendingReview += reviewing.length;
+    if (reviewing.length) toReview.push({ employeeId: e.id, name: e.name, requirements: reviewing.map(i => i.requirement.name), uploadedAt: reviewing.map(i => i.current?.uploadedAt || '').filter(Boolean).sort() });
     overdue += list.items.filter(i => i.overdue).length;
     for (const i of list.items) if (i.status !== 'Verified' && i.status !== 'Not Applicable' && (i.requirement.required || i.status !== 'Missing')) rows.push({ employeeId: e.id, name: e.name, number: e.employeeNumber || e.id, department: e.department, requirement: i.requirement.name, category: i.requirement.category, required: i.requirement.required, status: i.status, due: i.due, overdue: i.overdue, expiry: i.current?.expiryDate || '' });
     if (list.items.some(i => i.expiringSoon)) for (const i of list.items.filter(x => x.expiringSoon)) rows.push({ employeeId: e.id, name: e.name, number: e.employeeNumber || e.id, department: e.department, requirement: i.requirement.name, category: i.requirement.category, required: i.requirement.required, status: 'Expiring soon', due: '', overdue: false, expiry: i.current?.expiryDate || '' });
   }
-  return { missingDocuments, employeesMissing, expired, expiringSoon, pendingReview, overdue, rows };
+  return { missingDocuments, employeesMissing, expired, expiringSoon, pendingReview, overdue, rows, toReview };
 }
 export function completionReport(store, actor) {
   const settings = readSettings(store);

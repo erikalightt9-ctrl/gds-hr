@@ -105,7 +105,8 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if (HR_TEAM.includes(actor.role)) {
       const docs = documentSummary(store, actor), sheets = pendingSheets(store);
       if (sheets) items.push({ text: `${sheets} data sheet${sheets === 1 ? '' : 's'} awaiting review`, nav: 'datasheets' });
-      if (docs.pendingReview) items.push({ text: `${docs.pendingReview} document${docs.pendingReview === 1 ? '' : 's'} to review`, nav: 'files', filter: 'review' });
+      // One item per employee whose uploads wait for review: it opens that employee's 201 documents, where Review is.
+      for (const r of docs.toReview || []) items.push({ text: `${r.name}: ${r.requirements.length} document${r.requirements.length === 1 ? '' : 's'} to review (${r.requirements.join(', ')})`, nav: 'employee201', id: r.employeeId, tab: 'requirements', date: span(r.uploadedAt.map(d => d.slice(0, 10))) });
       if (docs.expired) items.push({ text: `${docs.expired} expired document${docs.expired === 1 ? '' : 's'}`, nav: 'files', filter: 'expired' });
       if (docs.overdue) items.push({ text: `${docs.overdue} overdue document submission${docs.overdue === 1 ? '' : 's'}`, nav: 'files', filter: 'missing' });
     }
