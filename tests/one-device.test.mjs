@@ -7,22 +7,21 @@ import { createHash } from 'node:crypto';
 
 const hash = t => createHash('sha256').update(t).digest('hex');
 
-test('an account can be signed in on several devices at once; HR can sign it out everywhere (administrators too)', async () => {
+test('an account signed in on one device cannot sign in on another until signed out (administrators too)', async () => {
   const store = new Store(':memory:'); store.write(completeState());
   try {
     const admin = { username: 'boss', role: 'admin' };
     const emp = await addUser(store, { username: 'worker1', password: 'Worker-pass-2026!', role: 'employee', employeeId: 'EMP-001' }, admin);
     const first = await login(store, 'worker1', 'Worker-pass-2026!', 'k1');
-    const second = await login(store, 'worker1', 'Worker-pass-2026!', 'k2');
-    assert.ok(second.token && second.token !== first.token, 'a second device signs in with its own session');
+    await assert.rejects(login(store, 'worker1', 'Worker-pass-2026!', 'k2'), /already signed in on another device/);
     const again = await login(store, 'worker1', 'Worker-pass-2026!', 'k3', '', { currentTokenHash: hash(first.token) });
     assert.ok(again.token, 'the same device may sign in again');
     assert.throws(() => signOutEverywhere(store, { username: 'x', role: 'employee' }, emp.id), /permission/i);
-    assert.equal(signOutEverywhere(store, admin, emp.id).signedOut, 2, 'both devices are signed out');
-    assert.ok((await login(store, 'worker1', 'Worker-pass-2026!', 'k4')).token, 'signs in again afterwards');
+    assert.equal(signOutEverywhere(store, admin, emp.id).signedOut, 1);
+    assert.ok((await login(store, 'worker1', 'Worker-pass-2026!', 'k4')).token, 'signs in on the new device after HR signs the old one out');
     await addUser(store, { username: 'boss2', password: 'Admin-pass-2026!!', role: 'admin' }, admin);
     await login(store, 'boss2', 'Admin-pass-2026!!', 'k5');
-    assert.ok((await login(store, 'boss2', 'Admin-pass-2026!!', 'k6')).token, 'administrators too');
+    await assert.rejects(login(store, 'boss2', 'Admin-pass-2026!!', 'k6'), /already signed in on another device/, 'administrators too');
   } finally { store.close(); }
 });
 

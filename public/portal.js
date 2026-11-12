@@ -603,7 +603,7 @@ export function createPortal(ctx) {
       const button = event.target.closest('button'); if (!button) return;
       try {
         if (button.dataset.userSignout) {
-          if (!window.confirm('Sign this account out on all its devices? The person can sign in again with the password.')) return;
+          if (!window.confirm('Sign this account out of its device? The person can then sign in on another device.')) return;
           await api(`/users/${button.dataset.userSignout}/sign-out`, {});
           button.textContent = 'Signed out ✓'; button.disabled = true; button.closest('tr')?.querySelector('.signed-in')?.remove();
           return;
