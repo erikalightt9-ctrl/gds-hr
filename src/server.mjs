@@ -37,6 +37,7 @@ import { employeeDashboard, locateAddress, punch, applyLeave, attachLeaveProof, 
 import { runMigrations } from './migrations.mjs';
 import { runTardinessMemos } from './tardiness-memo.mjs';
 import { submitAttendanceRequest, ownAttendanceRequests, cancelAttendanceRequest, replyAttendanceRequest, attendanceRequestsOverview, startReview, requestInformation, addRemark, rejectAttendanceRequest, approveAttendanceRequest, remindOverdueRequests } from './attendance-requests.mjs';
+import { runReminders } from './reminders.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -448,6 +449,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   // Attendance requests waiting for HR longer than 48 hours: one HR reminder per request per day; checked every hour.
   const requestCheck = () => { try { remindOverdueRequests(store); } catch (error) { console.error('attendance request reminder failed:', error.message); } };
   requestCheck(); setInterval(requestCheck, 3600000).unref();
+  // Attendance reminders (5 minutes before the scheduled start / after the scheduled end, Philippine Time), every minute.
+  const reminderCheck = () => runReminders(store, new Date(), { subject: origin }).catch(error => console.error('attendance reminder check failed:', error.message));
+  setInterval(reminderCheck, 60000).unref();
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });

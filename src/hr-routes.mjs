@@ -12,6 +12,7 @@ import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './rol
 import { celebrationsOn, celebrationsThisMonth, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 import { fileOvertime, cancelOvertime, editOvertime, myOvertime } from './overtime.mjs';
+import { pushStatus, savePushSubscription, removePushSubscription, sendTestReminder } from './reminders.mjs';
 import { saveSchedule } from './work-schedule.mjs';
 
 const BIG = 28_500_000;
@@ -43,6 +44,11 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   // ---------- Employee self-service ----------
   if (pathname.startsWith('/api/hr/me/')) {
     permit(actor, ['employee']);
+    // Attendance reminders on the employee's own devices (Web Push); reminders never record time.
+    if (pathname === '/api/hr/me/reminders' && method === 'GET') { send(200, pushStatus(store, actor)); return true; }
+    if (pathname === '/api/hr/me/reminders' && method === 'POST') { send(200, savePushSubscription(store, actor, await readBody(req))); return true; }
+    if (pathname === '/api/hr/me/reminders/remove' && method === 'POST') { send(200, removePushSubscription(store, actor, await readBody(req))); return true; }
+    if (pathname === '/api/hr/me/reminders/test' && method === 'POST') { send(200, await sendTestReminder(store, actor)); return true; }
     if (pathname === '/api/hr/me/overtime' && method === 'GET') { send(200, myOvertime(store, actor)); return true; }
     if (pathname === '/api/hr/me/overtime' && method === 'POST') { send(201, fileOvertime(store, actor, await readBody(req))); return true; }
     if ((p = m(/^\/api\/hr\/me\/overtime\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelOvertime(store, actor, p[1])); return true; }
