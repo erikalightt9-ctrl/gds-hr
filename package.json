@@ -12,7 +12,11 @@
     "preview": "node scripts/preview-roster.mjs",
     "test": "node --test tests/*.test.mjs",
     "coverage": "node --experimental-test-coverage --test-coverage-include=src/*.mjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test tests/*.test.mjs",
-    "lint": "eslint . --max-warnings=0"
+    "lint": "eslint . --max-warnings=0",
+    "backup": "node scripts/backup-r2.mjs run",
+    "backup:setup": "node scripts/backup-r2.mjs setup",
+    "backup:status": "node scripts/backup-r2.mjs status",
+    "backup:restore": "node scripts/backup-r2.mjs restore"
   },
   "dependencies": {
     "zod": "^4.4.3"
