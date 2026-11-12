@@ -1791,3 +1791,5 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .bal-cell { font-weight: 700; font-variant-numeric: tabular-nums; }
 .bal-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-right: auto; }
 .bal-filters .field { min-width: 180px; }
+/* Attendance correction policy (3-day rule) shown on the request screens */
+.ar-policy { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid #b8892b; background: #fbf5e6; color: #5a4310; font-size: .85rem; line-height: 1.4; border-radius: 4px; }

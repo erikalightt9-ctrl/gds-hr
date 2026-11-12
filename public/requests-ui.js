@@ -23,11 +23,12 @@ async function upload(api, file) {
 }
 
 // ---------- Employee ----------
+const POLICY = 'All attendance corrections must be completed within three (3) days from the date the correction is requested. If the record remains uncorrected after this period and no valid reason is provided, the employee will be marked absent for the affected date.';
 export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, confirmBox, onLeave }) {
   let list = [];
   const badge = s => { const [label, tone] = STATUS[s] || [s, 'neutral']; return `<span class="badge ${tone}">${esc(label)}</span>`; };
   function render(box) {
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>My attendance requests</h2><p class="legend">Forgot to time in or out, a failed time in, a system error or another reason? File a request; HR approves it before your record changes.</p></div><button class="primary" data-ar-new>New request</button></div>
+    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>My attendance requests</h2><p class="legend">Forgot to time in or out, a failed time in, a system error or another reason? File a request; HR approves it before your record changes.</p><p class="ar-policy">${esc(POLICY)}</p></div><button class="primary" data-ar-new>New request</button></div>
       ${list.length ? `<div class="ar-list">${list.map(r => `<article class="ar-item"><header><strong>${esc(r.reference)}</strong>${badge(r.status)}</header>
         <p><b>${esc(CATEGORIES[r.category])}</b> · ${esc(nice(r.date))} · requested ${esc(times(r))}</p>
         ${r.decision?.approved && r.status === 'approved' ? `<p>Approved: ${esc(times(r.decision.approved))}</p>` : ''}
@@ -70,6 +71,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
       <label class="field full" data-show="forgot-in forgot-out failed system other offsite">Reason<textarea name="reason" minlength="5" maxlength="2000" placeholder="Why the time in / out was not recorded"></textarea></label>
       <label class="field full" data-show="forgot-in forgot-out failed system other offsite">Supporting evidence (optional: screenshot, photo, PDF up to 5 MB)<input type="file" name="file" accept="application/pdf,image/png,image/jpeg"></label>
       <p class="full legend" data-show="forgot-in">If the whole day was not recorded, enter both the time in and the time out.</p>
+      <p class="full ar-policy">${esc(POLICY)}</p>
       <p class="full oof-error" data-ar-error hidden></p>
       <button class="primary full" type="submit">Submit to HR</button></form>`);
     const form = dialog.querySelector('#ar-form'), err = form.querySelector('[data-ar-error]');
@@ -107,7 +109,7 @@ export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, o
     const n = f => data.requests.filter(f).length, waiting = r => ['pending', 'review'].includes(r.status);
     const tile = (key, count, label) => `<button data-ar-filter="${key}" class="${filter === key ? 'active' : ''}"><strong>${count}</strong>${label}</button>`;
     const people = [...new Map(data.requests.map(r => [r.employeeId, r.employeeName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>Attendance requests</h2><p class="legend">Nothing changes in attendance until you approve. Approved requests become HR-approved adjustments; the original record stays in the correction history.</p></div></div>
+    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>Attendance requests</h2><p class="legend">Nothing changes in attendance until you approve. Approved requests become HR-approved adjustments; the original record stays in the correction history.</p><p class="ar-policy">${esc(POLICY)}</p></div></div>
       <div class="ot-summary ar-tiles">${tile('open', n(waiting) + data.leave.pending, 'Total pending')}${tile('forgot-in', n(r => r.category === 'forgot-in' && open(r)), 'Forgot time in')}${tile('forgot-out', n(r => r.category === 'forgot-out' && open(r)), 'Forgot time out')}${tile('failed', n(r => r.category === 'failed' && open(r)), 'Failed time in / out')}${tile('system', n(r => r.category === 'system' && open(r)), 'System error')}${tile('other', n(r => r.category === 'other' && open(r)), 'Other reason')}${tile('offsite', n(r => r.category === 'offsite' && open(r)), 'Off-site reconsideration')}<button data-ar-leave><strong>${data.leave.pending}</strong>Leave applications</button>${tile('info', n(r => r.status === 'info') + data.leave.needsInfo, 'Awaiting more information')}${tile('approved', n(r => r.status === 'approved'), 'Approved')}${tile('rejected', n(r => r.status === 'rejected'), 'Rejected')}${tile('all', data.requests.length, 'All requests')}</div>
       <div class="ot-filters"><label class="field">Employee<select data-ar-who><option value="">All employees</option>${people.map(([id, name]) => `<option value="${esc(id)}" ${id === who ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label></div>
       <div class="table-wrap"><table><thead><tr><th>Reference</th><th>Employee</th><th>Request</th><th>Date</th><th>Requested</th><th>Status</th><th>Submitted</th><th></th></tr></thead><tbody>
