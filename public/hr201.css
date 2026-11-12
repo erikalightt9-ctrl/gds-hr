@@ -1796,3 +1796,4 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .th-grid .share-input.th-posted { cursor: default; }
 .th-filters { padding: 10px 14px 4px; }
 .contrib-filters { margin-left: auto; margin-right: 0; }
+.contrib-excluded { margin: 0; padding: 10px 16px; font-size: .85rem; color: #6b4e12; background: #fbf5e6; border-top: 1px solid #eadcb5; }

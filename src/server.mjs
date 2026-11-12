@@ -26,6 +26,7 @@ import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, compute
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
+import { saveMonthEdit } from './contribution-month.mjs';
 import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
@@ -240,6 +241,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/overtime-requests' && req.method === 'POST') { send(201, fileOvertime(store, auth.user, await readBody(req))); return; }
       const otDecision = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/decision$/);
       if (otDecision && req.method === 'POST') { send(200, decideOvertime(store, auth.user, otDecision[1], await readBody(req))); return; }
+      if (pathname === '/api/contributions/month-edit' && req.method === 'POST') { send(200, saveMonthEdit(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions/employees' && req.method === 'POST') { send(200, addContributionEmployee(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions' && req.method === 'GET') { send(200, contributionOverview(store, auth.user, url.searchParams.get('month') || '', readSettings(store).company.egovFee ?? 15)); return; }
       if (pathname === '/api/thirteenth' && req.method === 'GET') {

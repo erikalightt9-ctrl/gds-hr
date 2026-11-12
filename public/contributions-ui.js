@@ -27,15 +27,15 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
       + `<div class="actions contrib-tools"><input type="month" id="contrib-month" value="${esc(month)}" aria-label="Month">${canAdd() ? '<button class="primary" data-contrib-add>+ Add employee</button>' : ''}<button class="small" data-nav="payroll">← Payroll</button><span class="download-links">${files}</span></div>`
       + `<div class="cards">${card('Employee share', money(employeeShare), filtered ? 'Filtered employees' : 'Deducted from salaries')}${card('Employer share', money(d.employer.total), 'Paid by GDS (SSS incl. EC)')}${card('Total remittance', money(s.total), `${d.monthName} · incl. loans and eGov fee`, true)}${card('Employees', people.length, filtered ? `Filtered · ${d.people.length} in this month` : 'In this month')}</div>`
       + `<section class="panel"><div class="panel-head"><h2>Per employee · ${esc(d.monthName)}</h2>${d.recorded ? '<span class="badge">Recorded from the remittance sheet</span>' : ''}${filters}</div><div class="table-wrap">${table(['Employee', 'Monthly compensation', 'SSS EE', 'SSS ER', 'PhilHealth declared salary', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Loans', 'Employee deductions', ''],
-        [...people.map(p => [esc(p.name), money(p.sssBasis), money(p.sssEE), money(p.sssER), money(p.phBasis), money(p.phEE), money(p.phER), money(p.piEE), money(p.piER), money(p.sssLoan + p.piLoan + (p.cashLoan || 0)), `<strong>${money(p.deductions)}</strong>`, p.employeeId && !d.recorded ? `<button class="small" data-contrib-edit="${esc(p.employeeId)}" title="Adjust ${esc(p.name)}'s contribution basis or premiums">Edit</button>` : '']),
-          [`<strong>${filtered ? 'Total (filtered)' : 'Total'}</strong>`, money(filtered ? tot('sssBasis') : t.basis), ...['sssEE', 'sssER', 'phBasis', 'phEE', 'phER', 'piEE', 'piER'].map(k => `<strong>${money(tot(k))}</strong>`), `<strong>${money(filtered ? tot('sssLoan') + tot('piLoan') + tot('cashLoan') : t.sssLoan + t.piLoan + (t.cashLoan || 0))}</strong>`, `<strong>${money(filtered ? tot('deductions') : t.deductions)}</strong>`, '']], 'No contributions for this month.')}</div></section>`
+        [...people.map(p => [`${esc(p.name)}${p.edited ? ' <span class="badge" title="Amounts typed for this month">Edited</span>' : ''}`, money(p.sssBasis), money(p.sssEE), money(p.sssER), money(p.phBasis), money(p.phEE), money(p.phER), money(p.piEE), money(p.piER), money(p.sssLoan + p.piLoan + (p.cashLoan || 0)), `<strong>${money(p.deductions)}</strong>`, p.employeeId && !d.recorded ? `<button class="small" data-contrib-edit="${esc(p.employeeId)}" title="Adjust ${esc(p.name)}'s contribution basis or premiums">Edit</button>` : '']),
+          [`<strong>${filtered ? 'Total (filtered)' : 'Total'}</strong>`, money(filtered ? tot('sssBasis') : t.basis), ...['sssEE', 'sssER', 'phBasis', 'phEE', 'phER', 'piEE', 'piER'].map(k => `<strong>${money(tot(k))}</strong>`), `<strong>${money(filtered ? tot('sssLoan') + tot('piLoan') + tot('cashLoan') : t.sssLoan + t.piLoan + (t.cashLoan || 0))}</strong>`, `<strong>${money(filtered ? tot('deductions') : t.deductions)}</strong>`, '']], 'No contributions for this month.')}</div>${(d.excluded || []).length ? `<p class="contrib-excluded"><strong>Not included this month</strong> (started with fewer than 15 workdays; remitted from next month): ${d.excluded.map(x => `${esc(x.name)} · started ${esc(x.startDate)} · ${x.workdays} workday${x.workdays === 1 ? '' : 's'}`).join('; ')}</p>` : ''}</section>`
       + `<div class="grid2"><section class="panel"><div class="panel-head"><h2>Remittance</h2><span class="legend">Paid to SSS, PhilHealth and Pag-IBIG</span></div><div class="panel-body">${lines(s.remittance, 'Total remittance', s.total)}</div></section>`
       + `<section class="panel"><div class="panel-head"><h2>Employer share</h2><span class="legend">Paid by GDS, not deducted from pay</span></div><div class="panel-body">${lines(s.employer, 'Total employer share', s.employerTotal)}</div></section></div>`
       + ratesPanel());
     // Edit: the employee's contribution basis and fixed premiums (applied from the chosen cutoff, with a reason and history).
     const refresh = () => render().catch(err => toast(err.message));
     document.querySelector('.content').onclick = e => {
-      const b = e.target.closest('[data-contrib-edit]'); if (b) editContribution(b.dataset.contribEdit, refresh);
+      const b = e.target.closest('[data-contrib-edit]'); if (b) monthDialog(d.people.find(p => p.employeeId === b.dataset.contribEdit), d, refresh);
       if (e.target.closest('[data-contrib-add]')) addDialog(d.people.map(p => p.employeeId), refresh);
     };
     document.querySelector('.content').onchange = e => {
@@ -43,6 +43,39 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
       else if (e.target.matches('[data-contrib-status]')) { fStatus = e.target.value; refresh(); }
     };
     document.querySelector('#contrib-month').onchange = e => { if (e.target.value) { month = e.target.value; render().catch(err => toast(err.message)); } };
+  }
+  // Edit: every amount of the employee's row for the month shown (employee and employer shares included).
+  // Blank = the computed amount. Payroll and payslips do not change; the cutoff-based basis editor stays one click away.
+  function monthDialog(p, d, refresh) {
+    if (!p) return;
+    const box = (k, label) => `<label class="field">${label}<span class="share-input"><span class="peso">₱</span><input type="number" min="0" step="0.01" name="${k}" value="${(p[k] ?? 0).toFixed(2)}" data-computed="${p.computed?.[k] ?? p[k] ?? 0}"></span>${p.computed && k in p.computed ? `<small class="share-state manual">Typed · computed ${money(p.computed[k])}</small>` : ''}</label>`;
+    openDialog(`${d.monthName} · ${p.name}`, `<form class="dialog-body form-grid" id="cm-form">
+      <p class="full sub">Amounts for ${esc(d.monthName)} only, as remitted. Payroll and payslips are not changed. Clear a box to use the computed amount.</p>
+      <h3 class="full">SSS</h3>${box('sssBasis', 'Monthly compensation')}${box('sssEE', 'Employee share')}${box('sssER', 'Employer share (incl. EC)')}
+      <h3 class="full">PhilHealth</h3>${box('phBasis', 'Declared salary')}${box('phEE', 'Employee share')}${box('phER', 'Employer share')}
+      <h3 class="full">Pag-IBIG</h3>${box('piEE', 'Employee share')}${box('piER', 'Employer share')}
+      <label class="field full">Reason (optional)<input name="reason" maxlength="500" value="${esc(p.edited?.reason || '')}"></label>
+      <p class="full cb-saved" data-cm-msg hidden></p>
+      <div class="full actions"><button class="primary">Save</button>${p.edited ? '<button type="button" data-cm-reset>Use computed amounts</button>' : ''}<button type="button" data-cm-basis>Change contribution basis from a cutoff…</button></div>
+    </form>`, '<div class="dialog-foot"><button data-close>Close</button></div>');
+    const form = dialog.querySelector('#cm-form');
+    const send = async values => {
+      try { await api('/contributions/month-edit', { employeeId: p.employeeId, month: d.month, values, reason: form.reason.value }); dialog.close?.(); toast(`Saved ${p.name} for ${d.monthName}.`); refresh(); }
+      catch (error) { toast(error.message); }
+    };
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      // Only boxes that differ from the computed amount are stored; the rest keep following payroll.
+      const values = {};
+      for (const input of form.querySelectorAll('input[type=number]')) {
+        if (input.value === '') continue;
+        const v = Math.round(Number(input.value) * 100) / 100;
+        if (Math.abs(v - Number(input.dataset.computed)) >= 0.005) values[input.name] = v;
+      }
+      send(values);
+    });
+    form.querySelector('[data-cm-reset]')?.addEventListener('click', () => send({}));
+    form.querySelector('[data-cm-basis]').addEventListener('click', () => { dialog.close?.(); editContribution(p.employeeId, refresh); });
   }
   // Add employee for manual encoding: a registered employee who is not in payroll, or a new person.
   function addDialog(listed, refresh) {
