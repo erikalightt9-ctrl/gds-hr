@@ -304,7 +304,7 @@ export function reviewExplanation(store, actor, id, input) {
     const before = JSON.parse(row.data);
     if (before.status === 'returned') throw new AppError('This explanation was sent back to the employee and is waiting for the employee to reply.');
     if (before.status !== 'pending') throw new AppError('This explanation was already reviewed.');
-    if (value.approvedOffset > before.requestedOffset) throw new AppError('Approved offset exceeds the requested minutes.');
+    // HR may approve any offset (up to a day), also when the employee asked for none.
     const state = store.read(), record = state.attendance.find(a => a.employeeId === before.employeeId && a.date === before.date);
     if (state.runs.some(r => r.start <= before.date && r.end >= before.date && r.rows.some(a => a.employeeId === before.employeeId))) throw new AppError('Attendance belongs to posted payroll; use a later authorized adjustment.');
     const after = { ...before, ...value, approvedOffset: value.status === 'approved' ? value.approvedOffset : 0, reviewedBy: actor.username, reviewedAt: new Date().toISOString() };
