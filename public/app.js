@@ -38,6 +38,7 @@ const label = key => key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpper
 const uid = () => crypto.randomUUID();
 let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun = null, filter = '', subtab = 'requests';
 let employeeStatusFilter = 'All Employees';
+let requestToOpen = '';   // AR reference to open when Attendance → Requests is reached from the bell
 let attendanceView = 'month'; // 'month' (monthly sheet), 'records' (one day, all employees) or 'timecard' (one employee beside pay)
 let attendanceMonth = '';      // Attendance → Monthly: YYYY-MM shown (blank = this month)
 let balCompany = '', balStatus = 'active';   // Leave → Balances filters: subsidiary ('' = all) and active / inactive / ''
@@ -650,7 +651,7 @@ function render() {
     api('/explanations').then(data => { const box = document.querySelector('[data-explanations]'); if (box && page === 'attendance' && attendanceView === view) box.innerHTML = portal.explanationsSection(data, view === 'reviewed' ? 'reviewed' : 'open'); }).catch(error => toast(error.message));
   }
   if (page === 'attendance' && attendanceView === 'overtime') { const box = document.querySelector('[data-overtime-apps]'); if (box) overtimeUi.fill(box); }
-  if (page === 'attendance' && attendanceView === 'requests') { const box = document.querySelector('[data-hr-requests]'); if (box) import('./requests-ui.js').then(m => m.createHrRequests({ api, esc, badge, openDialog, dialog, toast, onLeave: () => { location.hash = '#/leave'; } }).fill(box)).catch(() => { box.innerHTML = '<p class="muted">This page is available after the HR server restarts.</p>'; }); }
+  if (page === 'attendance' && attendanceView === 'requests') { const box = document.querySelector('[data-hr-requests]'); if (box) import('./requests-ui.js').then(m => m.createHrRequests({ api, esc, badge, openDialog, dialog, toast, onLeave: () => { location.hash = '#/leave'; } }).fill(box, (() => { const ref = requestToOpen; requestToOpen = ''; return ref; })())).catch(() => { box.innerHTML = '<p class="muted">This page is available after the HR server restarts.</p>'; }); }
   if (page === 'attendance' && attendanceView === 'clock') { const box = document.querySelector('[data-clock-records]'); if (box) loadClockRecords().then(ui => ui.fill(box)).catch(() => { box.innerHTML = '<p class="muted">This page is available after the HR server restarts.</p>'; }); }
   if (page === 'attendance' && !['explanations', 'reviewed', 'overtime'].includes(attendanceView) && liveData && ['admin', 'hr'].includes(auth.user.role)) {
     const live = document.createElement('div'); live.dataset.liveBlock = ''; live.innerHTML = portal.live(liveData);
@@ -1147,7 +1148,7 @@ document.addEventListener('click', async event => {
       menu.classList.toggle('hidden'); if (!menu.classList.contains('hidden')) markBellSeen(); return;
     }
     // A bell item opens the page (and tab) where it is handled, at the top, and closes the bell.
-    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'leave') subtab = 'requests'; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter }); window.scrollTo({ top: 0 }); return; }
+    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'leave') subtab = 'requests'; if (item.nav === 'requests') requestToOpen = (item.text.match(/AR-\d{4}-\d{4}/) || [''])[0]; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter }); window.scrollTo({ top: 0 }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
     if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }

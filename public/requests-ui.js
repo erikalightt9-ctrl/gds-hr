@@ -132,10 +132,13 @@ export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, o
       try { await api(`/attendance-requests/${r.id}/${act}`, body || {}); dialog.close(); toast({ review: 'Review started; the employee was notified.', remark: 'Remark added.', info: 'The employee was asked for more information.', reject: 'Request rejected; the record is unchanged.', approve: 'Approved; the attendance record was updated.' }[act]); load(box); } catch (error) { err.textContent = error.message; err.hidden = false; }
     }; });
   }
-  async function load(box) {
-    try { data = await api('/attendance-requests'); render(box); } catch (error) { box.innerHTML = `<p class="muted">${esc(error.message)}</p>`; }
+  async function load(box, openRef = '') {
+    try { data = await api('/attendance-requests'); render(box); } catch (error) { box.innerHTML = `<p class="muted">${esc(error.message)}</p>`; return; }
+    // Opened from the bell: show that request's details at once.
+    const r = openRef && data.requests.find(x => x.reference === openRef);
+    if (r) detail(r, box); else if (openRef) toast(`${openRef} is no longer waiting for approval.`);
   }
-  function fill(box) {
+  function fill(box, openRef = '') {
     box.onclick = event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-ar-filter')) { filter = b.dataset.arFilter; render(box); }
@@ -143,7 +146,7 @@ export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, o
       if (b.dataset.arOpen) { const r = data.requests.find(x => x.id === b.dataset.arOpen); if (r) detail(r, box); }
     };
     box.onchange = event => { if (event.target.matches('[data-ar-who]')) { who = event.target.value; render(box); } };
-    load(box);
+    load(box, openRef);
   }
   return { fill };
 }
