@@ -1,7 +1,18 @@
 // 13th Month Pay page: the annual ledger (posted payroll + salary encoded for months before the system),
 // the encoding grid for those earlier months, and the final pay computation for separated employees.
 import { who } from './hr-common.js';
-export function createThirteenthPage({ api, esc, money, table, toast, openDialog, dialog, shell, heading, today }) {
+export function createThirteenthPage({ api, esc, money, table, toast, openDialog, dialog, shell, heading, today, getState = () => null, context = () => null }) {
+  // Grid filters (Company / Status), kept while the page is open. Rows are only hidden, so saving still covers every employee.
+  let thCompany = '', thStatus = 'active';
+  const empInfo = id => { const e = (getState()?.employees || []).find(x => x.id === id); return { company: e?.department || '', active: !!e && !e.archived && e.active !== false }; };
+  const companyList = () => [...new Set([...(context()?.departments || []), ...(getState()?.employees || []).filter(e => !e.archived && e.department).map(e => e.department)])].sort();
+  function applyGridFilter() {
+    for (const tr of document.querySelectorAll('.th-grid tbody tr')) {
+      const id = tr.querySelector('[data-prior], [data-th-ov], [data-emp]')?.dataset; const emp = id?.prior || id?.emp; if (!emp) continue;
+      const info = empInfo(emp);
+      tr.hidden = (thCompany && info.company !== thCompany) || (thStatus && (thStatus === 'active') !== info.active);
+    }
+  }
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const fmt = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
   const card = (label, value, foot, featured = false) => `<div class="card${featured ? ' featured' : ''}"><div class="card-label">${esc(label)}</div><div class="card-value">${value}</div><div class="card-foot">${esc(foot)}</div></div>`;
@@ -99,6 +110,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       `      <div class="cards">${card('Basic earned (all sources)', money(L.reduce((s, r) => s + r.totalBasic, 0)), `${money(L.reduce((s, r) => s + r.priorBasic, 0))} encoded before the system`)}${card('Accrued 13th month', money(L.reduce((s, r) => s + r.accrued, 0)), 'Basic earned ÷ 12 (covered employees)', true)}${card('Already paid', money(L.reduce((s, r) => s + r.paid, 0)), 'Payroll + encoded payments')}${card('Balance to pay', money(L.reduce((s, r) => s + r.balance, 0)), 'Release on or before December 24')}</div>
 
       <section class="panel"><div class="panel-head"><div class="th-head"><span class="legend">Basic salary actually earned each month (after absences and unpaid leave; exclude overtime, holiday premiums and allowances). Leave blank to clear.</span></div></div>
+        <div class="bal-filters th-filters"><label class="field">Company<select data-th-company><option value="">All companies</option>${companyList().map(c => `<option ${c === thCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label><label class="field">Status<select data-th-status>${[['active', 'Active'], ['inactive', 'Not active'], ['', 'All']].map(([v, l]) => `<option value="${v}" ${v === thStatus ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
         <div class="th-year-band">YEAR ${esc(year)}</div>
         <div class="table-wrap th-grid">${table(['Employee', ...months.map(m => MONTHS[Number(m.slice(5)) - 1]), 'Total earned', '13th month pay'], L.map(gridRow), 'No employees.')}</div>
         ${editable ? '<div class="panel-foot"><div class="actions"><button class="small" id="th-undo" title="Undo (Ctrl+Z)" disabled>↶ Undo</button><button class="small" id="th-redo" title="Redo (Ctrl+Y)" disabled>↷ Redo</button></div><button class="primary" id="th-save">Save salary records</button></div>' : ''}</section>
@@ -106,6 +118,11 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     const content = document.querySelector('.content');
     content.addEventListener('click', onClick);
     snapshot = readGrid(); savedGrid = readGrid(); syncUndo();
+    applyGridFilter();
+    content.addEventListener('change', e => {
+      if (e.target.matches('[data-th-company]')) { thCompany = e.target.value; applyGridFilter(); }
+      else if (e.target.matches('[data-th-status]')) { thStatus = e.target.value; applyGridFilter(); }
+    });
     // A payslip shows the saved records only: opening one with unsaved changes in the grid asks to save first.
     content.addEventListener('click', e => {
       const link = e.target.closest('[data-th-pdf]'); if (!link) return;
