@@ -20,6 +20,7 @@ import { createLoansPage } from './loans-ui.js';
 import { createThirteenthPage } from './thirteenth-ui.js';
 import { monthSheet } from './attendance-month.js';
 import { createContributionsPage } from './contributions-ui.js';
+import { createOvertimeUi } from './overtime-ui.js';
 const app = document.querySelector('#app'), dialog = document.querySelector('#dialog');
 // Salary day of a cutoff: 1st-15th → the 22nd; 16th-end → the 8th of the next month (same rule as src/paydays.mjs).
 const payDateFor = (start, end) => { const y = Number(start.slice(0, 4)), m = Number(start.slice(5, 7)); if (start.slice(8, 10) === '01' && Number(end.slice(8, 10)) <= 15) return `${start.slice(0, 7)}-22`; return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-08`; };
@@ -37,8 +38,10 @@ const label = key => key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpper
 const uid = () => crypto.randomUUID();
 let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun = null, filter = '', subtab = 'requests';
 let employeeStatusFilter = 'All Employees';
+let requestToOpen = '';   // AR reference to open when Attendance → Requests is reached from the bell
 let attendanceView = 'month'; // 'month' (monthly sheet), 'records' (one day, all employees) or 'timecard' (one employee beside pay)
 let attendanceMonth = '';      // Attendance → Monthly: YYYY-MM shown (blank = this month)
+let balCompany = '', balStatus = 'active';   // Leave → Balances filters: subsidiary ('' = all) and active / inactive / ''
 let payrollEmployee = '', attCompany = '';   // attCompany: subsidiary filter on the attendance pages   // '' = all, an employee ID, or 'company:<subsidiary>'
 // Subsidiaries with employees on payroll; a company payroll is generated, totalled and finalized on its own.
 const companies = () => [...new Set([...(hrContext?.departments || []), ...state.employees.filter(e => !e.archived && e.department).map(e => e.department)])].sort();
@@ -59,7 +62,9 @@ Object.assign(names, { SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IB
 const canEdit = kind => ({ employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], holidays: ['admin', 'hr'], leaveTypes: ['admin'], rules: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'], deductions: ['admin', 'hr'] })[kind]?.includes(auth.user.role);
 async function api(path, body, method = body ? 'POST' : 'GET') {
   const res = await fetch(`/api${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth?.csrf || '' }, body: body ? JSON.stringify(body) : undefined });
-  const data = await res.json();
+  // A reply that is not JSON (connection cut, tunnel or proxy error page) gets a readable message instead of a parse error.
+  const data = await res.json().catch(() => null);
+  if (!data) throw new Error(res.ok ? 'The server sent an unreadable reply. Refresh the page and check whether it was saved.' : `The server did not complete the request (error ${res.status}). Check your connection and try again; for uploads, use a PDF, JPG or PNG up to 5 MB.`);
   if (!res.ok) {
     if (res.status === 401 && path !== '/login') { auth = { user: null }; renderLogin(); }
     throw new Error(data.error || 'Request failed.');
@@ -166,18 +171,40 @@ function shell(content) {
       const childActive = items.some(([id]) => id === page);
       return `<div class="nav-group ${payGroupOpen ? 'open' : ''}"><button class="nav-parent ${childActive ? 'has-active' : ''}" data-nav-group="${group.id}" aria-expanded="${payGroupOpen}" aria-controls="nav-${group.id}" title="${esc(group.label)}">${icon(group.icon)}<span class="nav-text">${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true"></span></button><div class="nav-sub" id="nav-${group.id}" role="group" aria-label="${esc(group.label)}"><div class="nav-sub-inner">${items.map(i => item(i, true)).join('')}</div></div></div>`;
     }).join('')}</nav>
-    <div class="sidebar-bottom sb-foot"><details class="sb-user"><summary title="Account"><span class="sb-avatar">${esc((who(auth.user.username).match(/\b\w/g) || ['?']).slice(0, 2).join('').toUpperCase())}</span><span class="sb-who"><strong>${esc(who(auth.user.username))}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span></summary><div class="sb-menu"><button data-my-account>My account</button>${auth.user.role === 'admin' ? '<button data-account>Account &amp; access</button>' : ''}<button data-signout>Sign out</button></div></details>${auth.user.role === 'admin' ? '<button class="sb-icon" data-nav="settings" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>' : ''}<span class="sb-sep" aria-hidden="true"></span><button class="sb-icon" data-toggle-sidebar title="Collapse menu" aria-label="Collapse menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></svg></button></div></aside>
+    <div class="sidebar-bottom sb-foot"><button class="sb-icon" data-toggle-sidebar title="Collapse menu" aria-label="Collapse menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></svg></button></div></aside>
     <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong></span></span>
       <span class="topbar-user"><span class="tb-pill optional"><span class="tb-when"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/><circle cx="8.5" cy="14" r=".6" fill="currentColor"/><circle cx="12" cy="14" r=".6" fill="currentColor"/><circle cx="15.5" cy="14" r=".6" fill="currentColor"/><circle cx="8.5" cy="17" r=".6" fill="currentColor"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>${esc(new Date(`${today()}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }))}</span><span class="tb-div" aria-hidden="true"></span><span class="tb-when"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5s1.1-6.1 3.5-8.5Z"/></svg>Asia/Manila</span></span>${messagesButton()}<span class="bell-wrap"><button class="small icon-button tb-btn tb-bell" data-bell aria-label="Notifications" aria-haspopup="true"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg><span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
-      <span class="topbar-divider" aria-hidden="true"></span><button class="user-meta" data-my-account title="My account: profile and password"><strong>${esc(who(auth.user.username))}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></button></span></header>
+      <span class="topbar-divider" aria-hidden="true"></span><details class="tb-account"><summary title="Account" aria-label="Account menu"><span class="tb-avatar">${esc((who(auth.user.username).match(/\b\w/g) || ['?']).slice(0, 2).join('').toUpperCase())}</span><span class="user-meta"><strong>${esc(who(auth.user.username))}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span><svg class="tb-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></summary><div class="tb-menu" role="menu"><button role="menuitem" data-my-account>My account</button>${auth.user.role === 'admin' ? '<button role="menuitem" data-account>Account &amp; access</button>' : ''}<button role="menuitem" data-signout>Sign out</button></div></details></span></header>
     <div class="content">${content}</div></main></div>`;
   loadBell();
   syncRoute();
 }
 let bellItems = [];
+// Bell → documents to review: bring the employee's Review buttons into view and mark them.
+// Bell → Attendance → Explanations: scroll to the section the item is about and outline its rows (late arrivals still
+// waiting for the employee's explanation, or explanations to review).
+let explanationFocus = null;
+function showExplanationFocus(box) {
+  const focus = explanationFocus; explanationFocus = null;
+  if (!focus) return;
+  const section = box.querySelector(focus.focus === 'review' ? '[data-expl-review]' : '[data-expl-waiting]');
+  if (!section) return;
+  const rows = focus.focus === 'waiting' ? [...section.querySelectorAll('[data-expl-date]')].filter(s => !focus.dates?.length || focus.dates.includes(s.dataset.explDate)).map(s => s.closest('tr')).filter(Boolean) : [];
+  if (focus.focus === 'waiting' && !rows.length) toast('These late arrivals have been explained since.');
+  rows.forEach(r => r.classList.add('bell-target'));
+  (rows[0] || section).scrollIntoView({ block: 'center' });
+}
+function showReviewButtons() {
+  const buttons = [...document.querySelectorAll('[data-review]')];
+  if (!buttons.length) { window.scrollTo({ top: 0 }); toast('Nothing is waiting for review in this 201 file any more.'); return; }
+  buttons.forEach(b => b.classList.add('bell-target'));
+  buttons[0].scrollIntoView({ block: 'center' }); buttons[0].focus({ preventScroll: true });
+}
 const bellKey = () => `gds-hr-bell-seen:${auth?.user?.id || ''}`;
 function bellSeen() { try { return JSON.parse(localStorage.getItem(bellKey()) || '[]'); } catch { return []; } }
 function markBellSeen() { try { localStorage.setItem(bellKey(), JSON.stringify(bellItems.map(item => item.text))); } catch { /* storage unavailable: the number stays */ } document.querySelector('[data-bell-count]')?.classList.add('hidden'); }
+// The bell list is counted live on the server; it is refreshed on every page draw, on opening and every minute.
+setInterval(() => { if (document.visibilityState === 'visible') loadBell(); }, 60000);
 async function loadBell() {
   if (!hrContext) return;
   try {
@@ -258,10 +285,15 @@ const breakdown = createBreakdown({ esc, money, table, openDialog, dialog, actio
 } });
 const loansUi = createLoansPage({ ...hrCtx, canEdit: kind => canEdit(kind), editButton: (k, id) => editButton(k, id), addButton: (k, label) => addButton(k, label), downloads: k => downloads(k) });
 const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(k) });
+// Loaded on first use, so the rest of the app never depends on this file being served.
+let clockRecordsUi = null;
+const loadClockRecords = async () => clockRecordsUi || (clockRecordsUi = (await import('./clock-records-ui.js')).createClockRecordsUi({ api, esc, badge, openDialog, employees: () => state.employees, today }));
+const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh() });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   if (nav.page === 'explanations') { attendanceView = 'explanations'; nav = { ...nav, page: 'attendance' }; }
+  if (nav.page === 'requests') { attendanceView = 'requests'; nav = { ...nav, page: 'attendance' }; }
   page = nav.page;
   if (page === 'files') return files.directory({ status: nav.status || '', docs: nav.docs || '' });
   if (page === 'employee201') return files.openProfile(nav.id, nav.tab || 'overview');
@@ -276,18 +308,21 @@ function overview() {
     `<div class="panel"><div class="flow"><span>Employee profile</span><i>→</i><span>Attendance</span><i>→</i><span>Leave & holidays</span><i>→</i><span>Payroll</span><i>→</i><span>13th month ledger</span></div></div><div class="grid2"><section class="panel"><div class="panel-head"><div><h2>Make your first payroll a smooth one</h2><p>A few essentials before you calculate.</p></div>${badge('Getting started', 'neutral')}</div><div class="panel-body"><ol class="steps"><li><div><strong>Add your employees</strong><span>Set salaries, schedules, rest days, and individual benefit coverage.</span></div></li><li><div><strong>Approve your company rules</strong><span>Review rates, contribution brackets, tax tables, and cutoff dates.</span></div></li><li><div><strong>Complete the attendance record</strong><span>Record work, approved leave, holidays, absences, and exceptions.</span></div></li><li><div><strong>Review, then post</strong><span>Inspect every calculation. Posting locks the record and updates loans.</span></div></li></ol></div></section><section class="panel"><div class="panel-head"><h2>Recent payrolls</h2><button class="small" data-nav="payroll">View all</button></div>${table(['Cutoff', 'Net pay', ''], runs.slice(-5).reverse().map(r => [`${esc(r.start)}<br><small>to ${esc(r.end)}</small>`, money(r.totals.net), `<button class="small" data-run="${r.id}">View</button>`]), 'Posted payrolls will appear here.')}<div class="panel-foot">Approved records preserve the rates and sources used.</div></section></div>`;
 }
 function employeesPage() {
-  const people = state.employees.map(e => ({ ...e, profile: state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'employment') || {}, attendanceStatus: state.attendance.filter(a => a.employeeId === e.id).map(a => a.status), leaveStatus: state.leaves.filter(l => l.employeeId === e.id).map(l => l.status) }));
+  const people = state.employees.map(e => ({ ...e, profile: state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'employment') || {}, pay: state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'payroll') || {}, attendanceStatus: state.attendance.filter(a => a.employeeId === e.id).map(a => a.status), leaveStatus: state.leaves.filter(l => l.employeeId === e.id).map(l => l.status) }));
   const statuses = ['All Employees', 'Active', 'Probationary', 'Regular', 'On Leave', 'Inactive', 'Resigned'];
   const list = filtered(people).filter(e => employeeStatusFilter === 'All Employees' || [e.profile.employmentStatus, e.profile.employeeStatus || (e.active ? 'Active' : 'Inactive')].includes(employeeStatusFilter));
-  return heading('Your people', 'Open an employee to view their complete, connected profile.', addButton('employees', 'Add employee')) + `${state.employees.some(e => e.draft) ? '<div class="notice">Draft profiles are excluded from payroll until salary, joining date, department, schedule, and benefit coverage are completed.</div>' : ''}<section class="panel"><div class="panel-head"><h2>Employee directory</h2>${downloads('employees')}${badge(`${list.length} employees`, 'neutral')}</div>${searchToolbar(`<label class="field">Employee filter<select id="employee-status-filter">${statuses.map(s => `<option ${s === employeeStatusFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></label>`)}${table(['Employee', 'Position', 'Monthly salary', 'Joined', 'Status', ''], list.map(e => [`<button class="employee-link" data-profile="${esc(e.id)}">${employee(e.id)}</button>`, esc(e.profile.position || 'Position required'), e.monthlySalary === null ? 'Not set' : money(e.monthlySalary), e.startDate || 'Not set', badge(e.draft ? 'Draft · needs details' : e.profile.employeeStatus || (e.active ? 'Active' : 'Inactive'), e.draft ? 'pending' : '') + `<small>${esc(e.profile.employmentStatus || '')}</small>`, `<button class="small" data-profile="${esc(e.id)}">Open profile</button>`]))}</section>`;
+  return heading('Your people', 'Open an employee to view their complete, connected profile.', addButton('employees', 'Add employee')) + `${state.employees.some(e => e.draft) ? '<div class="notice">Draft profiles are excluded from payroll until salary, joining date, department, schedule, and benefit coverage are completed.</div>' : ''}<section class="panel"><div class="panel-head"><h2>Employee directory</h2>${downloads('employees')}${badge(`${list.length} employees`, 'neutral')}</div>${searchToolbar(`<label class="field">Employee filter<select id="employee-status-filter">${statuses.map(s => `<option ${s === employeeStatusFilter ? 'selected' : ''}>${s}</option>`).join('')}</select></label>`)}${table(['Employee', 'Position', 'Salary', 'Joined', 'Status', ''], list.map(e => [`<button class="employee-link" data-profile="${esc(e.id)}">${employee(e.id)}</button>`, esc(e.profile.position || 'Position required'), e.pay.basis === 'daily' && e.pay.dailyRate ? `${money(e.pay.dailyRate)} / day` : e.monthlySalary === null ? 'Not set' : money(e.monthlySalary), e.startDate || 'Not set', badge(e.draft ? 'Draft · needs details' : e.profile.employeeStatus || (e.active ? 'Active' : 'Inactive'), e.draft ? 'pending' : '') + `<small>${esc(e.profile.employmentStatus || '')}</small>`, `<button class="small" data-profile="${esc(e.id)}">Open profile</button>`]))}</section>`;
 }
 function attendancePage() {
-  const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Timecard · against pay</button>${['admin', 'hr'].includes(auth.user.role) ? `<button data-attendance-view="explanations" class="${attendanceView === 'explanations' ? 'active' : ''}">Explanations</button>` : ''}</div>`;
+  const views = `<div class="tabs"><button data-attendance-view="month" class="${attendanceView === 'month' ? 'active' : ''}">Monthly</button><button data-attendance-view="records" class="${attendanceView === 'records' ? 'active' : ''}">Daily</button><button data-attendance-view="timecard" class="${attendanceView === 'timecard' ? 'active' : ''}">Timecard · against pay</button>${['admin', 'hr'].includes(auth.user.role) ? `<button data-attendance-view="explanations" class="${attendanceView === 'explanations' ? 'active' : ''}">Explanations</button><button data-attendance-view="requests" class="${attendanceView === 'requests' ? 'active' : ''}">Requests</button><button data-attendance-view="clock" class="${attendanceView === 'clock' ? 'active' : ''}">Time in / out records</button>` : ''}${['admin', 'hr', 'payroll'].includes(auth.user.role) ? `<button data-attendance-view="overtime" class="${attendanceView === 'overtime' ? 'active' : ''}">Overtime applications</button>` : ''}${['admin', 'hr'].includes(auth.user.role) ? `<button data-attendance-view="reviewed" class="${attendanceView === 'reviewed' ? 'active' : ''}">Reviewed</button>` : ''}</div>`;
   // Subsidiary filter (All / each company) for the monthly sheet and the daily records.
   const companyPick = `<label class="att-company">Subsidiary <select data-att-company><option value="">All subsidiaries</option>${companies().map(c => `<option ${c === attCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
   const top = heading('Attendance', '') + views + (['month', 'records'].includes(attendanceView) ? companyPick : '');
   if (attendanceView === 'timecard') return top + timecard.panel(state);
-  if (attendanceView === 'explanations') return top + '<div data-explanations><div class="loading">Loading explanations…</div></div>';
+  if (['explanations', 'reviewed'].includes(attendanceView)) return top + '<div data-explanations><div class="loading">Loading explanations…</div></div>';
+  if (attendanceView === 'overtime') return top + overtimeUi.panel();
+  if (attendanceView === 'requests' && ['admin', 'hr'].includes(auth.user.role)) return top + '<div data-hr-requests><div class="loading">Loading requests…</div></div>';
+  if (attendanceView === 'clock' && ['admin', 'hr'].includes(auth.user.role)) return top + '<div data-clock-records><div class="loading">Loading time in / out records…</div></div>';
   if (attendanceView === 'month') return top + monthSheet({ state, esc, today: today(), month: attendanceMonth || today().slice(0, 7), search: filter, company: attCompany });
   // Daily attendance records: one date, every employee (with day / today navigation, search, status and record tabs).
   const day = recordsDate || today(), weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
@@ -314,11 +349,12 @@ function attendancePage() {
     } else if (open) { recorded = true; look = 'ok'; label = 'Time in recorded'; sub = 'Time out pending'; icon = 'ok'; clockIn = open.time; }
     else if (leave) { look = 'leave'; label = 'On leave'; icon = 'cal'; }
     else if ((e.restDays || []).includes(weekday)) { look = 'rest'; label = 'Rest day'; icon = 'cal'; }
+    else if (day <= today() && (state.employeeProfiles || []).find(p => p.employeeId === e.id && p.section === 'attendance')?.daySchedules?.some(s => s.day === weekday && s.autoPresent)) { recorded = true; look = 'ok'; label = 'Present'; sub = 'Work from home · no time in needed'; icon = 'ok'; clockIn = 'WFH'; }
     else if (day > today()) { look = 'rest'; label = 'Upcoming'; icon = 'cal'; }
     const avatar = look === 'ok' ? 'ok' : look === 'late' ? 'late' : 'idle';
     return { e, recorded, label, html: `<tr data-dr-row data-dr-name="${esc(`${e.name} ${e.id}`.toLowerCase())}" data-dr-status="${esc(label)}" data-dr-recorded="${recorded ? 'yes' : 'no'}">
       <td><button class="dr-emp" ${view} title="Open this record"><span class="dr-avatar dr-${avatar}">${esc(ini(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.id)}</small></span></button></td>
-      <td>${esc(sched)}</td><td>${esc(clockIn)}</td><td>${esc(clockOut)}</td>
+      <td>${esc(sched)}</td><td>${esc(clockIn)}${a?.location ? `<small class="dr-sub">${esc(a.location)}</small>` : ''}</td><td>${esc(clockOut)}</td>
       <td><span class="dr-pill dr-${look}">${ic(icon)}${esc(label)}</span>${sub ? `<small class="dr-sub">${esc(sub)}</small>` : ''}</td>
       <td>${esc(offset)}</td><td>${approval}</td></tr>` };
   });
@@ -336,45 +372,131 @@ function attendancePage() {
 }
 
 // Proof (e.g. a medical certificate) uploaded by the employee: HR opens it, then confirms or asks for a new one.
-const proofBadges = { required: ['Waiting for employee', 'pending'], submitted: ['Ready to review', 'pending'], verified: ['Confirmed', ''], rejected: ['New proof requested', 'rejected'] };
+const proofBadges = { required: ['Asked · waiting for employee', 'pending'], submitted: ['Ready to review', 'pending'], verified: ['Confirmed', ''], rejected: ['New proof requested', 'rejected'] };
+// A supporting document is optional; HR may ask for one on a specific request (Ask for proof).
 function proofReviewCell(l) {
-  if (!l.proofStatus) return l.documentReference ? esc(l.documentReference) : '—';
+  const open = !['cancelled', 'rejected'].includes(l.status);
+  const ask = open && canEdit('leaves') ? `<button class="small" data-proof-request="${esc(l.id)}">Ask for proof</button>` : '';
+  if (!l.proofStatus) return `${l.documentReference ? esc(l.documentReference) : ''} ${ask}`.trim();
   const [label, tone] = proofBadges[l.proofStatus] || [l.proofStatus, 'neutral'];
   const uploaded = /^[0-9a-f-]{36}$/.test(l.documentReference || '');
   const view = uploaded && l.proofStatus !== 'required' ? `<a class="small" href="/api/documents/${esc(l.documentReference)}/content" target="_blank" rel="noopener">View proof</a>` : '';
   const review = l.proofStatus === 'submitted' && canEdit('leaves') ? `<span class="proof-actions"><button class="small primary" data-proof-review="${esc(l.id)}" data-decision="verified">Confirm</button><button class="small danger" data-proof-review="${esc(l.id)}" data-decision="rejected">Reject</button></span>` : '';
-  const by = l.proofStatus === 'rejected' && l.proofNote ? `<small>${esc(l.proofNote)}</small>` : '';
+  const by = ['required', 'rejected'].includes(l.proofStatus) && l.proofNote ? `<small>${esc(l.proofNote)}</small>` : '';
   return `${badge(label, tone)} ${view}${by}${review}`;
+}
+// Leave requests list: a short note under the reason only when the proof needs attention (details open on click).
+function proofHint(l) {
+  if (['cancelled', 'rejected'].includes(l.status)) return '';
+  if (l.proofStatus === 'submitted') return '<small class="lm-proof-hint review">📎 Proof to review</small>';
+  if (['required', 'rejected'].includes(l.proofStatus)) return '<small class="lm-proof-hint wait">Proof needed</small>';
+  return '';
+}
+// One leave request in full: type, dates, days, reason and explanation, credits, decision, and the proof with its
+// actions (view, confirm / reject, ask for proof).
+function leaveDetailDialog(id) {
+  const l = state.leaves.find(x => x.id === id); if (!l) return;
+  const person = state.employees.find(e => e.id === l.employeeId), type = state.leaveTypes.find(t => t.id === l.typeId)?.name || l.typeId;
+  const bal = balances.find(b => b.employeeId === l.employeeId && b.typeId === l.typeId);
+  const [reason, ...rest] = String(l.reason || '').split(' — '), explanation = rest.join(' — ');
+  const dates = `${l.startDate}${l.endDate !== l.startDate ? ` to ${l.endDate}` : ''}${l.startTime || l.endTime ? ` · ${l.startTime || 'Start'} – ${l.endTime || 'End'}` : ''}`;
+  const facts = [...(l.reference ? [['Reference', l.reference]] : []), ['Leave type', type], ['Dates', dates], ['Days', `${l.days}${(l.partialDates || []).length ? ' (half day)' : ''}`], ['Available credits', bal ? (bal.perOccasion ? 'Per occasion' : `${bal.available} days`) : '—'], ['Status', l.status.charAt(0).toUpperCase() + l.status.slice(1)], ...(l.hrRemarks ? [['HR remarks', l.hrRemarks]] : [])];
+  openDialog(`Leave · ${person?.name || l.employeeId}`, `<div class="dialog-body leave-detail"><p class="sub">${esc(l.employeeId)} · <a href="/api/leaves/${esc(l.id)}.pdf" target="_blank" rel="noopener">Leave application PDF</a></p>
+    <div class="notice-rows">${facts.map(([k, v]) => `<div class="notice-row"><span>${k}</span><strong>${esc(String(v))}</strong></div>`).join('')}</div>
+    <section class="ld-block"><h3>Reason</h3><p class="ld-reason">${esc(reason || '—')}</p>${explanation ? `<p class="ld-text">${esc(explanation)}</p>` : ''}</section>
+    <section class="ld-block"><h3>Proof</h3>${proofReviewCell(l) || '<span class="legend">None</span>'}${!l.proofStatus && !l.documentReference && l.days >= 2 ? '<p class="legend">Leave of 2 days or more needs proof before it can be approved.</p>' : ''}</section>
+    ${l.status === 'pending' && canEdit('leaves') ? '<p class="legend">Wrong dates or times (for example a half day filed as a whole day)? Correct them before deciding; the days are recounted from the times.</p>' : ''}</div>`,
+    `<div class="dialog-foot">${l.status === 'pending' && canEdit('leaves') ? `<button type="button" data-edit="leaves" data-id="${esc(l.id)}">Edit dates / times</button>` : ''}<button class="primary" data-close>Close</button></div>`);
+}
+// HR asks the employee for a supporting document on one leave request; approval waits until it is confirmed.
+function askForLeaveProof(id) {
+  const l = state.leaves.find(x => x.id === id); if (!l) return;
+  const who = state.employees.find(e => e.id === l.employeeId)?.name || l.employeeId, type = state.leaveTypes.find(t => t.id === l.typeId)?.name || l.typeId;
+  openDialog('Ask for a supporting document', `<form id="proof-request" class="dialog-body"><p><strong>${esc(who)}</strong> · ${esc(type)} · ${esc(l.startDate)}${l.endDate !== l.startDate ? ` → ${esc(l.endDate)}` : ''}</p>
+    <p class="legend">Attachments are optional unless you ask. The employee is notified and sees what to upload; the leave can be approved once you confirm the document.</p>
+    <label class="field">Document needed<textarea name="note" rows="3" required minlength="3" maxlength="2000" placeholder="e.g. Medical certificate for the 2 days of sick leave"></textarea></label></form>`,
+    '<div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary" form="proof-request">Send request</button></div>');
+  dialog.querySelector('#proof-request').onsubmit = async event => {
+    event.preventDefault();
+    try { await api(`/leaves/${id}/request-proof`, { note: event.target.elements.note.value.trim() }); dialog.close(); await refresh(); render(); toast('The employee was asked for a supporting document.'); } catch (error) { toast(error.message); }
+  };
+}
+// One employee's leave balances: every leave type they are eligible for, how each balance is made up, and this
+// year's requests per type.
+// Annual balances: one row per employee, one column per leave group. Each cell is days entitled (incl. carry-over) / days
+// used; Unpaid leave / absent shows the days taken. Clicking a cell opens that leave's details for the employee.
+const BALANCE_COLUMNS = [['Service incentive leave', ['sil']], ['Vacation leave', ['vacation']], ['Unpaid leave / absent', ['unpaid']], ['Bereavement leave', ['bereavement']], ['Maternity / Paternity leave', ['maternity', 'paternity']], ['Solo parent leave', ['solo-parent']], ['Special leave for women (RA 9710)', ['special-women']]];
+function balanceMatrix() {
+  const q = filter.trim().toLowerCase();
+  const isActive = e => !e.archived && e.active !== false;
+  const people = state.employees.filter(e => !e.draft && e.leaveEligibility.length && (!balCompany || e.department === balCompany) && (!balStatus || (balStatus === 'active') === isActive(e)) && (!q || `${e.name} ${e.id} ${e.employeeNumber || ''}`.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+  const filters = `<div class="bal-filters"><label class="field">Company<select data-bal-company><option value="">All companies</option>${companies().map(c => `<option ${c === balCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label><label class="field">Status<select data-bal-status>${[['active', 'Active'], ['inactive', 'Not active'], ['', 'All']].map(([v, l]) => `<option value="${v}" ${v === balStatus ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`;
+  const cell = (e, ids) => {
+    const own = balances.filter(b => b.employeeId === e.id && ids.includes(b.typeId) && e.leaveEligibility.includes(b.typeId));
+    if (!own.length) return '<span class="muted">—</span>';
+    const sum = k => own.reduce((s, b) => s + (Number(b[k]) || 0), 0), used = sum('used');   // already includes days used before the system
+    const text = ids.includes('unpaid') ? `${used}` : `${sum('entitled') + sum('carry')}/${used}`;
+    return `<button class="link-cell bal-cell" data-leave-balance="${esc(e.id)}" data-leave-types="${esc(ids.join(','))}" title="Entitled / used · click for details">${text}</button>`;
+  };
+  return `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · entitled / used (days) · click a number for the details</span></div>${searchToolbar(filters)}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
+}
+function leaveBalanceDialog(employeeId, typeIds = null) {
+  const person = state.employees.find(e => e.id === employeeId), year = today().slice(0, 4);
+  const own = balances.filter(b => b.employeeId === employeeId && person?.leaveEligibility.includes(b.typeId) && (!typeIds || typeIds.includes(b.typeId)));
+  const STATUS = { approved: ['Approved', ''], pending: ['Pending', 'pending'], rejected: ['Rejected', 'rejected'], cancelled: ['Cancelled', 'neutral'] };
+  const sections = own.map(b => {
+    const type = state.leaveTypes.find(t => t.id === b.typeId);
+    const requests = state.leaves.filter(l => l.employeeId === employeeId && l.typeId === b.typeId && (l.startDate.startsWith(year) || l.endDate.startsWith(year))).sort((x, y) => y.startDate.localeCompare(x.startDate));
+    const pendingDays = requests.filter(l => l.status === 'pending').reduce((s, l) => s + (Number(l.days) || 0), 0);
+    const facts = [['Entitled this year', b.entitled], ['Carry-over', `${b.carry}${b.expired ? ` (${b.expired} expired)` : ''}`], ['Used before the system', b.usedBefore || 0], ['Used / reserved', b.used], ['Pending requests', pendingDays]];
+    // Each leave: dates (and hours for part days), days, status, reference, the employee's reason and HR's remarks.
+    const when = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const list = requests.length ? `<ul class="lb-requests">${requests.map(l => { const [label, tone] = STATUS[l.status] || [l.status, 'neutral']; const remarks = /^Recorded by HR/i.test(l.hrRemarks || l.remarks || '') ? '' : l.hrRemarks || l.remarks || ''; return `<li><div class="lb-req-main"><span class="lb-req-dates">${esc(when(l.startDate))}${l.endDate !== l.startDate ? ` – ${esc(when(l.endDate))}` : ''}${l.startTime && l.endTime ? ` <small>${esc(l.startTime)}–${esc(l.endTime)}</small>` : ''}</span><span>${esc(String(l.days ?? ''))} day${Number(l.days) === 1 ? '' : 's'}</span>${badge(label, tone)}</div><p class="lb-req-reason"><strong>Reason:</strong> ${esc(l.reason || '—')}</p>${remarks ? `<p class="lb-req-reason"><strong>HR remarks:</strong> ${esc(remarks)}</p>` : ''}${l.reference ? `<small class="lb-req-ref">${esc(l.reference)}</small>` : ''}</li>`; }).join('')}</ul>` : `<p class="legend">${b.usedBefore ? `${b.usedBefore} day${b.usedBefore === 1 ? '' : 's'} used before the system (no request on record).` : 'No requests this year.'}</p>`;
+    return `<section class="lb-type"><div class="lb-type-head"><h3>${esc(type?.name || b.typeId)}</h3>${badge(`${b.available} days available`)}</div>
+      <div class="lb-facts">${facts.map(([k, v]) => `<div><span>${k}</span><strong>${esc(String(v))}</strong></div>`).join('')}</div>${list}</section>`;
+  }).join('');
+  const total = own.reduce((s, b) => s + (Number(b.available) || 0), 0);
+  openDialog(`Leave balances · ${person?.name || employeeId}`, `<div class="dialog-body"><p class="sub">${esc(employeeId)} · As of ${today()} · ${total} day${total === 1 ? '' : 's'} available in total</p>${sections || '<p class="legend">This employee is not eligible for any leave type.</p>'}</div>`, '<div class="dialog-foot"><button class="primary" data-close>Close</button></div>');
 }
 function leavePage() {
   const pending = state.leaves.filter(l => l.status === 'pending').length;
   const LM = { clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>', check: '<path d="m5 12.5 4.2 4.2L19 7"/>', doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>', people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>', ok: '<circle cx="12" cy="12" r="9"/><path d="m8 12.3 2.8 2.8L16.5 9.4"/>', left: '<path d="m15 6-6 6 6 6"/>', right: '<path d="m9 6 6 6-6 6"/>' };
   const lmIcon = (k, cls = '') => `<svg class="lm-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${LM[k]}</svg>`;
   const lmCard = (k, title, value, foot) => `<div class="lm-card"><span class="lm-card-ico">${lmIcon(k)}</span><div><span>${title}</span><strong>${value}</strong><small>${foot}</small></div></div>`;
-  let content = heading('Leave management', '<span class="lm-tagline">Time away, taken care of.</span>Review requests, track balances, and keep payroll in sync.') + `<div class="lm-cards">${lmCard('clock', 'Pending requests', pending, 'Ready for HR review')}${lmCard('check', 'Approved requests', state.leaves.filter(l => l.status === 'approved').length, 'Connected to payroll')}${lmCard('doc', 'Leave types', state.leaveTypes.length, 'Statutory and company benefits')}${lmCard('people', 'Paid leave types', state.leaveTypes.filter(t => t.paid).length, 'Eligibility verified per employee')}</div><div class="lm-tabs"><button data-tab="requests" class="${subtab === 'requests' ? 'active' : ''}">Leave requests <span class="lm-count">${state.leaves.length}</span></button><button data-tab="balances" class="${subtab === 'balances' ? 'active' : ''}">Balances</button><button data-tab="types" class="${subtab === 'types' ? 'active' : ''}">Leave policies</button></div>`;
-  if (subtab === 'balances') content += `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · Approved requests reserve days</span></div>${searchToolbar()}${table(['Employee', 'Leave type', 'Entitled', 'Carry-over', 'Used / reserved', 'Available'], filtered(balances).filter(b => state.employees.find(e => e.id === b.employeeId)?.leaveEligibility.includes(b.typeId)).map(b => [employee(b.employeeId), esc(state.leaveTypes.find(t => t.id === b.typeId)?.name), b.entitled, b.carry, b.used, badge(`${b.available} days`)]))}</section>`;
+  // Leave applications are kept in folders by status: Pending on top (the working list), then Approved, Rejected and
+  // Cancelled with search and filters. A decision moves the application to its folder at once.
+  const LEAVE_FOLDERS = [['requests', 'pending', 'Pending'], ['approved', 'approved', 'Approved'], ['rejected', 'rejected', 'Rejected'], ['cancelled', 'cancelled', 'Cancelled']];
+  const inFolder = s => state.leaves.filter(l => l.status === s).length;
+  let content = heading('Leave management', '<span class="lm-tagline">Time away, taken care of.</span>Review requests, track balances, and keep payroll in sync.') + `<div class="lm-cards">${lmCard('clock', 'Pending requests', pending, pending ? 'Waiting for HR review' : 'Nothing waiting')}${lmCard('check', 'Approved requests', inFolder('approved'), 'Connected to payroll')}${lmCard('doc', 'Rejected requests', inFolder('rejected'), 'Kept with remarks')}${lmCard('people', 'Leave types', state.leaveTypes.length, 'Statutory and company benefits')}</div>
+    <div class="lm-tabs">${LEAVE_FOLDERS.map(([tab, s, label]) => `<button data-tab="${tab}" class="${subtab === tab ? 'active' : ''}">${label}${s === 'pending' ? ` <span class="lm-count">${pending}</span>` : ''}</button>`).join('')}<button data-tab="balances" class="${subtab === 'balances' ? 'active' : ''}">Balances</button><button data-tab="types" class="${subtab === 'types' ? 'active' : ''}">Leave policies</button></div>`;
+  if (subtab === 'balances') content += balanceMatrix();
   else if (subtab === 'types') content += `<section class="panel"><div class="panel-head"><div><h2>Leave type configuration</h2><p>Statutory classification alone does not establish an employee’s entitlement.</p></div>${addButton('leaveTypes', 'Add leave type')}</div>${table(['Leave type', 'Category', 'Pay', 'Entitlement', 'Accrual', ''], state.leaveTypes.map(t => [esc(t.name), badge(t.category, 'neutral'), t.paid ? 'Paid' : 'Unpaid', `${t.entitledDays} days`, esc(t.accrual), editButton('leaveTypes', t.id)]))}</section>`;
   else {
+    const [, status, folderLabel] = LEAVE_FOLDERS.find(([tab]) => tab === subtab) || LEAVE_FOLDERS[0], decided = status !== 'pending';
     const canDecide = ['admin', 'hr'].includes(auth.user.role);
     const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const when = iso => (iso ? new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
     const ini = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return `${(first || '').charAt(0)}${(last || '').charAt(0)}`.toUpperCase(); };
-    const STATUS_LOOK = { approved: 'ok', pending: 'wait', rejected: 'no', cancelled: 'off' };
-    const list = state.leaves.slice().sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.startDate.localeCompare(a.startDate));
+    const list = state.leaves.filter(l => l.status === status).sort((a, b) => (decided ? String(b.decidedAt || b.startDate).localeCompare(String(a.decidedAt || a.startDate)) : a.startDate.localeCompare(b.startDate)));
     const rows = list.map(l => {
       const person = state.employees.find(e => e.id === l.employeeId), bal = balances.find(b => b.employeeId === l.employeeId && b.typeId === l.typeId), type = state.leaveTypes.find(t => t.id === l.typeId)?.name || l.typeId;
       const dates = (l.startDate === l.endDate ? nice(l.startDate) : `${nice(l.startDate)} – ${nice(l.endDate)}`) + (l.startTime || l.endTime ? `<small class="lm-time">${esc(l.startTime || 'Start')} – ${esc(l.endTime || 'End')}${(l.partialDates || []).length ? ' · half day' : ''}</small>` : '');
-      const decision = canDecide && l.status === 'pending' ? `<span class="row-actions"><button class="lm-btn primary" data-leave-decision="approve" data-id="${esc(l.id)}">Approve</button><button class="lm-btn" data-leave-decision="reject" data-id="${esc(l.id)}">Reject</button></span>` : canDecide && l.status === 'approved' ? `<button class="lm-btn" data-leave-decision="cancel" data-id="${esc(l.id)}">Cancel leave</button>` : '—';
-      return `<tr data-lm-row data-lm-name="${esc(`${person?.name || ''} ${l.employeeId} ${type} ${l.reason || ''}`.toLowerCase())}" data-lm-status="${esc(l.status)}">
+      const actions = canDecide && status === 'pending' ? `<span class="row-actions"><button class="lm-btn primary" data-leave-decision="approve" data-id="${esc(l.id)}">Approve</button><button class="lm-btn" data-leave-decision="reject" data-id="${esc(l.id)}">Reject</button></span>` : '';
+      const decisionInfo = decided ? `<td class="lm-decided">${l.decidedAt ? `<strong>${esc(when(l.decidedAt))}</strong>` : '<strong>—</strong>'}${l.decidedBy ? `<small>by ${esc(who(l.decidedBy))}</small>` : ''}${l.hrRemarks ? `<small class="wrap">“${esc(l.hrRemarks)}”</small>` : ''}</td>` : `<td>${bal ? (bal.perOccasion ? 'Per occasion' : `${bal.available} day${bal.available === 1 ? '' : 's'}`) : '—'}</td>`;
+      return `<tr data-lm-row data-lm-name="${esc(`${person?.name || ''} ${l.employeeId} ${type} ${l.reason || ''} ${l.hrRemarks || ''}`.toLowerCase())}" data-lm-emp="${esc(l.employeeId)}" data-lm-type="${esc(l.typeId)}" data-lm-start="${esc(l.startDate)}" data-lm-end="${esc(l.endDate)}">
         <td><a class="lm-emp" href="/api/leaves/${esc(l.id)}.pdf" target="_blank" rel="noopener" title="Open the leave application PDF"><span class="lm-avatar">${esc(ini(person?.name || l.employeeId))}</span><span><strong>${esc(person?.name || l.employeeId)}</strong><small>${esc(l.employeeId)}</small></span></a></td>
-        <td>${esc(type)}</td><td class="lm-dates">${dates}</td><td>${l.days}</td><td class="lm-reason">${esc(l.reason || '—')}</td>
-        <td>${bal ? (bal.perOccasion ? 'Per occasion' : `${bal.available} day${bal.available === 1 ? '' : 's'}`) : '—'}</td>
-        <td><span class="lm-status lm-${STATUS_LOOK[l.status] || 'off'}"><i></i>${esc(l.status.charAt(0).toUpperCase() + l.status.slice(1))}</span></td>
-        <td>${proofReviewCell(l)}</td><td>${decision}</td></tr>`;
+        <td>${esc(type)}</td><td class="lm-dates">${dates}</td><td>${l.days}</td><td class="lm-reason"><button class="lm-reason-btn" data-leave-detail="${esc(l.id)}" title="View leave details and proof">${esc(l.reason || 'View details')}</button>${status === 'pending' ? proofHint(l) : ''}</td>
+        ${decisionInfo}${!decided ? `<td>${actions || '—'}</td>` : ''}</tr>`;
     }).join('');
-    content += `<section class="lm-panel"><div class="lm-panel-head"><div><h2>Leave requests</h2><p>Manage employee time off and approvals.</p></div><div class="lm-filters"><label class="lm-search">${lmIcon('search')}<input type="search" data-lm-search placeholder="Search employees or keywords" aria-label="Search employees or keywords"></label><select data-lm-status aria-label="Status"><option value="">Status: All</option><option value="pending">Status: Pending</option><option value="approved">Status: Approved</option><option value="rejected">Status: Rejected</option><option value="cancelled">Status: Cancelled</option></select></div></div>
-      <div class="lm-table-wrap"><table class="lm-table"><thead><tr><th>Employee</th><th>Leave type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Available credits</th><th>Status</th><th>Proof</th><th>Decision</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="empty">No leave requests yet.</td></tr>'}</tbody></table></div>
-      <div class="lm-foot"><span data-lm-count>${list.length} request${list.length === 1 ? '' : 's'}</span><span class="lm-pager"><button disabled aria-label="Previous page">${lmIcon('left')}</button><span>1 of 1</span><button disabled aria-label="Next page">${lmIcon('right')}</button></span></div>
-      <div class="lm-note">${lmIcon('ok')}Approved leave is automatically reflected in credits and payroll.</div></section>`;
+    const people = [...new Map(list.map(l => [l.employeeId, state.employees.find(e => e.id === l.employeeId)?.name || l.employeeId])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const types = [...new Set(list.map(l => l.typeId))].map(id => [id, state.leaveTypes.find(t => t.id === id)?.name || id]);
+    const filters = decided ? `<select data-lm-emp aria-label="Employee"><option value="">All employees</option>${people.map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><select data-lm-type aria-label="Leave type"><option value="">All leave types</option>${types.map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><label class="lm-date">From<input type="date" data-lm-from></label><label class="lm-date">To<input type="date" data-lm-to></label>` : '';
+    const heads = ['Employee', 'Leave type', 'Dates', 'Days', 'Reason', ...(decided ? [status === 'cancelled' ? 'Cancelled' : 'Decision'] : ['Available credits']), ...(!decided ? ['Action'] : [])];
+    const intro = { pending: 'Applications waiting for approval. A decision moves them to Approved or Rejected.', approved: 'Approved leave, reflected in credits and payroll. Approval is final.', rejected: 'Rejected applications with HR remarks.', cancelled: 'Applications cancelled by the employee or HR.' }[status];
+    content += `<section class="lm-panel"><div class="lm-panel-head"><div><h2>${folderLabel} applications</h2><p>${intro}</p></div><div class="lm-filters"><label class="lm-search">${lmIcon('search')}<input type="search" data-lm-search placeholder="Search employees or keywords" aria-label="Search employees or keywords"></label>${filters}</div></div>
+      <div class="lm-table-wrap"><table class="lm-table"><thead><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="${heads.length}" class="empty">${status === 'pending' ? 'No applications waiting for approval.' : 'Nothing to show yet.'}</td></tr>`}</tbody></table></div>
+      <div class="lm-foot"><span data-lm-count>${list.length} application${list.length === 1 ? '' : 's'}</span></div>
+      <div class="lm-note">${lmIcon('ok')}Approved leave is automatically reflected in credits and payroll. Every decision is kept in the audit history.</div></section>`;
   }
   return content;
 }
@@ -400,33 +522,63 @@ const PR_ICON = {
 };
 const prIcon = (name, cls = '') => `<svg class="pr-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${PR_ICON[name]}</svg>`;
 let showAllRuns = false;
+let runsCompany = '';   // Payroll history: '' = all companies, else one company (employee department)
+// A run seen for one company: only that company's employees, totals recomputed from their rows.
+function runForCompany(run, company) {
+  const companyOf = id => state.employees.find(e => e.id === id)?.department || '';
+  const rows = company ? run.rows.filter(row => companyOf(row.employeeId) === company) : run.rows;
+  const sum = key => Math.round(rows.reduce((s, row) => s + (Number(row[key]) || 0), 0) * 100) / 100;
+  const totals = company ? { gross: sum('gross'), deductions: sum('totalDeductions'), net: sum('net') } : run.totals;
+  return { ...run, rows, totals, companies: [...new Set(rows.map(row => companyOf(row.employeeId)).filter(Boolean))].sort() };
+}
 function payrollPage() {
   const run = currentRun, period = run || cutoffDefaults();
   let html = heading('Payroll & 13th Month', 'Manage payroll, review payouts, and track annual accruals.', `<a class="pr-btn" href="${run?.id ? `/api/runs/${run.id}.xlsx` : '/api/reports/payroll-runs.xlsx'}" download>${prIcon('download')}Export report</a>`);
   const prCard = (ic, label, value, foot, featured = false) => `<div class="pr-card${featured ? ' featured' : ''}">${prIcon(ic, 'pr-card-ico')}<div><span>${label}</span><strong>${value}</strong><small>${foot}</small></div></div>`;
-  html += `<div class="pr-cards">${prCard('coins', 'Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${prCard('doc', 'Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${prCard('bars', 'Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${prCard('people', 'Employees', run?.rows.length || 0, 'In this payroll cutoff')}${prCard('bank', 'Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="pr-panel-head">${prIcon('calc', 'pr-head-ico')}<div><h2>Payroll computation</h2><p>Choose a cutoff to calculate employee pay.</p></div></div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee"><option value="">All employees</option><optgroup label="Company">${companies().map(c => `<option value="company:${esc(c)}" ${payrollEmployee === `company:${c}` ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup><optgroup label="Employee">${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup></select></label><label>13th month payout<select name="pay13th"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Generate payroll</button></form>`;
+  html += `<div class="pr-cards">${prCard('coins', 'Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${prCard('doc', 'Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${prCard('bars', 'Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${prCard('people', 'Employees', run?.rows.length || 0, 'In this payroll cutoff')}${prCard('bank', 'Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="pr-panel-head">${prIcon('calc', 'pr-head-ico')}<div><h2>Payroll computation</h2><p>Choose a cutoff to calculate employee pay.</p></div></div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee" data-searchable data-search-group="Employee"><option value="">All employees</option><optgroup label="Company">${companies().map(c => `<option value="company:${esc(c)}" ${payrollEmployee === `company:${c}` ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup><optgroup label="Employee">${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup></select></label><label><select name="pay13th" aria-label="13th month payout" title="13th month payout"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Generate payroll</button></form>`;
   const company = payrollEmployee.startsWith('company:') && run?.employeeIds?.length > 0 ? payrollEmployee.slice(8) : '';
   if (company) html += `<div class="notice" role="status">Payroll for <strong>${esc(company)}</strong> only (${run.employeeIds.length} employee${run.employeeIds.length === 1 ? '' : 's'}). ${run.id ? 'This posting covers only this company.' : 'Finalizing covers only this company; the other company is generated and finalized separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
   else if (run?.employeeIds?.length) html += `<div class="notice" role="status">Showing payroll for <strong>${run.employeeIds.map(id => esc(state.employees.find(e => e.id === id)?.name || id)).join(', ')}</strong> only. ${run.id ? 'This posting covers only this employee.' : 'Posting will cover only this employee; others can be posted separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
   // Simple view: what was earned, what was deducted, what is paid. Click any amount for the full computation.
   // Working days per month: fixed by the payroll rules (26 for every month), the same divisor used for the daily rate.
   // Daily-paid staff: the scheduled days of the cutoff (13), as on the HR attendance summary.
-  const monthWorkDays = r => (r.payBasis === 'daily' ? r.workingDays : latestRules()?.dailyDivisor ?? 26);
+  // Days present = days credited (after lateness, undertime and any override such as the HR attendance sheet) plus paid
+  // leave days (leave pay / daily rate); older rows without credited days fall back to the attendance count.
+  const paidDays = r => (r.creditedDays === undefined ? (r.daysPresentWithLeave ?? r.daysPresent) : r.creditedDays + (r.paidLeaveDays ?? ((r.adjustmentRate || r.dailyRate) ? (r.earnings.leavePay || 0) / (r.adjustmentRate || r.dailyRate) : 0)));
+  // Working days = the whole month's scheduled working days, from the calendar and the employee's rest day, holidays
+  // included (Nov 2026: 25 with Sunday rest, 26 with Saturday rest). Rows from before the server counted it are
+  // counted here the same way. The cutoff's share is in the hover title.
+  const calendarMonthDays = r => { const rest = state.employees.find(e => e.id === r.employeeId)?.restDays; if (!rest || !run?.start) return null; const [y, m] = run.start.slice(0, 7).split('-').map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate(); let n = 0; for (let d = 1; d <= last; d++) if (!rest.includes(new Date(Date.UTC(y, m - 1, d)).getUTCDay())) n++; return n; };
+  const monthWorkDays = r => { const month = r.monthWorkingDays ?? calendarMonthDays(r); return month ? `<span title="${esc(`${r.workingDays} in this cutoff`)}">${month}</span>` : r.workingDays; };
   const fixed2 = n => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Leave days / notes as HR writes them: "SIL - 10/13/26", "Absent 10/2, 10/8".
   const md = (d, year = false) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${year ? `/${d.slice(2, 4)}` : ''}`;
   const leaveCode = name => (/\(([^)]+)\)/.exec(name)?.[1] || name.split(/\s+/).filter(w => /^[A-Z]/.test(w)).map(w => w[0]).join(''));
   const notes = r => [...(r.leaveNotes || []).map(n => { const [d, ...rest] = n.split(': '), label = rest.join(': '), half = /half day/.test(label); return `${esc(leaveCode(label.replace(/\s*\(half day.*\)$/, '')))} - ${md(d, true)}${half ? ' (½)' : ''}`; }), ...((r.absentDates || []).length ? [`Absent ${r.absentDates.map(d => md(d)).join(',')}`] : [])].map(s => `<span class="pr-note">${s}</span>`).join('') || '';
-  const headers = ['Employee', 'Monthly salary', 'Working days', 'Days present', 'Leave days / notes', 'Basic pay', 'Leave pay', 'Overtime, night & holiday pay', 'Other additions', 'Gross pay', 'Deductions', 'Net pay'];
+  const headers = ['Employee', 'Salary', 'Working days', 'Days present', 'Holiday days', 'Leave days / notes', 'Basic pay', 'Leave pay', 'Overtime, rest day & night differential', 'Holiday pay', 'Other additions', 'Gross pay', 'Deductions', 'Net pay'];
   const sum = (r, keys) => keys.reduce((s, k) => s + (r.earnings[k] || 0), 0);
+  // Holiday breakdown (same as src/holiday-pay.mjs, used by the payslip and exports): each holiday credited on a scheduled
+  // workday is one day's pay taken out of Basic pay and shown under Holiday pay with any holiday-work premium, so it is
+  // paid once. Days present = regular workdays attended. Rows posted before this have no holiday fields.
+  const HOLIDAY_KEYS = ['specialHoliday', 'regularHoliday', 'otherHoliday'], OT_KEYS = ['regularOT', 'restOT', 'specialOT', 'regularHolidayOT', 'otherOT', 'nsd', 'restDay'];
+  const holidayDayPay = r => Math.max(0, Math.min(r.holidayPay || 0, r.earnings.basic || 0));
+  const holidayPay = r => holidayDayPay(r) + sum(r, HOLIDAY_KEYS);
+  const regularBasic = r => Math.round((r.earnings.basic - holidayDayPay(r)) * 100) / 100;
+  const daysPresentOf = r => (r.regularDays ?? paidDays(r));
+  const holidayList = r => (r.holidays || []).map(x => `${md(x.date)} ${x.name || ''} (${x.kind}${x.worked ? ', worked' : ''}${x.pay ? `: ${fixed2(x.pay)}` : ''})`).join(' · ');
+  const holidayDaysCell = r => (r.holidays ? `<span class="pr-holidays" title="${esc(holidayList(r))}">${holidayDayPay(r) ? r.holidayDays ?? 0 : 0}</span>` : '—');
+  const holidayCell = r => { const premium = sum(r, HOLIDAY_KEYS); const tip = [holidayList(r), premium ? `Holiday-work premium: ${fixed2(premium)}` : ''].filter(Boolean).join(' · '); return holidayPay(r) ? `<span class="pr-holidays" title="${esc(tip)}">${money(holidayPay(r))}</span>` : '—'; };
   const cell = (row, amount, component = '') => `<button class="money-link" data-salary="${esc(row.employeeId)}" data-component="${esc(component)}" title="Show how this amount was calculated">${money(amount)}</button>`;
-  html += table(headers, (run?.rows || []).slice().sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' })).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, fixed2(r.payBasis === 'daily' ? r.dailyRate : r.monthlySalary), monthWorkDays(r), fixed2(r.daysPresentWithLeave ?? r.daysPresent), notes(r), cell(r, r.earnings.basic, 'basic'), r.earnings.leavePay ? money(r.earnings.leavePay) : '—', money(sum(r, ['regularOT', 'restOT', 'specialOT', 'regularHolidayOT', 'otherOT', 'nsd', 'restDay', 'specialHoliday', 'regularHoliday', 'otherHoliday'])), money(sum(r, ['additional', 'allowance', 'thirteenth'])), cell(r, r.gross, 'gross'), money(r.totalDeductions), `<strong>${cell(r, r.net, 'net')}</strong>`]), 'Choose a cutoff and generate payroll to see the computation.').replace(/<tr><td colspan="9" class="empty">[\s\S]*?<\/td><\/tr>/, `<tr><td colspan="9" class="pr-empty"><span class="pr-empty-ico">${prIcon('doc')}</span><strong>Ready for your next payroll</strong><small>Select a cutoff and generate payroll to see the computation.</small></td></tr>`) + `<div class="panel-foot"><span><strong>PHP</strong> · Applicable Statutory / Company Payroll Rate</span><span class="payroll-total">${run?.rows.length || 0} employees · Total gross ${money(run?.totals.gross)} · Total deductions ${money(run?.totals.deductions)} · <strong>Total net pay ${money(run?.totals.net)}</strong>${run ? ` · <button class="employer-share-link" data-contrib-month="${run.start.slice(0, 7)}" title="Employee and employer SSS, PhilHealth and Pag-IBIG for ${run.start.slice(0, 7)}">Employer share ${money(run.totals.employer)} · Government contributions →</button>` : ''}</span></div></section>`;
+  html += table(headers, (run?.rows || []).slice().sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' })).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, r.payBasis === 'daily' ? `${fixed2(r.dailyRate)} / day` : fixed2(r.monthlySalary), monthWorkDays(r), fixed2(daysPresentOf(r)), holidayDaysCell(r), notes(r), cell(r, regularBasic(r), 'basic'), r.earnings.leavePay ? money(r.earnings.leavePay) : '—', money(sum(r, OT_KEYS)), holidayCell(r), money(sum(r, ['additional', 'allowance', 'thirteenth'])), cell(r, r.gross, 'gross'), money(r.totalDeductions), `<strong>${cell(r, r.net, 'net')}</strong>`]), 'Choose a cutoff and generate payroll to see the computation.').replace(/<tr><td colspan="9" class="empty">[\s\S]*?<\/td><\/tr>/, `<tr><td colspan="9" class="pr-empty"><span class="pr-empty-ico">${prIcon('doc')}</span><strong>Ready for your next payroll</strong><small>Select a cutoff and generate payroll to see the computation.</small></td></tr>`) + `<div class="panel-foot"><span><strong>PHP</strong> · Applicable Statutory / Company Payroll Rate</span><span class="payroll-total">${run?.rows.length || 0} employees · Total gross ${money(run?.totals.gross)} · Total deductions ${money(run?.totals.deductions)} · <strong>Total net pay ${money(run?.totals.net)}</strong>${run ? ` · <button class="employer-share-link" data-contrib-month="${run.start.slice(0, 7)}" title="Employee and employer SSS, PhilHealth and Pag-IBIG for ${run.start.slice(0, 7)}">Employer share ${money(run.totals.employer)} · Government contributions →</button>` : ''}</span></div></section>`;
   if (run?.id && run.status === 'posted') html += `<div class="final-banner"><strong>FINAL</strong><span>Finalized on ${esc(new Date(run.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }))} by ${esc(who(run.postedBy) || '—')} · This payroll can no longer be edited · Payslips appear in employee accounts on salary day, ${esc(payDateFor(run.start, run.end))}.</span></div>`;
   if (run?.id && run.status === 'posted' && auth.user.role === 'admin') html += `<div class="actions"><button data-reverse-run="${esc(run.id)}">Reverse this posting</button><span class="legend">Withdraws these payslips, restores loan balances and lets you correct and post the cutoff again. The posting stays in the audit trail.</span></div><br>`;
   if (run?.status === 'reversed') html += `<div class="notice">This payroll was reversed by ${esc(run.reversedBy)} on ${esc((run.reversedAt || '').slice(0, 10))}: ${esc(run.reversalReason || '')}</div>`;
   if (run && !run.id && ['admin', 'payroll'].includes(auth.user.role)) html += `<div class="actions"><button class="primary" data-post>Finalize payroll</button><span class="legend">Once final, this payroll can no longer be edited. The date and who finalized it are kept in the payroll history.</span></div><br>`;
-  const runsShown = state.runs.filter(r => r.status !== 'reversed').reverse();
-  html += `<section class="panel pr-history"><div class="pr-panel-head">${prIcon('history', 'pr-head-ico')}<div><h2>Payroll history</h2><p>View past payroll runs and their status.</p></div>${runsShown.length > 5 ? `<button class="pr-viewall" data-runs-all>${showAllRuns ? 'Show recent' : 'View all →'}</button>` : ''}</div>${table(['Cutoff', 'Salary day', 'Finalized on', 'Finalized by', 'Employees', 'Gross', 'Deductions', 'Net', 'Status', ''], (showAllRuns ? runsShown : runsShown.slice(0, 5)).map(r => [`<a class="cutoff-link" href="/api/runs/${r.id}.pdf?view=1" target="_blank" rel="noopener" title="Open the payroll register PDF">${esc(fmtCutoff(r.start, r.end))}</a>`, esc(new Date(`${payDateFor(r.start, r.end)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })), esc(r.postedAt ? new Date(r.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '—'), esc(who(r.postedBy) || '—'), r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.status === 'reversed' ? `${badge('Reversed', 'neutral')}<small>by ${esc(r.reversedBy || '')}</small>` : '<span class="pr-status">Finalized</span>', `<span class="download-links">${r.releasedAt || payDateFor(r.start, r.end) <= today() ? `<span class="pr-sent" title="Payslips are in employee accounts">${prIcon('check')}Sent</span>` : `<button class="small primary" data-release-run="${r.id}" title="Send the payslips to the employees' accounts now">Send payslips</button>`}</span>`]), 'No payroll has been finalized yet.')}</section>`;
+  const companyList = companies();
+  if (runsCompany && !companyList.includes(runsCompany)) runsCompany = '';
+  const runsShown = state.runs.filter(r => r.status !== 'reversed').reverse().map(r => runForCompany(r, runsCompany)).filter(r => r.rows.length);
+  const runsFilter = `<label class="field pr-company-filter">Company<select data-runs-company><option value="">All companies</option>${companyList.map(c => `<option ${c === runsCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
+  html += `<section class="panel pr-history"><div class="pr-panel-head">${prIcon('history', 'pr-head-ico')}<div><h2>Payroll history</h2><p>View past payroll runs and their status.</p></div>${runsFilter}${runsShown.length > 5 ? `<button class="pr-viewall" data-runs-all>${showAllRuns ? 'Show recent' : 'View all →'}</button>` : ''}</div>${table(['Cutoff', 'Salary day', 'Finalized on', 'Company', 'Employees', 'Gross', 'Deductions', 'Net', 'Status', ''], (showAllRuns ? runsShown : runsShown.slice(0, 5)).map(r => [`<a class="cutoff-link" href="/api/runs/${r.id}.pdf?view=1" target="_blank" rel="noopener" title="Open the payroll register PDF">${esc(fmtCutoff(r.start, r.end))}</a>`, esc(new Date(`${payDateFor(r.start, r.end)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })), `<span title="Finalized by ${esc(who(r.postedBy) || '—')}">${esc(r.postedAt ? new Date(r.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '—')}</span>`, esc(r.companies.join(', ') || '—'), r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.status === 'reversed' ? `${badge('Reversed', 'neutral')}<small>by ${esc(r.reversedBy || '')}</small>` : '<span class="pr-status">Finalized</span>', `<span class="download-links">${r.releasedAt || payDateFor(r.start, r.end) <= today() ? `<span class="pr-sent" title="Payslips are in employee accounts">${prIcon('check')}Sent</span>` : `<button class="small primary" data-release-run="${r.id}" title="Send the payslips to the employees' accounts now">Send payslips</button>`}</span>`]), runsCompany ? `No finalized payroll for ${esc(runsCompany)} yet.` : 'No payroll has been finalized yet.')}</section>`;
   return html;
 }
 function loansPage() { return heading('Employee loans', 'Scheduled deductions, clear balances, and a complete repayment history.', addButton('loans', 'Add loan')) + `<div class="cards">${card('Outstanding balance', money(state.loans.reduce((s, l) => s + l.balance, 0)), 'Across all loan types', true)}${card('Active loans', state.loans.filter(l => l.balance > 0).length, 'With an outstanding balance')}${card('Total original amount', money(state.loans.reduce((s, l) => s + l.original, 0)), 'Recorded loans')}${card('Repaid / opening credits', money(state.loans.reduce((s, l) => s + l.original - l.balance, 0)), 'Original amount less remaining balance')}</div><section class="panel"><div class="panel-head"><h2>Loan register</h2>${downloads('loans')}</div>${searchToolbar()}${table(['Employee', 'Type / reference', 'Original', 'Balance', 'Monthly amortization', 'Per payroll', 'Dates', 'Remaining terms', 'Authorization', ''], filtered(state.loans).map(l => [employee(l.employeeId), `${esc(l.type)}<br><small>${esc(l.reference)}</small>`, money(l.original), money(l.balance), money(l.monthlyAmortization), money(l.perPayroll), `${l.startDate}<br><small>to ${l.endDate}</small>`, `${l.remainingTerms} / ${l.terms}`, badge(l.authorized ? 'Authorized' : 'Pending', l.authorized ? '' : 'pending'), editButton('loans', l.id)]))}</section>`; }
@@ -540,11 +692,18 @@ function render() {
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   shell(views[page]());
+  // Dropdowns with a search box inside (Payroll → Employee). Loaded on demand: if the file cannot be loaded (e.g. the
+  // server has not been restarted to serve it), the plain dropdown stays and the page still works.
+  if (document.querySelector('select[data-searchable]')) import('./searchable-select.js').then(m => m.enhanceAll()).catch(() => {});
   // Attendance: today's live attendance comes first, above the requests and the records.
-  if (page === 'attendance' && attendanceView === 'explanations') {
-    api('/explanations').then(data => { const box = document.querySelector('[data-explanations]'); if (box && page === 'attendance' && attendanceView === 'explanations') box.innerHTML = portal.explanationsSection(data); }).catch(error => toast(error.message));
+  if (page === 'attendance' && ['explanations', 'reviewed'].includes(attendanceView)) {
+    const view = attendanceView;
+    api('/explanations').then(data => { const box = document.querySelector('[data-explanations]'); if (box && page === 'attendance' && attendanceView === view) { box.innerHTML = portal.explanationsSection(data, view === 'reviewed' ? 'reviewed' : 'open'); showExplanationFocus(box); } }).catch(error => toast(error.message));
   }
-  if (page === 'attendance' && attendanceView !== 'explanations' && liveData && ['admin', 'hr'].includes(auth.user.role)) {
+  if (page === 'attendance' && attendanceView === 'overtime') { const box = document.querySelector('[data-overtime-apps]'); if (box) overtimeUi.fill(box); }
+  if (page === 'attendance' && attendanceView === 'requests') { const box = document.querySelector('[data-hr-requests]'); if (box) import('./requests-ui.js').then(m => m.createHrRequests({ api, esc, badge, openDialog, dialog, toast, onLeave: () => { location.hash = '#/leave'; } }).fill(box, (() => { const ref = requestToOpen; requestToOpen = ''; return ref; })())).catch(() => { box.innerHTML = '<p class="muted">This page is available after the HR server restarts.</p>'; }); }
+  if (page === 'attendance' && attendanceView === 'clock') { const box = document.querySelector('[data-clock-records]'); if (box) loadClockRecords().then(ui => ui.fill(box)).catch(() => { box.innerHTML = '<p class="muted">This page is available after the HR server restarts.</p>'; }); }
+  if (page === 'attendance' && !['explanations', 'reviewed', 'overtime'].includes(attendanceView) && liveData && ['admin', 'hr'].includes(auth.user.role)) {
     const live = document.createElement('div'); live.dataset.liveBlock = ''; live.innerHTML = portal.live(liveData);
     document.querySelector('.content .page-heading')?.after(live);
   }
@@ -556,17 +715,6 @@ function render() {
   }
   if (page === 'payroll' && ['admin', 'hr', 'payroll', 'viewer'].includes(auth.user.role)) {
     thirteenthUi.section(y => { annualYear = y; page = 'annual'; render(); }).then(box => { if (page === 'payroll') document.querySelector('.content')?.append(box); }).catch(error => toast(error.message));
-  }
-  if (page === 'attendance' && ['admin', 'hr', 'payroll'].includes(auth.user.role)) {
-    api('/overtime-requests').then(list => {
-      const content = document.querySelector('.content'); if (page !== 'attendance' || !content) return;
-      const can = ['admin', 'hr'].includes(auth.user.role);
-      for (const o of list.filter(x => x.status === 'pending' && !x.locked)) {
-        const cell = content.querySelector(`[data-lv-req="${CSS.escape(o.employeeId)}"]`); if (!cell) continue;
-        const dash = cell.querySelector('.lv-muted'); if (dash) dash.remove();
-        cell.insertAdjacentHTML('beforeend', `<span class="lv-req-group"><span class="lv-req-label">Overtime ${esc(o.date.slice(5))} · ${o.hours} h</span>${can ? `<button class="lv-req ok" data-ot-decision="approve" data-id="${esc(o.id)}" data-hours="${o.worked === null ? o.hours : Math.min(o.hours, o.worked)}" data-filed="${o.hours}">Approve</button><button class="lv-req" data-ot-decision="reject" data-id="${esc(o.id)}">Reject</button>` : ''}</span>`);
-      }
-    }).catch(error => toast(error.message));
   }
   if (page === 'overview') {
     if (liveData) { const live = document.createElement('div'); live.innerHTML = portal.live(liveData); document.querySelector('.content').append(live); }
@@ -624,7 +772,7 @@ function netPayDialog(employeeId, focus = 'net') {
   const box = (side, [key, label, locked]) => {
     if (key === 'salaryDeduction' && salaryLoanModule) locked = true;
     const value = shown(side, key), always = ['basic', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'sssLoan', 'pagibigLoan', 'salaryDeduction'].includes(key);
-    const computed = key === 'basic' && original(key) !== undefined ? original(key) - (row.absenceAmount || 0) : original(key);
+    const computed = original(key);
     if (!value && computed === undefined && !always && (locked || !['allowance', 'additional', 'regularOT', 'nsd', 'absence', 'undertime', 'other'].includes(key))) return '';
     return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${locked || !editable ? ' locked' : ''}"><span>${esc(label)}</span>
       <input type="number" step="0.01" min="0" name="${esc(key)}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${locked || !editable ? 'readonly tabindex="-1"' : ''} aria-label="${esc(label)}">
@@ -654,7 +802,7 @@ function netPayDialog(employeeId, focus = 'net') {
     event.preventDefault();
     const allowed = new Set(['basic', 'regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT', 'additional', 'allowance', 'absence', 'undertime', 'other', 'tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'sssLoan', 'pagibigLoan', 'salaryDeduction']);
     const reason = '';
-    const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Math.round((Number(i.value || 0) + (i.name === 'basic' ? row.absenceAmount || 0 : 0)) * 100) / 100, reason }));
+    const overrides = [...form.querySelectorAll('input[data-side]')].filter(i => allowed.has(i.name) && !i.readOnly && Math.abs(Number(i.value || 0) - Number(i.dataset.computed)) > 0.004).map(i => ({ component: i.name, amount: Math.round(Number(i.value || 0) * 100) / 100, reason }));
     const base = m || { mode: 'add', daysWorked: 0, absenceDays: 0, lateMinutes: 0, undertimeMinutes: 0, hours: {}, reason: 'Net pay adjustment' };
     // Keep every saved amount this form does not show (e.g. a locked absence); only the boxes shown are replaced.
     const kept = (base.overrides || []).filter(o => !allowed.has(o.component) || !form.elements[o.component] || form.elements[o.component].readOnly);
@@ -682,13 +830,13 @@ function basicPayDialog(employeeId) {
   computationContext = { employeeId, start: currentRun.start, end: currentRun.end, pay13th: currentRun.pay13th, employeeIds: currentRun.employeeIds };
   const original = key => (row.overrides || []).find(o => o.component === key)?.original;
   const fact = (label, value, note = '') => `<div class="net-box locked"><span>${esc(label)}</span><strong class="fact-value">${value}</strong>${note ? `<small>${note}</small>` : ''}</div>`;
-  const input = (side, key, label) => { const value = row[side][key] || 0, computed = key === 'basic' && original(key) !== undefined ? original(key) - (row.absenceAmount || 0) : original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}>${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`; };
+  const input = (side, key, label) => { const value = row[side][key] || 0, computed = original(key); return `<label class="net-box${computed !== undefined ? ' overridden' : ''}${editable ? '' : ' locked'}"><span>${esc(label)}</span><input type="number" step="0.01" min="0" name="${key}" data-side="${side}" data-computed="${computed ?? value}" value="${value}" ${editable ? '' : 'readonly'}>${computed !== undefined ? `<small>Manual · computed ${money(computed)}</small>` : ''}</label>`; };
   const daily = row.payBasis === 'daily', base = daily ? row.dailyRate * row.workingDays : row.monthlySalary * (currentRun.start.endsWith('-01') || currentRun.start.endsWith('-16') ? 0.5 : 1);
   openDialog(`Basic pay · ${row.employeeName}`, `<form id="basic-form"><div class="dialog-body"><p class="sub">${esc(currentRun.start)} — ${esc(currentRun.end)} · ${currentRun.id ? 'Posted (read-only)' : 'Draft (not yet posted)'}</p>
     <fieldset class="net-side"><legend>How basic pay is computed</legend>
       ${fact(daily ? 'Daily rate' : 'Monthly salary', money(daily ? row.dailyRate : row.monthlySalary), daily ? 'Daily-paid' : 'Monthly-paid')}
       ${fact('Daily rate used', money(row.dailyRate))}${fact('Hourly rate used', money(row.hourlyRate))}
-      ${fact('Scheduled workdays', row.workingDays)}${fact('Days present', row.daysPresent)}${fact('Days credited', row.creditedDays ?? row.daysPresent, row.lateDaysLost ? `${row.lateDaysLost} day lost to late` : '')}
+      ${fact('Working days (month)', row.monthWorkingDays ?? row.workingDays, row.monthWorkingDays ? `rest days excluded, holidays included · ${row.workingDays} in this cutoff; attendance adjustments use ÷ ${row.adjustmentDivisor || latestRules()?.dailyDivisor || 26}` : 'this cutoff')}${fact('Days present', row.regularDays ?? row.daysPresent, row.regularDays !== undefined ? 'regular workdays attended' : '')}${row.holidays ? fact('Holiday days', row.holidayPay ? row.holidayDays ?? 0 : 0, esc((row.holidays || []).map(h => `${h.date.slice(5)} ${h.name || ''}${h.worked ? ' (worked)' : ''}${h.pay ? ` ₱${h.pay}` : ''}`).join(' · '))) : ''}${fact('Days credited', (Math.round((row.creditedDays ?? row.daysPresent) * 100) / 100).toFixed(2), [row.creditedHours ? `${Math.round(row.creditedHours * 100) / 100} h credited` : '', row.lateDaysLost ? `${row.lateDaysLost} day lost to late` : '', row.undertimeMinutes ? `${row.undertimeMinutes} min undertime (₱${row.undertimeAmount})` : ''].filter(Boolean).join(' · '))}
       ${fact('Leave days', row.leaveDays)}${fact('Late (not offset)', `${row.lateMinutesUnoffset || 0} min`)}${fact('Cutoff salary base', money(base), daily ? 'Daily rate × scheduled days' : 'Half of the monthly salary')}
     </fieldset>
     <fieldset class="net-side"><legend>Amounts</legend>${fact('Absences', money(row.absenceAmount || 0), 'Already taken off the days credited')}${input('earnings', 'basic', 'Basic pay (days credited)')}${input('deductions', 'undertime', 'Undertime')}
@@ -706,7 +854,7 @@ function basicPayDialog(employeeId) {
   form.onsubmit = async event => {
     event.preventDefault();
     const reason = '';
-    const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Math.round((Number(form.elements[k].value || 0) + (k === 'basic' ? row.absenceAmount || 0 : 0)) * 100) / 100, reason }));
+    const changed = shown.filter(k => Math.abs(Number(form.elements[k].value || 0) - Number(form.elements[k].dataset.computed)) > 0.004).map(k => ({ component: k, amount: Math.round(Number(form.elements[k].value || 0) * 100) / 100, reason }));
     try { await saveOverrides(row, shown, changed, 'Basic pay adjustment'); dialog.close(); dialog.classList.remove('wide-dialog'); if (await reopenComputation()) savedPopup(changed.length ? 'Basic pay updated. Changes are labelled Manual.' : 'Saved.'); } catch (error) { toast(error.message); }
   };
 }
@@ -752,7 +900,7 @@ function manualEntryDialog(employeeId) {
     <details class="form-section-box"${(m.overrides || []).length ? ' open' : ''}><summary>Manual overrides of calculated amounts</summary>
       <p class="legend">Replace a calculated amount for this cutoff. Leave blank to keep the system amount. Each override needs a reason; the original and revised values are kept in the audit trail.</p>
       ${table(['Item', 'Calculated', 'Override amount', 'Reason'], OVERRIDABLE.map(([k, label, side]) => { const o = (m.overrides || []).find(x => x.component === k), calc = (row.overrides || []).find(x => x.component === k)?.original ?? row[side][k] ?? 0; return [esc(label), money(calc), `<input type="number" min="0" step="0.01" name="ov.${k}" value="${o ? o.amount : ''}" aria-label="Override ${esc(label)}">`, `<input name="ovr.${k}" maxlength="500" value="${esc(o?.reason || '')}" aria-label="Reason for ${esc(label)} override">`]; }))}</details>
-    <label class="check-row"><input type="checkbox" name="waiveLate" ${m.waiveLate ? 'checked' : ''}> No late deductions this cutoff</label><label class="check-row"><input type="checkbox" name="waiveUndertime" ${m.waiveUndertime ? 'checked' : ''}> No undertime deductions this cutoff</label>
+    <label class="check-row"><input type="checkbox" name="waiveLate" ${m.waiveLate ? 'checked' : ''}> No late deductions this cutoff</label><label class="check-row"><input type="checkbox" name="waiveUndertime" ${m.waiveUndertime ? 'checked' : ''}> No undertime deductions this cutoff</label><label class="check-row"><input type="checkbox" name="waiveOpenTimeIn" ${m.waiveOpenTimeIn ? 'checked' : ''}> Waive: time in without time out (counted as a scheduled day)</label><label class="check-row"><input type="checkbox" name="waiveOvertimeCheck" ${m.waiveOvertimeCheck ? 'checked' : ''}> Waive: approved overtime not supported by attendance (only supported hours are paid)</label>
     <label class="field full">Note (optional)<input name="reason" maxlength="500" value="${esc(m.reason)}" placeholder="e.g. Manual DTR signed by supervisor; biometric was offline"></label>
   </div><div class="dialog-foot">${row.manualEntry ? '<button type="button" class="danger" data-manual-remove>Remove manual entry</button>' : ''}<button type="button" data-close>Cancel</button><button class="primary">Save and recalculate</button></div></form>`);
   const form = dialog.querySelector('#manual-form');
@@ -761,7 +909,7 @@ function manualEntryDialog(employeeId) {
   form.onsubmit = async event => {
     event.preventDefault();
     const v = n => Number(form.elements[n]?.value || 0);
-    const body = { start: currentRun.start, end: currentRun.end, mode: form.elements.mode.value, waiveLate: form.elements.waiveLate.checked, waiveUndertime: form.elements.waiveUndertime.checked, daysWorked: v('daysWorked'), absenceDays: v('absenceDays'), lateMinutes: Math.round(v('lateMinutes')), undertimeMinutes: Math.round(v('undertimeMinutes')), hours: Object.fromEntries(MANUAL_HOURS.map(([k]) => [k, v(`h.${k}`)])), reason: form.elements.reason.value, overrides: OVERRIDABLE.filter(([k]) => form.elements[`ov.${k}`].value !== '').map(([k]) => ({ component: k, amount: Number(form.elements[`ov.${k}`].value), reason: form.elements[`ovr.${k}`].value })) };
+    const body = { start: currentRun.start, end: currentRun.end, mode: form.elements.mode.value, waiveLate: form.elements.waiveLate.checked, waiveUndertime: form.elements.waiveUndertime.checked, waiveOpenTimeIn: form.elements.waiveOpenTimeIn.checked, waiveOvertimeCheck: form.elements.waiveOvertimeCheck.checked, daysWorked: v('daysWorked'), absenceDays: v('absenceDays'), lateMinutes: Math.round(v('lateMinutes')), undertimeMinutes: Math.round(v('undertimeMinutes')), hours: Object.fromEntries(MANUAL_HOURS.map(([k]) => [k, v(`h.${k}`)])), reason: form.elements.reason.value, overrides: OVERRIDABLE.filter(([k]) => form.elements[`ov.${k}`].value !== '').map(([k]) => ({ component: k, amount: Number(form.elements[`ov.${k}`].value), reason: form.elements[`ovr.${k}`].value })) };
     try { await api(`/payroll/inputs/${encodeURIComponent(employeeId)}`, body); dialog.close(); if (await reopenComputation()) savedPopup('Manual entry saved. Payroll recalculated.'); } catch (error) { toast(error.message); }
   };
   form.querySelector('[data-manual-remove]')?.addEventListener('click', async () => {
@@ -824,9 +972,9 @@ function definitions(kind) {
   const approved = field('approved', 'Approved', 'checkbox');
   const fields = {
     employees: [field('id', 'Employee ID', 'text', null, 'A unique, permanent identifier included in payroll and exports.'), field('name', 'Employee name'), field('department', 'Department'), field('monthlySalary', 'Monthly salary (PHP)', 'number'), field('startDate', 'Employment start', 'date'), field('endDate', 'Employment end (optional)', 'optional-date'), field('scheduleStart', 'Normal scheduled start', 'time'), field('restDays', 'Rest days', 'numbers', [[0, 'Sunday'], [1, 'Monday'], [2, 'Tuesday'], [3, 'Wednesday'], [4, 'Thursday'], [5, 'Friday'], [6, 'Saturday']]), field('active', 'Active employee profile', 'checkbox', null, 'Use an employment end date to stop payroll after separation.'), section('Coverage & leave eligibility'), field('coveredOT', 'Covered by overtime policy', 'checkbox'), field('coveredNSD', 'Covered by night differential', 'checkbox'), field('coveredHoliday', 'Covered by regular holiday pay', 'checkbox'), field('covered13th', 'Covered by 13th month pay', 'checkbox'), field('leaveEligibility', 'Eligible leave types (HR verified)', 'multi', leaveOptions, 'Select only entitlements whose eligibility requirements have been verified. Hold Ctrl / Command to select multiple.')],
-    attendance: [commonEmployee, field('date', 'Attendance date', 'date'), field('status', 'Day status', 'select', ['present', 'absent', 'off', 'official-business', 'rest-day-swap']), field('scheduledIn', 'Approved scheduled start', 'time'), field('timeIn', 'Actual time in (for present)', 'optional-time'), field('timeOut', 'Actual time out (for present)', 'optional-time'), field('endNextDay', 'Time out is on the following day', 'checkbox'), field('breaks', 'Unpaid breaks', 'breaks', null, 'Enter each break with its full local date and time. Breaks are excluded from work and night hours.'), section('Exceptions & approval'), field('offsetMinutes', 'Approved offset minutes', 'number'), field('exception', 'Approved explanation / attendance exception', 'checkbox', null, 'Exempts lateness and undertime deductions, such as authorized official business.'), field('explanation', 'Explanation / approval basis', 'optional-textarea'), field('holidayEligible', 'Regular holiday pay eligibility verified', 'checkbox'), approved],
+    attendance: [commonEmployee, field('date', 'Attendance date', 'date'), field('status', 'Day status', 'select', ['present', 'absent', 'off', 'official-business', 'rest-day-swap', 'offset']), field('scheduledIn', 'Approved scheduled start', 'time'), field('timeIn', 'Actual time in (for present)', 'optional-time'), field('timeOut', 'Actual time out (for present)', 'optional-time'), field('endNextDay', 'Time out is on the following day', 'checkbox'), field('location', 'Work location (optional)', 'optional-text', null, 'Where the day was worked when there is no GPS time in, e.g. from a biometric import.'), field('breaks', 'Unpaid breaks', 'breaks', null, 'Enter each break with its full local date and time. Breaks are excluded from work and night hours.'), section('Exceptions & approval'), field('offsetMinutes', 'Approved offset minutes', 'number'), field('exception', 'Approved explanation / attendance exception', 'checkbox', null, 'Exempts lateness and undertime deductions, such as authorized official business.'), field('explanation', 'Explanation / approval basis', 'optional-textarea'), field('holidayEligible', 'Regular holiday pay eligibility verified', 'checkbox'), approved],
     leaves: [commonEmployee, field('typeId', 'Leave type', 'select', leaveOptions), field('startDate', 'First day', 'date'), field('startTime', 'Start time (first day)', 'optional-time', null, 'Blank = start of the work schedule. A leave covering about half the day (e.g. 14:00–18:00) counts as a half day.'), field('endDate', 'Last day', 'date'), field('endTime', 'End time (last day)', 'optional-time', null, 'Blank = end of the work schedule.'), field('days', 'Leave days (computed)', 'number', null, 'Worked out from the dates and times when saved: whole days count 1, half days 0.5. Rest days do not consume leave.'), field('status', 'Request status', 'select', ['pending', 'approved', 'rejected']), field('reason', 'Reason / notes', 'textarea'), field('documentReference', 'Supporting document reference', 'optional-textarea', null, 'Reference a document in your controlled HR document store. Do not paste public document links.'), field('eligibilityVerified', 'Eligibility verified by HR', 'checkbox')],
-    leaveTypes: [field('name', 'Leave type name'), field('category', 'Benefit classification', 'select', ['statutory', 'company']), field('paid', 'Paid leave', 'checkbox'), field('entitledDays', 'Days entitled per year', 'number'), field('minServiceMonths', 'Minimum service (months)', 'number'), field('eligibility', 'Eligibility requirements', 'textarea'), field('accrual', 'Accrual method', 'select', ['annual', 'monthly', 'none']), field('carryOverDays', 'Maximum carry-over days', 'number'), field('expirationMonths', 'Carry-over expires after month', 'number', null, '1 = January, 12 = December. Current-year entitlement expires at year end.'), field('balanceRequired', 'Require sufficient accrued balance', 'checkbox'), field('documentsRequired', 'Supporting documents required', 'checkbox'), field('approvalRequired', 'Approval required', 'checkbox'), field('affectsPayroll', 'Affects payroll', 'checkbox'), field('includedIn13th', 'Paid leave included in 13th-month basic', 'checkbox')],
+    leaveTypes: [field('name', 'Leave type name'), field('category', 'Benefit classification', 'select', ['statutory', 'company']), field('paid', 'Paid leave', 'checkbox'), field('entitledDays', 'Days entitled per year', 'number'), field('minServiceMonths', 'Minimum service (months)', 'number'), field('eligibility', 'Eligibility requirements', 'textarea'), field('accrual', 'Accrual method', 'select', ['annual', 'monthly', 'none']), field('carryOverDays', 'Maximum carry-over days', 'number'), field('expirationMonths', 'Carry-over expires after month', 'number', null, '1 = January, 12 = December. Current-year entitlement expires at year end.'), field('balanceRequired', 'Require sufficient accrued balance', 'checkbox'), field('documentsRequired', 'Supporting document usually expected', 'checkbox', null, 'For reference only. Employees may apply without an attachment; use Ask for proof on a request when a document is needed.'), field('approvalRequired', 'Approval required', 'checkbox'), field('affectsPayroll', 'Affects payroll', 'checkbox'), field('includedIn13th', 'Paid leave included in 13th-month basic', 'checkbox')],
     holidays: [field('date', 'Holiday date', 'date'), field('name', 'Holiday name'), field('kind', 'Classification', 'select', [['ordinary', 'Ordinary / special working day'], ['special', 'Special non-working holiday'], ['regular', 'Regular holiday'], ['double', 'Double regular holiday'], ['other', 'Other configured holiday']]), field('basis', 'Proclamation / legal or policy basis', 'textarea')],
     loans: [commonEmployee, field('type', 'Loan type', 'select', ['Salary Loan', 'Emergency Loan', 'Medical Loan', 'Educational Loan', 'Housing Loan', 'Vehicle Loan', 'Calamity Loan', 'SSS Loan', 'Pag-IBIG Loan', 'Other Company Loan']), field('reference', 'Loan reference'), field('loanDate', 'Loan date', 'date'), field('original', 'Original amount (PHP)', 'number'), field('balance', 'Opening outstanding balance (PHP)', 'number'), field('perPayroll', 'Deduction per payroll (PHP)', 'number'), field('deductOn', 'Deduct on', 'select', [['every', 'Every cutoff'], ['first', '1st-15th cutoff only (paid on the 22nd)'], ['second', '16th-end cutoff only (paid on the 8th)']]), field('startDate', 'First deduction date', 'date'), field('endDate', 'Last deduction date', 'date'), field('terms', 'Total payroll deduction terms', 'number'), field('remainingTerms', 'Remaining payroll deduction terms', 'number'), field('authorized', 'Employee deduction authorization verified', 'checkbox')],
     adjustments: [commonEmployee, field('date', 'Effective date', 'date'), field('kind', 'Component', 'select', [['additional', 'Other additional pay'], ['allowance', 'Allowance'], ['otherDeduction', 'Other authorized deduction']]), field('amount', 'Amount (PHP)', 'number'), field('reason', 'Reason / authorization basis', 'textarea'), approved, field('includedIn13th', 'Earnings form part of applicable basic salary', 'checkbox', null, 'Use only if this payment is integrated into basic salary under approved policy.')],
@@ -838,7 +986,7 @@ function definitions(kind) {
   const leaveDaysField = fields.leaves.find(f => f.key === 'days');
   leaveDaysField.title = 'Leave days (policy basis)';
   leaveDaysField.hint = 'Count full working or calendar days according to the selected leave policy. Cross-year requests allocate days to each annual balance.';
-  fields.rules.push(section('Overtime approval'), field('overtimeApproval', 'Overtime is paid when', 'select', [['separate', 'the employee files it and HR approves it (late clock-out alone is not overtime)'], ['attendance', 'any approved attendance beyond the schedule']]), section('Calendar review & benefit taxation'), field('calendarReviewedYears', 'Holiday calendar years reviewed', 'yearlist', null, 'Comma-separated years, for example 2026, 2027. Add the applicable proclamations in the holiday calendar before confirming a year.'), field('thirteenthTaxExemption', 'Annual tax exemption allocated to 13th-month pay (PHP)', 'number', null, 'Configure the approved exemption after accounting for other benefits using the same exemption. Taxable excess is included automatically.'));
+  fields.rules.push(section('Overtime approval'), field('overtimeApproval', 'Overtime is paid when', 'select', [['separate', 'the employee files it and HR approves it (late clock-out alone is not overtime)'], ['attendance', 'any approved attendance beyond the schedule']]), section('Rounding'), field('creditRounding', 'Monthly-paid days credited', 'select', [['days', 'rounded to 2 decimals, then × daily rate (12.94 days × 1,000 = 12,940.00)'], ['exact', 'kept exact; only the peso amount is rounded (12.9375 days × 1,000 = 12,937.50)']]), section('Calendar review & benefit taxation'), field('calendarReviewedYears', 'Holiday calendar years reviewed', 'yearlist', null, 'Comma-separated years, for example 2026, 2027. Add the applicable proclamations in the holiday calendar before confirming a year.'), field('thirteenthTaxExemption', 'Annual tax exemption allocated to 13th-month pay (PHP)', 'number', null, 'Configure the approved exemption after accounting for other benefits using the same exemption. Taxable excess is included automatically.'));
   return fields[kind];
 }
 // HR/Admin approve an offset for late time: covered minutes no longer reduce credited days or pay.
@@ -852,7 +1000,7 @@ async function applyLateOffset(recordId, unoffsetMinutes) {
   if (!reason || reason.trim().length < 3) { toast('An offset needs a reason.'); return; }
   try {
     // An offset must carry an explanation on the record; the approval reason serves when none exists yet.
-    await api('/records/attendance', { ...record, offsetMinutes: record.offsetMinutes + add, explanation: record.explanation?.trim() ? record.explanation : reason.trim(), correctionReason: reason.trim() });
+    await api('/records/attendance', { ...record, offsetMinutes: record.offsetMinutes + add, explanation: record.explanation?.trim() && !/^Employee clock events:/.test(record.explanation) ? record.explanation : reason.trim(), correctionReason: reason.trim() });
     await refresh(); render(); toast(`${add} min offset approved for ${record.date}.`);
   } catch (error) { toast(error.message); }
 }
@@ -1028,6 +1176,8 @@ async function account() {
   if (userForm) userForm.onsubmit = async event => { event.preventDefault(); try { const values = Object.fromEntries(new FormData(userForm)); if (!['employee', 'dept_manager'].includes(values.role)) delete values.employeeId; await api('/users', values); await account(); toast('User created.'); } catch (e) { toast(e.message); } };
   await portal.accountTools(auth.user, users);
 }
+// Top-bar account menu: closes after a choice or a click elsewhere.
+document.addEventListener('click', event => { const inside = event.target.closest('.tb-account'); document.querySelectorAll('.tb-account[open]').forEach(d => { if (d !== inside || event.target.closest('.tb-menu button')) d.removeAttribute('open'); }); });
 document.addEventListener('click', async event => {
   const b = event.target.closest('button'); if (!b) return;
   try {
@@ -1042,10 +1192,13 @@ document.addEventListener('click', async event => {
     if (b.hasAttribute('data-toggle-sidebar')) { sidebarCollapsed = !sidebarCollapsed; try { localStorage.setItem('hr-sidebar', sidebarCollapsed ? 'collapsed' : 'open'); } catch { /* preference only */ } document.querySelector('.shell')?.classList.toggle('collapsed', sidebarCollapsed); b.setAttribute('aria-expanded', String(!sidebarCollapsed)); return; }
     if (b.hasAttribute('data-bell')) {
       const menu = document.querySelector('[data-bell-menu]');
-      menu.innerHTML = bellItems.length ? bellItems.map((item, i) => `<button role="menuitem" data-bell-item="${i}">${esc(item.text)}</button>`).join('') : '<p class="muted">Nothing needs your attention.</p>';
+      // Fresh list on every open: resolved / approved items are gone at once.
+      if (menu.classList.contains('hidden')) await loadBell();
+      menu.innerHTML = bellItems.length ? bellItems.map((item, i) => `<button role="menuitem" data-bell-item="${i}" title="Open"><span class="bell-go" aria-hidden="true">›</span>${esc(item.text)}<small class="bell-date">${esc(item.date || `As of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}`)}</small></button>`).join('') : '<p class="muted">Nothing needs your attention.</p>';
       menu.classList.toggle('hidden'); if (!menu.classList.contains('hidden')) markBellSeen(); return;
     }
-    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; await goTo({ page: item.nav, docs: item.filter }); return; }
+    // A bell item opens the page (and tab) where it is handled, at the top, and closes the bell.
+    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'employee201') { await goTo({ page: 'employee201', id: item.id, tab: item.tab || 'requirements' }); showReviewButtons(); return; } if (item.nav === 'leave') subtab = 'requests'; if (item.nav === 'explanations') explanationFocus = item.focus ? { focus: item.focus, dates: item.dates || [] } : null; if (item.nav === 'requests') requestToOpen = (item.text.match(/AR-\d{4}-\d{4}/) || [''])[0]; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter }); window.scrollTo({ top: 0 }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
     if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }
@@ -1086,18 +1239,7 @@ document.addEventListener('click', async event => {
       const reason = window.prompt('Reason for reversing this posted payroll (kept in the audit trail):'); if (!reason) return;
       currentRun = await api(`/runs/${b.dataset.reverseRun}/reverse`, { reason }); await refresh(); render(); toast('Payroll reversed. Loan balances restored; the cutoff can be corrected and posted again.'); return;
     }
-    if (b.dataset.otDecision) {
-      const decision = b.dataset.otDecision;
-      let hours;
-      if (decision === 'approve') {
-        const answer = window.prompt(`Hours to approve (filed ${b.dataset.filed} h; payroll never pays more than the hours worked beyond the schedule):`, b.dataset.hours); if (answer === null) return;
-        hours = Number(answer); if (!(hours > 0)) { toast('Enter the hours to approve.'); return; }
-      }
-      const remarks = window.prompt(decision === 'approve' ? 'Remarks for the employee (optional):' : 'Reason for not approving (the employee will see this):', '');
-      if (remarks === null) return;
-      await api(`/overtime-requests/${b.dataset.id}/decision`, { decision, remarks, ...(hours ? { hours } : {}) });
-      await refresh(); render(); toast(decision === 'approve' ? 'Overtime approved. Payroll will include it.' : 'Overtime rejected. The employee has been notified.'); return;
-    }
+    if (b.dataset.leaveBalance) { leaveBalanceDialog(b.dataset.leaveBalance, b.dataset.leaveTypes ? b.dataset.leaveTypes.split(',') : null); return; }
     if (b.dataset.leaveDecision) {
       const decision = b.dataset.leaveDecision;
       const remarks = decision === 'approve' ? window.prompt('Approve this leave. Remarks for the employee (optional):', '') : window.prompt(decision === 'reject' ? 'Reason for rejecting (the employee will see this):' : 'Reason for cancelling this approved leave (credits will be restored):', '');
@@ -1105,15 +1247,18 @@ document.addEventListener('click', async event => {
       await api(`/leaves/${b.dataset.id}/decision`, { decision, remarks });
       await refresh(); render(); toast({ approve: 'Leave approved. Credits and payroll are updated.', reject: 'Leave rejected. The employee has been notified.', cancel: 'Leave cancelled and credits restored.' }[decision]); return;
     }
+    if (b.dataset.leaveDetail) { leaveDetailDialog(b.dataset.leaveDetail); return; }
+    if (b.dataset.proofRequest) { askForLeaveProof(b.dataset.proofRequest); return; }
     if (b.dataset.proofReview) {
       const decision = b.dataset.decision;
       const note = decision === 'rejected' ? window.prompt('Why is this proof not accepted? The employee will see this message.') : '';
       if (note === null) return;
       await api(`/leaves/${b.dataset.proofReview}/proof-review`, { decision, note: note || '' });
-      await refresh(); render(); toast(decision === 'verified' ? 'Proof confirmed. You can now approve the leave.' : 'The employee was asked for a new proof.');
+      await refresh(); render(); if (dialog.open) leaveDetailDialog(b.dataset.proofReview);
+      toast(decision === 'verified' ? 'Proof confirmed. You can now approve the leave.' : 'The employee was asked for a new proof.');
     }
     if (b.hasAttribute('data-copy') && currentRun) {
-      const rows = [['Employee ID', 'Employee Name', 'Monthly Salary', 'Working Days', 'Days Present', 'Days Credited', 'Late Minutes Not Offset', 'Leave Days / Notes', 'Overtime', 'Adjustment', '13th Month Pay', 'Special Holiday', 'Regular Holiday', 'Gross', 'Deductions', 'Net Salary', 'Loan Balance', 'Loan Date', 'Loan Terms'], ...currentRun.rows.map(r => [r.employeeId, r.employeeName, r.monthlySalary, r.workingDays, r.daysPresent, r.creditedDays ?? r.daysPresent, r.lateMinutesUnoffset ?? 0, `${r.leaveDays}: ${r.leaveNotes.join('; ')}`, r.earnings.regularOT + r.earnings.restOT + r.earnings.specialOT + r.earnings.regularHolidayOT + r.earnings.otherOT, r.earnings.additional + r.earnings.allowance, r.earnings.thirteenth, r.earnings.specialHoliday, r.earnings.regularHoliday, r.gross, r.totalDeductions, r.net, r.loanBalance, r.loanDeductions.map(l => l.startDate).join('; '), r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('; ')])];
+      const rows = [['Employee ID', 'Employee Name', 'Monthly Salary', 'Working Days', 'Month Working Days', 'Days Present', 'Holiday Days', 'Days Credited', 'Late Minutes Not Offset', 'Leave Days / Notes', 'Basic Pay', 'Overtime', 'Holiday Pay', 'Adjustment', '13th Month Pay', 'Gross', 'Deductions', 'Net Salary', 'Loan Balance', 'Loan Date', 'Loan Terms'], ...currentRun.rows.map(r => [r.employeeId, r.employeeName, r.monthlySalary, r.workingDays, r.monthWorkingDays ?? '', r.regularDays ?? r.daysPresent, r.holidayPay ? r.holidayDays ?? 0 : 0, r.creditedDays ?? r.daysPresent, r.lateMinutesUnoffset ?? 0, `${r.leaveDays}: ${r.leaveNotes.join('; ')}`, Math.round((r.earnings.basic - Math.max(0, Math.min(r.holidayPay || 0, r.earnings.basic))) * 100) / 100, ['regularOT', 'restOT', 'specialOT', 'regularHolidayOT', 'otherOT', 'nsd', 'restDay'].reduce((t, k) => t + (r.earnings[k] || 0), 0), Math.max(0, Math.min(r.holidayPay || 0, r.earnings.basic)) + ['specialHoliday', 'regularHoliday', 'otherHoliday'].reduce((t, k) => t + (r.earnings[k] || 0), 0), r.earnings.additional + r.earnings.allowance, r.earnings.thirteenth, r.gross, r.totalDeductions, r.net, r.loanBalance, r.loanDeductions.map(l => l.startDate).join('; '), r.loanDeductions.map(l => `${l.remainingTerms}/${l.terms}`).join('; ')])];
       // Prefix formula-like strings when copying into spreadsheet applications.
       const safe = v => typeof v === 'string' ? (/^[=+@\-\t\r]/.test(v) ? `'${v}` : v).replace(/[\t\r\n]/g, ' ') : v;
       await navigator.clipboard.writeText(rows.map(row => row.map(safe).join('\t')).join('\n')); toast('Payroll summary copied with employee IDs.');
@@ -1178,13 +1323,15 @@ document.addEventListener('input', event => {
 // Leave requests: search and status hide rows in place.
 function filterLeaves() {
   const box = document.querySelector('.lm-panel'); if (!box) return;
-  const q = box.querySelector('[data-lm-search]').value.trim().toLowerCase(), st = box.querySelector('[data-lm-status]').value;
+  const val = k => box.querySelector(`[data-lm-${k}]`)?.value || '';
+  const q = val('search').trim().toLowerCase(), emp = val('emp'), type = val('type'), from = val('from'), to = val('to');
   let shown = 0;
-  for (const r of box.querySelectorAll('[data-lm-row]')) { const ok = (!q || r.dataset.lmName.includes(q)) && (!st || r.dataset.lmStatus === st); r.hidden = !ok; if (ok) shown++; }
-  box.querySelector('[data-lm-count]').textContent = `${shown} request${shown === 1 ? '' : 's'}`;
+  // A date filter keeps applications whose leave overlaps the chosen range.
+  for (const r of box.querySelectorAll('[data-lm-row]')) { const ok = (!q || r.dataset.lmName.includes(q)) && (!emp || r.dataset.lmEmp === emp) && (!type || r.dataset.lmType === type) && (!from || r.dataset.lmEnd >= from) && (!to || r.dataset.lmStart <= to); r.hidden = !ok; if (ok) shown++; }
+  box.querySelector('[data-lm-count]').textContent = `${shown} application${shown === 1 ? '' : 's'}`;
 }
 document.addEventListener('input', event => { if (event.target.matches?.('[data-lm-search]')) filterLeaves(); });
-document.addEventListener('change', event => { if (event.target.matches?.('[data-lm-status]')) filterLeaves(); });
+document.addEventListener('change', event => { if (event.target.matches?.('[data-lm-emp], [data-lm-type], [data-lm-from], [data-lm-to]')) filterLeaves(); });
 // Daily attendance records: search, status and tabs hide rows in place.
 function filterDaily() {
   const box = document.querySelector('.dr'); if (!box) return;
@@ -1193,6 +1340,8 @@ function filterDaily() {
 }
 document.addEventListener('input', event => { if (event.target.matches?.('[data-dr-search]')) filterDaily(); });
 document.addEventListener('change', event => { if (event.target.matches?.('[data-att-company]')) { attCompany = event.target.value; render(); } });
+document.addEventListener('change', event => { if (event.target.matches?.('[data-runs-company]')) { runsCompany = event.target.value; render(); } });
+document.addEventListener('change', event => { if (event.target.matches?.('[data-bal-company]')) { balCompany = event.target.value; render(); } else if (event.target.matches?.('[data-bal-status]')) { balStatus = event.target.value; render(); } });
 document.addEventListener('click', event => { const b = event.target.closest?.('[data-dr-tab]'); if (!b) return; b.parentElement.querySelectorAll('[data-dr-tab]').forEach(x => x.classList.toggle('active', x === b)); filterDaily(); });
 document.addEventListener('change', event => { if (event.target.id === 'employee-status-filter') { employeeStatusFilter = event.target.value; render(); } if (event.target.matches?.('[data-dr-status]')) filterDaily(); if (event.target.id === 'records-date' && event.target.value) { recordsDate = event.target.value; render(); } if (event.target.id === 'hol-year') { const y = event.target.value.trim(); if (!/^\d{4}$/.test(y)) { toast('Type the year as YYYY, e.g. 2028.'); return; } const show = () => { holidayYear = y; render(); }; if (canEdit('holidays') && !state.holidays.some(h => h.date.startsWith(`${y}-`))) api('/holidays/year', { year: y }).then(async r => { await refresh(); show(); if (r.added) toast(`${y} holidays added (${r.added} dates). Add Eid'l Fitr and Eid'l Adha when proclaimed.`); }).catch(e => toast(e.message)); else show(); } });
 setupInstall();

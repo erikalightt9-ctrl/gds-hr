@@ -1,6 +1,7 @@
 // HTTP routes for the HR 201 modules (/api/hr/...). Every handler enforces its own permission on the server.
 import { AppError, permit } from './service.mjs';
 import { explanationsDue } from './late-explanations.mjs';
+import { CATEGORIES as REQUEST_CATEGORIES } from './attendance-requests.mjs';
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
@@ -10,7 +11,8 @@ import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingShee
 import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './roles.mjs';
 import { celebrationsOn, celebrationsThisMonth, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
-import { fileOvertime, cancelOvertime, myOvertime } from './overtime.mjs';
+import { fileOvertime, cancelOvertime, editOvertime, myOvertime } from './overtime.mjs';
+import { pushStatus, savePushSubscription, removePushSubscription, sendTestReminder } from './reminders.mjs';
 import { saveSchedule } from './work-schedule.mjs';
 
 const BIG = 28_500_000;
@@ -42,9 +44,15 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   // ---------- Employee self-service ----------
   if (pathname.startsWith('/api/hr/me/')) {
     permit(actor, ['employee']);
+    // Attendance reminders on the employee's own devices (Web Push); reminders never record time.
+    if (pathname === '/api/hr/me/reminders' && method === 'GET') { send(200, pushStatus(store, actor)); return true; }
+    if (pathname === '/api/hr/me/reminders' && method === 'POST') { send(200, savePushSubscription(store, actor, await readBody(req))); return true; }
+    if (pathname === '/api/hr/me/reminders/remove' && method === 'POST') { send(200, removePushSubscription(store, actor, await readBody(req))); return true; }
+    if (pathname === '/api/hr/me/reminders/test' && method === 'POST') { send(200, await sendTestReminder(store, actor)); return true; }
     if (pathname === '/api/hr/me/overtime' && method === 'GET') { send(200, myOvertime(store, actor)); return true; }
     if (pathname === '/api/hr/me/overtime' && method === 'POST') { send(201, fileOvertime(store, actor, await readBody(req))); return true; }
     if ((p = m(/^\/api\/hr\/me\/overtime\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelOvertime(store, actor, p[1])); return true; }
+    if ((p = m(/^\/api\/hr\/me\/overtime\/([a-f0-9-]+)$/)) && method === 'POST') { send(200, editOvertime(store, actor, p[1], await readBody(req))); return true; }
     if (pathname === '/api/hr/me/loans' && method === 'GET') { send(200, myLoans(store, actor)); return true; }
     if (pathname === '/api/hr/me/loans' && method === 'POST') { send(201, applyLoan(store, actor, await readBody(req))); return true; }
     if ((p = m(/^\/api\/hr\/me\/loans\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelLoanApplication(store, actor, p[1])); return true; }
@@ -82,19 +90,31 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   if (pathname === '/api/hr/notifications' && method === 'GET') {
     permit(actor, DASHBOARD);
     const items = [];
-    if (['admin', 'hr'].includes(actor.role)) { const leaves = store.read().leaves.filter(l => l.status === 'pending').length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave' }); }
+    // Each item says which dates it covers (one date or first - last).
+    const fmt = d => new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const span = dates => { const s = dates.filter(Boolean).sort(); return s.length ? (s[0] === s.at(-1) ? fmt(s[0]) : `${fmt(s[0])} – ${fmt(s.at(-1))}`) : ''; };
+    if (['admin', 'hr'].includes(actor.role)) { const pending = store.read().leaves.filter(l => l.status === 'pending'), leaves = pending.length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave', date: span(pending.map(l => l.startDate)) }); }
+    // Attendance requests (forgot time in / out, failed time in, system error, ...) waiting for HR, in Attendance → Requests.
+    if (['admin', 'hr'].includes(actor.role)) {
+      // One item per request, so each new request lights up the bell with the employee's name.
+      for (const r of store.db.prepare("SELECT data FROM attendance_requests WHERE status IN ('pending','review') ORDER BY rowid").all().map(x => JSON.parse(x.data)))
+        items.push({ text: `${r.employeeName}: attendance request ${r.reference} (${REQUEST_CATEGORIES[r.category] || r.category}) waiting for approval`, nav: 'requests', date: fmt(r.date) });
+    }
     // Late arrivals (15+ minutes): explanations to review and those the employees still owe, in Attendance → Explanations.
     if (['admin', 'hr'].includes(actor.role)) {
-      const toReview = store.db.prepare("SELECT COUNT(*) n FROM attendance_explanations WHERE json_extract(data,'$.status')='pending'").get().n;
-      if (toReview) items.push({ text: `${toReview} attendance explanation${toReview === 1 ? '' : 's'} to review`, nav: 'explanations' });
+      const reviewDates = store.db.prepare("SELECT json_extract(data,'$.date') d FROM attendance_explanations WHERE json_extract(data,'$.status')='pending'").all().map(r => r.d), toReview = reviewDates.length;
+      if (toReview) items.push({ text: `${toReview} attendance explanation${toReview === 1 ? '' : 's'} to review`, nav: 'explanations', focus: 'review', date: span(reviewDates) });
       const due = explanationsDue(store), today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }), now = due.filter(d => d.date >= today).length, earlier = due.length - now;
-      if (now) items.push({ text: `${now} late time in${now === 1 ? '' : 's'} today need${now === 1 ? 's' : ''} an explanation from the employee`, nav: 'explanations' });
-      if (earlier) items.push({ text: `${earlier} earlier late arrival${earlier === 1 ? '' : 's'} (15+ minutes) still need${earlier === 1 ? 's' : ''} an explanation`, nav: 'explanations' });
+      // Names in the item, so HR sees who is late before opening it (surname = the part before the comma).
+      const who = list => { const names = [...new Set(list.map(d => String(d.employeeName || '').split(',')[0].trim()))]; return names.length > 4 ? `${names.slice(0, 4).join(', ')} +${names.length - 4}` : names.join(', '); };
+      if (now) items.push({ text: `${now} late time in${now === 1 ? '' : 's'} today need${now === 1 ? 's' : ''} an explanation from the employee (${who(due.filter(d => d.date >= today))})`, nav: 'explanations', focus: 'waiting', dates: [today], date: fmt(today) });
+      if (earlier) items.push({ text: `${earlier} earlier late arrival${earlier === 1 ? '' : 's'} (15+ minutes) still need${earlier === 1 ? 's' : ''} an explanation (${who(due.filter(d => d.date < today))})`, nav: 'explanations', focus: 'waiting', dates: due.filter(d => d.date < today).map(d => d.date), date: span(due.filter(d => d.date < today).map(d => d.date)) });
     }
     if (HR_TEAM.includes(actor.role)) {
       const docs = documentSummary(store, actor), sheets = pendingSheets(store);
       if (sheets) items.push({ text: `${sheets} data sheet${sheets === 1 ? '' : 's'} awaiting review`, nav: 'datasheets' });
-      if (docs.pendingReview) items.push({ text: `${docs.pendingReview} document${docs.pendingReview === 1 ? '' : 's'} to review`, nav: 'files', filter: 'review' });
+      // One item per employee whose uploads wait for review: it opens that employee's 201 documents, where Review is.
+      for (const r of docs.toReview || []) items.push({ text: `${r.name}: ${r.requirements.length} document${r.requirements.length === 1 ? '' : 's'} to review (${r.requirements.join(', ')})`, nav: 'employee201', id: r.employeeId, tab: 'requirements', date: span(r.uploadedAt.map(d => d.slice(0, 10))) });
       if (docs.expired) items.push({ text: `${docs.expired} expired document${docs.expired === 1 ? '' : 's'}`, nav: 'files', filter: 'expired' });
       if (docs.overdue) items.push({ text: `${docs.overdue} overdue document submission${docs.overdue === 1 ? '' : 's'}`, nav: 'files', filter: 'missing' });
     }

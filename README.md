@@ -112,6 +112,16 @@ Technical references: [browser location permissions and freshness options](https
 
 Every list can be downloaded as an Excel workbook or a PDF from **Reports & downloads** or the Excel/PDF buttons on each list. Reports are defined in `src/reports.mjs`, each with the roles allowed to download it, matching on-screen access: personal details are Admin/HR only, government IDs Admin/HR/Payroll. Employees can download only their own attendance and leave (`my-` reports) plus their payslips. Posted payrolls also download as a PDF register. Every download is recorded in the audit trail. Files are generated without external services (`src/export.mjs`); PDFs use Helvetica with Latin-1 text, so letters such as ñ print correctly.
 
+## Off-site backups (Cloudflare R2)
+
+The HR server uploads one encrypted backup a day to a private R2 bucket (src/backup-r2.mjs). The backup is a consistent snapshot of `data/hr.sqlite`, which also holds the uploaded 201 documents and memo attachments. It is gzip-compressed, encrypted with AES-256-GCM and uploaded as `hr/YYYY-MM-DD/gds-hr-YYYY-MM-DDTHHMMSS.sqlite.gz.enc`. The default time is 18:30 Philippine Time. A missed day is caught up as soon as the PC is back on. Backups older than 30 days are removed, but the newest 7 always stay.
+
+- One-time setup, on this PC: `npm run backup:setup`. It asks for the S3 endpoint, bucket, Access Key ID and Secret Access Key from an R2 token limited to that bucket with Object Read & Write. It then creates the encryption key, prints it once and uploads a first backup. **Keep the encryption key outside this PC** (password manager); without it no backup can be opened.
+- Settings and keys: `data/backup-r2.json` (git-ignored). Status: `data/backup-status.json`. Log: `data/logs/backup.log`.
+- `npm run backup` uploads one now. `npm run backup:status` shows the last success and error.
+- Restore: download the `.enc` file from the R2 dashboard and run `npm run backup:restore -- <file.enc> <new.sqlite>`. It writes a new file and never overwrites `data/hr.sqlite`. Check the file, then stop the app and swap it in by hand.
+- The schedule runs inside the HR server, so it starts after the server is restarted. Nothing happens until setup is done.
+
 ## Verification & code map
 
 ```powershell

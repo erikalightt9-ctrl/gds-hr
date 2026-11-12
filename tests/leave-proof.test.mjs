@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { completeState, admin } from './helpers.mjs';
-import { applyLeave, attachLeaveProof, reviewLeaveProof, employeeDashboard } from '../src/portal.mjs';
+import { applyLeave, attachLeaveProof, reviewLeaveProof, requestLeaveProof, employeeDashboard } from '../src/portal.mjs';
 import { uploadDocument } from '../src/profiles.mjs';
 import { saveRecord } from '../src/service.mjs';
 
@@ -23,12 +23,12 @@ function fixture() {
 const upload = (store, actor = worker) => uploadDocument(store, actor, actor.employeeId, { type: 'Leave Supporting', name: 'medcert.pdf', mime: 'application/pdf', data: pdf });
 const sick = { typeId: 'sick', startDate: '2026-09-21', endDate: '2026-09-21', reason: 'Fever' };
 
-test('sick leave can be filed before the medical certificate exists, and is marked proof required', () => {
+test('an attachment is optional when applying, even for leave types that usually have one', () => {
   const store = fixture();
   try {
     const leave = applyLeave(store, worker, sick);
     assert.equal(leave.status, 'pending');
-    assert.equal(leave.proofStatus, 'required');
+    assert.equal(leave.proofStatus, '', 'not marked as needing proof until HR asks');
     const withProof = applyLeave(store, worker, { ...sick, startDate: '2026-09-22', endDate: '2026-09-22', documentId: upload(store).id });
     assert.equal(withProof.proofStatus, 'submitted');
     assert.equal(applyLeave(store, worker, { typeId: 'unpaid', startDate: '2026-09-23', endDate: '2026-09-23', reason: 'Errand' }).proofStatus, '', 'no proof needed');
@@ -67,17 +67,61 @@ test('HR confirms or rejects proof, the employee is told, and a rejected proof c
   } finally { store.close(); }
 });
 
-test('approval waits for proof, and HR edits keep the proof status', () => {
+test('HR asks for proof: the employee is told; approval does not wait for it; HR edits keep the proof status', () => {
   const store = fixture();
   try {
     const leave = applyLeave(store, worker, sick);
     const approve = l => saveRecord(store, admin, 'leaves', { id: l.id, employeeId: l.employeeId, typeId: l.typeId, startDate: l.startDate, endDate: l.endDate, days: l.days, reason: l.reason, documentReference: l.documentReference, status: 'approved', eligibilityVerified: true });
-    assert.throws(() => approve(store.read().leaves.find(l => l.id === leave.id)), /proof/i);
+    assert.throws(() => requestLeaveProof(store, worker, leave.id, { note: 'Medical certificate' }), /permission/i);
+    assert.throws(() => requestLeaveProof(store, admin, leave.id, { note: '' }), /document is needed/);
+    const asked = requestLeaveProof(store, admin, leave.id, { note: 'Medical certificate for the sick day' });
+    assert.equal(asked.proofStatus, 'required'); assert.equal(asked.proofNote, 'Medical certificate for the sick day');
+    assert.match(employeeDashboard(store, worker).notifications[0].message, /HR asks for a supporting document .*Medical certificate for the sick day/);
+    assert.throws(() => requestLeaveProof(store, admin, leave.id, { note: 'Again' }), /already asked/);
     attachLeaveProof(store, worker, leave.id, { documentId: upload(store).id });
     reviewLeaveProof(store, admin, leave.id, { decision: 'verified', note: '' });
     approve(store.read().leaves.find(l => l.id === leave.id));
     const saved = store.read().leaves.find(l => l.id === leave.id);
     assert.equal(saved.status, 'approved');
     assert.equal(saved.proofStatus, 'verified', 'HR form save does not erase the proof review');
+  } finally { store.close(); }
+});
+
+test('without a request from HR, a leave without an attachment can be approved', () => {
+  const store = fixture();
+  try {
+    const leave = applyLeave(store, worker, sick);
+    const saved = saveRecord(store, admin, 'leaves', { id: leave.id, employeeId: leave.employeeId, typeId: leave.typeId, startDate: leave.startDate, endDate: leave.endDate, days: leave.days, reason: leave.reason, documentReference: '', status: 'approved', eligibilityVerified: true });
+    assert.equal(saved.status, 'approved'); assert.equal(saved.proofStatus, '');
+  } finally { store.close(); }
+});
+
+test('open leave requests marked proof needed automatically (never by HR) are cleared once at start-up', async () => {
+  const { runMigrations } = await import('../src/migrations.mjs');
+  const store = fixture();
+  try {
+    const s = store.read();
+    s.leaves.push({ ...structuredClone(s.leaves[0] || {}), id: 'auto', employeeId: 'EMP-001', typeId: 'sick', startDate: '2026-09-21', endDate: '2026-09-21', days: 1, reason: 'Fever', documentReference: '', status: 'pending', proofStatus: 'required', proofNote: '', proofReviewedBy: '', proofReviewedAt: '', countedDates: ['2026-09-21'] });
+    s.leaves.push({ ...s.leaves.at(-1), id: 'asked', startDate: '2026-09-22', endDate: '2026-09-22', countedDates: ['2026-09-22'], proofNote: 'Medical certificate', proofReviewedBy: 'hr1' });
+    store.write(s);
+    assert.equal(runMigrations(store).leaveProofOptional, 1);
+    const after = store.read().leaves;
+    assert.equal(after.find(l => l.id === 'auto').proofStatus, '');
+    assert.equal(after.find(l => l.id === 'asked').proofStatus, 'required', 'a request made by HR stays');
+    assert.equal(runMigrations(store).leaveProofOptional, 0, 'runs once');
+  } finally { store.close(); }
+});
+
+test('supporting documents are optional: any leave can be approved without one', () => {
+  const store = fixture();
+  try {
+    const two = applyLeave(store, worker, { ...sick, startDate: '2026-09-21', endDate: '2026-09-22' });
+    assert.equal(two.days, 2); assert.equal(two.proofStatus, '', 'no document is asked for automatically');
+    const approve = l => saveRecord(store, admin, 'leaves', { id: l.id, employeeId: l.employeeId, typeId: l.typeId, startDate: l.startDate, endDate: l.endDate, days: l.days, reason: l.reason, documentReference: l.documentReference, status: 'approved', eligibilityVerified: true });
+    assert.equal(approve(two).status, 'approved', 'approved without a document');
+    const one = applyLeave(store, worker, { ...sick, startDate: '2026-09-23', endDate: '2026-09-23' });
+    assert.equal(one.proofStatus, '', 'a 1-day leave stays optional');
+    const withDoc = applyLeave(store, worker, { ...sick, startDate: '2026-09-24', endDate: '2026-09-25', documentId: upload(store).id });
+    assert.equal(withDoc.proofStatus, 'submitted', 'attached when applying');
   } finally { store.close(); }
 });

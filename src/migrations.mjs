@@ -1,7 +1,7 @@
 // One-time data updates applied at start-up. Each runs once per database (recorded in hr_counters) and writes
 // every change to the audit trail with its previous value.
 import { capitalizeExistingNames } from './names.mjs';
-import { explanationsDue } from './late-explanations.mjs';
+import { explanationsDue, isWaivedDate } from './late-explanations.mjs';
 
 const once = (store, key, run) => {
   if (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(key)) return 0;
@@ -111,6 +111,59 @@ function lateExplanationNotice(store, now = new Date()) {
     return earlier.length;
   }));
 }
+// HR waiver (November 2026): explanations for late arrivals dated Jan 1 - Oct 31, 2026 are not required. Explanations
+// still waiting for HR or sent back to the employee become "waived" (their text and comments are kept); decided ones
+// are unchanged. New ones for those dates are refused and never listed as due.
+export function waiveEarlyExplanations(store) {
+  return once(store, 'migration:waive-explanations-2026-jan-oct', () => store.transaction(() => {
+    const system = { username: 'system (explanation waiver Jan-Oct 2026)' }, at = new Date().toISOString();
+    let changed = 0;
+    for (const row of store.db.prepare('SELECT id, data FROM attendance_explanations').all()) {
+      const before = JSON.parse(row.data);
+      if (!isWaivedDate(before.date) || !['pending', 'returned'].includes(before.status)) continue;
+      const after = { ...before, status: 'waived', waivedAt: at, waivedBy: system.username, waiverNote: 'Explanation requirement waived for late arrivals from January 1 to October 31, 2026.' };
+      store.db.prepare('UPDATE attendance_explanations SET data=? WHERE id=?').run(JSON.stringify(after), row.id);
+      store.log(system, 'waive', 'attendance-explanation', row.id, before, after);
+      changed++;
+    }
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:waive-explanations-2026-jan-oct');
+    return changed;
+  }));
+}
+// Leave attachments are optional unless HR asks (November 2026 instruction): open leave requests that were marked
+// "proof needed" automatically by their leave type, never by HR, no longer need proof.
+function optionalLeaveProof(store) {
+  return once(store, 'migration:leave-proof-optional-2026-11', () => store.transaction(() => {
+    const system = { username: 'system (leave proof optional)' }, state = store.read();
+    let changed = 0;
+    for (const l of state.leaves.filter(x => x.proofStatus === 'required' && !x.proofReviewedBy && !x.proofNote && ['pending', 'approved'].includes(x.status))) {
+      store.log(system, 'clear-auto-proof', 'leaves', l.id, { proofStatus: 'required' }, { proofStatus: '' });
+      l.proofStatus = ''; changed++;
+    }
+    if (changed) { state.version++; store.write(state); }
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:leave-proof-optional-2026-11');
+    return changed;
+  }));
+}
+// Saturdays are work from home for these staff (November 2026 instruction): counted present without time in / out.
+export const WFH_SATURDAY_STAFF = ['2017-0420', '2024-0930', '2010-1024', '2025-0602', '2026-0907', '2026-0908'];
+function saturdayWorkFromHome(store) {
+  return once(store, 'migration:wfh-saturday-2026-11', () => store.transaction(() => {
+    const system = { username: 'system (WFH Saturdays)' };
+    let changed = 0;
+    for (const id of WFH_SATURDAY_STAFF) {
+      const row = store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='attendance'").get(id);
+      if (!row) continue;
+      const before = JSON.parse(row.data), days = before.daySchedules || [], saturday = days.find(d => d.day === 6);
+      if (saturday?.autoPresent) continue;
+      const after = { ...before, daySchedules: saturday ? days.map(d => (d.day === 6 ? { ...d, arrangement: d.arrangement || 'WFH', autoPresent: true } : d)) : [...days, { day: 6, scheduleStart: '', scheduleEnd: '', hoursPerDay: null, mealBreakMinutes: null, arrangement: 'WFH', flexible: false, autoPresent: true }] };
+      store.db.prepare("UPDATE employee_profiles SET data=? WHERE employee_id=? AND section='attendance'").run(JSON.stringify(after), id);
+      store.log(system, 'set-wfh-saturday', 'profile:attendance', id, before, after); changed++;
+    }
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:wfh-saturday-2026-11');
+    return changed;
+  }));
+}
 export function runMigrations(store) {
-  return { names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store) };
+  return { waivedExplanations: waiveEarlyExplanations(store), names: capitalizeExistingNames(store), departments: headquartersDepartment(store), leave: leavePolicy(store), withholding: noWithholdingTax(store), contributionsMonthly: contributionsOnceAMonth(store), lateExplanations: lateExplanationNotice(store), leaveProofOptional: optionalLeaveProof(store), wfhSaturday: saturdayWorkFromHome(store) };
 }

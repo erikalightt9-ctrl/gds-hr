@@ -3,7 +3,7 @@
 // the share of scheduled people present that day, and each person's present / absent / leave totals with a bar.
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAY = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const MARK = { present: ['✓', 'Present'], late: ['✓', 'Late'], absent: ['✕', 'Absent'], leave: ['●', 'On leave'], open: ['✓', 'Timed in, no time out'] };
+const MARK = { present: ['✓', 'Present'], late: ['✓', 'Late'], absent: ['✕', 'Absent'], leave: ['●', 'On leave'], open: ['✓', 'Timed in, no time out'], half: ['◐', 'Half day: worked half, half-day leave approved'], wfh: ['✓', 'Present · work from home (no time in / out needed)'], offset: ['↺', 'Offset: hours worked on another day'], 'half-pending': ['◐', 'Half day: worked half, half-day leave not yet approved'] };
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const minutes = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
 
@@ -12,7 +12,10 @@ function dayStatus(state, e, date, today, since) {
   if (!e.startDate || date < e.startDate || (e.endDate && date > e.endDate)) return 'none';
   const a = state.attendance.find(x => x.employeeId === e.id && x.date === date);
   if (a) {
-    if (a.status !== 'present') return a.status === 'absent' ? 'absent' : 'leave';
+    if (a.status !== 'present') return a.status === 'absent' ? 'absent' : a.status === 'off' ? 'rest' : a.status === 'offset' ? 'offset' : 'leave';   // a recorded day off is shown like a rest day
+    // Worked part of the day beside a half-day leave: half present, half leave (or half absent until approved).
+    const halfLeave = state.leaves.find(l => l.employeeId === e.id && ['approved', 'pending'].includes(l.status) && (l.partialDates || []).includes(date));
+    if (halfLeave) return halfLeave.status === 'approved' ? 'half' : 'half-pending';
     const raw = minutes(a.timeIn) !== null && minutes(a.scheduledIn) !== null ? minutes(a.timeIn) - minutes(a.scheduledIn) : 0, grace = (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
     const late = raw >= Math.max(1, grace) && raw > (a.offsetMinutes || 0);
     return late ? 'late' : 'present';
@@ -21,6 +24,9 @@ function dayStatus(state, e, date, today, since) {
   if (state.leaves.some(l => l.employeeId === e.id && l.status === 'approved' && (l.countedDates || []).includes(date))) return 'leave';
   const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
   if ((e.restDays || []).includes(weekday)) return 'rest';
+  // Work-from-home day set as present without time in / out (e.g. Saturdays).
+  const profile = (state.employeeProfiles || []).find(p => p.employeeId === e.id && p.section === 'attendance');
+  if (date <= today && (profile?.daySchedules || []).some(s => s.day === weekday && s.autoPresent)) return 'wfh';
   if ((state.holidays || []).some(h => h.date === date && h.kind !== 'ordinary')) return 'holiday';
   return date > today ? 'future' : date < since ? 'none' : 'absent';   // before attendance was kept in the system: no mark
 }
@@ -39,18 +45,24 @@ export function monthSheet({ state, esc, today, month, search = '', company = ''
   const grid = people.map(e => ({ e, days: dates.map(d => dayStatus(state, e, d, today, since)) }));
   const isWeekend = d => [0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay());
   const holiday = d => (state.holidays || []).find(h => h.date === d && h.kind !== 'ordinary');
-  // Work days per month are fixed by the payroll rules (26 for every month), as on the payroll screen.
-  const workDays = (state.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.dailyDivisor ?? 26;
-  const counted = s => ['present', 'late', 'open'].includes(s);
+  // Scheduled work days this month, from the calendar and each person's rest day (holidays included): one number when
+  // everyone shown has the same rest day, otherwise one per rest day (Nov 2026: Sun rest 25 · Sat rest 26).
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const workDaysBy = new Map();
+  for (const e of people) { const key = (e.restDays || []).slice().sort().join(','); if (!workDaysBy.has(key)) workDaysBy.set(key, dates.filter(d => !(e.restDays || []).includes(new Date(`${d}T00:00:00Z`).getUTCDay())).length); }
+  const workDays = workDaysBy.size <= 1 ? (workDaysBy.values().next().value ?? dates.length) : [...workDaysBy].map(([key, n]) => `${key ? key.split(',').map(k => dayNames[k]).join('/') : 'no'} rest ${n}`).join(' · ');
+  const counted = s => ['present', 'late', 'open', 'half', 'half-pending', 'wfh', 'offset'].includes(s);
+  // A half day counts 0.5 present and 0.5 leave (0.5 absent while the half-day leave is pending).
+  const sum = (days, weights) => days.reduce((s, d) => s + (weights[d] || 0), 0);
   const rows = grid.map(({ e, days }) => {
-    const present = days.filter(counted).length, absent = days.filter(s => s === 'absent').length, leave = days.filter(s => s === 'leave').length;
+    const present = sum(days, { present: 1, late: 1, open: 1, wfh: 1, offset: 1, half: 0.5, 'half-pending': 0.5 }), absent = sum(days, { absent: 1, 'half-pending': 0.5 }), leave = sum(days, { leave: 1, half: 0.5 });
     return { e, days, present, absent, leave, rate: pct(present, present + absent + leave) };
   });
-  const dailyRate = dates.map((d, i) => { const due = rows.filter(r => ['present', 'late', 'open', 'absent', 'leave'].includes(r.days[i])); return due.length && d <= today ? pct(due.filter(r => counted(r.days[i])).length, due.length) : null; });
+  const dailyRate = dates.map((d, i) => { const due = rows.filter(r => ['present', 'late', 'open', 'absent', 'leave', 'half', 'half-pending', 'wfh', 'offset'].includes(r.days[i])); return due.length && d <= today ? pct(due.filter(r => counted(r.days[i])).length, due.length) : null; });
   const average = rows.length ? Math.round(rows.reduce((s, r) => s + r.rate, 0) / rows.length) : 0;
   const box = (label, value) => `<div class="am-box"><span>${esc(label)}</span><strong>${esc(String(value))}</strong></div>`;
   const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  const cell = s => s === 'rest' || s === 'holiday' || s === 'none' || s === 'future' ? '' : `<span class="am-mark am-${s}" title="${MARK[s][1]}">${MARK[s][0]}</span>`;
+  const cell = s => s === 'rest' || s === 'holiday' || s === 'none' || s === 'future' ? '' : `<span class="am-mark am-${s.replace('-pending', ' am-pending')}" title="${MARK[s][1]}">${MARK[s][0]}</span>`;
 
   return `<section class="panel am-sheet">
     <div class="am-top">
@@ -66,6 +78,6 @@ export function monthSheet({ state, esc, today, month, search = '', company = ''
       </thead>
       <tbody>${rows.length ? rows.map(r => `<tr><td class="am-id">${esc(r.e.id)}</td><td class="am-name">${esc(r.e.name)}</td>${r.days.map((s, i) => `<td class="${isWeekend(dates[i]) || s === 'rest' ? 'am-weekend' : ''}${s === 'holiday' ? ' am-holiday' : ''}">${cell(s)}</td>`).join('')}<td class="am-num am-present">${r.present}</td><td class="am-num am-absent">${r.absent}</td><td class="am-num am-leave">${r.leave}</td><td class="am-chart"><span class="am-bar"><i class="am-w${Math.round(r.rate / 5) * 5}"></i></span><b>${r.rate}%</b></td></tr>`).join('') : `<tr><td colspan="${dates.length + 6}" class="empty">No employees this month.</td></tr>`}</tbody>
     </table></div>
-    <p class="am-legend"><span class="am-mark am-present">✓</span> Present <span class="am-mark am-late">✓</span> Late <span class="am-mark am-absent">✕</span> Absent <span class="am-mark am-leave">●</span> On leave <span class="am-key am-weekend"></span> Rest day / weekend <span class="am-key am-holiday"></span> Holiday</p>
+    <p class="am-legend"><span class="am-mark am-present">✓</span> Present <span class="am-mark am-late">✓</span> Late <span class="am-mark am-absent">✕</span> Absent <span class="am-mark am-leave">●</span> On leave <span class="am-mark am-half">◐</span> Half day <span class="am-mark am-wfh">✓</span> Present · work from home <span class="am-mark am-offset">↺</span> Offset <span class="am-key am-weekend"></span> Rest day / weekend <span class="am-key am-holiday"></span> Holiday</p>
   </section>`;
 }

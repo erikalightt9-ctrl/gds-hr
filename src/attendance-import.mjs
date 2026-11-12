@@ -15,6 +15,7 @@ export const FIELDS = {
   timeOut: 'Time out',
   punch: 'Date & time punch (one log per row)',
   status: 'Status / remarks (optional)',
+  location: 'Work location (optional)',
 };
 const HEADING_PATTERNS = {
   employeeId: /^(emp(loyee)?\.?\s*(id|no\.?|number|#|code)|id(\s*(no\.?|number))?|ac[\s.-]*no\.?|badge(\s*no\.?)?|user\s*id|enroll(ment)?\s*(no\.?|id)|person(nel)?\s*(id|no\.?)|staff\s*(id|no\.?))$/,
@@ -24,6 +25,7 @@ const HEADING_PATTERNS = {
   timeOut: /^(time|clock|check|log|punch)[\s-]*out$|^out$|^pm\s*out$|^departure$|^last\s*out$|^out\s*time$|^logout$/,
   punch: /^(date\s*(and|&)?\s*time|datetime|timestamp|punch(\s*time)?|log\s*time|check\s*time|record(ed)?\s*time|time)$/,
   status: /^(status|remarks?|day\s*status|attendance\s*status|notes?)$/,
+  location: /^((work|office)\s*)?(location|site|place|address)$/,
 };
 const norm = value => String(value ?? '').trim().toLowerCase().replace(/[_:]+/g, ' ').replace(/\s+/g, ' ');
 
@@ -182,7 +184,8 @@ function buildRows(state, store, input, sheet) {
     else if (match.ambiguous) issues.push(`Name matches more than one employee (${match.ambiguous.join(', ')})`);
     else if (!match.employee) issues.push('Employee not found');
     if (!date) issues.push(get(cells, mapping.date !== null ? 'date' : 'punch') === '' ? 'Missing date' : 'Date not recognised');
-    entries.push({ line, key: match.key, assigned: !!match.assigned, employeeId: match.employee?.id || null, date, timeIn, timeOut, status, issues, source: Object.fromEntries(Object.keys(FIELDS).filter(f => mapping[f] !== null).map(f => [f, cellText(get(cells, f))])) });
+    const location = String(get(cells, 'location')).trim().slice(0, 200);
+    entries.push({ line, key: match.key, assigned: !!match.assigned, employeeId: match.employee?.id || null, date, timeIn, timeOut, status, location, issues, source: Object.fromEntries(Object.keys(FIELDS).filter(f => mapping[f] !== null).map(f => [f, cellText(get(cells, f))])) });
   });
   if (!punchMode) return { entries, punchMode, mapping, headerRow, order };
   // Punch logs: the first and last punch of each employee's day become time in and time out.
@@ -214,6 +217,7 @@ function toRecord(store, state, entry, input) {
     timeIn: status === 'present' ? entry.timeIn : '', timeOut: status === 'present' ? entry.timeOut : '', endNextDay,
     breaks: spansLunch ? [{ start: `${entry.date}T${LUNCH_START}`, end: `${entry.date}T${lunchEnd}` }] : [],
     approved: input.approve, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true,
+    ...(entry.location ? { location: entry.location } : {}),
   };
 }
 

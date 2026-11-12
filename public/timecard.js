@@ -74,10 +74,10 @@ export function createTimecard(ctx) {
         cells: [
           `<strong>${WEEKDAYS[weekday]} ${esc(date.slice(5))}</strong>`,
           `<span class="tc-pill tc-${tone || 'ok'}">${esc(status)}</span>` + (blocker && !blocker.includes('Missing') ? `<small class="timecard-flag">${esc(blocker.replace(`${employee.id} ${employee.name}: `, ''))}</small>` : ''),
-          record?.status === 'present' ? `${esc(record.timeIn)} → ${esc(record.timeOut)}${record.endNextDay ? ' (+1)' : ''}<small>Scheduled ${esc(record.scheduledIn)}</small>` : '—',
+          record?.status === 'present' ? `${esc(record.timeIn)} → ${esc(record.timeOut)}${record.endNextDay ? ' (+1)' : ''}<small>Scheduled ${esc(record.scheduledIn)}</small>${record.location ? `<small>${esc(record.location)}</small>` : ''}` : '—',
           breaks ? `${breaks} min` : '—',
           work.length ? `${round(work.filter(w => !w.overtime).reduce((s, w) => s + w.hours, 0))} h` : '—',
-          late?.lateMinutes ? `${late.lateMinutes} min${late.approvedOffset ? ` · ${late.approvedOffset} offset` : ''}${late.deduction ? `<small>−${late.dayFraction} day · −${money(late.deduction)}</small>` : '<small>Covered, no pay change</small>'}${late.deductibleMinutes && record && canEdit('attendance') ? `<button class="small" data-timecard-offset="${esc(record.id)}" data-minutes="${late.deductibleMinutes}">Apply offset</button>` : ''}` : '—',
+          late?.lateMinutes ? `${late.lateMinutes} min${late.approvedOffset ? ` · ${late.approvedOffset} offset` : ''}${late.deduction ? `<small>−${late.dayFraction} day · −${money(late.deduction)}</small>` : `<small>${late.withinGrace ? 'Under 15 min, no pay change' : 'Covered by approved offset, no pay change'}</small>`}${late.deductibleMinutes && record && canEdit('attendance') ? `<button class="small" data-timecard-offset="${esc(record.id)}" data-minutes="${late.deductibleMinutes}">Apply offset</button>` : ''}` : '—',
           undertime ? `${undertime.formula.split(' ')[0]} min<small>−${money(undertime.amount)}</small>` : '—',
           work.some(w => w.overtime) ? `${round(work.filter(w => w.overtime).reduce((s, w) => s + w.hours, 0))} h${work.some(w => w.night) ? '<small>incl. night</small>' : ''}` : '—',
           deducted || earned ? `${earned ? `<span class="pay-plus">+${money(earned)}</span>` : ''}${deducted ? `<span class="pay-minus">−${money(deducted)}</span>` : ''}` : '<span class="legend">No change</span>',

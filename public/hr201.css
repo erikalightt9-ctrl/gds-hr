@@ -27,6 +27,10 @@
 .bell-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: 300px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 40px -16px rgb(0 0 0 / .35); padding: 8px; display: grid; gap: 4px; }
 .bell-menu button { text-align: left; border: 0; background: transparent; padding: 9px 10px; font-weight: 500; white-space: normal; }
 .bell-menu button:hover { background: var(--line); }
+.doc-idtype { display: grid; gap: 4px; margin: 8px 0; font-size: 13px; font-weight: 600; }
+.doc-idtype select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; }
+.bell-menu button[data-bell-item] { cursor: pointer; position: relative; padding-right: 26px; border-radius: 8px; }
+.bell-menu .bell-go { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 18px; color: var(--brand, #a3171c); }
 .bell-menu p { margin: 8px; font-size: 12.5px; }
 @media (max-width: 720px) {
   .shell.collapsed .sidebar { padding: 17px; }
@@ -442,6 +446,17 @@ dialog.bd-dialog { width: min(920px, calc(100vw - 24px)); }
 .employee-bell .bell-title { display: block; padding: 4px 16px 8px; border-bottom: 1px solid #f0e6cc; }
 .employee-bell .portal-notifications { padding: 0 16px; }
 .employee-bell .portal-notifications li.unread { font-weight: 700; }
+.employee-bell .portal-notifications li:has(.notice-item) { padding: 0; }
+.notice-item { display: block; width: 100%; padding: 14px 24px 14px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; position: relative; white-space: normal; }
+.notice-item::after { content: '›'; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); color: #b51f2b; font-size: 20px; }
+.notice-item:hover, .notice-item:focus-visible { background: #fff7e4; }
+.notice-message { font-size: 16px; line-height: 1.5; margin: 0 0 6px; }
+.notice-when { color: #777; font-size: 12px; margin: 0 0 16px; }
+.notice-rows { border: 1px solid #eadfc4; border-radius: 10px; overflow: hidden; }
+.notice-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 14px; border-bottom: 1px solid #f1ead8; }
+.notice-row:last-child { border-bottom: 0; }
+.notice-row span { color: #666; flex-shrink: 0; }
+.notice-row strong { text-align: right; overflow-wrap: anywhere; font-weight: 600; }
 .confirm-box { text-align: center; padding-top: 8px; }
 .confirm-box .confirm-icon { font-size: 44px; margin: 0 0 6px; }
 .confirm-box p { font-size: 15px; line-height: 1.6; }
@@ -1615,3 +1630,191 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .lv-filters { grid-template-columns: minmax(200px, 1fr) repeat(3, minmax(150px, 190px)); }
 @media (max-width: 1200px) { .lv-filters { grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(120px, 160px)); } .lv-search { grid-column: auto; } }
 @media (max-width: 720px) { .lv-filters { grid-template-columns: 1fr 1fr; } .lv-search { grid-column: 1 / -1; } }
+
+/* Leave balances: clickable employee name and the per-type details window */
+.link-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.link-cell .name { color: #a91d29; text-decoration: underline; text-underline-offset: 3px; }
+.link-cell:hover .name, .link-cell:focus-visible .name { color: #7d1520; }
+.lb-type { border: 1px solid #eadfc4; border-radius: 12px; padding: 14px 16px; margin-top: 14px; }
+.lb-type-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lb-type-head h3 { margin: 0; font-size: 16px; }
+.lb-facts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.lb-facts div { background: #fffaf0; border-radius: 8px; padding: 8px 10px; }
+.lb-facts span { display: block; font-size: 11px; color: #777; }
+.lb-facts strong { font-size: 18px; }
+.lb-requests { list-style: none; margin: 0; padding: 0; }
+.lb-requests li { padding: 10px 0; border-top: 1px solid #f1ead8; }
+.lb-req-main { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; }
+.lb-req-dates { font-weight: 600; }
+.lb-req-dates small { font-weight: 500; color: var(--muted, #6b6b6b); }
+.lb-req-reason { margin: 4px 0 0; font-size: 13px; line-height: 1.45; }
+.lb-req-ref { display: block; margin-top: 3px; color: var(--muted, #6b6b6b); font-size: 11.5px; }
+@media (max-width: 760px) { .lb-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Overtime applications: HR list + review window, employee "My overtime" cards */
+.ot-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 16px 20px 0; }
+.ot-summary button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border: 1px solid #eadfc4; border-radius: 12px; background: #fffdf8; text-align: left; font-size: 12px; color: #555; }
+.ot-summary button strong { font-size: 22px; color: #171717; }
+.ot-summary button.active { border-color: #d9b85c; background: #fff0c9; color: #911a24; }
+.ot-filters { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; padding: 16px 20px; }
+.ot-list { display: flex; flex-direction: column; padding: 0 20px 20px; }
+.ot-item { display: grid; grid-template-columns: 1.4fr 1.4fr 1.2fr 1fr; gap: 14px; align-items: center; width: 100%; padding: 14px 12px; border: 0; border-top: 1px solid #f1ead8; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.ot-item:hover, .ot-item:focus-visible { background: #fff7e4; }
+.ot-item > span { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.ot-item small { color: #777; font-size: 12px; }
+.ot-item .ot-flag { color: #a91d29; }
+.ot-empty { padding: 20px 12px; }
+.ot-review .ot-review-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ot-reason { margin: 14px 0; line-height: 1.5; }
+.ot-reason span { display: block; font-size: 12px; color: #777; }
+.ot-flags { border: 1px solid #f3c2c6; background: #fff1f2; color: #8f1823; border-radius: 10px; padding: 8px 12px; margin: 12px 0; }
+.ot-flags p { margin: 4px 0; }
+.ot-decide { border: 1px solid #eadfc4; border-radius: 12px; padding: 12px 14px; margin: 14px 0; display: grid; gap: 10px; }
+.ot-decide legend { font-weight: 600; padding: 0 6px; }
+.ot-history ul { margin: 8px 0 0; padding-left: 18px; }
+.ot-history li { margin: 6px 0; }
+.ot-history small { display: block; color: #666; }
+.ot-form-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ot-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; padding: 16px 20px 20px; }
+.ot-card { border: 1px solid #eadfc4; border-radius: 14px; padding: 14px 16px; background: #fffdf8; }
+.ot-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ot-card p { margin: 8px 0; }
+.ot-card-reason { color: #444; overflow-wrap: anywhere; }
+.ot-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ot-card-actions details { flex-basis: 100%; font-size: 12px; color: #555; }
+.ot-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.ot-pending { background: #fff0c9; color: #8a6400; }
+.ot-approved { background: #e3f4e8; color: #1d6b37; }
+.ot-rejected { background: #fde4e6; color: #a91d29; }
+.ot-cancelled { background: #eee; color: #666; }
+@media (max-width: 760px) {
+  .ot-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 14px 0; }
+  .ot-filters { grid-template-columns: 1fr 1fr; padding: 12px 14px; }
+  .ot-filters label:first-child { grid-column: 1 / -1; }
+  .ot-list { padding: 0 8px 14px; }
+  .ot-item { grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .ot-mine { padding: 12px 14px 16px; }
+}
+
+/* Live attendance → Reason column and its details window */
+.lv-reason { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; max-width: 220px; }
+.lv-reason-chip { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.lv-reason-out-of-office { background: #e8f0fe; color: #1f4f9a; }
+.lv-reason-late { background: #fff0c9; color: #8a6400; }
+.lv-reason-leave { background: #e3f4e8; color: #1d6b37; }
+.lv-reason-overtime { background: #f3e8fd; color: #6a2c91; }
+.lv-reason-more { font-size: 12px; color: #a91d29; font-weight: 600; }
+.lv-reason-card { border: 1px solid #eadfc4; border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
+.lv-reason-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.lv-reason-label { font-weight: 600; margin: 8px 0 2px; }
+.lv-reason-text { margin: 6px 0 10px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Leave requests: clickable reason, proof note, and the leave details window */
+.lm-reason-btn { display: block; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: #d9b85c; text-underline-offset: 3px; }
+.lm-reason-btn:hover, .lm-reason-btn:focus-visible { color: #a91d29; }
+.lm-proof-hint { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.lm-proof-hint.review { background: #fff0c9; color: #8a6400; }
+.lm-proof-hint.wait { background: #fde4e6; color: #a91d29; }
+.ld-block { margin-top: 16px; }
+.ld-block h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #777; margin: 0 0 6px; }
+.ld-reason { font-weight: 600; margin: 0 0 4px; }
+.ld-text { margin: 0; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Leave management folders: decision column and date filters */
+.lm-decided strong { display: block; font-weight: 600; }
+.lm-decided small { display: block; color: #666; margin-top: 2px; }
+.lm-date { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #555; }
+.lm-date input { padding: 6px 8px; border: 1px solid #e3d6b5; border-radius: 8px; font: inherit; }
+@media (max-width: 760px) { .lm-filters { flex-wrap: wrap; } .lm-filters > * { flex: 1 1 140px; } }
+
+/* Monthly sheet: half day = worked half (green) + half-day leave (gold), or not yet approved (red) */
+.am-mark.am-half { background: linear-gradient(90deg, #2e9a5a 50%, #e8c25a 50%); color: #fff; }
+.am-mark.am-half.am-pending { background: linear-gradient(90deg, #2e9a5a 50%, #c8323e 50%); }
+
+/* Work-from-home days counted present without time in / out */
+.am-mark.am-wfh { background: #2e9a5a; box-shadow: inset 0 0 0 2px #b9e3c8; }
+.lv-wfh { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e3f4e8; color: #1d6b37; font-size: 12px; font-weight: 600; }
+
+/* Offset day: not worked because the hours were worked on another day (paid, not absent) */
+.am-mark.am-offset { background: #3d7fc4; color: #fff; }
+
+
+/* Top-bar account menu: logo (initials), name and role, settings icon; My account, Account & access, Sign out */
+.tb-account { position: relative; }
+.tb-account summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 8px 4px 4px; border-radius: 12px; }
+.tb-account summary::-webkit-details-marker { display: none; }
+.tb-account summary:hover, .tb-account[open] summary { background: rgba(217, 184, 92, .16); }
+.tb-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f3d27a, #c8962f); color: #2b2116; font-weight: 800; font-size: 13px; flex: none; }
+.tb-gear { width: 20px; height: 20px; color: var(--ink-soft, #5a4e34); flex: none; }
+.tb-account[open] .tb-gear { color: #a91d29; }
+.tb-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 210px; padding: 6px; border-radius: 12px; background: #fff; border: 1px solid #eadfc4; box-shadow: 0 16px 34px -14px rgba(0, 0, 0, .35); display: grid; z-index: 60; }
+.tb-menu button { border: 0; background: none; text-align: left; padding: 10px 12px; border-radius: 8px; font-weight: 500; color: var(--ink, #1f1f1f); }
+.tb-menu button:hover, .tb-menu button:focus-visible { background: #fff7e4; color: #a91d29; }
+.tb-menu button[data-signout] { border-top: 1px solid #f1ead8; border-radius: 0 0 8px 8px; margin-top: 4px; }
+@media (max-width: 900px) { .tb-account .user-meta { display: none; } .tb-menu { left: 0; right: auto; max-width: calc(100vw - 24px); } }
+
+.pm-row:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Today's attendance: Office attendance and Off-site work as two separate sections. */
+.att-mode { margin-top: 14px; padding: 14px; border: 1px solid #efe4d2; border-radius: 16px; background: #fffdf8; }
+.att-mode h3 { margin: 0 0 6px; font-size: 16px; }
+.att-mode .net-status { margin: 0 0 8px; }
+.att-mode .clock-btn:disabled { opacity: .5; cursor: not-allowed; }
+.att-offsite .legend { margin: 0 0 4px; }
+.oof-loc { padding: 12px; border-radius: 12px; background: #faf6ee; }
+.oof-label { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #8f1420; }
+.oof-address { margin: 4px 0 8px; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.oof-loc textarea { width: 100%; margin: 6px 0; }
+.oof-loc .loc-map { margin: 8px 0; }
+.oof-warn { margin: 6px 0; color: #8f1420; font-size: 14px; }
+.oof-confirm { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.oof-error { margin: 0; padding: 8px 10px; border-radius: 10px; background: #fdecee; color: #8f1420; }
+
+.att-done { display: block; margin-top: 8px; color: #1f6b3a; font-weight: 600; }
+
+/* Attendance requests */
+.ar-list { display: grid; gap: 10px; }
+.ar-item { padding: 12px 14px; border: 1px solid #efe4d2; border-radius: 14px; background: #fffdf8; }
+.ar-item header { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.ar-item p { margin: 6px 0; }
+.ar-history { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+.ar-history li { margin-bottom: 4px; }
+.ar-facts { display: grid; grid-template-columns: minmax(120px, 30%) 1fr; gap: 6px 12px; margin: 0 0 10px; }
+.ar-facts dt { font-weight: 700; color: #6b5d4a; }
+.ar-facts dd { margin: 0; }
+.ar-check { display: flex; gap: 8px; align-items: center; }
+.ar-decide { margin-top: 12px; padding-top: 12px; border-top: 1px solid #efe4d2; }
+.ar-tiles { flex-wrap: wrap; }
+.bell-date { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 500; color: var(--muted, #6b6b6b); }
+.memo-who { font-weight: 600; }
+.memo-who + small { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.4; }
+.bal-cell { font-weight: 700; font-variant-numeric: tabular-nums; }
+.bal-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-right: auto; }
+.bal-filters .field { min-width: 180px; }
+/* Attendance correction policy (3-day rule) shown on the request screens */
+.ar-policy { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid #b8892b; background: #fbf5e6; color: #5a4310; font-size: .85rem; line-height: 1.4; border-radius: 4px; }
+.th-grid .share-input.th-posted { cursor: default; }
+.th-filters { padding: 10px 14px 4px; }
+.contrib-filters { margin-left: auto; margin-right: 0; }
+.contrib-excluded { margin: 0; padding: 10px 16px; font-size: .85rem; color: #6b4e12; background: #fbf5e6; border-top: 1px solid #eadcb5; }
+/* Payroll history: company filter in the panel head */
+.pr-history .pr-panel-head { flex-wrap: wrap; }
+.pr-company-filter { margin: 0 0 0 auto; min-width: 200px; }
+.pr-company-filter + .pr-viewall { margin-left: 0; }
+
+/* Dropdown with a search box inside (searchable-select.js; Payroll → Employee). */
+.ss { position: relative; min-width: 220px; }
+.ss-button { width: 100%; text-align: left; font-size: 12px; font-weight: 400; color: #262626; padding: 9px 30px 9px 11px; border: 1px solid #d6d6d6; border-radius: 6px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23555' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ss-button:hover { background-color: #fffaf0; }
+.ss-panel { position: absolute; z-index: 30; left: 0; top: calc(100% + 4px); width: max(100%, 280px); max-height: 360px; overflow: auto; background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; box-shadow: 0 10px 30px #0000002a; }
+.ss-top { padding: 8px; border-bottom: 1px solid var(--line); }
+.ss-list { list-style: none; margin: 0; padding: 4px 0; }
+.ss-group { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 12px 4px; font-size: 12px; font-weight: 700; color: #262626; }
+.ss-group .ss-search { min-width: 0; box-sizing: border-box; }
+.ss-search { font-size: 12px; padding: 6px 9px; width: 100%; }
+.ss-option { padding: 7px 12px 7px 24px; font-size: 12px; cursor: pointer; }
+.ss-list > .ss-option:first-child { padding-left: 12px; }
+.ss-option:hover, .ss-option:focus { background: #fff3d6; outline: none; }
+.ss-option[aria-selected="true"] { background: var(--brand); color: #fff; }
+.ss-none { margin: 0; padding: 10px 12px; font-size: 12px; color: var(--muted); }
+.ss-group[hidden], .ss-option[hidden], .ss-none[hidden] { display: none; }

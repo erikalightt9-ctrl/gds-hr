@@ -2,7 +2,7 @@ import { who } from './hr-common.js';
 const labels = { contributions: 'Government contribution overrides', personal: 'Personal Information', employment: 'Employment', government: 'Government IDs', attendance: 'Attendance', leave: 'Leave', payroll: 'Payroll', bank: 'Bank Details', loans: 'Loans', documents: 'Documents', emergency: 'Emergency Contact', audit: 'Audit History' };
 const fields = {
   personal: ['lastName', 'firstName', 'middleName', 'suffix', 'sex', 'birthDate', 'civilStatus', 'nationality', 'mobile', 'personalEmail', 'address'],
-  employment: ['position', 'employmentStatus', 'regularizationDate', 'employmentType', 'supervisor', 'workLocation', 'businessEmail', 'employeeStatus'],
+  employment: ['position', 'employmentStatus', 'regularizationDate', 'employmentType', 'supervisor', 'workLocation', 'businessEmail', 'employeeStatus', 'resignationDate'],
   government: ['sss', 'philHealth', 'pagIbig', 'tin', 'otherId', 'expiry'],
   emergency: ['name', 'relationship', 'contact', 'alternateContact', 'address'],
   attendance: ['scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'paidFrom', 'approvedLocation', 'latitude', 'longitude', 'radiusMeters', 'arrangement', 'policy'],
@@ -13,9 +13,9 @@ const choices = { withholdingTax: ['withhold', 'exempt'], sex: ['Female', 'Male'
 const numeric = ['sssEmployee', 'sssEmployer', 'sssEc', 'philHealthEmployee', 'philHealthEmployer', 'pagIbigEmployee', 'pagIbigEmployer', 'hoursPerDay', 'mealBreakMinutes', 'graceMinutes', 'latitude', 'longitude', 'radiusMeters', 'dailyRate', 'hourlyRate'];
 const documentTypes = ['Photo', 'Employment Contract', 'Government ID', 'Resume/CV', 'Birth Certificate', 'Tax', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Company ID', 'Medical', 'Leave Supporting', 'Disciplinary', 'Other HR'];
 const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const dayFields = ['scheduleStart', 'scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'arrangement'];
-const describeDay = s => [s.scheduleStart && `${s.scheduleStart}–${s.scheduleEnd || '?'}`, s.hoursPerDay != null && `${s.hoursPerDay} h`, s.mealBreakMinutes != null && `${s.mealBreakMinutes} min meal`, s.arrangement].filter(Boolean).join(' · ');
-const title = key => ({ sssEmployee: 'SSS employee share / month', sssEmployer: 'SSS employer share / month', sssEc: 'SSS EC (employer) / month', philHealthEmployee: 'PhilHealth employee share / month', philHealthEmployer: 'PhilHealth employer share / month', pagIbigEmployee: 'Pag-IBIG employee share / month', pagIbigEmployer: 'Pag-IBIG employer share / month', reason: 'Reason for override', sss: 'SSS number', philHealth: 'PhilHealth number', pagIbig: 'Pag-IBIG number', tin: 'TIN number', hoursPerDay: 'Working hours / day', paidFrom: 'Paid time starts at (actual time in / schedule)', radiusMeters: 'Geofence radius (meters)', dailyRate: 'Daily rate override', hourlyRate: 'Hourly rate override', frequency: 'Payroll frequency', basis: 'Pay basis (blank = monthly)' })[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+const dayFields = ['scheduleStart', 'scheduleEnd', 'hoursPerDay', 'mealBreakMinutes', 'priceHours', 'arrangement'];
+const describeDay = s => [s.scheduleStart && `${s.scheduleStart}–${s.scheduleEnd || '?'}`, s.hoursPerDay != null && `${s.hoursPerDay} h`, s.mealBreakMinutes != null && `${s.mealBreakMinutes} min meal`, s.priceHours != null && `missing time ÷ ${s.priceHours} h`, s.arrangement].filter(Boolean).join(' · ');
+const title = key => ({ sssEmployee: 'SSS employee share / month', sssEmployer: 'SSS employer share / month', sssEc: 'SSS EC (employer) / month', philHealthEmployee: 'PhilHealth employee share / month', philHealthEmployer: 'PhilHealth employer share / month', pagIbigEmployee: 'Pag-IBIG employee share / month', pagIbigEmployer: 'Pag-IBIG employer share / month', reason: 'Reason for override', sss: 'SSS number', philHealth: 'PhilHealth number', pagIbig: 'Pag-IBIG number', tin: 'TIN number', hoursPerDay: 'Working hours / day', priceHours: 'Hours used to price missing time', paidFrom: 'Paid time starts at (actual time in / schedule)', radiusMeters: 'Geofence radius (meters)', dailyRate: 'Daily rate override', hourlyRate: 'Hourly rate override', frequency: 'Payroll frequency', basis: 'Pay basis (blank = monthly)' })[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
 
 export function createProfileView(ctx) {
   const { api, esc, money, table, shell, heading, toast, refresh, editMaster, openRun, today } = ctx;
@@ -33,9 +33,9 @@ export function createProfileView(ctx) {
   function dayScheduleInputs(daySchedules = []) {
     const cell = (day, key, value) => key === 'arrangement'
       ? `<select name="ds-${day}-${key}" aria-label="${weekdays[day]} arrangement"><option value="">Same</option>${choices.arrangement.map(o => `<option ${o === value ? 'selected' : ''}>${o}</option>`).join('')}</select>`
-      : `<input name="ds-${day}-${key}" aria-label="${weekdays[day]} ${esc(title(key))}" type="${key.startsWith('schedule') ? 'time' : 'number'}" ${key.startsWith('schedule') ? '' : `step="any" min="${key === 'hoursPerDay' ? 1 : 0}" max="${key === 'hoursPerDay' ? 16 : 240}"`} value="${esc(value ?? '')}">`;
-    const rows = [1, 2, 3, 4, 5, 6, 0].map(day => { const s = daySchedules.find(v => v.day === day) || {}; return [weekdays[day], ...dayFields.map(key => cell(day, key, s[key])), `<input type="checkbox" name="ds-${day}-flexible" aria-label="${weekdays[day]} flexible time" ${s.flexible ? 'checked' : ''}>`]; });
-    return `<div class="panel-body"><h3>Day-specific schedules</h3><p class="legend">Only fill a day that differs from the schedule above. Blank cells use the base schedule; rest days come from the master record. Flexible time: any start, only the regular hours are required, never late, and extra hours are not overtime.</p>${table(['Day', 'Start', 'End', 'Regular hours', 'Meal break (min)', 'Arrangement', 'Flexible time'], rows)}</div>`;
+      : `<input name="ds-${day}-${key}" aria-label="${weekdays[day]} ${esc(title(key))}" type="${key.startsWith('schedule') ? 'time' : 'number'}" ${key.startsWith('schedule') ? '' : `step="any" min="${['hoursPerDay', 'priceHours'].includes(key) ? 1 : 0}" max="${['hoursPerDay', 'priceHours'].includes(key) ? 16 : 240}"`} value="${esc(value ?? '')}">`;
+    const rows = [1, 2, 3, 4, 5, 6, 0].map(day => { const s = daySchedules.find(v => v.day === day) || {}; return [weekdays[day], ...dayFields.map(key => cell(day, key, s[key])), `<input type="checkbox" name="ds-${day}-flexible" aria-label="${weekdays[day]} flexible time" ${s.flexible ? 'checked' : ''}>`, `<input type="checkbox" name="ds-${day}-autoPresent" aria-label="${weekdays[day]} present without time in or out" ${s.autoPresent ? 'checked' : ''}>`]; });
+    return `<div class="panel-body"><h3>Day-specific schedules</h3><p class="legend">Only fill a day that differs from the schedule above. Blank cells use the base schedule; rest days come from the master record. Flexible time: any start, only the regular hours are required, never late, and extra hours are not overtime. Missing time priced at: hours the daily rate is divided by to price undertime on that day (blank = the base hours per day; e.g. 4 on a 4-hour Saturday makes 1 missing hour cost a quarter day). Present without time in/out: a work-from-home day counted as a full regular day even without time in or out (a real time in, leave or HR record takes precedence).</p>${table(['Day', 'Start', 'End', 'Regular hours', 'Meal break (min)', 'Missing time priced at (h)', 'Arrangement', 'Flexible time', 'Present without time in/out (WFH)'], rows)}</div>`;
   }
   function readDaySchedules(values) {
     const result = [];
@@ -43,10 +43,11 @@ export function createProfileView(ctx) {
       const entry = { day };
       for (const key of dayFields) {
         const raw = values[`ds-${day}-${key}`] ?? ''; delete values[`ds-${day}-${key}`];
-        entry[key] = ['hoursPerDay', 'mealBreakMinutes'].includes(key) ? (raw === '' ? null : Number(raw)) : raw;
+        entry[key] = ['hoursPerDay', 'mealBreakMinutes'].includes(key) ? (raw === '' ? null : Number(raw)) : key === 'priceHours' ? (raw === '' ? undefined : Number(raw)) : raw;
       }
       entry.flexible = values[`ds-${day}-flexible`] === 'on'; delete values[`ds-${day}-flexible`];
-      if (entry.flexible || dayFields.some(key => entry[key] !== '' && entry[key] !== null)) result.push(entry);
+      entry.autoPresent = values[`ds-${day}-autoPresent`] === 'on'; delete values[`ds-${day}-autoPresent`];
+      if (entry.flexible || entry.autoPresent || dayFields.some(key => entry[key] !== '' && entry[key] !== null && entry[key] !== undefined)) result.push(entry);
     }
     return result;
   }

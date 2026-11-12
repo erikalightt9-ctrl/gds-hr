@@ -7,6 +7,14 @@ import { scheduleOn, ruleOn } from './engine.mjs';
 import { lateBy } from './late-incidents.mjs';
 
 export const EXPLAIN_AFTER_MINUTES = 15;
+// Explanations are asked for lateness from this date on; earlier late days are not (HR decision, Nov 2026).
+export const EXPLAIN_FROM = '2026-11-01';
+// HR waiver: no explanation is required for late arrivals dated Jan 1 - Oct 31, 2026 (by attendance date), whatever
+// the minutes late or offsets. Late minutes, offsets, payroll and tardiness memos are not affected.
+export const WAIVED_FROM = '2026-01-01', WAIVED_TO = '2026-10-31';
+export const isWaivedDate = date => date >= WAIVED_FROM && date <= WAIVED_TO;
+// Settings -> Company may hold another start date (lateExplanationsFrom).
+export const explainFrom = store => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').company?.lateExplanationsFrom || EXPLAIN_FROM; } catch { return EXPLAIN_FROM; } };
 const profileOf = (state, id) => (state.employeeProfiles || []).find(p => p.employeeId === id && p.section === 'attendance') || {};
 const explainedDays = store => new Set(store.db.prepare('SELECT employee_id, data FROM attendance_explanations').all().map(r => `${r.employee_id}|${JSON.parse(r.data).date}`));
 
@@ -19,9 +27,9 @@ function lateOn(state, employee, date, timeIn, recordedStart) {
 }
 
 export function explanationsDue(store, state = store.read(), { employeeId = null } = {}) {
-  const explained = explainedDays(store), people = new Map(state.employees.map(e => [e.id, e])), due = new Map();
+  const explained = explainedDays(store), people = new Map(state.employees.map(e => [e.id, e])), due = new Map(), from = explainFrom(store);
   const consider = (employee, date, timeIn, recordedStart, source) => {
-    if (!employee || (employeeId && employee.id !== employeeId) || !timeIn || explained.has(`${employee.id}|${date}`)) return;
+    if (!employee || date < from || (employeeId && employee.id !== employeeId) || !timeIn || explained.has(`${employee.id}|${date}`)) return;
     const late = lateOn(state, employee, date, timeIn, recordedStart);
     if (!late || late.lateMinutes < EXPLAIN_AFTER_MINUTES) return;
     due.set(`${employee.id}|${date}`, { employeeId: employee.id, employeeName: employee.name, date, scheduledIn: late.scheduledIn, timeIn, lateMinutes: late.lateMinutes, source });

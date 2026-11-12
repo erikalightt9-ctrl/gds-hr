@@ -4,9 +4,21 @@
 import { calculatePayroll, ruleOn, contributionShares, activeContributionSetting } from './engine.mjs';
 import { permit } from './service.mjs';
 import { recordedMonth } from './contribution-history.mjs';
+import { applyMonthEdits } from './contribution-month.mjs';
 
 const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
 const lastDay = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+// First month rule: someone who starts during the month is remitted for it only with at least MIN_FIRST_MONTH_WORKDAYS
+// workdays from the start date to the month end (their rest days skipped); otherwise remittance starts the next month.
+export const MIN_FIRST_MONTH_WORKDAYS = 15;
+export function firstMonthWorkdays(employee, month) {
+  const start = employee?.startDate || '';
+  if (!start.startsWith(month)) return null;   // not their first month
+  const rest = employee.restDays || [0], end = Number(lastDay(month).slice(8));
+  let n = 0;
+  for (let day = Number(start.slice(8)); day <= end; day++) if (!rest.includes(new Date(`${month}-${String(day).padStart(2, '0')}T00:00:00Z`).getUTCDay())) n++;
+  return n;
+}
 export const MONTH_NAME = month => new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
 
 // A month recorded from its remittance sheet (before payroll moved into the system), shown exactly as remitted.
@@ -26,7 +38,7 @@ export function monthlyContributions(store, month) {
   for (const [start, end] of periods) {
     const posted = state.runs.find(r => r.status === 'posted' && r.start === start && r.end === end);
     if (!posted) draft = true;
-    const rows = posted ? posted.rows : calculatePayroll(state, start, end).rows;
+    const rows = posted ? posted.rows : calculatePayroll({ ...state, asOf: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()) }, start, end).rows;
     for (const row of rows) {
       const t = byEmployee.get(row.employeeId) || { employeeId: row.employeeId, name: row.employeeName, sssBasis: 0, phBasis: 0, sssEE: 0, sssER: 0, phEE: 0, phER: 0, piEE: 0, piER: 0, sssLoan: 0, piLoan: 0 };
       const d = row.deductions, er = row.employer || {};
@@ -40,14 +52,21 @@ export function monthlyContributions(store, month) {
     }
   }
   for (const t of remittanceOnlyRows(state, month)) byEmployee.set(t.employeeId, t);
-  const people = [...byEmployee.values()].sort((a, b) => a.name.localeCompare(b.name)).map(t => {
+  // Started this month with fewer than 15 workdays: not in this month's remittance (listed apart on the page).
+  const excluded = [];
+  for (const [id, t] of byEmployee) {
+    const e = state.employees.find(x => x.id === id), days = firstMonthWorkdays(e, month);
+    if (days !== null && days < MIN_FIRST_MONTH_WORKDAYS) { excluded.push({ employeeId: id, name: t.name, startDate: e.startDate, workdays: days }); byEmployee.delete(id); }
+  }
+  // Month-only amounts typed on the Government Contributions page replace the computed ones.
+  const people = applyMonthEdits(store, month, [...byEmployee.values()].sort((a, b) => a.name.localeCompare(b.name)).map(t => {
     const out = Object.fromEntries(Object.entries(t).map(([k, v]) => [k, typeof v === 'number' ? r2(v) : v]));
     return { ...out, deductions: r2(t.sssEE + t.phEE + t.piEE + t.sssLoan + t.piLoan) };
-  });
+  }));
   const sum = key => r2(people.reduce((s, p) => s + p[key], 0));
   const employer = { sss: sum('sssER'), ph: sum('phER'), pi: sum('piER') };
   employer.total = r2(employer.sss + employer.ph + employer.pi);
-  return { month, draft, people, employer, totals: { basis: sum('sssBasis'), sss: r2(sum('sssEE') + sum('sssER')), ph: r2(sum('phEE') + sum('phER')), pi: r2(sum('piEE') + sum('piER')), sssLoan: sum('sssLoan'), piLoan: sum('piLoan'), deductions: sum('deductions') } };
+  return { month, draft, people, excluded, employer, totals: { basis: sum('sssBasis'), sss: r2(sum('sssEE') + sum('sssER')), ph: r2(sum('phEE') + sum('phER')), pi: r2(sum('piEE') + sum('piER')), sssLoan: sum('sssLoan'), piLoan: sum('piLoan'), deductions: sum('deductions') } };
 }
 
 // Employees outside payroll whose contributions are still remitted (payroll status 'Remittance only'): full monthly

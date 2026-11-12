@@ -1,5 +1,6 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
-import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS, idTypeSelect } from './hr-common.js';
+import { describeTotal } from './overtime-ui.js';
 
 export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message) }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
@@ -66,38 +67,66 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       <p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved.</p></section>`;
     box.querySelector('[data-mp-photo]')?.addEventListener('error', event => event.target.remove());
   }
-  function overtime(box, list) {
-    const STATUS = { pending: 'Pending HR approval', approved: 'Approved', rejected: 'Not approved', cancelled: 'Cancelled' };
-    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>File overtime</h2><span class="legend">Clocking out late is not overtime by itself. File the extra hours you actually worked; only approved hours are paid.</span></div>
+  // My overtime: apply (period, unpaid break, work to be done, optional attachment), edit or cancel while pending,
+  // and see every application with its status, HR's decision and history.
+  function overtime(box, list, editing = null) {
+    const STATUS = { pending: ['Pending', 'pending'], approved: ['Approved', 'approved'], rejected: ['Rejected', 'rejected'], cancelled: ['Cancelled', 'cancelled'] };
+    const pill = s => { const [label, tone] = STATUS[s] || [s, 'cancelled']; return `<span class="ot-pill ot-${tone}">${label}</span>`; };
+    const period = o => (o.startTime ? `${o.startTime} – ${o.endTime}${o.endTime <= o.startTime ? ' (next day)' : ''}` : '—');
+    const e = editing || {};
+    const nightSummary = (() => { const approved = list.filter(o => o.status === 'approved'); const nh = approved.reduce((s, o) => s + (o.approvedNightHours || 0), 0), np = approved.reduce((s, o) => s + (o.nightPay || 0), 0); return nh ? `<div class="cards"><div class="card featured"><div class="card-label">Approved night differential</div><div class="card-value">${Math.round(nh * 100) / 100} h</div><div class="card-foot">≈ ₱${np.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · final amount in your payslip</div></div></div>` : ''; })();
+    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>${editing ? 'Edit overtime application' : 'Apply for overtime'}</h2><span class="legend">Clocking out late is not overtime by itself. Apply for the period you will work or worked; only approved time actually worked inside it is paid.</span></div>
       <form id="ot-file" class="panel-body form-grid">
-        <label class="field">Date<input type="date" name="date" required></label>
-        <label class="field">Start of overtime<input type="time" name="startTime" required></label>
-        <label class="field">End of overtime<input type="time" name="endTime" required></label>
-        <div class="field ot-total">Total overtime<strong data-ot-hours>—</strong><span class="ot-night" data-ot-night></span><small>Computed from start and end. An end time earlier than the start counts as the next day.</small></div>
-        <label class="field full">Work done / reason<input name="reason" required minlength="3" maxlength="1000"></label>
-        <div><button class="primary">Submit for approval</button></div></form>
-      ${(() => { const approved = list.filter(o => o.status === 'approved'); const nh = approved.reduce((s, o) => s + (o.approvedNightHours || 0), 0), np = approved.reduce((s, o) => s + (o.nightPay || 0), 0); return nh ? `<div class="cards"><div class="card featured"><div class="card-label">Approved night differential</div><div class="card-value">${Math.round(nh * 100) / 100} h</div><div class="card-foot">≈ ₱${np.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · final amount in your payslip</div></div></div>` : ''; })()}
-      ${table(['Date', 'Time', 'Hours filed', 'Night diff', 'Reason', 'Status', 'HR remarks', ''], list.map(o => [fmtDate(o.date), o.startTime ? `${esc(o.startTime)} – ${esc(o.endTime)}` : '—', `${o.hours} h`, o.nightHours ? `${o.nightHours} h${o.nightPay ? `<small>≈ ₱${Number(o.nightPay).toFixed(2)}</small>` : ''}` : '—', esc(o.reason), esc(STATUS[o.status] || o.status) + (o.status === 'approved' ? ` (${o.approvedHours} h)` : ''), esc(o.remarks || '—'), o.status === 'pending' ? `<button class="small" data-ot-cancel="${o.id}">Cancel</button>` : '']), 'No overtime filed yet.')}</section>`;
-    const form = box.querySelector('#ot-file'), total = form.querySelector('[data-ot-hours]');
+        <label class="field">Date<input type="date" name="date" required value="${esc(e.date || '')}"></label>
+        <label class="field">Unpaid break (minutes)<input type="number" name="breakMinutes" min="0" max="480" step="5" value="${e.breakMinutes || 0}"></label>
+        <label class="field">Start of overtime<input type="time" name="startTime" required value="${esc(e.startTime || '')}"></label>
+        <label class="field">End of overtime<input type="time" name="endTime" required value="${esc(e.endTime || '')}"></label>
+        <div class="field full ot-total"><strong data-ot-hours>—</strong><span class="ot-night" data-ot-night></span><small>An end time earlier than the start counts as the next day.</small></div>
+        ${reasonPicker(OVERTIME_REASONS, e.reason || '', { detailsLabel: 'Work to be done / explanation' })}
+        <label class="field full">Supporting attachment (optional)<input type="file" name="file" accept="application/pdf,image/png,image/jpeg"><small>${e.documentId ? 'An attachment is already on file; choose a file only to replace it. ' : ''}PDF, PNG or JPEG · up to 5 MB</small></label>
+        <div class="full ot-form-actions"><button class="primary">${editing ? 'Save changes' : 'Submit for approval'}</button>${editing ? '<button type="button" data-ot-edit-cancel>Discard changes</button>' : ''}</div></form>
+      ${nightSummary}</section>
+      <section class="panel"><div class="panel-head"><h2>My applications</h2></div><div class="ot-mine">${list.map(o => `<article class="ot-card">
+        <div class="ot-card-head"><strong>${fmtDate(o.date)}</strong>${pill(o.status)}</div>
+        <p class="ot-card-time">${esc(period(o))}${o.breakMinutes ? ` · ${o.breakMinutes} min break` : ''} · <strong>${o.hours} h</strong>${o.status === 'approved' ? ` · approved <strong>${o.approvedHours} h</strong>` : ''}${o.nightHours ? ` · 🌙 ${o.nightHours} h night` : ''}</p>
+        <p class="ot-card-reason">${esc(o.reason)}</p>
+        ${o.adjustReason ? `<p class="legend">HR approved ${o.approvedHours} of ${o.hours} h: ${esc(o.adjustReason)}</p>` : ''}${o.remarks ? `<p class="legend">HR remarks: ${esc(o.remarks)}</p>` : ''}
+        <div class="ot-card-actions">${o.documentId ? `<a class="small" href="/api/me/documents/${esc(o.documentId)}/content" target="_blank" rel="noopener">📎 Attachment</a>` : ''}${o.history?.length ? `<details><summary>History</summary><ul>${o.history.map(h => `<li>${esc(h.action)} · ${esc(new Date(h.at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }))}${h.note ? ` · ${esc(h.note)}` : ''}</li>`).join('')}</ul></details>` : ''}
+          ${o.status === 'pending' ? `<button class="small" data-ot-edit="${esc(o.id)}">Edit</button><button class="small" data-ot-cancel="${esc(o.id)}">Cancel</button>` : ''}</div></article>`).join('') || '<p class="muted">Nothing to show yet.</p>'}</div></section>`;
+    const form = box.querySelector('#ot-file');
     const compute = () => {
-      const s = form.elements.startTime.value, e = form.elements.endTime.value;
-      if (!s || !e) { total.textContent = '—'; return null; }
-      let minutes = (Number(e.slice(0, 2)) * 60 + Number(e.slice(3))) - (Number(s.slice(0, 2)) * 60 + Number(s.slice(3))); if (minutes <= 0) minutes += 1440;
-      const h = Math.round(minutes / 60 * 100) / 100, hh = Math.floor(minutes / 60), mm = minutes % 60;
-      total.textContent = `${h} h (${hh} h${mm ? ` ${mm} min` : ''})${minutes <= 0 || e <= s ? ' · ends next day' : ''}`;
-      const start = Number(s.slice(0, 2)) * 60 + Number(s.slice(3)); let night = 0;
-      for (let m = start; m < start + minutes; m++) { const hr = Math.floor((m % 1440) / 60); if (hr >= 22 || hr < 6) night++; }
-      form.querySelector('[data-ot-night]').textContent = night ? `🌙 ${Math.round(night / 60 * 100) / 100} h night differential (10 PM – 6 AM): +10% of your hourly rate, computed automatically` : '';
-      return h;
+      const s = form.elements.startTime.value, en = form.elements.endTime.value, br = Number(form.elements.breakMinutes.value || 0);
+      form.querySelector('[data-ot-hours]').textContent = describeTotal(s, en, br);
+      if (!s || !en) { form.querySelector('[data-ot-night]').textContent = ''; return; }
+      const start = Number(s.slice(0, 2)) * 60 + Number(s.slice(3)); let span = Number(en.slice(0, 2)) * 60 + Number(en.slice(3)) - start; if (span <= 0) span += 1440;
+      let night = 0; for (let m = start; m < start + span; m++) { const hr = Math.floor((m % 1440) / 60); if (hr >= 22 || hr < 6) night++; }
+      form.querySelector('[data-ot-night]').textContent = night ? `🌙 Up to ${Math.round(night / 60 * 100) / 100} h night differential (10 PM – 6 AM), computed automatically` : '';
     };
-    form.addEventListener('input', compute);
+    form.addEventListener('input', compute); compute(); bindReasonPickers(box);
     form.onsubmit = async event => {
-      event.preventDefault(); const f = new FormData(event.target);
-      try { await api('/hr/me/overtime', { date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), reason: f.get('reason') }); confirm('Overtime submitted', `Your overtime for <strong>${esc(f.get('date'))}</strong> (${esc(f.get('startTime'))} – ${esc(f.get('endTime'))}) was sent to HR.<br>Status: <strong>Pending HR approval</strong>.`); await fill('overtime201', box); } catch (error) { toast(error.message); }
+      event.preventDefault(); const f = new FormData(form), file = form.elements.file.files[0], submit = form.querySelector('button.primary');
+      submit.disabled = true;
+      try {
+        let documentId = e.documentId || '';
+        if (file) {
+          if (!['application/pdf', 'image/png', 'image/jpeg'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Choose a PDF, PNG or JPEG up to 5 MB.');
+          const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Unable to read the file.')); reader.readAsDataURL(file); });
+          documentId = (await api('/me/documents', { type: 'Leave Supporting', name: file.name, mime: file.type, data, expiry: '', remarks: 'Overtime support' })).id;
+        }
+        const body = { date: f.get('date'), startTime: f.get('startTime'), endTime: f.get('endTime'), breakMinutes: Number(f.get('breakMinutes') || 0), reason: readReason(form), documentId };
+        const saved = await api(editing ? `/hr/me/overtime/${editing.id}` : '/hr/me/overtime', body);
+        confirm(editing ? 'Overtime application updated' : 'Overtime submitted', `Your overtime for <strong>${esc(saved.date)}</strong> (${esc(period(saved))}, ${saved.hours} h) was ${editing ? 'updated' : 'sent to HR'}.<br>Status: <strong>Pending HR approval</strong>.`);
+        await fill('overtime201', box);
+      } catch (error) { submit.disabled = false; toast(error.message); }
     };
     box.onclick = async event => {
-      const b = event.target.closest('[data-ot-cancel]'); if (!b) return;
-      try { await api(`/hr/me/overtime/${b.dataset.otCancel}/cancel`, {}); confirm('Overtime cancelled', 'Your overtime filing was cancelled.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
+      const b = event.target.closest('button'); if (!b) return;
+      if (b.dataset.otEdit) { overtime(box, list, list.find(o => o.id === b.dataset.otEdit)); box.scrollIntoView({ behavior: 'smooth' }); return; }
+      if (b.hasAttribute('data-ot-edit-cancel')) { overtime(box, list); return; }
+      if (b.dataset.otCancel) {
+        if (!window.confirm('Cancel this overtime application?')) return;
+        try { await api(`/hr/me/overtime/${b.dataset.otCancel}/cancel`, {}); confirm('Overtime cancelled', 'Your overtime application was cancelled. It stays in your history.'); await fill('overtime201', box); } catch (error) { toast(error.message); }
+      }
     };
   }
   function loans(box, data) {
@@ -191,20 +220,23 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   function documents(box, list) {
     const due = toComply(list);
     box.innerHTML = `${due.length ? `<div class="compliance-alert" role="alert"><div><strong>⚠️ ${due.length} required document${due.length === 1 ? ' is' : 's are'} not yet complied</strong><ol class="comply-list">${due.map(i => `<li>${esc(i.requirement.name)}${i.numberOnly ? ' <small>(enter the number in My data sheet)</small>' : i.status === 'Missing' ? '' : ` <small>(${esc(STATUS_TEXT[i.status])})</small>`}</li>`).join('')}</ol><p class="legend">Upload ${due.length === 1 ? 'it' : 'each one'} below. The notice is lifted as soon as the file is uploaded; HR then reviews it.</p></div></div>` : `<div class="notice success">All required documents are uploaded${list.completeCount < list.requiredCount ? '; HR is reviewing the rest' : ' and verified'}.</div>`}<section class="panel"><div class="panel-head"><div><h2>My 201 documents</h2><p>Upload what HR asked for. HR checks each file before it counts as complete.</p></div><span class="legend">${list.completeCount} of ${list.requiredCount} required documents verified</span></div>
-      <div class="doc-cards">${list.items.length ? list.items.map(i => {
+      <div class="doc-cards">${list.items.some(i => !(i.numberOnly && i.status === 'Verified')) ? list.items.filter(i => !(i.numberOnly && i.status === 'Verified')).map(i => {
         // One card per requirement so the upload button is always on screen (phones included).
         const upload = i.numberOnly
           ? (i.status === 'Missing' ? '<button class="primary doc-upload" data-portal-tab="datasheet">Enter number</button>' : '')
-          : ['Missing', 'Rejected', 'Expired'].includes(i.status) ? `<label class="doc-upload button-like primary-like">📤 Upload file<input type="file" data-up="${esc(i.requirement.id)}" accept="application/pdf,image/png,image/jpeg" hidden></label>` : '';
+          : ['Missing', 'Rejected', 'Expired'].includes(i.status) ? `${i.requirement.id === 'valid-id' ? `<label class="doc-idtype">Which ID will you upload?${idTypeSelect(esc, 'idType', 'data-idtype')}</label>` : ''}<label class="doc-upload button-like primary-like">📤 Upload file<input type="file" data-up="${esc(i.requirement.id)}" accept="application/pdf,image/png,image/jpeg" hidden></label>` : '';
         const when = i.current?.expiryDate ? `Expires ${fmtDate(i.current.expiryDate)}` : i.due ? `Due ${fmtDate(i.due)}` : '';
         const file = i.versions[0] ? `<a href="/api/hr/me/documents/${i.versions[0].id}/content" target="_blank" rel="noopener">${esc(i.versions[0].name)}</a>` : '';
-        return `<article class="doc-card${['Missing', 'Rejected', 'Expired'].includes(i.status) ? ' due' : ''}"><div class="doc-card-head"><strong>${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}</strong>${badge(statusText(i), DOC_BADGE[i.status])}</div>${i.current?.reviewNote && i.status === 'Rejected' ? `<p class="doc-note">${esc(i.current.reviewNote)}</p>` : ''}${when || file ? `<p class="doc-meta">${[when, file && `Your upload: ${file}`].filter(Boolean).join(' · ')}</p>` : ''}${upload}</article>`;
+        return `<article class="doc-card${['Missing', 'Rejected', 'Expired'].includes(i.status) ? ' due' : ''}"><div class="doc-card-head"><strong>${esc(i.requirement.name)}</strong>${!i.requirement.required && i.status === 'Missing' ? '' : badge(statusText(i), DOC_BADGE[i.status])}</div>${i.current?.reviewNote && i.status === 'Rejected' ? `<p class="doc-note">${esc(i.current.reviewNote)}</p>` : ''}${when || file ? `<p class="doc-meta">${[when, i.current?.idType && `ID: ${esc(i.current.idType)}`, file && `Your upload: ${file}`].filter(Boolean).join(' · ')}</p>` : ''}${upload}</article>`;
       }).join('') : '<p class="muted">No documents are required right now.</p>'}</div>
       <p class="panel-body legend">PDF, JPG or PNG. Sensitive documents (such as medical records) are handled directly by HR.</p></section>`;
     box.onchange = async event => {
       const input = event.target.closest('[data-up]'); if (!input) return;
       const file = input.files[0]; if (!file) return;
-      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); documents(box, await api('/hr/me/documents')); } catch (error) { toast(error.message); }
+      // Government-issued ID: the employee first says which ID it is (Passport, UMID, TIN ID, ...).
+      const idType = input.dataset.up === 'valid-id' ? box.querySelector('[data-idtype]')?.value || '' : '';
+      if (input.dataset.up === 'valid-id' && !idType) { input.value = ''; toast('Choose which ID you are uploading first.'); box.querySelector('[data-idtype]')?.focus(); return; }
+      try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file), ...(idType ? { idType } : {}) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); documents(box, await api('/hr/me/documents')); } catch (error) { toast(error.message); }
     };
   }
   // Employee dashboard: details still missing from their record, with a button to fill them in (data sheet).

@@ -4,7 +4,7 @@ import { Store } from '../src/store.mjs';
 import { saveProfile, getProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from '../src/profiles.mjs';
 import { completeState } from './helpers.mjs';
 import { leaveBalance, calculatePayroll } from '../src/engine.mjs';
-import { saveRecord, postPayroll } from '../src/service.mjs';
+import { saveRecord, postPayroll, preview } from '../src/service.mjs';
 import { createApp } from '../src/server.mjs';
 const admin = { username: 'admin', role: 'admin' }, viewer = { username: 'viewer', role: 'viewer' };
 function fixture() {
@@ -57,7 +57,7 @@ test('profile settings drive leave approval, wage rates, working hours and payro
     assert.throws(() => postPayroll(store, admin, { start: computed.start, end: computed.end, fingerprint: computed.fingerprint, pay13th: false }));
     saveProfile(store, admin, employee.id, 'payroll', { dailyRate: 1600, hourlyRate: 200, status: 'Active', frequency: 'semi-monthly' });
     saveProfile(store, admin, employee.id, 'government', { sss: 'PRIVATE-PAYROLL-EXCLUDED' });
-    const next = calculatePayroll(store.read(), '2026-09-01', '2026-09-15');
+    const next = preview(store, '2026-09-01', '2026-09-15');
     const run = postPayroll(store, admin, { start: next.start, end: next.end, fingerprint: next.fingerprint, pay13th: false });
     assert.ok(!JSON.stringify(run).includes('PRIVATE-PAYROLL-EXCLUDED'));
     assert.equal(run.sources.employeeProfiles.find(p => p.section === 'payroll').dailyRate, 1600);

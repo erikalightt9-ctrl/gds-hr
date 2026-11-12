@@ -8,6 +8,7 @@ import { localToday } from './profiles.mjs';
 import { scopeEmployees, activity } from './hr201.mjs';
 import { validFile } from './documents201.mjs';
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
+import { remittanceOnlyIds } from './remittance-only.mjs';
 
 const dateField = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default('');
 const memoSchema = z.object({
@@ -21,7 +22,8 @@ const write = (store, memo) => store.db.prepare('INSERT INTO memos(id,data) VALU
 const profileOf = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
 
 function recipientIds(store, recipients) {
-  const people = store.read().employees.filter(e => !e.archived && activity(e, profileOf(store, e.id, 'employment')) === 'Active');
+  const skip = remittanceOnlyIds(store);   // remittance-only profiles (e.g. the CEO) receive no memos
+  const people = store.read().employees.filter(e => !e.archived && !skip.has(e.id) && activity(e, profileOf(store, e.id, 'employment')) === 'Active');
   const chosen = recipients.mode === 'all' ? people : recipients.mode === 'departments' ? people.filter(e => recipients.departments.includes(e.department)) : people.filter(e => recipients.employees.includes(e.id));
   return chosen.map(e => e.id);
 }
@@ -68,6 +70,22 @@ export function publishMemo(store, actor, id, input = {}) {
     store.log(actor, version > 1 ? 'revise' : 'publish', 'memos', id, null, { version, title: issued.title, recipients: ids.length });
     return updated;
   });
+}
+// A memo the system issues by itself (e.g. the monthly tardiness reminder) to named employees, with an optional PDF
+// attached (`pdf` may be a function of the memo reference): issued at once as version 1, acknowledgement required,
+// recorded as issued by the system. Call inside a transaction; returns the issued memo.
+export function issueSystemMemo(store, { title, category, body, employeeIds, issueDate = localToday(), pdf = null, pdfName = 'memo.pdf', issuedBy = 'system', kind = '' }) {
+  const id = randomUUID(), now = new Date().toISOString(), reference = nextReference(store, issueDate);
+  pdf = typeof pdf === 'function' ? pdf(reference) : pdf;
+  const attachment = pdf ? { id: randomUUID(), name: pdfName.replace('{ref}', reference), mime: 'application/pdf', size: pdf.length, version: 1 } : null;
+  if (attachment) store.db.prepare('INSERT INTO memo_attachments(id,memo_id,version,name,mime,content) VALUES(?,?,1,?,?,?)').run(attachment.id, id, attachment.name, attachment.mime, pdf);
+  const issued = { title, category, reference, issueDate, body, recipients: { mode: 'employees', departments: [], employees: employeeIds }, ackRequired: true, ackDeadline: '', version: 1, publishedAt: now, publishedBy: issuedBy, changeNote: '', attachments: attachment ? [attachment] : [] };
+  const memo = { id, status: 'published', version: 1, versions: [issued], draft: null, attachments: attachment ? [attachment] : [], createdBy: issuedBy, createdAt: now, kind };
+  write(store, memo);
+  const insert = store.db.prepare('INSERT OR IGNORE INTO memo_assignments(memo_id,version,employee_id,assigned_at,acknowledged_at,ack_user) VALUES(?,1,?,?,NULL,NULL)');
+  for (const employeeId of employeeIds) { insert.run(id, employeeId, now); store.notify(employeeId, `New memo: ${title} — please read and acknowledge receipt.`); }
+  store.log({ username: issuedBy }, 'publish', 'memos', id, null, { version: 1, title, recipients: employeeIds.length, reference, kind });
+  return { ...memo, reference };
 }
 // A revision starts from the issued text; it is published separately.
 export function startRevision(store, actor, id) {
@@ -137,9 +155,11 @@ function assignmentStats(store, memo, allowed = null) {
 export function listMemos(store, actor) {
   permit(actor, [...HR_TEAM, 'viewer', 'dept_manager']);
   const team = actor.role === 'dept_manager' ? new Set(scopeEmployees(store, actor).map(e => e.id)) : null;
+  // Names on the list itself, so HR sees who received the memo and who has not acknowledged it without opening it.
+  const names = new Map(store.read().employees.map(e => [e.id, e.name])), nameOf = id => names.get(id) || id;
   return store.db.prepare('SELECT data FROM memos').all().map(r => JSON.parse(r.data))
     .filter(m => HR_TEAM.includes(actor.role) || m.status !== 'draft')
-    .map(m => { const issued = m.versions.at(-1), stats = m.version ? assignmentStats(store, m, team) : null; return { id: m.id, status: m.status, version: m.version, title: issued?.title || m.draft?.title, category: issued?.category || m.draft?.category, reference: issued?.reference || m.draft?.reference || '', issueDate: issued?.issueDate || m.draft?.issueDate, ackRequired: issued?.ackRequired ?? m.draft?.ackRequired, ackDeadline: issued?.ackDeadline || '', revisionInProgress: m.status === 'published' && !!m.draft, recipients: stats?.recipients ?? 0, acknowledged: stats?.acknowledged ?? 0, pending: issued?.ackRequired ? stats?.pending ?? 0 : 0 }; })
+    .map(m => { const issued = m.versions.at(-1), stats = m.version ? assignmentStats(store, m, team) : null; return { id: m.id, status: m.status, version: m.version, title: issued?.title || m.draft?.title, category: issued?.category || m.draft?.category, reference: issued?.reference || m.draft?.reference || '', issueDate: issued?.issueDate || m.draft?.issueDate, ackRequired: issued?.ackRequired ?? m.draft?.ackRequired, ackDeadline: issued?.ackDeadline || '', revisionInProgress: m.status === 'published' && !!m.draft, recipients: stats?.recipients ?? 0, acknowledged: stats?.acknowledged ?? 0, pending: issued?.ackRequired ? stats?.pending ?? 0 : 0, recipientNames: (stats?.rows || []).map(r => nameOf(r.employee_id)), pendingNames: issued?.ackRequired ? (stats?.rows || []).filter(r => !r.acknowledged_at).map(r => nameOf(r.employee_id)) : [] }; })
     .filter(m => !team || m.recipients)
     .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''));
 }

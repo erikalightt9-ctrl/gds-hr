@@ -14,7 +14,7 @@ import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
-import { decideLoanApplication, loanDashboard, setLoanSkips } from './loans.mjs';
+import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule } from './loans.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
 import { renderThirteenthPdf } from './thirteenth-pdf.mjs';
@@ -26,14 +26,19 @@ import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, compute
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
+import { saveMonthEdit } from './contribution-month.mjs';
 import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
 import { availableReports, buildReport, payrollRunPdf } from './reports.mjs';
 import { getProfile, saveProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from './profiles.mjs';
-import { employeeDashboard, punch, applyLeave, attachLeaveProof, reviewLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, locationAddress, earlierHistory, announceDuePayslips, employeeClockEvents, explanationsOverview } from './portal.mjs';
+import { employeeDashboard, locateAddress, punch, applyLeave, attachLeaveProof, reviewLeaveProof, requestLeaveProof, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, correctClock, ownPayslip, payslipPdf, payslipFromRow, staffPayslip, designationOf, employeeCompany, locationAddress, earlierHistory, announceDuePayslips, employeeClockEvents, explanationsOverview } from './portal.mjs';
 import { runMigrations } from './migrations.mjs';
+import { runTardinessMemos } from './tardiness-memo.mjs';
+import { submitAttendanceRequest, ownAttendanceRequests, cancelAttendanceRequest, replyAttendanceRequest, attendanceRequestsOverview, startReview, requestInformation, addRemark, rejectAttendanceRequest, approveAttendanceRequest, remindOverdueRequests } from './attendance-requests.mjs';
+import { runReminders } from './reminders.mjs';
+import { startBackupSchedule } from './backup-r2.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -66,6 +71,7 @@ export function employeeNotice(pathname, data = {}) {
     [/^\/api\/me\/documents$/, () => `Supporting document uploaded${data.name ? `: ${data.name}` : ''}.`],
     [/^\/api\/hr\/me\/overtime$/, () => `Overtime filed for ${data.date} (${data.hours} h). Waiting for HR approval.`],
     [/^\/api\/hr\/me\/overtime\/[^/]+\/cancel$/, () => `Overtime filing for ${data.date} cancelled.`],
+    [/^\/api\/hr\/me\/overtime\/[^/]+$/, () => `Overtime application for ${data.date} updated (${data.hours} h). Waiting for HR approval.`],
     [/^\/api\/hr\/me\/loans$/, () => `${data.type || 'Loan'} application submitted. Waiting for HR review.`],
     [/^\/api\/hr\/me\/loans\/[^/]+\/cancel$/, () => 'Loan application cancelled.'],
     [/^\/api\/hr\/me\/datasheet$/, () => (data.status === 'submitted' ? 'Data sheet submitted. Waiting for HR review.' : 'Data sheet draft saved.')],
@@ -94,7 +100,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -171,8 +177,13 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname.startsWith('/api/me/')) {
         permit(auth.user, ['employee']);
         if (pathname === '/api/me/dashboard' && req.method === 'GET') { send(200, { ...employeeDashboard(store, auth.user), network: networkStatus(store, visitorIp) }); return; }
+        if (pathname === '/api/me/locate' && req.method === 'POST') { checkLimit(store, `locate:${auth.user.id}`, 30); send(200, await locateAddress(store, auth.user, await readBody(req))); return; }
+        if (pathname === '/api/me/attendance-requests' && req.method === 'GET') { send(200, ownAttendanceRequests(store, auth.user)); return; }
+        if (pathname === '/api/me/attendance-requests' && req.method === 'POST') { checkLimit(store, `ar:${auth.user.id}`, 20); send(201, submitAttendanceRequest(store, auth.user, await readBody(req))); return; }
+        const ownRequest = pathname.match(/^\/api\/me\/attendance-requests\/([a-f0-9-]+)\/(cancel|reply)$/);
+        if (ownRequest && req.method === 'POST') { send(200, ownRequest[2] === 'cancel' ? cancelAttendanceRequest(store, auth.user, ownRequest[1]) : replyAttendanceRequest(store, auth.user, ownRequest[1], await readBody(req))); return; }
         if (pathname === '/api/me/history' && req.method === 'GET') { send(200, earlierHistory(store, auth.user, url.searchParams.get('before') || '')); return; }
-        if (pathname === '/api/me/clock' && req.method === 'POST') { checkLimit(store, `clock:${auth.user.id}`); const event = punch(store, auth.user, await readBody(req), new Date(), { ip: visitorIp }); send(200, event); if (event.latitude !== null && !event.onOfficeNetwork && !event.inOfficeArea) locationAddress(store, auth.user, event.id).catch(() => {}); return; }
+        if (pathname === '/api/me/clock' && req.method === 'POST') { checkLimit(store, `clock:${auth.user.id}`); const event = punch(store, auth.user, await readBody(req), new Date(), { ip: visitorIp, userAgent: req.headers['user-agent'] || '' }); send(200, event); if (event.latitude !== null && !event.address && !event.onOfficeNetwork && !event.inOfficeArea) locationAddress(store, auth.user, event.id).catch(() => {}); return; }
         if (pathname === '/api/me/leaves' && req.method === 'POST') { send(201, applyLeave(store, auth.user, await readBody(req))); return; }
         const cancellation = pathname.match(/^\/api\/me\/leaves\/([a-zA-Z0-9_-]+)\/cancel$/);
         if (cancellation && req.method === 'POST') { send(200, cancelLeave(store, auth.user, cancellation[1])); return; }
@@ -232,6 +243,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/overtime-requests' && req.method === 'POST') { send(201, fileOvertime(store, auth.user, await readBody(req))); return; }
       const otDecision = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/decision$/);
       if (otDecision && req.method === 'POST') { send(200, decideOvertime(store, auth.user, otDecision[1], await readBody(req))); return; }
+      if (pathname === '/api/contributions/month-edit' && req.method === 'POST') { send(200, saveMonthEdit(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions/employees' && req.method === 'POST') { send(200, addContributionEmployee(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions' && req.method === 'GET') { send(200, contributionOverview(store, auth.user, url.searchParams.get('month') || '', readSettings(store).company.egovFee ?? 15)); return; }
       if (pathname === '/api/thirteenth' && req.method === 'GET') {
@@ -278,6 +290,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/office-networks' && req.method === 'POST') { send(200, changeOfficeNetworks(store, auth.user, await readBody(req), visitorIp)); return; }
       const loanSkips = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/skips$/);
       if (loanSkips && req.method === 'POST') { send(200, setLoanSkips(store, auth.user, loanSkips[1], await readBody(req))); return; }
+      const loanSchedule = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/schedule$/);
+      if (loanSchedule && req.method === 'POST') { send(200, setLoanSchedule(store, auth.user, loanSchedule[1], await readBody(req))); return; }
       const releaseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/release$/);
       if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1])); return; }
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);
@@ -285,9 +299,18 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const leaveDecision = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/decision$/);
       if (leaveDecision && req.method === 'POST') { send(200, reviewLeave(store, auth.user, leaveDecision[1], await readBody(req))); return; }
       if (pathname === '/api/explanations' && req.method === 'GET') { send(200, explanationsOverview(store, auth.user)); return; }
+      if (pathname === '/api/attendance-requests' && req.method === 'GET') { send(200, attendanceRequestsOverview(store, auth.user)); return; }
+      const requestAction = pathname.match(/^\/api\/attendance-requests\/([a-f0-9-]+)\/(review|info|remark|reject|approve)$/);
+      if (requestAction && req.method === 'POST') {
+        const [, rid, action] = requestAction, body = action === 'review' ? {} : await readBody(req);
+        send(200, { review: () => startReview(store, auth.user, rid), info: () => requestInformation(store, auth.user, rid, body), remark: () => addRemark(store, auth.user, rid, body), reject: () => rejectAttendanceRequest(store, auth.user, rid, body), approve: () => approveAttendanceRequest(store, auth.user, rid, body) }[action]());
+        return;
+      }
       if (pathname === '/api/clock-events' && req.method === 'GET') { send(200, employeeClockEvents(store, auth.user, url.searchParams.get('employeeId') || '', url.searchParams.get('month') || '')); return; }
       const proofReview = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/proof-review$/);
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
+      const proofRequest = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/request-proof$/);
+      if (proofRequest && req.method === 'POST') { send(200, requestLeaveProof(store, auth.user, proofRequest[1], await readBody(req))); return; }
       const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
@@ -364,7 +387,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         if (!row) throw new AppError('This employee is not included in payroll for that cutoff.', 404);
         store.log(auth.user, 'preview-payslip', 'payslip', 'preview', null, { employeeId: row.employeeId, start: p.start, end: p.end });
         res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="draft-payslip-${row.employeeId}-${p.start}-${p.end}.pdf"` });
-        res.end(payslipPdf(payslipFromRow({ ...run, id: 'preview', status: 'preview' }, row, { designation: designationOf(store, row.employeeId) }), { draft: true })); return;
+        res.end(payslipPdf(payslipFromRow({ ...run, id: 'preview', status: 'preview' }, row, { designation: designationOf(store, row.employeeId), company: employeeCompany(store, row.employeeId) }), { draft: true })); return;
       }
       const staffSlip = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/payslips\/([A-Za-z0-9_-]+)\.pdf$/);
       if (staffSlip && req.method === 'GET') {
@@ -398,7 +421,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (res.headersSent) { res.end(); return; }
       if (error instanceof z.ZodError) { send(400, { error: error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ') }); return; }
       const status = error instanceof AppError ? error.status : 500;
-      if (status === 500) console.error('HR request failed:', error.name);
+      if (status === 500) console.error('HR request failed:', error.name, String(error.message || '').slice(0, 200), req.method, String(req.url || '').split('?')[0]);
       send(status, { error: status === 500 ? 'The request could not be completed. Check the server and try again.' : error.message });
     }
   });
@@ -421,10 +444,23 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   // Payslips: released and announced at 9:00 AM on the 8th and 22nd (checked every minute).
   const payslipCheck = () => { try { announceDuePayslips(store); } catch (error) { console.error('payslip release check failed:', error.message); } };
   payslipCheck(); setInterval(payslipCheck, 60000).unref();
+  // Monthly tardiness memos: on or after the 5th (Philippine Time) for the previous month; checked every hour.
+  const tardinessCheck = () => { try { const sent = runTardinessMemos(store); if (sent.length) console.log(`Monthly tardiness memos sent: ${sent.map(s => `${s.employeeId} (${s.occurrences})`).join(', ')}.`); } catch (error) { console.error('tardiness memo check failed:', error.message); } };
+  tardinessCheck(); setInterval(tardinessCheck, 3600000).unref();
+  // Attendance requests waiting for HR longer than 48 hours: one HR reminder per request per day; checked every hour.
+  const requestCheck = () => { try { remindOverdueRequests(store); } catch (error) { console.error('attendance request reminder failed:', error.message); } };
+  requestCheck(); setInterval(requestCheck, 3600000).unref();
+  // Attendance reminders (5 minutes before the scheduled start / after the scheduled end, Philippine Time), every minute.
+  const reminderCheck = () => runReminders(store, new Date(), { subject: origin }).catch(error => console.error('attendance reminder check failed:', error.message));
+  setInterval(reminderCheck, 60000).unref();
+  // Daily encrypted off-site backup to Cloudflare R2 (only once npm run backup:setup has saved the keys).
+  startBackupSchedule(data);
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });
-  app.requestTimeout = 15000; app.headersTimeout = 10000;
+  // Headers must arrive within 10 s (slow-header protection); the whole request, uploads included, within 2 minutes:
+  // a 5 MB scan over a slow mobile or office upload through the tunnel can take well over 15 s (error 408).
+  app.requestTimeout = 120000; app.headersTimeout = 10000;
   app.listen(port, host, () => {
     console.log(`GDS CAPITAL INC. HR is running at ${origin}`);
     console.log(mailer ? `Password reset emails are sent from ${mailer.from}.` : 'Password reset email is not configured (set HR_SMTP_* in .env); recovery goes to HR.');

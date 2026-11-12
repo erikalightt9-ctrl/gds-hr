@@ -5,7 +5,17 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const LOGO_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public/payslip-logo.jpg');
+const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public');
+const LOGO_FILE = path.join(PUBLIC, 'payslip-logo.jpg');
+// Payslips of employees under another company (Settings -> subsidiaries / department) use that company's logo.
+const COMPANY_LOGOS = { PDMN: path.join(PUBLIC, 'payslip-logo-pdmn.jpg') };
+const companyLogos = {};
+export function companyLogo(company) {
+  const file = COMPANY_LOGOS[String(company || '').trim().toUpperCase()];
+  if (!file) return logo();
+  if (!(file in companyLogos)) companyLogos[file] = jpegFile(file);
+  return companyLogos[file] || logo();
+}
 export const W = 595, H = 842, LEFT = 40, RIGHT = 555, WIDTH = RIGHT - LEFT;
 export const COLOR = { ink: '0.13 0.13 0.13', muted: '0.42 0.42 0.42', line: '0.78 0.74 0.68', red: '0.71 0.12 0.17', redText: '0.80 0.18 0.20', gold: '0.85 0.72 0.36', goldTint: '0.99 0.95 0.84', band: '0.97 0.96 0.94', net: '1 0.90 0.45', white: '1 1 1' };
 
@@ -29,6 +39,8 @@ function jpegInfo(buffer) {
   }
   return null;
 }
+// Any JPEG file as an image for assemblePdf (e.g. the memo letterhead); null when missing or unreadable.
+export function jpegFile(file) { const data = existsSync(file) ? readFileSync(file) : null, info = data && jpegInfo(data); return info ? { data, ...info } : null; }
 let cachedLogo;
 export function logo() {
   if (cachedLogo !== undefined) return cachedLogo;
@@ -61,10 +73,22 @@ function hoursByComponent(rows = []) {
   return out;
 }
 const hrs = h => (h ? `${Math.round(h * 100) / 100}` : '');
+// Days are shown to at most 2 decimals without trailing zeros (8, 12.53, 0.94); pay is computed at full precision.
+const days2 = n => (n === null || n === undefined || n === '' ? '-' : String(Math.round(Number(n) * 100) / 100));
+const SHORT_MONTHS = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+// "05 Nov. 2026" in Philippine time.
+export const releaseDate = at => { const [y, m, d] = new Date(new Date(at).getTime() + 8 * 3600e3).toISOString().slice(0, 10).split('-').map(Number); return `${String(d).padStart(2, '0')} ${SHORT_MONTHS[m - 1]} ${y}`; };
 
-export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } = {}) {
-  const p = new Page(), e = slip.earnings || {}, d = slip.deductions || {}, hours = hoursByComponent(slip.workBreakdown);
-  const image = logo();
+// Rest day work in whole days (e.g. 12 h on a 12-hour schedule = 1 DAY); rest day overtime or part days in hours.
+function restDayRow(hours, hoursPerDay, value) {
+  const day = hours.restDay || 0, ot = hours.restOT || 0, perDay = Number(hoursPerDay) || 0;
+  if (day && !ot && perDay && Number.isInteger(Math.round(day / perDay * 100) / 100)) return ['Rest day / RDOT', days2(day / perDay), 'DAY', value];
+  return ['Rest day / RDOT', hrs(day + ot), 'HRS', value];
+}
+
+export function renderPayslipPdf(slip, { draft = slip.draft, designation = '', now = new Date() } = {}) {
+  const p = new Page(), e = slip.earnings || {}, d = slip.deductions || {}, hours = slip.quantities || hoursByComponent(slip.workBreakdown);
+  const image = companyLogo(slip.company);
   let y = H - 40;
   // Header: the 菲龍集團 GDS Capital logo, title, period and release date.
   p.stroke(LEFT, 40, WIDTH, H - 80, COLOR.gold);
@@ -73,7 +97,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   p.text('PAYSLIP', W / 2, y - 14, { size: 20, bold: true, align: 'center' }); y -= 24;
   p.line(W / 2 - 60, y, W / 2 + 60, y, COLOR.gold, 1.2); y -= 18;
   p.text('Period covered:', RIGHT - 190, y, { size: 9.5, bold: true }); p.text(period(slip.start, slip.end), RIGHT - 12, y, { align: 'right' }); y -= 15;
-  p.text('Release date:', RIGHT - 190, y, { size: 9.5, bold: true }); p.text(draft ? 'Not yet released' : slip.postedAt ? longDate(slip.postedAt) : '-', RIGHT - 12, y, { align: 'right' }); y -= 12;
+  p.text('Release date:', RIGHT - 190, y, { size: 9.5, bold: true }); p.text(releaseDate(draft ? now : slip.releasedAt || slip.postedAt || now), RIGHT - 12, y, { align: 'right' }); y -= 12;
   if (draft) { y -= 6; p.fill(COLOR.red, LEFT, y - 18, WIDTH, 18); p.text('DRAFT - FOR REVIEW ONLY, NOT YET POSTED', W / 2, y - 12.5, { size: 10, bold: true, color: COLOR.white, align: 'center' }); y -= 18; }
   y -= 10;
 
@@ -82,7 +106,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   y = header('EMPLOYEE INFORMATION', y);
   const daily = slip.payBasis === 'daily';
   const info = [['Employee name', slip.employeeName.toUpperCase()], ['Employee ID', slip.employeeId], ['Designation', designation || '-'],
-    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', String(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent ?? '-')], ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
+    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (month)', slip.monthWorkingDays ? `${slip.monthWorkingDays} (${slip.workingDays} this cutoff)` : String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.holidayDays ? [['Holiday days', `${days2(slip.holidayDays)}${slip.holidayDates?.length ? ` (${slip.holidayDates.map(d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })).join(', ')})` : ''}`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
   const KEY = LEFT + 190;
   for (const [label, value] of info) {
     p.line(LEFT, y - 18, RIGHT, y - 18); p.line(KEY, y, KEY, y - 18);
@@ -95,13 +119,14 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '' } 
   p.fill(COLOR.goldTint, LEFT, y - 20, WIDTH, 20); p.stroke(LEFT, y - 20, WIDTH, 20);
   p.text('PARTICULARS', LEFT + 10, y - 14, { size: 9, bold: true }); p.text('DAYS / HOURS', (C1 + C3) / 2, y - 14, { size: 9, bold: true, align: 'center' }); p.text('AMOUNT', RIGHT - 12, y - 14, { size: 9, bold: true, align: 'right' }); y -= 20;
   const rows = [
-    ['Days worked (regular)', slip.daysWorked ?? slip.creditedDays ?? slip.daysPresent, 'DAY', e.basic],
+    ['Days worked (regular)', days2(slip.daysWorked ?? slip.creditedDays ?? slip.daysPresent), 'DAY', e.basic],
     ...(e.leavePay ? [['Paid leave', slip.paidLeaveDays || '', 'DAY', e.leavePay]] : []),
+    ...(e.holidayPay ? [['Holiday pay', days2(slip.holidayDays || 0), 'DAY', e.holidayPay]] : []),
     ['Overtime', hrs(hours.regularOT), 'HRS', e.regularOT],
-    ['Rest day / RDOT', hrs((hours.restDay || 0) + (hours.restOT || 0)), 'HRS', (e.restDay || 0) + (e.restOT || 0)],
+    restDayRow(hours, slip.hoursPerDay, (e.restDay || 0) + (e.restOT || 0)),
     ['Night differential', hrs(hours.nsd), 'HRS', e.nsd],
-    ['Special holiday', hrs((hours.specialHoliday || 0) + (hours.specialOT || 0)), 'HRS', (e.specialHoliday || 0) + (e.specialOT || 0)],
-    ['Regular holiday', hrs((hours.regularHoliday || 0) + (hours.regularHolidayOT || 0)), 'HRS', (e.regularHoliday || 0) + (e.regularHolidayOT || 0)],
+    ['Special holiday worked', hrs((hours.specialHoliday || 0) + (hours.specialOT || 0)), 'HRS', (e.specialHoliday || 0) + (e.specialOT || 0)],
+    ['Regular holiday worked', hrs((hours.regularHoliday || 0) + (hours.regularHolidayOT || 0)), 'HRS', (e.regularHoliday || 0) + (e.regularHolidayOT || 0)],
     ...[['Other holiday', (e.otherHoliday || 0) + (e.otherOT || 0)], ['Allowance', e.allowance], ['Adjustment', e.additional], ['13th month pay', e.thirteenth]].filter(([, v]) => v).map(([l, v]) => [l, '', '', v]),
   ];
   for (const [label, qty, unit, value] of rows) {

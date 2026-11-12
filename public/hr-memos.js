@@ -11,6 +11,12 @@ export function createMemos(ctx) {
   async function render(openId = null) {
     shell(heading('Memos', 'Loading…') + '<div class="loading">Loading memos…</div>');
     [memos, people] = await Promise.all([api('/hr/memos'), ctx.context().can.manage ? api('/hr/employees') : Promise.resolve([])]);
+    // Servers started before the names were added to the list: read them from each issued memo's details instead.
+    memos = await Promise.all(memos.map(async m => {
+      if (m.recipientNames || !m.version) return m;
+      try { const v = (await api(`/hr/memos/${m.id}`)).versions.at(-1), rows = v?.assignments || [], name = a => a.name || a.employeeId; return { ...m, recipientNames: rows.map(name), pendingNames: m.ackRequired ? rows.filter(a => !a.acknowledgedAt).map(name) : [] }; }
+      catch { return m; }
+    }));
     draw();
     if (openId) detail(openId);
   }
@@ -18,7 +24,7 @@ export function createMemos(ctx) {
     const can = ctx.context().can, list = memos.filter(m => (view === 'issued' ? m.status === 'published' : m.status === view));
     shell(heading('Memos', 'Issue memos to everyone, a department or chosen employees, and track who has acknowledged receipt.', can.manage ? '<button class="primary" data-new>＋ Create memo</button>' : '') +
       `<div class="tabs">${['issued', ...(can.manage ? ['draft'] : []), 'archived'].map(v => `<button data-view="${v}" class="${v === view ? 'active' : ''}">${{ issued: 'Issued', draft: 'Drafts', archived: 'Archived' }[v]} (${memos.filter(m => (v === 'issued' ? m.status === 'published' : m.status === v)).length})</button>`).join('')}</div>
-      <section class="panel">${table(['Reference', 'Title', 'Category', 'Issued', 'Version', 'Recipients', 'Acknowledged', 'Deadline', ''], list.map(m => [esc(m.reference || '—'), `<button class="link-button" data-open="${m.id}">${esc(m.title)}</button>${m.revisionInProgress ? '<small>revision in progress</small>' : ''}`, esc(m.category || '—'), fmtDate(m.issueDate), m.version ? `v${m.version}` : '—', m.recipients || '—', m.status === 'draft' ? '—' : m.ackRequired ? `${m.acknowledged} / ${m.recipients}${m.pending ? ` · ${badge(`${m.pending} pending`, 'pending')}` : ''}` : 'Not required', m.ackDeadline ? fmtDate(m.ackDeadline) : '—', `<button class="small" data-open="${m.id}">Open</button>`]), view === 'draft' ? 'No drafts.' : 'No memos here yet.')}</section>`);
+      <section class="panel">${table(['Reference', 'Employee', 'Title', 'Category', 'Issued', 'Recipients', 'Acknowledged', 'Deadline', ''], list.map(m => [esc(m.reference || '—'), recipientCell(m), `<button class="link-button" data-open="${m.id}">${esc(m.title)}</button>${m.revisionInProgress ? '<small>revision in progress</small>' : ''}`, esc(m.category || '—'), fmtDate(m.issueDate), m.recipients || '—', m.status === 'draft' ? '—' : m.ackRequired ? `${m.acknowledged} / ${m.recipients}${m.pending ? ` · ${badge(`${m.pending} pending`, 'pending')}` : ''}` : 'Not required', m.ackDeadline ? fmtDate(m.ackDeadline) : '—', `<button class="small" data-open="${m.id}">Open</button>`]), view === 'draft' ? 'No drafts.' : 'No memos here yet.')}</section>`);
     document.querySelector('.content').addEventListener('click', onClick);
   }
   async function onClick(event) {
@@ -89,4 +95,13 @@ export function createMemos(ctx) {
     } catch (error) { toast(error.message); }
   }
   return { render, create: () => { if (!people.length) api('/hr/employees').then(p => { people = p; editor(null); }).catch(e => toast(e.message)); else editor(null); } };
+}
+
+// Memo list: the recipient's name (one employee) or the count, with the names still to acknowledge.
+function recipientCell(m) {
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const names = m.recipientNames || [], pending = m.pendingNames || [];
+  if (!names.length) return '—';
+  if (names.length === 1) return `<span class="memo-who">${esc(names[0])}</span>${pending.length ? '<small class="danger-text">Not yet acknowledged</small>' : ''}`;
+  return `<span class="memo-who">${names.length} employees</span>${pending.length ? `<small class="danger-text">Not yet acknowledged: ${pending.map(esc).join('; ')}</small>` : ''}`;
 }

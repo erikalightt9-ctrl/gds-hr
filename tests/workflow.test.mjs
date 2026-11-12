@@ -50,27 +50,27 @@ test('stale preview cannot overwrite changed inputs', () => {
   assert.throws(() => postPayroll(db, admin, p), /changed/);
   assert.equal(db.read().loans[0].balance, 1200); db.close();
 });
-test('leave approval requires eligibility, documents, balance, non-overlap and no recorded work', () => {
+test('leave approval requires eligibility, balance, non-overlap and no recorded work (documents optional)', () => {
   const db = new Store(':memory:'); db.write(completeState());
   const l = { id: 'leave1', employeeId: 'EMP-001', typeId: 'sil', startDate: '2026-09-16', endDate: '2026-09-16', days: 1, reason: 'Rest', documentReference: '', status: 'approved', eligibilityVerified: false };
   assert.throws(() => saveRecord(db, admin, 'leaves', l), /eligibility/);
   l.eligibilityVerified = true;
-  assert.throws(() => saveRecord(db, admin, 'leaves', l), /document/);
-  l.documentReference = 'HR-DOC-123'; saveRecord(db, admin, 'leaves', l);
+  saveRecord(db, admin, 'leaves', l);   // a supporting document is optional unless HR asks for one
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave2' }), /overlap/);
-  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /Insufficient/);
+  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7 }), /Insufficient/, 'no document needed; the balance still applies');
+  assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave3', startDate: '2026-09-17', endDate: '2026-09-25', days: 7, documentReference: 'MEDCERT-1' }), /Insufficient/);
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...l, id: 'leave4', startDate: '2026-09-01', endDate: '2026-09-01' }), /conflicts/);
   assert.equal(saveRecord(db, admin, 'leaves', { ...l, days: 2 }).days, 1, 'days are derived from the dates, not typed');
-  deleteRecord(db, admin, 'leaves', l.id);
-  assert.equal(db.read().leaves.length, 0); db.close();
+  assert.throws(() => deleteRecord(db, admin, 'leaves', l.id), /final/, 'approved leave cannot be deleted');
+  assert.equal(db.read().leaves.length, 1); db.close();
 });
 test('leave with times: a half day counts 0.5, may sit beside the worked half; a whole day may not', () => {
   const db = new Store(':memory:'); db.write(completeState());
   const base = { employeeId: 'EMP-001', typeId: 'sil', days: 1, reason: 'Half day', documentReference: 'HR-DOC-1', status: 'approved', eligibilityVerified: true };
   const day = db.read().attendance[0].date;
-  const half = saveRecord(db, admin, 'leaves', { ...base, id: 'half1', startDate: day, endDate: day, startTime: '14:00', endTime: '18:00' });
+  const half = saveRecord(db, admin, 'leaves', { ...base, id: 'half1', status: 'pending', startDate: day, endDate: day, startTime: '14:00', endTime: '18:00' });
   assert.equal(half.days, 0.5); assert.deepEqual(half.partialDates, [day]);
-  deleteRecord(db, admin, 'leaves', 'half1');
+  deleteRecord(db, admin, 'leaves', 'half1');   // a pending request may still be removed
   assert.throws(() => saveRecord(db, admin, 'leaves', { ...base, id: 'whole2', startDate: day, endDate: day }), /conflicts with recorded work/);
   const two = saveRecord(db, admin, 'leaves', { ...base, id: 'two', startDate: '2026-09-16', endDate: '2026-09-17', startTime: '14:00', endTime: '18:00' });
   assert.equal(two.days, 1.5, 'afternoon of the first day + whole second day');
@@ -106,7 +106,7 @@ test('calendar-day leave crosses years and consumes annual balances by actual da
   const db = new Store(':memory:'); const s = completeState();
   const t = s.leaveTypes.find(t => t.id === 'vacation'); t.dayBasis = 'calendar'; t.entitledDays = 10;
   db.write(s);
-  const leave = { id: 'cross-year', employeeId: 'EMP-001', typeId: 'vacation', startDate: '2026-12-30', endDate: '2027-01-03', days: 5, reason: 'Calendar test', documentReference: '', status: 'approved', eligibilityVerified: true };
+  const leave = { id: 'cross-year', employeeId: 'EMP-001', typeId: 'vacation', startDate: '2026-12-30', endDate: '2027-01-03', days: 5, reason: 'Calendar test', documentReference: 'HR-DOC-5', status: 'approved', eligibilityVerified: true };
   saveRecord(db, admin, 'leaves', leave);
   assert.equal(db.read().leaves[0].days, 5); db.close();
 });

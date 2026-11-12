@@ -2,37 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { completeState, admin } from './helpers.mjs';
-import { punch, liveDashboard, employeeClockEvents } from '../src/portal.mjs';
+import { punch, liveDashboard, employeeClockEvents, locateAddress, clockFlags } from '../src/portal.mjs';
 import { changeOfficeNetworks, networkStatus } from '../src/office-network.mjs';
+import { addressParts, formatAddress, missingParts, reverseGeocode, cachedAddress } from '../src/geocode.mjs';
 
 const worker = { id: 'worker', username: 'employee1', role: 'employee', employeeId: 'EMP-001' };
 function fixture() { const store = new Store(':memory:'); const state = completeState(); state.attendance = []; store.write(state); return store; }
 const reading = (kind, id, now, extra = {}) => ({ kind, requestId: id, latitude: 14.55, longitude: 121.02, accuracy: 15, capturedAt: now.toISOString(), ...extra });
 const OFFICE = '203.177.10.20', HOME = '112.198.1.2';
+// A Nominatim-style answer for 14.55, 121.02 (no network in tests).
+const NOMINATIM = { name: 'ABC Building', address: { building: 'ABC Building', house_number: '123', road: 'Example Street', quarter: 'San Antonio', city: 'Makati', state: 'Metro Manila', postcode: '1203', country: 'Philippines' } };
+const fakeFetch = body => async () => ({ ok: true, json: async () => body });
+const offsite = (kind, id, now, extra = {}) => reading(kind, id, now, { mode: 'outside', reason: 'Client meeting in Makati', addressConfirmed: true, ...extra });
 
-test('office Wi-Fi: time in only from the office address; out of office needs a reason and is recorded at once (no approval)', () => {
+test('office attendance: only from the authorized office Wi-Fi (public address), with the exact message otherwise', () => {
   const store = fixture(), now = new Date('2026-09-01T00:05:00Z');
   try {
-    assert.deepEqual(networkStatus(store, HOME), { configured: false, office: false }, 'no address saved: not restricted');
+    assert.deepEqual(networkStatus(store, HOME), { configured: false, office: false }, 'no address saved: set-up mode, not restricted');
     assert.throws(() => changeOfficeNetworks(store, admin, { action: 'add-current' }, '192.168.1.5'), /public address/);
     changeOfficeNetworks(store, admin, { action: 'add-current' }, `::ffff:${OFFICE}`);
     assert.deepEqual(networkStatus(store, OFFICE), { configured: true, office: true });
-    assert.throws(() => punch(store, worker, reading('in', '11111111-1111-4111-8111-111111111111', now), now, { ip: HOME }), /not at the office/);
-    assert.throws(() => punch(store, worker, reading('in', '11111111-1111-4111-8111-111111111111', now, { mode: 'outside', reason: 'x' }), now, { ip: HOME }), /reason/);
-    const away = punch(store, worker, reading('in', '11111111-1111-4111-8111-111111111111', now, { mode: 'outside', reason: 'Client meeting in Makati' }), now, { ip: HOME });
-    assert.equal(away.outOfOffice, true); assert.equal(away.reason, 'Client meeting in Makati'); assert.equal(away.approval, undefined, 'no approval step');
-    assert.equal(away.recordedAt, now.toISOString()); assert.equal(away.latitude, 14.55);
-    assert.equal(liveDashboard(store, admin, now).outOfOffice, undefined, 'nothing to approve in Live attendance');
-    const history = employeeClockEvents(store, admin, 'EMP-001', '2026-09');
-    assert.equal(history[0].reason, 'Client meeting in Makati'); assert.equal(history[0].outOfOffice, true);
-    assert.throws(() => employeeClockEvents(store, worker, 'EMP-001', '2026-09'), /permission/i);
-    const end = new Date('2026-09-01T09:05:00Z');
-    const out = punch(store, worker, reading('out', '22222222-2222-4222-8222-222222222222', end), end, { ip: OFFICE });
-    assert.equal(out.onOfficeNetwork, true); assert.ok(!out.outOfOffice);
+    assert.throws(() => punch(store, worker, reading('in', '11111111-1111-4111-8111-111111111111', now), now, { ip: HOME }), /only available when connected to the company.s authorized office Wi-Fi network/);
+    const event = punch(store, worker, reading('in', '11111111-1111-4111-8111-111111111111', now, { connection: { type: 'wifi', effectiveType: '4g' } }), now, { ip: OFFICE, userAgent: 'Mozilla/5.0 (Android)' });
+    assert.equal(event.attendanceType, 'office'); assert.equal(event.network.verified, true); assert.equal(event.network.connection.type, 'wifi');
+    assert.equal(event.recordedAt, now.toISOString(), 'server time'); assert.equal(event.latitude, 14.55, 'GPS kept as extra verification');
+    assert.equal(event.device.userAgent, 'Mozilla/5.0 (Android)');
   } finally { store.close(); }
 });
 
-test('office area: a phone at the office may time in even when the office internet address changed', () => {
+test('office GPS area: inside the office radius but off the saved Wi-Fi address is accepted and flagged; outside is refused', () => {
   const store = fixture(), now = new Date('2026-09-01T00:05:00Z');
   try {
     changeOfficeNetworks(store, admin, { action: 'add-current' }, OFFICE);
@@ -40,8 +38,79 @@ test('office area: a phone at the office may time in even when the office intern
     settings.company = { ...settings.company, officeAddress: '104 Paseo de Roxas, San Lorenzo, Makati City', officeLatitude: 14.55, officeLongitude: 121.02, officeRadius: 150 };
     if (row) store.db.prepare('UPDATE hr_settings SET data=? WHERE id=?').run(JSON.stringify(settings), row.id); else store.db.prepare('INSERT INTO hr_settings(id, data) VALUES(1, ?)').run(JSON.stringify(settings));
     const inOffice = punch(store, worker, reading('in', '33333333-3333-4333-8333-333333333333', now), now, { ip: HOME });
-    assert.equal(inOffice.inOfficeArea, true); assert.equal(inOffice.onOfficeNetwork, false); assert.equal(inOffice.outOfOffice, undefined);
+    assert.equal(inOffice.attendanceType, 'office'); assert.equal(inOffice.officeBy, 'gps'); assert.equal(inOffice.network.verified, false);
+    assert.ok(inOffice.flags.includes('Office Wi-Fi not verified: accepted by the office GPS area'));
     const far = new Date('2026-09-01T09:05:00Z');
-    assert.throws(() => punch(store, worker, reading('out', '44444444-4444-4444-8444-444444444444', far, { latitude: 14.65, longitude: 121.10 }), far, { ip: HOME }), /not at the office/);
+    assert.throws(() => punch(store, worker, reading('out', '34444444-4444-4444-8444-444444444444', far, { latitude: 14.65, longitude: 121.10 }), far, { ip: HOME }), /authorized office Wi-Fi network or inside the office/);
+  } finally { store.close(); }
+});
+
+test('address: the most precise readable address from the map service, nothing added that it did not return', () => {
+  const parts = addressParts(NOMINATIM);
+  assert.equal(formatAddress(parts), 'ABC Building, 123 Example Street, San Antonio, Makati, Metro Manila, 1203, Philippines');
+  assert.deepEqual(missingParts(parts), []);
+  const partial = addressParts({ address: { city: 'Makati', country: 'Philippines' } });
+  assert.equal(formatAddress(partial), 'Makati, Philippines', 'no street or barangay invented');
+  assert.deepEqual(missingParts(partial), ['street', 'barangay']);
+});
+
+test('off-site work: any connection; GPS + a confirmed address; the server-found address is stored with the timestamp', async () => {
+  const store = fixture(), now = new Date();
+  try {
+    changeOfficeNetworks(store, admin, { action: 'add-current' }, OFFICE);
+    const found = await locateAddress(store, worker, { latitude: 14.55, longitude: 121.02, accuracy: 15 }, { fetchImpl: fakeFetch(NOMINATIM) });
+    assert.equal(found.formatted, 'ABC Building, 123 Example Street, San Antonio, Makati, Metro Manila, 1203, Philippines');
+    assert.equal(found.limit, 50); assert.equal(found.lowAccuracy, false);
+    assert.throws(() => punch(store, worker, offsite('in', '55555555-5555-4555-8555-555555555555', now, { addressConfirmed: false }), now, { ip: HOME }), /confirm your location/);
+    const event = punch(store, worker, offsite('in', '55555555-5555-4555-8555-555555555555', now), now, { ip: HOME });
+    assert.equal(event.attendanceType, 'offsite'); assert.equal(event.network.verified, false);
+    assert.equal(event.address, found.formatted); assert.equal(event.addressDetected, found.formatted); assert.equal(event.addressCorrected, false);
+    assert.equal(event.addressParts.street, 'Example Street'); assert.equal(event.accuracy, 15); assert.deepEqual(event.flags, []);
+    assert.equal(liveDashboard(store, admin, now).outOfOffice, undefined, 'recorded at once, no approval');
+    assert.equal(employeeClockEvents(store, admin, 'EMP-001', now.toISOString().slice(0, 7))[0].place, found.formatted, 'HR sees the captured address');
+    assert.throws(() => employeeClockEvents(store, worker, 'EMP-001', '2026-09'), /permission/i, 'precise locations for HR / Admin only');
+  } finally { store.close(); }
+});
+
+test('off-site flags: low accuracy is recorded but flagged; corrected / typed addresses and impossible travel are flagged', async () => {
+  const store = fixture(), now = new Date();
+  try {
+    await reverseGeocode(store, 14.55, 121.02, { fetchImpl: fakeFetch(NOMINATIM) });
+    const event = punch(store, worker, offsite('in', '66666666-6666-4666-8666-666666666666', now, { accuracy: 120, address: 'Unit 5, ABC Building, 123 Example Street, Makati' }), now, { ip: HOME });
+    assert.equal(event.addressCorrected, true); assert.equal(event.address, 'Unit 5, ABC Building, 123 Example Street, Makati');
+    assert.ok(event.flags.some(f => /Low GPS accuracy: ±120 m \(limit 50 m\)/.test(f)));
+    assert.ok(event.flags.includes('Address corrected by the employee'));
+    const typed = clockFlags({ mode: 'outside', accuracy: 10, address: 'Somewhere typed' }, { limit: 50, detected: null, previous: null, now });
+    assert.deepEqual(typed, ['Address not found automatically; typed by the employee']);
+    const travel = clockFlags({ mode: 'outside', accuracy: 0, latitude: 10.3, longitude: 123.9 }, { limit: 50, detected: { formatted: '' }, previous: { latitude: 14.55, longitude: 121.02, recordedAt: new Date(now.getTime() - 30 * 60000).toISOString() }, now });
+    assert.ok(travel.some(f => /simulated/.test(f)) && travel.some(f => /Impossible travel/.test(f)));
+  } finally { store.close(); }
+});
+
+test('off-site work: no address found and none typed is refused; an unreachable service never invents one', async () => {
+  const store = fixture(), now = new Date();
+  try {
+    const failed = await reverseGeocode(store, 14.6, 121.1, { fetchImpl: async () => { throw new Error('offline'); } });
+    assert.equal(failed.formatted, ''); assert.match(failed.error, /could not be reached/);
+    assert.equal(cachedAddress(store, 14.6, 121.1), null, 'failures are not cached');
+    assert.throws(() => punch(store, worker, offsite('in', '77777777-7777-4777-8777-777777777777', now, { latitude: 14.6, longitude: 121.1 }), now, { ip: HOME }), /Type the address/);
+  } finally { store.close(); }
+});
+
+test('off-site work after the day\'s time out opens an additional session that extends the same day (gap unpaid, HR reviews)', async () => {
+  const store = fixture(), day = '2026-09-01', at = hhmm => new Date(`${day}T${hhmm}:00+08:00`);
+  try {
+    await reverseGeocode(store, 14.55, 121.02, { fetchImpl: fakeFetch(NOMINATIM) });
+    punch(store, worker, reading('in', '81111111-1111-4111-8111-111111111111', at('09:00')), at('09:00'), { ip: HOME });
+    punch(store, worker, reading('out', '82222222-2222-4222-8222-222222222222', at('18:00')), at('18:00'), { ip: HOME });
+    assert.throws(() => punch(store, worker, reading('in', '83333333-3333-4333-8333-333333333333', at('19:00')), at('19:00'), { ip: HOME }), /use Off-site work time in/, 'office: still one session a day');
+    const extraIn = punch(store, worker, offsite('in', '84444444-4444-4444-8444-444444444444', at('19:00')), at('19:00'), { ip: HOME });
+    assert.equal(extraIn.additionalSession, true); assert.ok(extraIn.flags.some(f => /Additional off-site session/.test(f)));
+    assert.ok(!store.read().openClockIns.some(c => c.id === extraIn.id), 'not treated as an open time-in by payroll');
+    punch(store, worker, offsite('out', '85555555-5555-4555-8555-555555555555', at('20:30')), at('20:30'), { ip: HOME });
+    const record = store.read().attendance.find(a => a.employeeId === 'EMP-001' && a.date === day);
+    assert.equal(record.timeIn, '09:00'); assert.equal(record.timeOut, '20:30'); assert.equal(record.approved, false, 'HR reviews it');
+    assert.deepEqual(record.breaks.at(-1), { start: `${day}T18:00`, end: `${day}T19:00` }, 'the gap between sessions is unpaid');
+    assert.match(record.explanation, /Additional off-site session 19:00-20:30/);
   } finally { store.close(); }
 });

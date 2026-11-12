@@ -24,7 +24,7 @@ export const DEFAULT_REQUIREMENTS = [
   ['sss', 'SSS number', 'Government registration', true, false, false],
   ['philhealth', 'PhilHealth number', 'Government registration', true, false, false],
   ['pagibig', 'Pag-IBIG MID number', 'Government registration', true, false, false],
-  ['nbi', 'NBI clearance', 'Pre-employment', true, true, false],
+  ['nbi', 'NBI clearance', 'Pre-employment', true, false, false],   // kept on file from hiring; not renewed (Nov 2026)
   ['medical', 'Pre-employment medical certificate', 'Medical', false, true, true],
   ['evaluation', 'Performance evaluation', 'Performance', false, false, false],
   ['training-cert', 'Training certificates', 'Training', false, false, false],
@@ -34,7 +34,7 @@ export const DEFAULT_REQUIREMENTS = [
 const text = (max = 200) => z.string().trim().max(max);
 const requirementSchema = z.object({ id: z.string().regex(/^[a-z0-9-]{1,60}$/), name: text().min(1), category: text(80).min(1), required: z.boolean(), expires: z.boolean(), restricted: z.boolean(), providedBy: z.enum(['employee', 'company']).default('employee'), departments: z.array(text(120)).max(100), classifications: z.array(text(60)).max(30), dueDays: z.number().int().min(0).max(365).nullable().default(null) }).strict();
 export const settingsSchema = z.object({
-  company: z.object({ name: text(120).min(1), systemTitle: text(120).min(1), theme: z.enum(['forest', 'gds']), sssEmployerNo: text(40).default(''), philhealthEmployerNo: text(40).default(''), pagibigEmployerNo: text(40).default(''), egovFee: z.number().min(0).max(10000).default(15), leaveVerifiedName: text(120).default(''), leaveVerifiedTitle: text(120).default(''), leaveApprovedName: text(120).default(''), leaveApprovedTitle: text(120).default(''), officeAddress: text(300).default(''), officeLatitude: z.number().min(-90).max(90).nullable().default(null), officeLongitude: z.number().min(-180).max(180).nullable().default(null), officeRadius: z.number().int().min(10).max(5000).default(150) }).strict(),
+  company: z.object({ name: text(120).min(1), systemTitle: text(120).min(1), theme: z.enum(['forest', 'gds']), sssEmployerNo: text(40).default(''), philhealthEmployerNo: text(40).default(''), pagibigEmployerNo: text(40).default(''), egovFee: z.number().min(0).max(10000).default(15), leaveVerifiedName: text(120).default(''), leaveVerifiedTitle: text(120).default(''), leaveApprovedName: text(120).default(''), leaveApprovedTitle: text(120).default(''), officeAddress: text(300).default(''), officeLatitude: z.number().min(-90).max(90).nullable().default(null), officeLongitude: z.number().min(-180).max(180).nullable().default(null), officeRadius: z.number().int().min(10).max(5000).default(150), offsiteAccuracyMeters: z.number().int().min(5).max(1000).default(50), lateExplanationsFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict(),
   departments: z.array(text(120).min(1)).max(200),
   positions: z.array(text(120).min(1)).max(500),
   classifications: z.array(text(60).min(1)).min(1).max(30),

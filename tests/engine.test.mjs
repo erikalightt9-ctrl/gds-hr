@@ -23,15 +23,15 @@ test('NSD crosses midnight and excludes timed breaks', () => {
   assert.equal(nightMinutes('2026-09-01T22:00', '2026-09-02T02:00', []), 240);
   assert.equal(nightMinutes('2026-09-01T21:00', '2026-09-02T07:00', [{ start: '2026-09-02T01:00', end: '2026-09-02T02:00' }]), 420);
 });
-test('ordinary OT and lateness are independently traced; late time made up after the shift is offset', () => {
+test('ordinary OT and lateness are independently traced; staying after the shift is not an offset unless approved', () => {
   const s = fixture(); s.rules[0].graceMinutes = 0; s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '18:15' })]; withOtherDays(s);
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15');
   const row = p.rows[0];
   assert.equal(row.earnings.regularOT, 426.14);
   assert.equal(row.deductions.late, undefined, 'no separate late deduction');
-  assert.equal(row.earnings.basic, 15000, 'the 15 late minutes are offset by staying after the scheduled end');
-  assert.equal(row.creditedDays, 11);
-  assert.equal(row.late[0].lateMinutes, 15); assert.equal(row.late[0].workedOffset, 15); assert.equal(row.late[0].deductibleMinutes, 0);
+  assert.equal(row.earnings.basic, 14959.09, 'the 15 late minutes lower credited time (10.96875 → 10.97 days × 1,363.64); staying late is not an approved offset');
+  assert.equal(row.creditedDays, 10.97, '10.96875 shown with 2 decimals');
+  assert.equal(row.late[0].lateMinutes, 15); assert.equal(row.late[0].workedAfter, 15, 'shown to HR'); assert.equal(row.late[0].deductibleMinutes, 15);
   assert.equal(row.late[0].sourceId, '2026-09-01');
 });
 test('approved exception and offset protect covered late time', () => {
@@ -163,7 +163,7 @@ test('payroll is real time: unapproved attendance and a time-in without time out
   s.openClockIns = [{ id: 'ci-1', employeeId: 'EMP-001', workDate: '2026-09-01', time: '08:30' }];
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
   assert.equal(row.daysPresent, 11, 'the open time-in day and the unapproved day both count');
-  assert.equal(row.creditedDays, 10.9375, '30 minutes late on the open day: 1 - 30/480');
+  assert.equal(row.creditedDays, 10.94, '30 minutes late on the open day: 11 - 30/480 = 10.9375 → 10.94');
   assert.ok(p.blockers.some(b => /no time out yet/.test(b)) && p.blockers.some(b => /not approved/.test(b)), 'flagged until complete');
 });
 
@@ -174,30 +174,30 @@ test('half-day leave: the leave half is paid (or deducted when unpaid); the work
     return calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
   };
   const paid = run('sil');
-  assert.equal(paid.deductions.undertime, 0, 'the leave half is not undertime');
+  assert.equal(paid.undertimeAmount, 0, 'the leave half is not undertime');
   assert.equal(paid.absenceAmount, 0, 'paid half day: nothing deducted');
   const unpaid = run('unpaid');
   assert.equal(Math.round((unpaid.absenceAmount - paid.absenceAmount) * 100) / 100, 681.82, 'unpaid half day reduces basic by half a day (1,363.64 / 2)');
-  assert.equal(unpaid.deductions.undertime, 0);
+  assert.equal(unpaid.undertimeAmount, 0);
 });
 
 test('late time not made up reduces credited days, not a deduction line', () => {
   const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:00' })]; withOtherDays(s);
   const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
   assert.equal(row.deductions.late, undefined, 'no separate late deduction');
-  assert.equal(row.earnings.basic, 15000 - 42.61, '15 min of a 480-min day = 0.03125 day x 1,363.64 daily');
-  assert.equal(row.creditedDays, 10.9688, 'credited days are kept to 4 decimals (11 days present, 0.03125 day lost)');
+  assert.equal(row.earnings.basic, 14959.09, '15 min of a 480-min day = 0.03125 day: 10.96875 → 10.97 days x 30,000 / 22');
+  assert.equal(row.creditedDays, 10.97, 'monthly-paid days credited have 2 decimals (11 days present, 0.03125 day lost = 10.96875 → 10.97)');
   assert.equal(row.late[0].deductibleMinutes, 15);
 });
 
 test('a cutoff waiver removes late and undertime deductions; the minutes stay on record', () => {
   const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:30', timeOut: '15:00' })]; withOtherDays(s);
   const before = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-  assert.ok(before.late[0].deductibleMinutes > 0 && before.deductions.undertime > 0);
+  assert.ok(before.late[0].deductibleMinutes > 0 && before.undertimeAmount > 0);
   s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveLate: true, waiveUndertime: true, reason: 'Waived', updatedBy: 'admin' }];
   const after = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
   assert.equal(after.late[0].lateMinutes, 30); assert.equal(after.late[0].deductibleMinutes, 0);
-  assert.equal(after.deductions.undertime, 0); assert.equal(after.earnings.basic, 15000);
+  assert.equal(after.undertimeAmount, 0); assert.equal(after.earnings.basic, 15000);
 });
 
 test('a loan set to the 1st-15th cutoff is deducted only there; every-cutoff loans each cutoff', () => {
@@ -237,4 +237,25 @@ test('overtime is paid in whole 30-minute blocks, rounded down (40 min = 30; 1 h
   assert.equal(ot('17:15'), hour, '1 h 15 min -> 1 h');
   assert.equal(ot('16:29'), 0, '29 minutes -> not overtime');
   assert.ok(Math.abs(ot('16:30') - hour / 2) < 0.02, 'exactly 30 minutes counts');
+});
+
+test('HR can waive the open time-in check for a cutoff: pay is unchanged, the blocker becomes a trace note', () => {
+  const s = fixture(); s.attendance = [attend('2026-09-02')]; withOtherDays(s);
+  s.attendance = s.attendance.filter(a => a.date !== '2026-09-01');
+  s.openClockIns = [{ id: 'ci-1', employeeId: 'EMP-001', workDate: '2026-09-01', time: '08:30' }];
+  const before = calculatePayroll(s, '2026-09-01', '2026-09-15');
+  s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveOpenTimeIn: true, updatedBy: 'hr1' }];
+  const after = calculatePayroll(s, '2026-09-01', '2026-09-15');
+  assert.ok(before.blockers.some(b => /no time out yet/.test(b)));
+  assert.ok(!after.blockers.some(b => /no time out yet/.test(b)), 'waived');
+  assert.equal(after.rows[0].net, before.rows[0].net, 'pay unchanged');
+  assert.ok(after.rows[0].trace.some(t => /Waived by hr1: time in 08:30 on 2026-09-01/.test(t.formula)));
+});
+
+test('a manual "replace" entry with typed days worked and a typed basic credits exactly the typed days', () => {
+  const s = fixture(); withOtherDays(s);
+  s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'replace', daysWorked: 9, absenceDays: 2, lateMinutes: 0, undertimeMinutes: 0, hours: {}, updatedBy: 'hr1',
+    overrides: [{ component: 'basic', amount: 5000, reason: 'Semi-monthly / scheduled days x days present' }] }];
+  const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(row.earnings.basic, 5000); assert.equal(row.creditedDays, 9);
 });

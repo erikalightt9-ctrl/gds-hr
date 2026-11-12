@@ -66,10 +66,17 @@ test('uploading and verifying a required document updates completion and the das
     const item = employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'contract');
     assert.equal(item.versions.length, 2); assert.equal(item.status, 'Submitted');
     // Expired documents are not complete.
-    const idDoc = upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2020-01-01' });
+    assert.throws(() => upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF }), /Choose which ID/, 'the ID type is required');
+    const idDoc = upload201(store, hr, id, { requirementId: 'valid-id', name: 'id.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2020-01-01', idType: 'Passport' });
+    assert.equal(idDoc.idType, 'Passport', 'the ID type is kept with the file');
+    assert.equal(idDoc.name, 'Passport ID.pdf', 'the file is named after the chosen ID'); assert.equal(idDoc.originalName, 'id.pdf');
     reviewDocument(store, hr, idDoc.id, { decision: 'Verified' });
     assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'valid-id').status, 'Expired');
     assert.throws(() => reviewDocument(store, hr, idDoc.id, { decision: 'Rejected' }), /reason/);
+    // NBI clearance is kept on file from hiring: a past expiry date never makes it Expired.
+    const nbi = upload201(store, hr, id, { requirementId: 'nbi', name: 'nbi.pdf', mime: 'application/pdf', data: PDF, expiryDate: '2018-04-04' });
+    reviewDocument(store, hr, nbi.id, { decision: 'Verified' });
+    assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'nbi').status, 'Verified', 'NBI does not expire');
     setNotApplicable(store, hr, id, 'nbi', { notApplicable: true, reason: 'Transferred from affiliate with clearance on file' });
     assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'nbi').status, 'Not Applicable');
     assert.throws(() => upload201(store, hr, id, { requirementId: 'contract', name: 'x.pdf', mime: 'application/pdf', data: Buffer.from('not a pdf').toString('base64') }), /does not match/);
@@ -239,5 +246,19 @@ test('TIN, SSS, PhilHealth and Pag-IBIG are complied by the number on file; no p
     saveProfile(store, admin, id, 'government', { sss: '01-2345678-9', tin: '', philHealth: '', pagIbig: '' });
     assert.equal(status('sss').status, 'Verified'); assert.equal(status('tin').status, 'Missing');
     assert.ok(!JSON.stringify(employeeChecklist(store, me, id)).includes('01-2345678-9'), 'the number itself is not exposed in the checklist');
+  } finally { store.close(); }
+});
+
+test('remittance-only profiles (e.g. the CEO) receive no memos', async () => {
+  const { saveProfile } = await import('../src/profiles.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const ceo = createEmployee(store, hr, form('Demry', 'Boss')).created.id;
+    saveProfile(store, admin, ceo, 'payroll', { status: 'Remittance only' });
+    const memo = saveMemoDraft(store, staff, null, { title: 'Everyone memo', issueDate: '2026-10-01', body: 'Fictional memo text.', recipients: { mode: 'all' }, ackRequired: true, ackDeadline: '' });
+    publishMemo(store, hr, memo.id);
+    assert.equal(myMemos(store, { role: 'employee', username: 'ana', employeeId: a }).length, 1);
+    assert.equal(myMemos(store, { role: 'employee', username: 'ceo', employeeId: ceo }).length, 0);
   } finally { store.close(); }
 });

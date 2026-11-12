@@ -20,9 +20,11 @@ const canSee = (actor, req) => (actor.role === 'maker' ? !isSalaryRequirement(re
 export function applicableRequirements(settings, employee, job) {
   return settings.documentRequirements.filter(r => (!r.departments.length || r.departments.includes(employee.department)) && (!r.classifications.length || r.classifications.includes(job.employmentStatus || '')));
 }
-function statusOf(doc, today) {
+// A file expires only when its requirement is set to expire (Settings → requirements); a pre-employment record kept on
+// file (e.g. the NBI clearance submitted when hired) keeps its expiry date for reference but never turns Expired.
+function statusOf(doc, today, req = { expires: true }) {
   if (!doc) return 'Missing';
-  if (doc.expiryDate && doc.expiryDate < today && doc.reviewStatus !== 'Rejected') return 'Expired';
+  if (req.expires && doc.expiryDate && doc.expiryDate < today && doc.reviewStatus !== 'Rejected') return 'Expired';
   return doc.reviewStatus;
 }
 // The checklist for one employee. `actor` decides whether restricted items show file details.
@@ -34,12 +36,12 @@ export function checklistFor(store, actor, employee, settings = readSettings(sto
     const na = overrides.get(req.id);
     // Government registrations are complied by the number on file (the number itself is never shown here).
     const number = NUMBER_REQUIREMENTS[req.id];
-    const status = na ? 'Not Applicable' : number ? (String(gov[number.field] || '').trim() ? 'Verified' : 'Missing') : statusOf(current, today);
+    const status = na ? 'Not Applicable' : number ? (String(gov[number.field] || '').trim() ? 'Verified' : 'Missing') : statusOf(current, today, req);
     const due = req.dueDays !== null && req.dueDays !== undefined && employee.startDate ? addDays(employee.startDate, req.dueDays) : '';
     const hidden = !canSee(actor, req);
     return {
       requirement: req, status, due, overdue: status === 'Missing' && req.required && !!due && due < today,
-      expiringSoon: status === 'Verified' && !!current?.expiryDate && current.expiryDate <= addDays(today, settings.reminders.expiryDays),
+      expiringSoon: status === 'Verified' && req.expires && !!current?.expiryDate && current.expiryDate <= addDays(today, settings.reminders.expiryDays),
       notApplicable: na || null, restricted: req.restricted, hidden, numberOnly: !!number,
       current: hidden ? null : current, versions: hidden ? [] : versions,
     };
@@ -61,12 +63,20 @@ export function employeeChecklist(store, actor, employeeId) {
 }
 
 // ---------- Upload, review, Not Applicable ----------
+// Government-issued ID: the uploader says which ID it is (the same list is in public/hr-common.js).
+export const VALID_ID_TYPES = ['Passport', 'PhilSys National ID', 'UMID', 'SSS ID', 'TIN ID', "Driver's license", 'PRC ID', 'PhilHealth ID', 'Pag-IBIG ID', 'Postal ID', "Voter's ID", 'ACR I-Card (foreign national)', 'Senior citizen ID', 'PWD ID', 'Other government ID'];
 const uploadSchema = z.object({
   requirementId: z.string().regex(/^[a-z0-9-]{1,60}$/), name: z.string().trim().min(1).max(180).refine(v => !/[\x00-\x1f\\/]/.test(v), 'Invalid file name'),
   mime: z.enum(['application/pdf', 'image/png', 'image/jpeg']), data: z.string().min(1).max(28000000).regex(/^[A-Za-z0-9+/]*={0,2}$/),
   issueDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default(''), expiryDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default(''),
   replaceReason: z.string().trim().max(500).default(''), remarks: z.string().trim().max(500).default(''),
+  idType: z.string().trim().max(80).default(''),
 }).strict();
+// A Government-issued ID file is named after the chosen ID (e.g. "Passport ID.jpg"); the original name is kept as originalName.
+export function idFileName(idType, mime) {
+  const ext = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg' }[mime];
+  return `${/\bID\b|I-Card|license/i.test(idType) ? idType : `${idType} ID`}.${ext}`;
+}
 export function validFile(mime, bytes) {
   return mime === 'application/pdf' ? bytes.subarray(0, 5).toString() === '%PDF-' : mime === 'image/png' ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
 }
@@ -83,19 +93,20 @@ export function upload201(store, actor, employeeId, input) {
   if (!bytes.length || bytes.length > settings.uploads.documentMB * 1024 * 1024) throw new AppError(`Choose a file up to ${settings.uploads.documentMB} MB.`);
   if (!validFile(v.mime, bytes)) throw new AppError('The file content does not match a PDF, PNG or JPEG.');
   if (v.expiryDate && v.issueDate && v.expiryDate < v.issueDate) throw new AppError('Expiry date is before the issue date.');
+  if (req.id === 'valid-id' && !VALID_ID_TYPES.includes(v.idType)) throw new AppError('Choose which ID you are uploading (e.g. Passport, UMID, TIN ID).');
   return store.transaction(() => {
     const previous = docsOf(store, employeeId).filter(d => d.requirementId === req.id).sort((a, b) => b.version - a.version)[0];
     if (previous && !self && previous.reviewStatus === 'Verified' && v.replaceReason.length < 3) throw new AppError('Give a reason for replacing a verified document.');
     const meta = {
       id: randomUUID(), employeeId, type: TYPE, requirementId: req.id, requirementName: req.name, category: req.category, restricted: req.restricted,
-      name: v.name, mime: v.mime, size: bytes.length, version: (previous?.version || 0) + 1, replaces: previous?.id || null, replaceReason: v.replaceReason,
-      issueDate: v.issueDate, expiryDate: v.expiryDate, expiry: v.expiryDate, remarks: v.remarks,
+      name: req.id === 'valid-id' ? idFileName(v.idType, v.mime) : v.name, ...(req.id === 'valid-id' ? { originalName: v.name } : {}), mime: v.mime, size: bytes.length, version: (previous?.version || 0) + 1, replaces: previous?.id || null, replaceReason: v.replaceReason,
+      issueDate: v.issueDate, expiryDate: v.expiryDate, expiry: v.expiryDate, remarks: v.remarks, idType: req.id === 'valid-id' ? v.idType : '',
       uploadedAt: new Date().toISOString(), uploadedBy: actor.username, reviewStatus: 'Submitted', reviewer: '', reviewedAt: '', reviewNote: '', status: 'Active',
     };
     store.db.prepare('INSERT INTO employee_documents VALUES(?,?,?,?)').run(meta.id, employeeId, JSON.stringify(meta), bytes);
     store.db.prepare('DELETE FROM requirement_overrides WHERE employee_id=? AND requirement_id=?').run(employeeId, req.id);
     if (self) store.notify(null, `${employee.name} uploaded “${req.name}” from their account. Waiting for HR review.`);
-    store.log(actor, previous ? 'replace' : 'upload', `document:${TYPE}`, employeeId, previous ? { id: previous.id, version: previous.version } : null, { id: meta.id, requirement: req.name, version: meta.version, reason: v.replaceReason });
+    store.log(actor, previous ? 'replace' : 'upload', `document:${TYPE}`, employeeId, previous ? { id: previous.id, version: previous.version } : null, { id: meta.id, requirement: req.name, version: meta.version, reason: v.replaceReason, ...(meta.idType ? { idType: meta.idType } : {}) });
     return meta;
   });
 }
@@ -148,18 +159,21 @@ export function document201Content(store, actor, docId) {
 export function documentSummary(store, actor, employees = scopeEmployees(store, actor).filter(e => !e.archived)) {
   const settings = readSettings(store), today = localToday(), rows = [];
   let missingDocuments = 0, employeesMissing = 0, expired = 0, expiringSoon = 0, pendingReview = 0, overdue = 0;
+  const toReview = [];   // one entry per employee with uploads waiting for HR review (bell items open that 201 file)
   for (const e of employees) {
     const list = checklistFor(store, actor, e, settings, today);
     const missing = list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status));
     missingDocuments += missing.length; if (missing.length) employeesMissing++;
     expired += list.items.filter(i => i.status === 'Expired').length;
     expiringSoon += list.items.filter(i => i.expiringSoon).length;
-    pendingReview += list.items.filter(i => ['Submitted', 'Under Review'].includes(i.status)).length;
+    const reviewing = list.items.filter(i => ['Submitted', 'Under Review'].includes(i.status));
+    pendingReview += reviewing.length;
+    if (reviewing.length) toReview.push({ employeeId: e.id, name: e.name, requirements: reviewing.map(i => i.requirement.name), uploadedAt: reviewing.map(i => i.current?.uploadedAt || '').filter(Boolean).sort() });
     overdue += list.items.filter(i => i.overdue).length;
     for (const i of list.items) if (i.status !== 'Verified' && i.status !== 'Not Applicable' && (i.requirement.required || i.status !== 'Missing')) rows.push({ employeeId: e.id, name: e.name, number: e.employeeNumber || e.id, department: e.department, requirement: i.requirement.name, category: i.requirement.category, required: i.requirement.required, status: i.status, due: i.due, overdue: i.overdue, expiry: i.current?.expiryDate || '' });
     if (list.items.some(i => i.expiringSoon)) for (const i of list.items.filter(x => x.expiringSoon)) rows.push({ employeeId: e.id, name: e.name, number: e.employeeNumber || e.id, department: e.department, requirement: i.requirement.name, category: i.requirement.category, required: i.requirement.required, status: 'Expiring soon', due: '', overdue: false, expiry: i.current?.expiryDate || '' });
   }
-  return { missingDocuments, employeesMissing, expired, expiringSoon, pendingReview, overdue, rows };
+  return { missingDocuments, employeesMissing, expired, expiringSoon, pendingReview, overdue, rows, toReview };
 }
 export function completionReport(store, actor) {
   const settings = readSettings(store);

@@ -1,6 +1,6 @@
 // Employee 201 Files: directory (search, filters, sort, pagination) and the tabbed employee profile with the
 // digital 201 document checklist.
-import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who } from './hr-common.js';
+import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who, idTypeSelect } from './hr-common.js';
 
 const PAGE_SIZE = 10;
 const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['attendance', 'Attendance', '🕒'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
@@ -210,7 +210,7 @@ export function createFiles(ctx) {
   function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Subsidiary', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
   // Attendance history for one month: recorded attendance and approved leave, newest first.
   let attMonth = '';
-  // Time in / out records (out of office: reason, time recorded, location), loaded per employee and month.
+  // Time in / out records (off-site work: reason, time recorded, location), loaded per employee and month.
   const clockCache = new Map();
   function clockEventsHtml(id, month) {
     const key = `${id}|${month}`;
@@ -224,7 +224,7 @@ export function createFiles(ctx) {
     const away = list.filter(e => e.outOfOffice);
     const where = e => (e.latitude === null || e.latitude === undefined ? 'No GPS reading' : `<a href="https://www.google.com/maps/search/?api=1&query=${e.latitude},${e.longitude}" target="_blank" rel="noopener noreferrer">${esc(e.place || `${e.latitude}, ${e.longitude}`)}</a><small> ±${esc(e.accuracy)} m</small>`);
     const stampOf = iso => new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
-    return `<h3>Out of office time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
+    return `<h3>Off-site work time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
   }
   function attendanceHtml(id) {
     const state = ctx.getState(), month = attMonth || ctx.today().slice(0, 7);
@@ -235,7 +235,7 @@ export function createFiles(ctx) {
     for (const a of state.attendance.filter(x => x.employeeId === id && x.date.startsWith(month))) {
       const late = a.status === 'present' && mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? Math.max(0, mins(a.timeIn) - mins(a.scheduledIn)) : 0;
       const status = a.status === 'present' ? (late >= Math.max(1, grace) ? 'Late' : 'Present') : a.status === 'absent' ? 'Absent' : a.status === 'off' ? 'Off' : a.status.replace(/-/g, ' ');
-      rows.set(a.date, { date: a.date, status, timeIn: a.timeIn, timeOut: a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '', late, note: a.explanation || '' });
+      rows.set(a.date, { date: a.date, status, timeIn: a.timeIn, timeOut: a.timeOut ? `${a.timeOut}${a.endNextDay ? ' (+1)' : ''}` : '', late, note: /^Employee clock events:/.test(a.explanation || '') ? '' : a.explanation || '' });   // the automatic time in / out note is not a remark
     }
     for (const l of state.leaves.filter(x => x.employeeId === id && x.status === 'approved')) for (const d of (l.countedDates || []).filter(x => x.startsWith(month))) {
       const half = (l.partialDates || []).includes(d), row = rows.get(d) || { date: d, timeIn: '', timeOut: '', late: 0, note: '' };
@@ -297,7 +297,7 @@ export function createFiles(ctx) {
     }
     if (tab === 'requirements' || tab === 'documents' || tab === 'government') {
       const files = checklist.items.flatMap(i => i.versions.map(v => ({ ...v, current: i.current?.id === v.id })));
-      return governmentIds() + documentsTab(record, checklist) + (files.length ? block('📁', 'All 201 files', table(['File', 'Requirement', 'Version', 'Uploaded', 'Review', ''], files.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(v => [`<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, esc(v.requirementName || ''), `v${v.version}${v.current ? ' <small>current</small>' : ' <small>earlier</small>'}`, `${fmtDateTime(v.uploadedAt)}<small>${esc(who(v.uploadedBy))}</small>`, badge(v.reviewStatus, DOC_BADGE[v.reviewStatus]), `<a class="small download-link" href="/api/hr/documents/${v.id}/content?download=1">Download</a>`]), 'No files uploaded yet. Upload them from the Requirements tab.')) : '');
+      return governmentIds() + documentsTab(record, checklist) + (files.length ? block('📁', 'All 201 files', table(['File', 'Requirement', 'Uploaded', 'Review'], files.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(v => [`<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, esc(v.requirementName || ''), fmtDateTime(v.uploadedAt), badge(v.reviewStatus, DOC_BADGE[v.reviewStatus])]), 'No files uploaded yet. Upload them from the Requirements tab.')) : '');
     }
     if (tab === 'attendance') return `<div data-att-box>${attendanceHtml(record.id)}</div>`;
     if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'), edit ? ' <button class="small" data-go-memos>Send a memo</button>' : '');
@@ -358,16 +358,17 @@ export function createFiles(ctx) {
   }
   function documentsTab(record, checklist) {
     const manage = can().manage && !record.archived, approve = can().approve;
-    const groups = [...new Set(checklist.items.map(i => i.requirement.category))];
+    // Government numbers already on file (Government IDs) need nothing more, so they are not listed; missing ones still are.
+    const shown = checklist.items.filter(i => !(i.numberOnly && i.status === 'Verified'));
+    const groups = [...new Set(shown.map(i => i.requirement.category))];
     return `<section class="panel checklist-panel"><div class="panel-head"><div><h2>Digital 201 checklist</h2><p>Completion counts only current, verified, required documents.</p></div>${progress(checklist.percent, `${checklist.completeCount}/${checklist.requiredCount} verified`)}</div>
-      ${groups.map(g => `<h3 class="hr-group-title">${esc(g)}</h3>${table(['Requirement', 'Status', 'Due / expiry', 'Current file', 'Reviewed', 'Actions'], checklist.items.filter(i => i.requirement.category === g).map(i => {
+      ${groups.map(g => `<h3 class="hr-group-title">${esc(g)}</h3>${table(['Requirement', 'Status', 'Due / expiry', 'Current file', 'Actions'], shown.filter(i => i.requirement.category === g).map(i => {
         const c = i.current;
-        return [`${esc(i.requirement.name)}${i.requirement.required ? '' : ' <small>optional</small>'}${i.restricted ? ' <small>🔒 restricted</small>' : ''}`,
-          `${i.numberOnly ? badge(i.status === 'Verified' ? 'Number on file' : i.status === 'Missing' ? 'No number yet' : i.status, DOC_BADGE[i.status]) : badge(i.status, DOC_BADGE[i.status])}${i.overdue ? ' <small class="danger-text">overdue</small>' : ''}${i.expiringSoon ? ' <small>expiring soon</small>' : ''}${i.notApplicable ? `<small>${esc(i.notApplicable.reason)}</small>` : ''}`,
+        return [`${esc(i.requirement.name)}${i.restricted ? ' <small>🔒 restricted</small>' : ''}`,
+          `${i.numberOnly ? badge(i.status === 'Verified' ? 'Number on file' : i.status === 'Missing' ? 'No number yet' : i.status, DOC_BADGE[i.status]) : !i.requirement.required && i.status === 'Missing' ? '<span class="muted">—</span>' : badge(i.status, DOC_BADGE[i.status])}${i.overdue ? ' <small class="danger-text">overdue</small>' : ''}${i.expiringSoon ? ' <small>expiring soon</small>' : ''}${i.notApplicable ? `<small>${esc(i.notApplicable.reason)}</small>` : ''}`,
           c?.expiryDate ? `Expires ${fmtDate(c.expiryDate)}` : i.due && ['Missing', 'Rejected'].includes(i.status) ? `Due ${fmtDate(i.due)}` : '—',
-          i.numberOnly ? '<span class="muted">Number only · no file needed</span>' : i.hidden ? '<span class="muted">Restricted</span>' : c ? `<a href="/api/hr/documents/${c.id}/content" target="_blank" rel="noopener">${esc(c.name)}</a><small>v${c.version} · ${fmtDate(c.uploadedAt)} · ${esc(who(c.uploadedBy))}</small>` : '—',
-          c?.reviewer ? `${esc(c.reviewer)}<small>${fmtDate(c.reviewedAt)}${c.reviewNote ? ` · ${esc(c.reviewNote)}` : ''}</small>` : '—',
-          `<span class="row-actions">${manage && !i.hidden && !i.numberOnly ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${c && !i.hidden ? `<a class="small download-link" href="/api/hr/documents/${c.id}/content?download=1">Download</a>` : ''}${i.versions.length > 1 ? `<button class="small" data-versions="${esc(i.requirement.id)}">Versions (${i.versions.length})</button>` : ''}${approve ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? 'Mark applicable' : 'Not applicable'}</button>` : ''}</span>`];
+          i.numberOnly ? '<span class="muted">Number only · no file needed</span>' : i.hidden ? '<span class="muted">Restricted</span>' : c ? `<a href="/api/hr/documents/${c.id}/content" target="_blank" rel="noopener">${esc(c.name)}</a>` : '—',
+          `<span class="row-actions">${manage && !i.hidden && !i.numberOnly ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${approve ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? 'Mark applicable' : 'Not applicable'}</button>` : ''}</span>`];
       }))}`).join('')}</section>`;
   }
   async function onProfileClick(event, record, checklist, extras) {
@@ -411,6 +412,7 @@ export function createFiles(ctx) {
     const c = item.current, needsReason = c && c.reviewStatus === 'Verified';
     openDialog(`${c ? 'Replace' : 'Upload'}: ${item.requirement.name}`, `<form id="doc-upload"><div class="dialog-body form-grid">
       <label class="field full">File (PDF, JPG or PNG, up to ${ctx.context().uploads.documentMB} MB)<input type="file" name="file" accept="application/pdf,image/png,image/jpeg" required></label>
+      ${item.requirement.id === 'valid-id' ? `<label class="field full">Which ID is this?${idTypeSelect(esc, 'idType', 'required')}</label>` : ''}
       <label class="field">Issue date (optional)<input type="date" name="issueDate"></label><label class="field">Expiry date ${item.requirement.expires ? '' : '(optional)'}<input type="date" name="expiryDate" ${item.requirement.expires ? 'required' : ''}></label>
       ${c ? `<label class="field full">Reason for replacing${needsReason ? '' : ' (optional)'}<input name="replaceReason" ${needsReason ? 'required minlength="3"' : ''} maxlength="500" placeholder="e.g. Signed copy received"></label>` : ''}
       <label class="field full">Remarks (optional)<input name="remarks" maxlength="500"></label>
@@ -423,7 +425,7 @@ export function createFiles(ctx) {
       if (file.size > limit * 1024 * 1024) { toast(`Files can be up to ${limit} MB.`); return; }
       const button = form.querySelector('.primary'); button.disabled = true; button.textContent = 'Uploading…';
       try {
-        await api(`/hr/employees/${encodeURIComponent(profileId)}/documents`, { requirementId: item.requirement.id, name: file.name, mime: file.type, data: await readFile(file), issueDate: form.elements.issueDate.value, expiryDate: form.elements.expiryDate.value, replaceReason: form.elements.replaceReason?.value || '', remarks: form.elements.remarks.value });
+        await api(`/hr/employees/${encodeURIComponent(profileId)}/documents`, { requirementId: item.requirement.id, name: file.name, mime: file.type, data: await readFile(file), issueDate: form.elements.issueDate.value, expiryDate: form.elements.expiryDate.value, replaceReason: form.elements.replaceReason?.value || '', remarks: form.elements.remarks.value, ...(form.elements.idType ? { idType: form.elements.idType.value } : {}) });   // idType only for the Government-issued ID
         dialog.close(); toast('Document uploaded. Review it to count it as complete.'); await drawProfile();
       } catch (error) { toast(error.message); button.disabled = false; button.textContent = 'Upload'; }
     };

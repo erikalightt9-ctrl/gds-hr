@@ -4,6 +4,8 @@ import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, 
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
+// Leave of this many days or more needs a supporting document (November 2026 policy); shorter leave only when HR asks.
+export const PROOF_FROM_DAYS = 2;   // kept for reference only: supporting documents are optional (Nov 11, 2026)
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }
 export const entityRoles = { employees: ['admin', 'hr'], attendance: ['admin', 'hr'], leaves: ['admin', 'hr'], leaveTypes: ['admin'], holidays: ['admin', 'hr'], loans: ['admin', 'payroll'], adjustments: ['admin', 'payroll', 'hr'], deductions: ['admin', 'hr'], rules: ['admin', 'hr'] };
 function overlaps(a, b, c, d) { return a <= d && b >= c; }
@@ -70,7 +72,9 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       if (!type) throw new AppError('Leave type does not exist.');
       if (!type.approvalRequired && value.status === 'pending') value.status = 'approved';
       const prior = state.leaves.find(l => l.id === value.id);
-      value.proofStatus = prior?.proofStatus ?? (type.documentsRequired && !value.documentReference.trim() ? 'required' : '');
+      if (prior?.status === 'approved' && value.status !== 'approved') throw new AppError('Approved leave is final and cannot be cancelled, rejected or set back to pending.');
+      // Supporting documents are optional (Nov 11, 2026): HR may ask for one, but approval never waits for it.
+      value.proofStatus = prior?.proofStatus ?? '';
       for (const key of ['proofNote', 'proofReviewedBy', 'proofReviewedAt']) value[key] = prior?.[key] ?? '';
       // HR typing a new reference (e.g. a paper certificate received in person) counts as HR confirming it.
       if (prior && ['required', 'rejected'].includes(prior.proofStatus) && value.documentReference.trim() && value.documentReference !== prior.documentReference) {
@@ -90,8 +94,6 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
         const eligibleOn = new Date(`${employee.startDate}T00:00:00Z`);
         eligibleOn.setUTCMonth(eligibleOn.getUTCMonth() + type.minServiceMonths);
         if (value.startDate < eligibleOn.toISOString().slice(0, 10)) throw new AppError('The minimum service requirement for this leave type has not been met.');
-        if (['required', 'rejected'].includes(value.proofStatus)) throw new AppError('Proof (a supporting document such as a medical certificate) is still needed. Ask the employee to upload it, then confirm it before approving.');
-        if (type.documentsRequired && !value.documentReference.trim()) throw new AppError('Supporting document reference is required.');
         const without = { ...state, leaves: state.leaves.filter(l => l.id !== value.id) };
         if (type.balanceRequired) {
           const reservation = { ...value, countedDates: [] };   // partialDates kept: a half day reserves 0.5
@@ -107,7 +109,12 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       }
     }
     if (kind === 'holidays' && state.holidays.some(h => h.id !== value.id && h.date === value.date)) throw new AppError('A holiday classification already exists for that date. Edit the existing record.');
-    if (kind === 'loans' && previous && state.runs.some(r => r.rows.some(row => row.loanDeductions.some(l => l.loanId === value.id)))) throw new AppError('A loan used in posted payroll is immutable. Record a separately authorized adjustment or new loan.');
+    // A loan used in posted payroll keeps its amounts; only its future schedule (skipped cutoffs, which cutoff it is
+    // deducted in) may change, as that never alters a posted deduction.
+    const prior = previous && kind === 'loans' ? (schemas.loans.safeParse(previous).data || previous) : previous;   // with the same defaults as `value`
+    const differs = k => JSON.stringify(prior[k]) !== JSON.stringify(value[k]);
+    const scheduleOnly = prior && Object.keys({ ...prior, ...value }).every(k => ['skipCutoffs', 'deductOn'].includes(k) || !differs(k)) && ['skipCutoffs', 'deductOn'].some(differs);
+    if (kind === 'loans' && previous && !scheduleOnly && state.runs.some(r => r.rows.some(row => row.loanDeductions.some(l => l.loanId === value.id)))) throw new AppError('A loan used in posted payroll is immutable. Record a separately authorized adjustment or new loan.');
     if (kind === 'loans' && state.loans.some(l => l.id !== value.id && l.employeeId === value.employeeId && l.reference === value.reference)) throw new AppError('Duplicate employee loan reference.');
     if (kind === 'rules') {
       // Approved rates can be corrected until a posted payroll uses them; after that the version is locked for audit integrity.
@@ -146,6 +153,7 @@ export function deleteRecord(store, actor, kind, id) {
     assertUnlocked(state, kind, value);
     if (kind === 'employees') { assertNoEmployeeHistory(store, state, id); store.db.prepare('DELETE FROM employee_profiles WHERE employee_id=?').run(id); }
     else if (['leaveTypes', 'loans', 'rules', 'attendance'].includes(kind)) throw new AppError('This record type cannot be deleted. Preserve its history and use a documented correction.');
+    else if (kind === 'leaves' && value.status === 'approved') throw new AppError('Approved leave is final and cannot be deleted.');
     state[kind] = state[kind].filter(x => x.id !== id); state.version++;
     store.write(state); store.log(actor, 'delete', kind, id, value, null);
   });
@@ -205,25 +213,28 @@ export function reversePayroll(store, actor, runId, input) {
 // always show the same figure and nothing is deducted twice. Cancelling approved leave restores the credits.
 export function reviewLeave(store, actor, id, input) {
   permit(actor, ['admin', 'hr']);
-  const decision = ['approve', 'reject', 'cancel'].includes(input?.decision) ? input.decision : null, remarks = String(input?.remarks ?? '').trim();
-  if (!decision) throw new AppError('Choose approve, reject or cancel.');
+  // Approved leave is final (November 2026 policy): it cannot be cancelled or revoked afterwards.
+  if (input?.decision === 'cancel') throw new AppError('Approved leave is final and cannot be cancelled.');
+  const decision = ['approve', 'reject'].includes(input?.decision) ? input.decision : null, remarks = String(input?.remarks ?? '').trim();
+  if (!decision) throw new AppError('Choose approve or reject.');
   if (remarks.length > 1000) throw new AppError('Keep remarks under 1,000 characters.');
-  if (decision !== 'approve' && remarks.length < 3) throw new AppError(decision === 'reject' ? 'Give the employee a reason for the rejection.' : 'Give a reason for cancelling the approved leave.');
+  if (decision === 'reject' && remarks.length < 3) throw new AppError('Give the employee a reason for the rejection.');
   const leave = store.read().leaves.find(l => l.id === id);
   if (!leave) throw new AppError('Leave request not found.', 404);
-  if (decision !== 'cancel' && leave.status !== 'pending') throw new AppError(`This request is already ${leave.status}.`);
-  if (decision === 'cancel' && leave.status !== 'approved') throw new AppError('Only approved leave can be cancelled here.');
-  const status = { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }[decision];
+  if (leave.status !== 'pending') throw new AppError(`This request is already ${leave.status}.`);
+  const status = { approve: 'approved', reject: 'rejected' }[decision];
   return saveRecord(store, actor, 'leaves', { ...leave, status, hrRemarks: remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(decision === 'approve' ? { eligibilityVerified: true } : {}) });
 }
-export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll(store.read(), start, end, pay13th, employeeIds);
+// Live payroll: days after today (Manila) are not credited until they arrive (engine state.asOf).
+export const manilaToday = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
+export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll({ ...store.read(), asOf: manilaToday() }, start, end, pay13th, employeeIds);
 export function postPayroll(store, actor, request) {
   permit(actor, ['admin', 'payroll']);
   return store.transaction(() => {
     const state = store.read();
     const existing = state.runs.find(run => run.status === 'posted' && run.fingerprint === request.fingerprint);
     if (existing) return existing; // Idempotent retry after a successful commit.
-    const computed = calculatePayroll(state, request.start, request.end, request.pay13th, request.employeeIds);
+    const computed = calculatePayroll({ ...state, asOf: manilaToday() }, request.start, request.end, request.pay13th, request.employeeIds);
     if (computed.fingerprint !== request.fingerprint) throw new AppError('Records changed after preview. Recalculate and review payroll.', 409);
     if (computed.blockers.length) throw new AppError(`Resolve payroll blockers before posting: ${computed.blockers.slice(0, 5).join(' ')}`);
     const run = { ...computed, id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };

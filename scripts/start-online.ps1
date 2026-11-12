@@ -1,5 +1,6 @@
 # Starts the live GDS HR service and its Cloudflare Tunnel, restarting either if it stops.
 # Registered by install-online.ps1 as the "GDS HR Online" startup task; safe to run by hand.
+# Only one copy runs at a time.
 param(
   [string]$Origin = 'https://hr.blkstone.site',
   [string]$TunnelConfig = 'C:\Users\L.Erika\.cloudflared\config.yml'
@@ -16,6 +17,9 @@ if (-not $cloudflared) {
     Select-Object -First 1 -ExpandProperty FullName
 }
 if (-not $cloudflared) { throw 'cloudflared.exe not found.' }
+# Only one supervisor at a time, so a second start never fights over port 3400 or opens a second tunnel.
+$single = New-Object System.Threading.Mutex($false, 'Global\GdsHrOnline')
+if (-not $single.WaitOne(0)) { exit 0 }
 $log = { param($message) Add-Content (Join-Path $logs 'supervisor.log') "$(Get-Date -Format s) $message" }
 
 function Start-Hr {

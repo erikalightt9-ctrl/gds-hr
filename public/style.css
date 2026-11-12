@@ -34,3 +34,7 @@
 
 /* The message box as a popover (top layer): keep its corner position, no popover frame. */
 #toast[popover]{inset:auto 24px 24px auto;margin:0;border:0;overflow:visible}#toast[popover]:popover-open{display:block}
+
+/* Bell → documents to review: the Review buttons the bell led to */
+.bell-target { outline: 3px solid var(--gold, #d4a017); outline-offset: 2px; animation: bell-target-pulse 1.2s ease-in-out 3; }
+@keyframes bell-target-pulse { 50% { outline-offset: 5px; } }

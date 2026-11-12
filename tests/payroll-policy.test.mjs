@@ -30,7 +30,7 @@ test('early arrival is paid by default but not when paid time starts at the sche
   const fromSchedule = state({ paidFrom: 'schedule' }); fromSchedule.attendance = [day(MONDAY)];
   const row = run(fromSchedule);
   assert.equal(row.earnings.regularOT, 0, 'no overtime for leaving at the scheduled end');
-  assert.equal(row.deductions.undertime, 0);
+  assert.equal(row.undertimeAmount, 0);
   fromSchedule.attendance = [day(MONDAY, { timeOut: '20:00' })];
   assert.equal(run(fromSchedule).earnings.regularOT, round(2 * 22000 / 22 / 8 * 1.25), 'overtime only after 6 PM');
 });

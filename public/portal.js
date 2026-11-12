@@ -1,5 +1,7 @@
 import { messagesButton } from './messages.js';
-const componentNames = { basic: 'Basic salary', leavePay: 'Leave pay', regularOT: 'Regular overtime', restDay: 'Rest day pay', restOT: 'Rest day overtime', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday overtime', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Holiday overtime', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday overtime', allowance: 'Allowances', additional: 'Additional pay', thirteenth: '13th month pay', late: 'Late deduction', undertime: 'Undertime', absence: 'Unpaid leave / absence', tax: 'Withholding tax', loans: 'Loan deductions', other: 'Other authorized deductions', SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' };
+import { noticeDetail } from './notice-detail.js';
+import { reasonPicker, bindReasonPickers, readReason, LEAVE_REASONS } from './hr-common.js';
+const componentNames = { basic: 'Basic salary', holidayPay: 'Holiday pay', leavePay: 'Leave pay', regularOT: 'Regular overtime', restDay: 'Rest day pay', restOT: 'Rest day overtime', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday overtime', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Holiday overtime', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday overtime', allowance: 'Allowances', additional: 'Additional pay', thirteenth: '13th month pay', late: 'Late deduction', undertime: 'Undertime', absence: 'Unpaid leave / absence', tax: 'Withholding tax', loans: 'Loan deductions', other: 'Other authorized deductions', SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' };
 // Common reasons for an attendance explanation (late, undertime, missed clock-in/out). "Other" lets the employee type one.
 const EXPLANATION_REASONS = ['Traffic / transportation delay', 'Medical / health reason', 'Family emergency', 'Official business / client meeting', 'Work from home / field work', 'Forgot to time in or time out', 'System or device problem (GPS / app / internet)', 'Weather / natural calamity', 'Approved schedule change'];
 // Employee menu order: me first, then time, pay and company items.
@@ -45,9 +47,16 @@ export function createPortal(ctx) {
   const markSeen = (id, at) => { try { localStorage.setItem(SEEN_KEY(id), at); } catch { /* storage unavailable: the count simply stays */ } };
   const bell = (data) => {
     const list = data.notifications || [], seen = lastSeen(data.employee.id), unread = list.filter(n => n.at > seen).length;
-    return `<span class="bell-wrap employee-bell"><button class="icon-button portal-bell tb-btn tb-bell" data-portal-bell aria-label="Notifications${unread ? ` (${unread} new)` : ''}" aria-haspopup="true" aria-expanded="false"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg>${unread ? `<span class="bell-count">${unread > 9 ? '9+' : unread}</span>` : ''}</button><div class="bell-menu hidden" data-portal-bell-menu role="menu"><strong class="bell-title">Notifications</strong><ul class="portal-notifications">${list.slice(0, 20).map(n => `<li class="${n.at > seen ? 'unread' : ''}">${esc(n.message)}<small>${stamp(n.at)}</small></li>`).join('') || '<li>No notifications yet.</li>'}</ul></div></span>`;
+    return `<span class="bell-wrap employee-bell"><button class="icon-button portal-bell tb-btn tb-bell" data-portal-bell aria-label="Notifications${unread ? ` (${unread} new)` : ''}" aria-haspopup="true" aria-expanded="false"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg>${unread ? `<span class="bell-count">${unread > 9 ? '9+' : unread}</span>` : ''}</button><div class="bell-menu hidden" data-portal-bell-menu role="menu"><strong class="bell-title">Notifications</strong><ul class="portal-notifications">${list.slice(0, 20).map((n, i) => `<li class="${n.at > seen ? 'unread' : ''}"><button type="button" class="notice-item" data-notice="${i}">${esc(n.message)}<small>${stamp(n.at)}</small></button></li>`).join('') || '<li>No notifications yet.</li>'}</ul></div></span>`;
   };
   // A confirmation that stays until the employee taps OK (toasts are easy to miss on a phone).
+  // One notification opened from the bell: the full message, when it arrived, the record behind it and a link to it.
+  const showNotice = (notice, data) => {
+    const d = noticeDetail(notice, data);
+    const rows = d.rows.map(([label, value]) => `<div class="notice-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
+    openDialog(`${d.icon} ${d.title}`, `<div class="dialog-body notice-detail"><p class="notice-message">${esc(notice.message)}</p><p class="notice-when">Received ${esc(stamp(notice.at))}</p>${rows ? `<div class="notice-rows">${rows}</div>` : ''}</div>`,
+      `<div class="dialog-foot"><button type="button" data-close>Close</button>${d.tab ? `<button type="button" class="primary" data-portal-tab="${esc(d.tab)}" data-close>Open ${esc(d.tabLabel)} →</button>` : ''}</div>`);
+  };
   const confirmBox = (title, message) => openDialog(title, `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">✅</p><p>${message}</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
   const attachmentSelect = data => `<label class="field">Supporting document<select name="documentId"><option value="">None</option>${data.documents.filter(d => d.status === 'Active').map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</select></label>`;
   // My attendance calendar: one month, each day coloured by its status; clicking a day shows the details below.
@@ -100,24 +109,28 @@ export function createPortal(ctx) {
 
   // Line icons for the time card buttons (white on red).
   const svg = d => `<svg class="btn-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const OFFICE_ONLY = 'Office attendance is only available when connected to the company’s authorized office Wi-Fi network or inside the office (GPS).';
   const ICON = {
     in: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="M3 4l3 3"/>'),
     out: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l-3 2"/><path d="M21 4l-3 3"/>'),
     away: svg('<circle cx="13" cy="4" r="2"/><path d="M8 21l3-6 3 2v4"/><path d="M6 12l3-4 4 1 3 4h3"/><path d="M11 15l-2-4"/>'),
     leave: svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M9 15l2 2 4-4"/>'),
+    overtime: svg(MENU_ICON.overtime201),
   };
+  // Credited days to 2 decimals (0.9375 -> 0.94); pay itself is computed at full precision.
+  const days2 = n => (n === null || n === undefined ? 'Unavailable' : (Math.round(Number(n) * 100) / 100).toFixed(2));
   function payslipContent(data) {
     const p = currentPayslip;
-    return `${(data.upcomingPayslips || []).map(u => `<div class="notice">📅 Your payslip for <strong>${esc(u.start)} → ${esc(u.end)}</strong> will be available on salary day, <strong>${esc(u.payDate)}</strong>.</div>`).join('')}<section class="panel"><div class="panel-head"><h2>My payslips</h2><span class="legend">Released on salary day: the 8th and the 22nd</span></div>${table(['Payroll period', 'Salary day', 'Net salary'], data.payslips.map(p => [`<a class="cutoff-link" href="/api/me/payslips/${esc(p.id)}.pdf?view=1" target="_blank" rel="noopener" title="Open your payslip PDF">${esc(p.start)} → ${esc(p.end)}</a>`, esc(p.payDate || ''), money(p.net)]), 'Your payslips appear here on salary day.')}</section>` + (p ? `<section class="panel"><div class="panel-head"><div><h2>${esc(p.employeeName)}</h2><p>${esc(p.employeeId)} · ${p.start} — ${p.end}</p>${p.leaves ? `<p class="slip-leaves">🌴 Leave: ${esc(p.leaves)}</p>` : ''}</div><a class="button" download href="/api/me/payslips/${esc(p.id)}.pdf">Download PDF</a></div>${p.employer ? `<div class="panel-body"><div class="notice"><strong>Employer contributions paid for you by GDS CAPITAL INC.</strong> (not deducted from your pay): SSS ${money(p.employer.SSS)} · SSS EC ${money(p.employer['SSS EC'])} · PhilHealth ${money(p.employer.PhilHealth)} · Pag-IBIG ${money(p.employer['Pag-IBIG'])} · <strong>Total ${money(p.employerTotal)}</strong></div></div>` : ''}<div class="grid2"><div>${table(['Earnings', 'Amount'], Object.entries(p.earnings).map(([key, value]) => [esc(componentNames[key] || key), money(value)]))}</div><div>${table(['Deductions', 'Amount'], p.deductionItems.map(item => [esc(componentNames[item.label] || item.label), money(item.amount)]))}${table(['Loan (included above)', 'Previous balance', 'Deduction', 'Remaining balance'], p.loans.map(l => [esc(`${l.type}${l.reference ? ` (${l.reference})` : ''}`), l.previousBalance == null ? 'Unavailable' : money(l.previousBalance), money(l.amount), l.remainingBalance == null ? 'Unavailable' : money(l.remainingBalance)]), 'No loan deductions for this period.')}</div></div><div class="cards">${card('Gross salary', money(p.gross))}${card('Total deductions', money(p.totalDeductions))}${card('Net salary', money(p.net))}</div><p>Net salary = ${money(p.gross)} gross − ${money(p.totalDeductions)} deductions = ${money(p.net)}</p><h3>Salary computation</h3><p>Monthly salary: ${money(p.monthlySalary)} · Daily rate: ${money(p.dailyRate)} · Hourly rate: ${money(p.hourlyRate)}</p><p>Scheduled days: ${esc(p.workingDays ?? 'Unavailable')} · Days present: ${esc(p.daysPresent ?? 'Unavailable')} · Leave days: ${esc(p.leaveDays ?? 'Unavailable')}</p>${table(['Date', 'Type', 'Component', 'Calculation / reason', 'Amount'], p.computation.map(t => [esc(t.date || ''), esc(t.side), esc(componentNames[t.component] || t.component), esc(t.formula), money(t.amount)]), 'Calculation detail is unavailable for this historical payslip.')}</section>` : '');
+    return `${(data.upcomingPayslips || []).map(u => `<div class="notice">📅 Your payslip for <strong>${esc(u.start)} → ${esc(u.end)}</strong> will be available on salary day, <strong>${esc(u.payDate)}</strong>.</div>`).join('')}<section class="panel"><div class="panel-head"><h2>My payslips</h2><span class="legend">Released on salary day: the 8th and the 22nd</span></div>${table(['Payroll period', 'Salary day', 'Net salary'], data.payslips.map(p => [`<a class="cutoff-link" href="/api/me/payslips/${esc(p.id)}.pdf?view=1" target="_blank" rel="noopener" title="Open your payslip PDF">${esc(p.start)} → ${esc(p.end)}</a>`, esc(p.payDate || ''), money(p.net)]), 'Your payslips appear here on salary day.')}</section>` + (p ? `<section class="panel"><div class="panel-head"><div><h2>${esc(p.employeeName)}</h2><p>${esc(p.employeeId)} · ${p.start} — ${p.end}</p>${p.leaves ? `<p class="slip-leaves">🌴 Leave: ${esc(p.leaves)}</p>` : ''}</div><a class="button" download href="/api/me/payslips/${esc(p.id)}.pdf">Download PDF</a></div>${p.employer ? `<div class="panel-body"><div class="notice"><strong>Employer contributions paid for you by GDS CAPITAL INC.</strong> (not deducted from your pay): SSS ${money(p.employer.SSS)} · SSS EC ${money(p.employer['SSS EC'])} · PhilHealth ${money(p.employer.PhilHealth)} · Pag-IBIG ${money(p.employer['Pag-IBIG'])} · <strong>Total ${money(p.employerTotal)}</strong></div></div>` : ''}<div class="grid2"><div>${table(['Earnings', 'Amount'], Object.entries(p.earnings).map(([key, value]) => [esc(componentNames[key] || key), money(value)]))}</div><div>${table(['Deductions', 'Amount'], p.deductionItems.map(item => [esc(componentNames[item.label] || item.label), money(item.amount)]))}${table(['Loan (included above)', 'Previous balance', 'Deduction', 'Remaining balance'], p.loans.map(l => [esc(`${l.type}${l.reference ? ` (${l.reference})` : ''}`), l.previousBalance == null ? 'Unavailable' : money(l.previousBalance), money(l.amount), l.remainingBalance == null ? 'Unavailable' : money(l.remainingBalance)]), 'No loan deductions for this period.')}</div></div><div class="cards">${card('Gross salary', money(p.gross))}${card('Total deductions', money(p.totalDeductions))}${card('Net salary', money(p.net))}</div><p>Net salary = ${money(p.gross)} gross − ${money(p.totalDeductions)} deductions = ${money(p.net)}</p><h3>Salary computation</h3><p>Monthly salary: ${money(p.monthlySalary)} · Daily rate: ${money(p.dailyRate)} · Hourly rate: ${money(p.hourlyRate)}</p><p>Scheduled days: ${esc(p.workingDays ?? 'Unavailable')} · Days present: ${esc(p.daysPresent ?? 'Unavailable')} · Days credited: ${days2(p.daysCredited ?? p.creditedDays ?? p.daysPresent)}${p.creditedHours ? ` (${Math.round(p.creditedHours * 100) / 100} h)` : ''} · Leave days: ${esc(p.leaveDays ?? 'Unavailable')}</p>${table(['Date', 'Type', 'Component', 'Calculation / reason', 'Amount'], p.computation.map(t => [esc(t.date || ''), esc(t.side), esc(componentNames[t.component] || t.component), esc(t.formula), money(t.amount)]), 'Calculation detail is unavailable for this historical payslip.')}</section>` : '');
   }
   // Own-records downloads; the server only ever returns the signed-in employee's rows.
   const downloads = key => `<span class="download-links" aria-label="Download"><a class="small download-link" href="/api/reports/${key}.xlsx" download>Excel</a><a class="small download-link" href="/api/reports/${key}.pdf" download>PDF</a></span>`;
-  const proofLabels = { required: 'Proof needed', submitted: 'Submitted · awaiting HR', verified: '✓ Confirmed by HR', rejected: 'New proof needed' };
+  const proofLabels = { required: 'HR asked for a document', submitted: 'Submitted · awaiting HR', verified: '✓ Confirmed by HR', rejected: 'New proof needed' };
   const needsProof = l => ['required', 'rejected'].includes(l.proofStatus) && !['cancelled', 'rejected'].includes(l.status);
   function proofCell(l) {
     if (!l.proofStatus) return '—';
     const view = l.documentReference && /^[\w-]+$/.test(l.documentReference) && l.proofStatus !== 'required' ? ` <a href="/api/me/documents/${esc(l.documentReference)}/content">View</a>` : '';
-    const note = l.proofStatus === 'rejected' && l.proofNote ? `<small class="proof-note">HR: ${esc(l.proofNote)}</small>` : '';
+    const note = ['required', 'rejected'].includes(l.proofStatus) && l.proofNote ? `<small class="proof-note">HR: ${esc(l.proofNote)}</small>` : '';
     const upload = needsProof(l) ? `<form data-leave-proof="${esc(l.id)}" class="proof-form"><input type="file" name="proofFile" accept="application/pdf,image/png,image/jpeg" required aria-label="Proof file for leave ${esc(l.startDate)}"><button class="small primary">Upload proof</button></form>` : '';
     return `<span class="proof-status proof-${esc(l.proofStatus)}">${proofLabels[l.proofStatus] || esc(l.proofStatus)}</span>${view}${note}${upload}`;
   }
@@ -128,23 +141,23 @@ export function createPortal(ctx) {
     return api('/me/documents', { type: 'Leave Supporting', name: file.name, mime: file.type, data, expiry: '', remarks: 'Leave proof' });
   }
   function leaveContent(data) {
-    return `<section class="panel"><div class="panel-head"><h2>Apply for leave</h2></div><form data-employee-leave><div class="panel-body form-grid"><label class="field">Leave type<select name="typeId" required>${data.balances.map(b => `<option value="${esc(b.typeId)}">${esc(b.name)}${b.documentsRequired ? ' — proof needed (now or on return)' : ''}</option>`).join('')}</select></label>${field('startDate', 'Start date', 'date', today(), 'required')}${field('startTime', 'Start time', 'time', data.today?.scheduledIn || '09:00', 'required')}${field('endDate', 'End date', 'date', today(), 'required')}${field('endTime', 'End time', 'time', data.today?.scheduledOut || '18:00', 'required')}<p class="field-hint full">For a half day, set the times (e.g. 14:00 to 18:00). About half a workday or less counts as 0.5 day.</p>${field('reason', 'Reason', 'text', '', 'required minlength="3" maxlength="2000"')}<label class="field">Proof / supporting document<input type="file" name="proofFile" accept="application/pdf,image/png,image/jpeg"><small class="field-hint">Optional now. For sick leave you can upload your medical certificate when you return to work.</small></label></div><div class="panel-foot"><button class="primary" ${data.employee.draft || !data.balances.length ? 'disabled' : ''}>Submit leave request</button></div></form></section><section class="panel"><div class="panel-head"><h2>My leave applications</h2>${downloads('my-leaves')}</div>${(() => {
+    return `<section class="panel"><div class="panel-head"><h2>Apply for leave</h2></div><form data-employee-leave><div class="panel-body form-grid"><label class="field">Leave type<select name="typeId" required>${data.balances.map(b => `<option value="${esc(b.typeId)}">${esc(b.name)}</option>`).join('')}</select></label>${field('startDate', 'Start date', 'date', today(), 'required')}${field('startTime', 'Start time', 'time', data.today?.scheduledIn || '09:00', 'required')}${field('endDate', 'End date', 'date', today(), 'required')}${field('endTime', 'End time', 'time', data.today?.scheduledOut || '18:00', 'required')}<p class="field-hint full">For a half day, set the times (e.g. 14:00 to 18:00). About half a workday or less counts as 0.5 day.</p>${reasonPicker(LEAVE_REASONS)}<label class="field">Proof / supporting document<input type="file" name="proofFile" accept="application/pdf,image/png,image/jpeg"><small class="field-hint">Required for leave of 2 days or more (you may also upload it when you return). For shorter leave it is optional unless HR asks.</small></label></div><div class="panel-foot"><button class="primary" ${data.employee.draft || !data.balances.length ? 'disabled' : ''}>Submit leave request</button></div></form></section><section class="panel"><div class="panel-head"><h2>My leave applications</h2>${downloads('my-leaves')}</div>${(() => {
       // Dates · time · type of leave · days · status (newest first); HR remarks under the status, proof / cancel at the end.
       const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
       const STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
       const list = data.leaves.slice().sort((a, b) => b.startDate.localeCompare(a.startDate));
-      return table(['Dates', 'Time', 'Type of leave', 'Days', 'Status', ''], list.map(l => [l.startDate === l.endDate ? nice(l.startDate) : `${nice(l.startDate)} – ${nice(l.endDate)}`, l.startTime || l.endTime ? `${esc(l.startTime || '—')} – ${esc(l.endTime || '—')}` : 'Whole day', esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId), l.days, `${esc(STATUS[l.status] || l.status)}${l.hrRemarks ? `<small class="wrap">${esc(l.hrRemarks)}</small>` : ''}`, `${proofCell(l) === '—' ? '' : proofCell(l)}${l.status === 'pending' ? ` <button class="small" data-cancel-leave="${esc(l.id)}">Cancel request</button>` : ''}`]));
+      return table(['Dates', 'Time', 'Type of leave', 'Days', 'Reason', 'Status', ''], list.map(l => [`${l.startDate === l.endDate ? nice(l.startDate) : `${nice(l.startDate)} – ${nice(l.endDate)}`}${l.reference ? `<small>${esc(l.reference)}</small>` : ''}`, l.startTime || l.endTime ? `${esc(l.startTime || '—')} – ${esc(l.endTime || '—')}` : 'Whole day', esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId), l.days, `<span class="wrap">${esc(l.reason || '—')}</span>`, `${esc(STATUS[l.status] || l.status)}${l.decidedAt && l.status !== 'pending' ? `<small>${esc(STATUS[l.status] || l.status)} on ${esc(new Date(l.decidedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' }))}</small>` : ''}${l.hrRemarks ? `<small class="wrap">HR: ${esc(l.hrRemarks)}</small>` : ''}`, `${proofCell(l) === '—' ? '' : proofCell(l)}${l.status === 'pending' ? ` <button class="small" data-cancel-leave="${esc(l.id)}">Cancel request</button>` : ''}`]));
     })()}</section><section class="panel"><div class="panel-head"><h2>My leave credits</h2></div>${table(['Leave type', 'Entitled', 'Used / reserved', 'Pending', 'Remaining after pending'], data.balances.map(b => b.perOccasion ? [esc(b.name), b.maxDays ? `Per occasion · up to ${b.maxDays} days` : 'As needed', b.used, b.pending, b.maxDays ? 'Filed per event' : 'No limit'] : [esc(b.name), b.entitled, b.used, b.pending, b.remaining]))}<p class="panel-foot">Pending requests are shown separately. Approval determines the official balance; future approved leave already reserves days.</p></section>`;
   }
   // History, explanations and supporting documents all concern attendance, so they share one tab.
   function attendanceContent(data) {
-    const views = [['history', 'My attendance records', '🕒'], ['explanations', 'Explanations', '📝'], ['documents', 'Supporting documents', '📁']];
-    const body = attendanceView === 'explanations' ? explanationContent(data) : attendanceView === 'documents' ? documentContent(data) : history(data);
+    const views = [['history', 'My attendance records', '🕒'], ['requests', 'Requests', '📨'], ['explanations', 'Explanations', '📝'], ['documents', 'Supporting documents', '📁']];
+    const body = attendanceView === 'requests' ? '<div data-my-requests><div class="loading">Loading your requests…</div></div>' : attendanceView === 'explanations' ? explanationContent(data) : attendanceView === 'documents' ? documentContent(data) : history(data);
     return `<nav class="portal-subtabs" aria-label="Attendance">${views.map(([id, label, icon]) => `<button data-attendance-view="${id}" class="${id === attendanceView ? 'active' : ''}" ${id === attendanceView ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span> ${label}</button>`).join('')}</nav><div id="attendance-${attendanceView}" class="attendance-section">${body}</div>`;
   }
   // One explanation with its comments; the employee gets a reply box when HR sent it back.
   function explanationCard(e, view) {
-    const STATUS = { pending: ['Waiting for HR review', 'pending'], returned: ['Sent back by HR · reply needed', 'rejected'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'] };
+    const STATUS = { pending: ['Waiting for HR review', 'pending'], returned: ['Sent back by HR · reply needed', 'rejected'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'], waived: ['Waived · not required (Jan–Oct 2026)', 'neutral'] };
     const [label, kind] = STATUS[e.status] || [e.status, 'neutral'];
     const thread = (e.comments || []).map(c => `<div class="expl-comment ${c.side}"><strong>${c.side === 'hr' ? 'HR' : view === 'employee' ? 'You' : 'Employee'}</strong> · <small>${esc(stamp(c.at))}</small><p>${esc(c.text)}</p></div>`).join('');
     const reply = view === 'employee' && e.status === 'returned' ? `<form class="expl-reply" data-explanation-reply="${esc(e.id)}"><textarea name="comment" required minlength="3" maxlength="2000" placeholder="Reply to HR"></textarea><button class="primary">Send reply</button></form>` : '';
@@ -161,26 +174,33 @@ export function createPortal(ctx) {
   function dashboardContent(data) {
     const t = data.today;
     const owed = data.leaves.filter(needsProof);
-    const proofReminder = owed.length ? `<div class="notice proof-reminder" role="status"><strong>Proof needed for ${owed.length === 1 ? 'your leave' : `${owed.length} leave requests`}</strong> — ${owed.map(l => `${esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId)} ${esc(l.startDate)}${l.proofStatus === 'rejected' ? ' (HR asked for a new one)' : ''}`).join(', ')}. Upload your medical certificate or other proof. <button class="small" data-portal-tab="leave">Upload proof</button></div>` : '';
+    const proofReminder = owed.length ? `<div class="notice proof-reminder" role="status"><strong>HR asked for a supporting document for ${owed.length === 1 ? 'your leave' : `${owed.length} leave requests`}</strong> — ${owed.map(l => `${esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId)} ${esc(l.startDate)}${l.proofStatus === 'rejected' ? ' (HR asked for a new one)' : ''}`).join(', ')}. Upload your medical certificate or other proof. <button class="small" data-portal-tab="leave">Upload proof</button></div>` : '';
     return `${proofReminder}${data.employee.draft ? '<div class="notice">Your employee profile needs HR setup. You can view your portal, but attendance and leave submission will be available after HR completes your employment details.</div>' : ''}${t.exceptions.length ? `<div class="notice">Attendance exception: ${t.exceptions.map(esc).join(' · ')}</div>` : ''}<section class="pm-card pm-loc"><h2>Today’s location records</h2>${[t.clockIn, t.clockOut].filter(Boolean).map(e => `<div class="pm-loc-row"><svg class="pm-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg><div><span>${e.kind === 'in' ? 'Time in' : 'Time out'}</span><small>GPS coordinates</small></div><div class="pm-loc-right"><strong>${esc(e.time)}</strong><code>${e.latitude !== null && e.latitude !== undefined ? `${Number(e.latitude).toFixed(6)}, ${Number(e.longitude).toFixed(6)}` : 'No device location'}</code></div></div>`).join('') || '<p class="muted">No time in yet today.</p>'}</section><p class="pm-foot">GDS Capital · Employee workspace</p>`;
   }
   // Time in / Time out comes first, right after sign-in.
   function clockSection(data) {
     const t = data.today;
     const returned = (data.explanations || []).find(e => e.status === 'returned'), due = data.explanationsDue || [];
-    const kind = t.open ? 'out' : 'in', done = data.employee.draft || (t.actualOut && t.date === today()), net = data.network || {}, away = net.configured && !net.office;
+    const kind = t.open ? 'out' : 'in', done = data.employee.draft || (!t.open && t.actualOut && t.date === today()), net = data.network || {}, away = net.configured && !net.office;
     const chip = { Late: 'late', Present: 'ok', 'Missing time out': 'late', Absent: 'late', 'On leave': 'leave' }[t.status] || 'idle';
     const alertIcon = '<svg class="pm-ico pm-alert-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>';
     const lateBox = returned ? `<div class="pm-alert">${alertIcon}<div><strong>HR sent back your explanation</strong><small>${esc((returned.comments || []).at(-1)?.text || '')}</small></div><button class="pm-link" data-portal-tab="explanations">Reply to HR →</button></div>`
       : due.length ? `<div class="pm-alert">${alertIcon}<div><strong>Written explanation required</strong><small>You timed in 15 minutes or more after your scheduled start on:</small><small>${due.slice(0, 6).map(d => `${esc(d.date)} (${d.lateMinutes} min late)`).join(' · ')}${due.length > 6 ? ` and ${due.length - 6} more` : ''}</small></div><button class="pm-link" data-portal-tab="explanations">Submit explanation →</button></div>` : '';
     const graceBox = !lateBox && t.graceLate && !t.actualOut ? `<div class="pm-alert pm-grace">${alertIcon}<div><strong>${t.graceLate} minute${t.graceLate === 1 ? '' : 's'} late · within the grace period</strong><small>Stay until ${esc(t.offsetUntil)} to offset it. Minutes not offset are deducted from your salary.</small></div></div>` : '';
     const tile = (label, value) => `<div class="pm-tile"><span>${label}</span><strong>${value}</strong></div>`;
-    const netLine = net.configured ? `<p class="net-status ${net.office ? 'ok' : 'away'}">${net.office ? '📶 Connected to the office Wi-Fi' : '📍 Not on the office Wi-Fi: time in still works at the office (your location is checked)'}</p>` : '';
+    // Office attendance needs the authorized office Wi-Fi (checked by the server); no network saved = not restricted.
+    const officeOk = !net.configured || net.office;
+    // Both buttons stay closed once today's time in and time out are recorded; say so (a disabled button gives no reason).
+    const doneNote = data.employee.draft ? 'HR must complete your employment record first.' : `✅ Today's time in (${esc(t.actualIn || '—')}) and time out (${esc(t.actualOut || '—')}) are already recorded. For extra work outside the office (for example an offset), use Off-site work time in.`;
+    const netLine = `<p class="net-status ${officeOk ? 'ok' : 'away'}">${net.office ? '📶 Verified: connected to the authorized office Wi-Fi' : net.configured ? '📍 Office Wi-Fi not detected: inside the office your GPS location is used instead (HR sees it as “Wi-Fi not verified”).' : '📶 Office Wi-Fi check is not set up yet'}</p>`;
     return `<section class="pm-card pm-attend"><div class="pm-attend-head"><div><h2>Today’s attendance</h2><p>Work schedule ${esc(t.scheduledIn || '—')} – ${esc(t.scheduledOut || '—')}${t.arrangement === 'WFH' ? ' · Work from home' : t.arrangement === 'Hybrid' ? ' · Hybrid' : ''}</p></div><span class="pm-chip pm-${chip}">${esc(t.status)}</span></div>
       ${lateBox}${graceBox}
       <div class="pm-tiles">${tile('Actual time in', esc(t.actualIn || '—'))}${tile('Actual time out', esc(t.actualOut || '—'))}${tile('Working hours', `${t.hours} h`)}${tile('Undertime', `${t.undertime} min`)}</div>
-      <div class="clock-actions pm-actions">${netLine}<button class="primary clock-btn" data-clock="${kind}" ${done ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button>${done ? '' : `<button class="clock-btn clock-outside pm-outline" data-clock-outside="${kind}">${ICON.away}<span>Out of office time ${kind}</span></button>`}<small>${away ? `At the office you can time ${kind} normally (your location is checked). Away from the office, use Out of office (needs HR approval).` : 'Uses your current device location. Allow location access when prompted.'}</small></div>
-      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
+      <div class="att-mode"><h3>🏢 Office attendance</h3>${netLine}
+        <div class="clock-actions pm-actions"><button class="primary clock-btn" data-clock="${kind}" ${done ? 'disabled' : ''}>${t.open ? ICON.out : ICON.in}<span>${t.open ? 'Time out' : 'Time in'}</span></button>${away && !done ? '<button class="small" data-net-recheck>Check the connection again</button>' : ''}<small>${done ? doneNote : officeOk ? 'Server time is recorded, with your device location as an extra check.' : 'Inside the office you can time in / out; elsewhere use Off-site work.'}</small></div></div>
+      <div class="att-mode att-offsite"><h3>📍 Off-site work</h3><p class="legend">For official duties outside the office. Any internet connection works; your GPS location and exact address are recorded and must be confirmed.</p>
+        <button class="clock-btn clock-outside" data-clock-outside="${kind}" ${data.employee.draft ? 'disabled' : ''}>${ICON.away}<span>Off-site work time ${kind}${done ? ' · extra session' : ''}</span></button>${done ? '<small class="att-done">Opens an additional session after today\u2019s time out (for example to offset lateness). HR reviews the hours.</small>' : ''}</div>
+      ${data.employee.draft ? '' : `<button class="pm-row" data-file-unpaid>${ICON.leave}<span>File leave / absence</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-file-overtime>${ICON.overtime}<span>Apply for overtime</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button><button class="pm-row" data-ar-request>${ICON.leave}<span>Attendance correction request</span><svg class="pm-ico pm-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>`}</section>`;
   }
   function draw(data, auth) {
     if (!data) return;
@@ -214,12 +234,19 @@ export function createPortal(ctx) {
         event.stopPropagation(); const opening = bellMenu.classList.contains('hidden'); setOpen(opening);
         if (opening && data.notifications?.length) { markSeen(data.employee.id, data.notifications[0].at); bellButton.querySelector('.bell-count')?.remove(); }
       };
-      bellMenu.onclick = event => event.stopPropagation();
+      bellMenu.onclick = event => {
+        event.stopPropagation();
+        const item = event.target.closest('[data-notice]'), notice = item && data.notifications?.[Number(item.dataset.notice)];
+        if (notice) { setOpen(false); showNotice(notice, data); }
+      };
       app.querySelector('.employee-main').addEventListener('click', () => setOpen(false));
     }
     if (isHr) ctx.portalHr.fill(tab, app.querySelector('#portal-hr'));
+    const requestBox = app.querySelector('[data-my-requests]');
+    if (requestBox) requestsUi().then(ui => ui.fill(requestBox)).catch(() => { requestBox.innerHTML = '<p class="muted">Requests are available after the HR server restarts.</p>'; });
     if (tab === 'dashboard') ctx.portalHr?.celebrations(app.querySelector('.employee-main'));
     ctx.portalHr?.compliance(app, tab === 'dashboard');
+    bindReasonPickers(app);
     app.querySelectorAll('form').forEach(form => { form.oninput = () => { dirty = true; }; form.onchange = () => { dirty = true; }; form.onsubmit = submitForm; });
     app.querySelector('[data-reason-select]')?.addEventListener('change', event => { const other = app.querySelector('[data-reason-other]'); const show = event.target.value === 'Other'; other.classList.toggle('hidden', !show); other.querySelector('input').required = show; });
     async function submitForm(event) {
@@ -229,6 +256,7 @@ export function createPortal(ctx) {
         const values = Object.fromEntries(new FormData(form));
         if (form.hasAttribute('data-employee-leave')) {
           const file = form.elements.proofFile?.files[0]; delete values.proofFile;
+          values.reason = readReason(values); delete values.reasonChoice; delete values.reasonOther; delete values.reasonDetails;
           if (file) values.documentId = (await uploadProof(file)).id;
           await api('/me/leaves', values);
           const typeName = data.balances?.find(x => x.typeId === values.typeId)?.name || 'Leave';
@@ -256,8 +284,7 @@ export function createPortal(ctx) {
   }
   // Reads a fresh device position. A precise fix is tried first; if the device times out
   // (common indoors), one standard-accuracy attempt follows. Each failure says what to fix.
-  function capturePosition() {
-    const read = options => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
+  function geoError(error) {
     const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
     const reasons = {
       1: ios ? 'Location permission is blocked for Safari. On your iPhone open Settings → Privacy & Security → Location Services → Safari Websites, choose "While Using the App", then reload this page and tap Allow.'
@@ -265,7 +292,11 @@ export function createPortal(ctx) {
       2: 'Your device could not determine its location. Turn on Wi-Fi and location services, move near a window, and try again.',
       3: 'Finding your location took too long. Move near a window or turn on Wi-Fi, then try again.',
     };
-    const fail = error => new Error(`${reasons[error?.code] || 'Location could not be captured.'} No attendance was recorded.`);
+    return new Error(`${reasons[error?.code] || 'Location could not be captured.'} No attendance was recorded.`);
+  }
+  function capturePosition() {
+    const read = options => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
+    const fail = geoError;
     return read({ enableHighAccuracy: true, maximumAge: 0, timeout: 15000 })
       .catch(error => error?.code === 3 ? read({ enableHighAccuracy: false, maximumAge: 0, timeout: 15000 }) : Promise.reject(error))
       .catch(error => Promise.reject(fail(error)));
@@ -276,28 +307,127 @@ export function createPortal(ctx) {
       if (!navigator.geolocation) throw new Error('This browser does not support location capture. Contact HR.');
       if (!pendingClock || pendingClock.kind !== kind || pendingClock.mode !== extra.mode) {
         const location = await capturePosition();
-        pendingClock = { kind, ...extra, requestId: crypto.randomUUID(), latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: location.coords.accuracy, capturedAt: new Date(location.timestamp).toISOString() };
+        pendingClock = { kind, ...extra, connection: connectionInfo(), requestId: crypto.randomUUID(), latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: location.coords.accuracy, capturedAt: new Date(location.timestamp).toISOString() };
       }
       const recordedAt = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date());
-      await api('/me/clock', pendingClock); pendingClock = null; dirty = false; await refresh(); render();
-      confirmBox(`Time ${kind} submitted`, `Your <strong>${extra.mode === 'outside' ? 'out-of-office ' : ''}time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location${extra.mode === 'outside' ? ' and your reason' : ''}.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
+      await clockApi(pendingClock); pendingClock = null; dirty = false; await refresh(); render();
+      confirmBox(`Time ${kind} submitted`, `Your <strong>${extra.mode === 'outside' ? 'off-site work ' : ''}time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location${extra.mode === 'outside' ? ' and your reason' : ''}.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
     } catch (error) {
       if (!/fetch|network|connect/i.test(error.message)) pendingClock = null; dirty = false; button.disabled = false;
-      // Not at the office: say so plainly and offer the Out of office time in / out (with a reason).
-      if (extra.mode === 'office' && /not at the office|not connected to the office/i.test(error.message)) {
+      // Not at the office: say so plainly and offer the Off-site work time in / out (with a reason).
+      if (extra.mode === 'office' && /authorized office Wi-Fi|not at the office/i.test(error.message)) {
         button.textContent = `Time ${kind}`;
-        openDialog('You are not at the office', `<div class="dialog-body"><p>Your phone is not on the office Wi-Fi and your location is outside the office.</p><p>If you are working outside (for example at a client or another site), use <strong>Out of office time ${kind}</strong>: give the reason and it is recorded at once with your exact location.</p></div>`, `<div class="dialog-foot"><button data-close>Cancel</button><button class="primary" data-go-outside="${kind}">Out of office time ${kind}</button></div>`);
+        openDialog('Office attendance unavailable', `<div class="dialog-body"><p>${esc(OFFICE_ONLY)}</p><p>If you are working outside (for example at a client or another site), use <strong>Off-site work time ${kind}</strong>: your exact location and address are captured and confirmed by you.</p></div>`, `<div class="dialog-foot"><button data-close>Cancel</button><button class="primary" data-go-outside="${kind}">Off-site work time ${kind}</button></div>`);
         dialog.querySelector('[data-go-outside]').onclick = () => { dialog.close(); document.querySelector(`[data-clock-outside="${kind}"]`)?.click(); };
         return;
       }
       toast(error.message); button.textContent = `Retry time ${kind}`;
     }
   }
+  // Live GPS for off-site work: listen to the device's readings and stop at the first one within the accuracy goal;
+  // after WATCH_MS take the best reading so far (a reading above the limit is still recorded but flagged for HR).
+  // With no reading at all, one standard-accuracy attempt follows. Usually 2-8 seconds instead of up to 30.
+  const GPS_GOAL_METERS = 50, WATCH_MS = 8000;
+  function watchBestPosition({ onProgress = () => {} } = {}) {
+    return new Promise((resolve, reject) => {
+      let best = null, done = false, id = null;
+      const finish = (ok, value) => { if (done) return; done = true; clearTimeout(timer); if (id !== null) navigator.geolocation.clearWatch(id); (ok ? resolve : reject)(value); };
+      const timer = setTimeout(() => {
+        if (best) { finish(true, best); return; }
+        if (id !== null) { navigator.geolocation.clearWatch(id); id = null; }
+        navigator.geolocation.getCurrentPosition(position => finish(true, position), error => finish(false, geoError(error)), { enableHighAccuracy: false, maximumAge: 0, timeout: 10000 });
+      }, WATCH_MS);
+      id = navigator.geolocation.watchPosition(position => {
+        if (!best || position.coords.accuracy < best.coords.accuracy) best = position;
+        onProgress(best.coords.accuracy);
+        if (best.coords.accuracy <= GPS_GOAL_METERS) finish(true, best);
+      }, error => { if (error?.code === 1) finish(false, geoError(error)); }, { enableHighAccuracy: true, maximumAge: 0, timeout: WATCH_MS });
+    });
+  }
+  // Off-site work time in / out. GPS (high accuracy) -> the server finds the readable address -> the employee checks it,
+  // may correct the wording (never the coordinates), confirms, and submits. Nothing is recorded until then.
+  const OFFSITE_PURPOSES = ['Client meeting', 'Field work / site visit', 'Bank or government errand', 'Delivery or pick-up', 'Training or seminar', 'Work from home (approved)', 'Company event', 'Other'];
+  function offsiteDialog(kind) {
+    let reading = null, found = null;
+    dirty = true;
+    openDialog(`Off-site work time ${kind}`, `<form class="dialog-body form-grid" id="oof-form">
+      <label class="field full">Purpose<select name="purpose" required><option value="">Choose the purpose…</option>${OFFSITE_PURPOSES.map(x => `<option>${x}</option>`).join('')}</select></label>
+      <label class="field full">Reason / details<textarea name="details" required minlength="3" maxlength="450" placeholder="e.g. Meeting with ABC Corp. until 3 PM"></textarea></label>
+      <div class="full oof-loc" data-oof-loc><p class="muted">Getting your exact location…</p></div>
+      <label class="full oof-confirm"><input type="checkbox" name="confirm" required disabled> I confirm this is my current location</label>
+      <p class="full oof-error" data-oof-error hidden></p>
+      <button class="primary full" type="submit" disabled>Submit off-site time ${kind}</button></form>`, '<div class="dialog-foot"><button data-close>Cancel</button></div>');
+    const form = dialog.querySelector('#oof-form'), box = form.querySelector('[data-oof-loc]'), confirm = form.elements.confirm, submit = form.querySelector('button[type="submit"]'), errorBox = form.querySelector('[data-oof-error]');
+    dialog.addEventListener('close', () => { dirty = false; }, { once: true });
+    const showError = message => { errorBox.textContent = message; errorBox.hidden = !message; };
+    const ready = () => { submit.disabled = !(reading && confirm.checked && (found?.formatted || form.elements.address?.value.trim())); };
+    async function locate() {
+      reading = null; found = null; confirm.checked = false; confirm.disabled = true; ready(); showError('');
+      box.innerHTML = '<p class="muted">Getting your exact location… allow location access if asked.</p>';
+      try {
+        if (!navigator.geolocation) throw new Error('This browser cannot capture your location. Use another browser or contact HR.');
+        const position = await watchBestPosition({ onProgress: accuracy => { box.innerHTML = `<p class="muted">Getting your exact location… ±${Math.round(accuracy)} m${accuracy > GPS_GOAL_METERS ? ' (improving)' : ''}</p>`; } });
+        reading = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, capturedAt: new Date(position.timestamp).toISOString() };
+        box.innerHTML = '<p class="muted">Finding the street address…</p>';
+        found = await api('/me/locate', { latitude: reading.latitude, longitude: reading.longitude, accuracy: reading.accuracy })
+          .catch(error => ({ formatted: '', error: `Address lookup failed (${error.message}).`, accuracy: Math.round(reading.accuracy), limit: 50, lowAccuracy: reading.accuracy > 50 }));
+      } catch (error) {
+        reading = null;
+        box.innerHTML = `<p class="oof-warn">${esc(error.message)}</p><button type="button" class="small" data-oof-retry>Try again</button>`;
+        return;
+      }
+      const x = reading.longitude, y = reading.latitude, bounds = [x - .002, y - .002, x + .002, y + .002].join(',');
+      const missing = found.missing?.length ? `<p class="oof-warn">The map service did not return the ${esc(found.missing.join(', '))}. Check the address and add what is missing.</p>` : '';
+      box.innerHTML = `<p class="oof-label">Off-site location</p>
+        ${found.formatted ? `<p class="oof-address" data-oof-address>${esc(found.formatted)}</p>${missing}<button type="button" class="small" data-oof-correct>Correct the address</button>` : `<p class="oof-warn">${esc(found.error || 'No address was found for this location.')} Type the full address where you are; HR will review it against your GPS reading.</p>`}
+        <textarea name="address" maxlength="450" rows="3" ${found.formatted ? 'hidden' : 'required'} placeholder="Unit / floor, building, street, barangay, city, province">${esc(found.formatted || '')}</textarea>
+        <p class="legend">GPS ${y.toFixed(6)}, ${x.toFixed(6)} · accuracy ±${esc(found.accuracy)} m${found.source ? ` · address from ${esc(found.source)}` : ''}</p>
+        ${found.lowAccuracy ? `<p class="oof-warn">Accuracy ±${esc(found.accuracy)} m is above the ${esc(found.limit)} m limit. Move to an open area or near a window and try again; if you submit anyway, HR will be asked to review it.</p>` : ''}
+        <div class="loc-map"><iframe class="attendance-map" title="Your location" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&amp;layer=mapnik&amp;marker=${encodeURIComponent(`${y},${x}`)}"></iframe></div>
+        <button type="button" class="small" data-oof-retry>Detect my location again</button>`;
+      confirm.disabled = false; ready();
+    }
+    form.addEventListener('click', event => {
+      if (event.target.closest('[data-oof-retry]')) locate();
+      if (event.target.closest('[data-oof-correct]')) { const area = form.elements.address; area.hidden = false; area.focus(); event.target.closest('[data-oof-correct]').remove(); }
+    });
+    form.addEventListener('input', ready); form.addEventListener('change', ready);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (!reading) { showError('Your location has not been captured yet.'); return; }
+      const f = new FormData(form), reason = `${String(f.get('purpose') || '').trim()} — ${String(f.get('details') || '').trim()}`;
+      const typed = String(f.get('address') || '').trim();
+      submit.disabled = true; submit.textContent = 'Submitting…'; showError('');
+      try {
+        await clockApi({ kind, requestId: crypto.randomUUID(), ...reading, mode: 'outside', reason, address: typed && typed !== found?.formatted ? typed : '', addressConfirmed: true, connection: connectionInfo() });
+        const recordedAt = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date());
+        dialog.close(); dirty = false; await refresh(); render();
+        confirmBox(`Off-site time ${kind} submitted`, `Your <strong>off-site work time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded at:<br><strong>${esc(typed || found?.formatted || '')}</strong>`);
+      } catch (error) {
+        showError(/stale/i.test(error.message) ? 'Your location reading is more than 5 minutes old. Detect your location again, then submit.' : error.message);
+        submit.textContent = `Submit off-site time ${kind}`; ready();
+      }
+    };
+    locate();
+  }
+  // A server that has not been restarted since this screen changed rejects the new fields: send the earlier ones.
+  const LEGACY_CLOCK_KEYS = ['kind', 'requestId', 'latitude', 'longitude', 'accuracy', 'capturedAt', 'mode', 'reason'];
+  async function clockApi(payload) {
+    try { return await api('/me/clock', payload); } catch (error) {
+      if (!/unrecognized key/i.test(error.message)) throw error;
+      return api('/me/clock', Object.fromEntries(Object.entries(payload).filter(([k]) => LEGACY_CLOCK_KEYS.includes(k))));
+    }
+  }
+  // Attendance requests (loaded on first use, so the portal never depends on this file being served).
+  let requestsModule = null;
+  const requestsUi = async () => requestsModule || (requestsModule = (await import('./requests-ui.js')).createEmployeeRequests({ api, esc, openDialog, dialog, toast, confirmBox, onLeave: () => { tab = 'leave'; dirty = false; render(); preselectLeave(''); } }));
+  // The browser's own report of the connection (Android Chrome); other browsers do not share it.
+  function connectionInfo() { const c = navigator.connection; return c ? { type: String(c.type || '').slice(0, 30), effectiveType: String(c.effectiveType || '').slice(0, 10) } : null; }
   function map(event) {
     if (event.latitude === null) { toast('This HR correction has no device GPS reading. The original time-in remains in history.'); return; }
     const x = event.longitude, y = event.latitude, bounds = [Math.max(-180, x - .003), Math.max(-90, y - .003), Math.min(180, x + .003), Math.min(90, y + .003)].join(',');
     const pin = `https://www.google.com/maps/search/?api=1&query=${y},${x}`;
-    openDialog('Time in / out location', `<div class="dialog-body loc-box"><p class="loc-when">${esc(event.workDate)} · ${esc(event.kind === 'out' ? 'Time out' : 'Time in')} ${esc(event.time)}${event.outOfOffice ? ' · <b>Out of office</b>' : ''}</p>
+    openDialog('Time in / out location', `<div class="dialog-body loc-box"><p class="loc-when">${esc(event.workDate)} · ${esc(event.kind === 'out' ? 'Time out' : 'Time in')} ${esc(event.time)}${event.outOfOffice ? ' · <b>Off-site work</b>' : ''}</p>
       <p class="loc-place ${event.atOffice ? 'office' : ''}">📍 <span id="location-address">${esc(event.place || 'Finding the exact address…')}</span>${event.atOffice ? `<small>${event.onOfficeNetwork ? 'Office Wi-Fi' : 'At the office'}</small>` : ''}</p>
       <div class="loc-map"><iframe class="attendance-map" title="Pinned location" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&amp;layer=mapnik&amp;marker=${encodeURIComponent(`${y},${x}`)}"></iframe></div>
       <p class="loc-actions"><a class="button small" href="${pin}" target="_blank" rel="noopener noreferrer">Open pin in Google Maps</a></p>
@@ -335,6 +465,18 @@ export function createPortal(ctx) {
     panel.querySelector('[data-lv-count]').textContent = `${shown} employee${shown === 1 ? '' : 's'} total`;
   };
   for (const type of ['input', 'change']) document.addEventListener(type, e => { const panel = e.target.closest?.('.lv'); if (panel && e.target.matches('[data-lv-search], [data-lv-status], [data-lv-loc], [data-lv-company]')) filterLive(panel); });
+  // Live attendance → Reason: today's out-of-office, late explanation, leave and overtime reasons for one employee,
+  // each with its explanation, attachment and leave proof.
+  const PROOF = { required: 'HR asked for a document', submitted: 'Proof submitted · awaiting HR', verified: 'Proof confirmed by HR', rejected: 'New proof requested' };
+  function showReasons(e) {
+    const ICON = { 'out-of-office': '📍', late: '⏰', leave: '🌴', overtime: '⏱️' };
+    const block = r => `<section class="lv-reason-card"><div class="lv-reason-card-head"><strong>${ICON[r.kind] || '📝'} ${esc(r.title)}</strong>${r.status ? `<span class="badge ${r.status === 'Approved' ? '' : r.status === 'Rejected' ? 'rejected' : 'pending'}">${esc(r.status)}</span>` : ''}</div>
+      <p class="lv-reason-label">${esc(r.label)}</p>${r.detail ? `<p class="legend">${esc(r.detail)}</p>` : ''}
+      <p class="lv-reason-text">${r.explanation ? esc(r.explanation) : '<span class="legend">No further explanation given.</span>'}</p>
+      ${r.kind === 'leave' && r.proof ? `<p class="legend">${esc(PROOF[r.proof] || r.proof)}${r.proofNote ? ` · ${esc(r.proofNote)}` : ''}</p>` : ''}
+      ${r.documentId ? `<a class="button" href="/api/documents/${esc(r.documentId)}/content" target="_blank" rel="noopener">📎 ${r.kind === 'leave' ? 'View proof of leave' : 'View attachment'}</a>` : ''}</section>`;
+    openDialog(`Reasons today · ${e.name}`, `<div class="dialog-body"><p class="sub">${esc(e.employeeId)} · ${esc(e.status)}${e.actualIn ? ` · in ${esc(e.actualIn)}` : ''}${e.actualOut ? ` · out ${esc(e.actualOut)}` : ''}</p>${(e.reasons || []).map(block).join('')}</div>`, '<div class="dialog-foot"><button class="primary" data-close>Close</button></div>');
+  }
   function live(data, { countsOnly = false } = {}) {
     const statuses = ['All', 'Present', 'Late', 'Absent', 'On leave', 'Missing time out'];
     const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => e.status === s).length);
@@ -348,8 +490,9 @@ export function createPortal(ctx) {
       return `<tr data-lv-row data-name="${esc(`${e.name} ${e.employeeId}`.toLowerCase())}" data-status="${esc(e.status)}" data-loc="${located(e) ? 'yes' : 'no'}" data-company="${esc(e.department || '')}">
         <td><button class="lv-emp" data-profile="${esc(e.employeeId)}" title="Open 201 profile"><span class="lv-avatar lv-${look}">${esc(initialsOf(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.employeeId)}</small></span></button></td>
         <td><span class="lv-pill lv-${look}">${icon(pill)}${esc(e.status)}</span></td>
-        <td class="lv-time">${esc(e.actualIn || '—')}</td><td class="lv-time">${esc(e.actualOut || '—')}</td>
+        <td class="lv-time">${e.autoPresent ? '<span class="lv-wfh" title="Work from home: present without time in / out">WFH</span>' : esc(e.actualIn || '—')}</td><td class="lv-time">${e.autoPresent ? '<span class="lv-muted">—</span>' : esc(e.actualOut || '—')}</td>
         <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}" title="${esc(ev.place || 'View location')}">${icon('pin')}<span>${esc(ev.atOffice ? 'Office' : ev.place ? ev.place.split(',').slice(0, 2).join(',') : 'View location')}</span></button>` : '<span class="lv-muted">No location</span>'}</td>
+        <td class="lv-reasons">${(e.reasons || []).length ? `<button class="lv-reason" data-live-reason="${esc(e.employeeId)}" title="View the explanation, attachments and proof">${(e.reasons || []).slice(0, 2).map(r => `<span class="lv-reason-chip lv-reason-${esc(r.kind)}">${esc(r.label)}</span>`).join('')}${e.reasons.length > 2 ? `<span class="lv-reason-more">+${e.reasons.length - 2}</span>` : ''}</button>` : '<span class="lv-muted">—</span>'}</td>
         <td class="lv-requests" data-lv-req="${esc(e.employeeId)}">${requests.join('') || '<span class="lv-muted">—</span>'}</td></tr>`;
     };
     const html = `<section class="panel live-panel lv">
@@ -359,7 +502,7 @@ export function createPortal(ctx) {
         <select data-lv-company aria-label="Subsidiary"><option value="">All subsidiaries</option>${[...new Set([...(data.companies || []), ...data.employees.map(e => e.department)].filter(Boolean))].sort().map(c => `<option>${esc(c)}</option>`).join('')}</select>
         <select data-lv-status aria-label="Status"><option value="">Status</option>${[...new Set(data.employees.map(e => e.status))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select>
         <select data-lv-loc aria-label="Location"><option value="">Location</option><option value="yes">With location</option><option value="no">No location</option></select></div>
-      <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Action</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="6" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
+      <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Reason</th><th>Action</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="7" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
       <p class="lv-foot" data-lv-count>${filtered.length} employee${filtered.length === 1 ? '' : 's'} total</p></section>`;
     if (!countsOnly) return html;
     // Dashboard: today's attendance at a glance.
@@ -369,18 +512,19 @@ export function createPortal(ctx) {
   }
   // HR / Admin: Attendance → Explanations. Late arrivals still waiting for the employee's explanation, explanations to
   // review (with the Review button), those sent back, and decisions already made.
-  function explanationsSection(data) {
+  // view 'reviewed' (its own Attendance tab) shows only the decided explanations; the Explanations tab shows the rest.
+  function explanationsSection(data, view = 'open') {
     explanationList = data.explanations;
     const name = id => data.names[id] || id, day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     const byStatus = st => data.explanations.filter(e => e.status === st);
     const card = (e, action = '') => `<div class="expl-hr"><p class="expl-who"><strong>${esc(name(e.employeeId))}</strong> <small>${esc(e.employeeId)}</small></p>${explanationCard(e, 'hr')}${action}</div>`;
     const reviewed = data.explanations.filter(e => ['approved', 'rejected'].includes(e.status));
-    return `<section class="panel"><div class="panel-head"><div><h2>To review</h2><p class="legend">Explanations submitted by employees.</p></div><span class="badge pending">${byStatus('pending').length}</span></div>
+    if (view === 'reviewed') return `<section class="panel"><div class="panel-head"><div><h2>Reviewed</h2><p class="legend">Late arrival explanations HR has approved or rejected.</p></div><span class="badge neutral">${reviewed.length}</span></div><div class="panel-body expl-list">${reviewed.map(e => card(e)).join('') || '<p class="muted">Nothing to show yet.</p>'}</div></section>`;
+    return `<section class="panel" data-expl-review><div class="panel-head"><div><h2>To review</h2><p class="legend">Explanations submitted by employees.</p></div><span class="badge pending">${byStatus('pending').length}</span></div>
         <div class="panel-body expl-list">${byStatus('pending').map(e => card(e, `<button class="primary small" data-review-explanation="${esc(e.id)}">Review</button>`)).join('') || '<p class="muted">Nothing to review.</p>'}</div></section>
-      <section class="panel"><div class="panel-head"><div><h2>Waiting for the employee</h2><p class="legend">Time in 15 minutes or more after the scheduled start of that day, with no explanation yet.</p></div><span class="badge pending">${data.due.length}</span></div>
-        ${table(['Date', 'Employee', 'Scheduled', 'Time in', 'Late'], data.due.map(d => [esc(day(d.date)), `${esc(d.employeeName)} <small>${esc(d.employeeId)}</small>`, esc(d.scheduledIn), esc(d.timeIn), `${d.lateMinutes} min`]), 'Every late arrival has an explanation.')}</section>
-      ${byStatus('returned').length ? `<section class="panel"><div class="panel-head"><h2>Sent back to the employee</h2></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}
-      <section class="panel"><div class="panel-head"><h2>Reviewed</h2></div><div class="panel-body expl-list">${reviewed.slice(0, 50).map(e => card(e)).join('') || '<p class="muted">Nothing to show yet.</p>'}</div></section>`;
+      <section class="panel" data-expl-waiting><div class="panel-head"><div><h2>Waiting for the employee</h2><p class="legend">Time in 15 minutes or more after the scheduled start of that day, with no explanation yet.</p></div><span class="badge pending">${data.due.length}</span></div>
+        ${table(['Date', 'Employee', 'Scheduled', 'Time in', 'Late'], data.due.map(d => [`<span data-expl-date="${esc(d.date)}">${esc(day(d.date))}</span>`, esc(d.employeeName), esc(d.scheduledIn), esc(d.timeIn), `${d.lateMinutes} min`]), 'Every late arrival has an explanation.')}</section>
+      ${byStatus('returned').length ? `<section class="panel"><div class="panel-head"><h2>Sent back to the employee</h2></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}`;
   }
   // Opens the leave form with a type chosen, e.g. the dashboard's unpaid leave / absence shortcut.
   function preselectLeave(typeId, attempts = 20) {
@@ -404,29 +548,21 @@ export function createPortal(ctx) {
     if (button.dataset.calDay) { calDay = button.dataset.calDay; render(); return; }
     if (button.dataset.attendanceView) { attendanceView = button.dataset.attendanceView; dirty = false; render(); }
     if (button.dataset.attendanceJump) { attendanceView = button.dataset.attendanceJump; dirty = false; render(); }
+    if (button.hasAttribute('data-ar-request')) { try { (await requestsUi()).openForm('', () => { tab = 'attendance'; attendanceView = 'requests'; dirty = false; render(); }); } catch { toast('Requests are available after the HR server restarts.'); } return; }
+    if (button.hasAttribute('data-file-overtime')) { tab = 'overtime201'; dirty = false; render(); window.scrollTo({ top: 0 }); return; }   // the overtime tab opens with the application form
     if (button.hasAttribute('data-file-unpaid')) { tab = 'leave'; dirty = false; render(); preselectLeave(''); /* opens the leave form; the employee picks the leave type */ }
     if (button.dataset.clock) await clock(button.dataset.clock, button);
-    if (button.dataset.clockOutside) {
-      // Out of office: recorded at once with the reason, the time and the location (no approval needed).
-      const kind = button.dataset.clockOutside;
-      const PURPOSES = ['Client meeting', 'Field work / site visit', 'Bank or government errand', 'Delivery or pick-up', 'Training or seminar', 'Work from home (approved)', 'Company event', 'Other'];
-      openDialog(`Out of office time ${kind}`, `<form class="dialog-body form-grid" id="oof-form"><p class="full">You are timing ${kind} outside the office. Your reason, the time and your location are recorded.</p><label class="field full">Purpose<select name="purpose" required><option value="">Choose the purpose…</option>${PURPOSES.map(x => `<option>${x}</option>`).join('')}</select></label><label class="field full">Reason / details<textarea name="details" required minlength="3" maxlength="450" placeholder="e.g. Meeting with ABC Corp. in Makati until 3 PM"></textarea></label><button class="primary full" type="submit">Submit time ${kind}</button></form>`);
-      dialog.querySelector('#oof-form').onsubmit = async event => {
-        event.preventDefault();
-        const f = new FormData(event.target), reason = `${String(f.get('purpose') || '').trim()} — ${String(f.get('details') || '').trim()}`;   // e.g. "Client meeting — ABC Corp. in Makati"
-        const submit = event.target.querySelector('button[type="submit"]');
-        dialog.close();
-        await clock(kind, document.querySelector(`[data-clock-outside="${kind}"]`) || submit, { mode: 'outside', reason });
-      };
-    }
+    if (button.hasAttribute('data-net-recheck')) { const fresh = await api('/me/dashboard'); await refresh(); render(); toast(fresh.network?.office ? 'Connected to the office Wi-Fi.' : 'Still not on the office Wi-Fi.'); return; }
+    if (button.dataset.clockOutside) { offsiteDialog(button.dataset.clockOutside); return; }
     if (button.dataset.cancelLeave) { await api(`/me/leaves/${button.dataset.cancelLeave}/cancel`, {}); await refresh(); render(); confirmBox('Leave request cancelled', 'Your pending leave request was cancelled. No leave credits were used.'); }
     if (button.dataset.ownPayslip) { currentPayslip = await api(`/me/payslips/${button.dataset.ownPayslip}`); render(); }
+    if (button.dataset.liveReason) { const person = liveData?.employees?.find(x => x.employeeId === button.dataset.liveReason); if (person) showReasons(person); return; }
     if (button.dataset.location) { const event = [...(historyOverride || employeeData?.history || []), ...(liveData?.history || [])].find(e => e.id === button.dataset.location); if (event) map(event); }
     if (button.hasAttribute('data-earlier-history')) { const current = historyOverride || employeeData.history; const earlier = await api(`/me/history?before=${encodeURIComponent(current.at(-1).id)}`); historyOverride = [...current, ...earlier]; historyEnd = earlier.length < 200; render(); }
     if (button.dataset.liveFilter) { liveFilter = button.dataset.liveFilter; render(); }
     if (button.dataset.reviewExplanation) {
       const explanation = explanationList.find(e => e.id === button.dataset.reviewExplanation);
-      openDialog('Review attendance explanation', `<form id="explanation-review"><div class="dialog-body form-grid"><div class="full">${explanationCard(explanation, 'hr')}</div><label class="field">Decision<select name="status" data-expl-decision><option value="approved">Approve</option><option value="rejected">Reject</option><option value="returned">Send back to the employee with a comment</option></select></label>${field('approvedOffset', 'Approved offset (minutes)', 'number', explanation.requestedOffset, `min="0" max="${explanation.requestedOffset}" required`)}${field('note', 'Review reason', 'text', '', 'required minlength="3" maxlength="2000"')}</div><div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary">Save decision</button></div></form>`, '');
+      openDialog('Review attendance explanation', `<form id="explanation-review"><div class="dialog-body form-grid"><div class="full">${explanationCard(explanation, 'hr')}</div><label class="field">Decision<select name="status" data-expl-decision><option value="approved">Approve</option><option value="rejected">Reject</option><option value="returned">Send back to the employee with a comment</option></select></label>${field('approvedOffset', 'Approved offset (minutes)', 'number', explanation.requestedOffset, 'min="0" max="1440" required')}${field('note', 'Review reason', 'text', '', 'required minlength="3" maxlength="2000"')}</div><div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary">Save decision</button></div></form>`, '');
       dialog.querySelector('form').onsubmit = async event => { event.preventDefault(); const values = Object.fromEntries(new FormData(event.target)); try { if (values.status === 'returned') await api(`/explanations/${explanation.id}/return`, { comment: values.note }); else await api(`/explanations/${explanation.id}/review`, { ...values, approvedOffset: Number(values.approvedOffset) }); dialog.close(); toast(values.status === 'returned' ? 'Sent back to the employee with your comment.' : 'Decision saved.'); await refresh(); render(); } catch (error) { toast(error.message); } };
       const decision = dialog.querySelector('[data-expl-decision]'), noteBox = dialog.querySelector('[name=note]'), offsetBox = dialog.querySelector('[name=approvedOffset]');
       decision.onchange = () => { const back = decision.value === 'returned'; offsetBox.closest('label').classList.toggle('hidden', back); offsetBox.required = !back; noteBox.closest('label').firstChild.textContent = back ? 'Comment to the employee' : 'Review reason'; };
@@ -467,7 +603,7 @@ export function createPortal(ctx) {
       const button = event.target.closest('button'); if (!button) return;
       try {
         if (button.dataset.userSignout) {
-          if (!window.confirm('Sign this account out of its device? The person can then sign in on another device.')) return;
+          if (!window.confirm('Sign this account out on all its devices? The person can sign in again with the password.')) return;
           await api(`/users/${button.dataset.userSignout}/sign-out`, {});
           button.textContent = 'Signed out ✓'; button.disabled = true; button.closest('tr')?.querySelector('.signed-in')?.remove();
           return;
