@@ -89,7 +89,8 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     };
     const gridRow = r => [nameCell(r), ...months.map(m => {
       const posted = data.postedMonths[r.employeeId]?.includes(m), p = prior.get(`${r.employeeId}:${m}`), fromPayroll = data.postedBasic?.[r.employeeId]?.[m] || 0;
-      if (posted) return `<span class="payroll-amount">₱${fmtAmount(fromPayroll)}</span><small class="share-state">Payroll</small>`;
+      // Fully posted month: the same peso box as the typed months, read-only (the amount comes from posted payroll).
+      if (posted) return `<span class="th-peso"><input class="share-input th-posted" type="text" readonly tabindex="-1" aria-label="${esc(r.name)} basic salary ${m} (from posted payroll)" title="From posted payroll" value="${fmtAmount(fromPayroll)}"></span>`;
       // Part typed before the system + part from finalized payroll: one box with the month's total; click to see or change the typed part.
       if (fromPayroll) return `<input type="hidden" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"><button type="button" class="share-input th-month-total" data-th-split="${esc(r.employeeId)}|${m}" title="Typed ${p ? fmtAmount(p.basic) : '0.00'} + payroll ${fmtAmount(fromPayroll)}">₱${fmtAmount((p?.basic || 0) + fromPayroll)}</button>`;
       return `<span class="th-peso"><input class="share-input" type="text" inputmode="decimal" data-amount aria-label="${esc(r.name)} basic salary ${m}" data-prior="${esc(r.employeeId)}" data-month="${m}" value="${p ? fmtAmount(p.basic) : ''}"${editable ? '' : ' disabled'}></span>`;
