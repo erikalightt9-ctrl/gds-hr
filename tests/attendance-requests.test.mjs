@@ -92,3 +92,18 @@ test('"next day" with a later time out is refused as over 24 hours, on filing an
     assert.equal(approveAttendanceRequest(store, admin, r.id, { remarks: '' }).status, 'approved', 'as filed it approves');
   } finally { store.close(); }
 });
+
+test('forgot time in while already timed in (later) today: approval is accepted and the approved time in is used at time out', () => {
+  const store = fixture(), day = '2026-09-03', at = new Date(`${day}T09:33:00+08:00`), later = new Date(`${day}T18:05:00+08:00`);
+  try {
+    punch(store, worker, { kind: 'in', requestId: '92222222-2222-4222-8222-222222222222', latitude: 14.55, longitude: 121.02, accuracy: 10, capturedAt: at.toISOString() }, at, { ip: '1.2.3.4' });
+    const r = submitAttendanceRequest(store, worker, forgotIn({ date: day, timeOut: '', reason: 'Phone broke in the morning' }), at);
+    const approved = approveAttendanceRequest(store, admin, r.id, {}, at);
+    assert.equal(approved.status, 'approved'); assert.equal(approved.decision.applyAtTimeOut, true);
+    assert.equal(dayRecord(store, day), undefined, 'nothing written until the day is closed');
+    punch(store, worker, { kind: 'out', requestId: '93333333-3333-4333-8333-333333333333', latitude: 14.55, longitude: 121.02, accuracy: 10, capturedAt: later.toISOString() }, later, { ip: '1.2.3.4' });
+    const record = dayRecord(store, day);
+    assert.equal(record.timeIn, '08:55'); assert.equal(record.timeOut, '18:05');
+    assert.match(record.explanation, /HR-approved time in AR-/);
+  } finally { store.close(); }
+});

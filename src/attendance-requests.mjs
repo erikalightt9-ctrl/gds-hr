@@ -191,9 +191,13 @@ export function approveAttendanceRequest(store, actor, id, input, now = new Date
       store.db.prepare('INSERT INTO clock_events VALUES(?,?,?,?,?)').run(event.id, r.employeeId, 'in', r.date, JSON.stringify(event));
       store.log(actor, 'approved-time-in', 'clock', event.id, null, event);
       result = event;
+    } else if (approved.timeIn && !approved.timeOut && openIn) {
+      // Already timed in (later than the approved time) and not yet out: the approved time in replaces the actual one
+      // when the day is closed (the employee's time out or HR's missing time out). Clock events stay untouched.
+      result = { id: `clock-${openIn.id}`, applyAtTimeOut: true };
     } else if (!approved.timeOut) throw new AppError('This day has no time out on record. Enter the approved time out as well.');
     else throw new AppError('This day has no time in on record. Enter the approved time in as well.');
-    const decision = { by: actor.username, at: new Date().toISOString(), remarks: v.remarks, approved, requested: { timeIn: r.timeIn, timeOut: r.timeOut, endNextDay: r.endNextDay }, original: record ? { timeIn: record.timeIn, timeOut: record.timeOut, status: record.status, endNextDay: record.endNextDay } : r.original };
+    const decision = { by: actor.username, at: new Date().toISOString(), remarks: v.remarks, approved, ...(result.applyAtTimeOut ? { applyAtTimeOut: true } : {}), requested: { timeIn: r.timeIn, timeOut: r.timeOut, endNextDay: r.endNextDay }, original: record ? { timeIn: record.timeIn, timeOut: record.timeOut, status: record.status, endNextDay: record.endNextDay } : r.original };
     const next = step(r, actor, 'approved', v.remarks, { status: 'approved', decision, attendanceId: result.id }); save(store, next);
     store.log(actor, 'approve', 'attendance-request', id, r, next);
     store.notify(r.employeeId, `Your request ${r.reference} (${r.date}) was approved${changed ? ` with time ${approved.timeIn || '—'} – ${approved.timeOut || '—'}` : ''}.${v.remarks ? ` HR: ${v.remarks}` : ''}`);
@@ -201,6 +205,12 @@ export function approveAttendanceRequest(store, actor, id, input, now = new Date
   });
 }
 
+// The approved time in waiting for the day's time out (approved while the employee had an open, later time in).
+export function approvedTimeIn(store, employeeId, workDate) {
+  ensure(store);
+  const r = store.db.prepare("SELECT data FROM attendance_requests WHERE employee_id=? AND date=? AND status='approved'").all(employeeId, workDate).map(x => JSON.parse(x.data)).find(x => x.decision?.applyAtTimeOut && x.decision.approved?.timeIn);
+  return r ? { time: r.decision.approved.timeIn, label: `HR-approved time in ${r.reference} (${CATEGORIES[r.category]}): ${r.reason}`.slice(0, 1000) } : null;
+}
 // Hourly: requests waiting for HR longer than the review period get one HR reminder a day.
 export function remindOverdueRequests(store, now = new Date(), hours = REVIEW_HOURS) {
   ensure(store);

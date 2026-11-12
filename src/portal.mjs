@@ -12,7 +12,7 @@ import { lateBy, graceFor } from './late-incidents.mjs';
 import { explanationsDue, EXPLAIN_AFTER_MINUTES, explainFrom } from './late-explanations.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 import { reasonsFor } from './live-reasons.mjs';
-import { leaveReference } from './attendance-requests.mjs';
+import { leaveReference, approvedTimeIn } from './attendance-requests.mjs';
 
 export const clockSchema = z.object({ kind: z.enum(['in', 'out']), requestId: z.string().uuid(), latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180), accuracy: z.number().finite().min(0).max(100000), capturedAt: z.string().datetime(), mode: z.enum(['office', 'outside']).default('office'), reason: z.string().trim().max(500).default(''),
   // Off-site work: the address shown to the employee and confirmed (or corrected) by them; the device connection as the
@@ -144,7 +144,8 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
     } else if (clockIn) {
       if (state.attendance.some(a => a.employeeId === employee.id && a.date === workDate)) throw new AppError('HR has already entered a record for this day. Ask HR to reconcile it.');
       const approvedExplanation = rows(store, 'attendance_explanations', employee.id).find(e => e.date === workDate && e.status === 'approved');
-      const record = schemas.attendance.parse({ id: `clock-${clockIn.id}`, employeeId: employee.id, date: workDate, status: 'present', scheduledIn: (s => (s.flexible ? clockIn.time : s.start))(scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate)), timeIn: clockIn.time, timeOut: event.time, endNextDay: day !== workDate, breaks: [], approved: false, offsetMinutes: approvedExplanation?.approvedOffset || 0, exception: false, explanation: approvedExplanation?.explanation || 'Employee clock events: HR must review exact unpaid breaks and approve.', holidayEligible: false });
+      const hrTimeIn = approvedTimeIn(store, employee.id, workDate);   // an approved correction of this day's time in
+      const record = schemas.attendance.parse({ id: `clock-${clockIn.id}`, employeeId: employee.id, date: workDate, status: 'present', scheduledIn: (s => (s.flexible ? clockIn.time : s.start))(scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate)), timeIn: hrTimeIn?.time || clockIn.time, timeOut: event.time, endNextDay: day !== workDate, breaks: [], approved: false, offsetMinutes: approvedExplanation?.approvedOffset || 0, exception: false, explanation: hrTimeIn?.label || approvedExplanation?.explanation || 'Employee clock events: HR must review exact unpaid breaks and approve.', holidayEligible: false });
       attendanceMinutes(record);
       state.attendance.push(record); state.version++; store.write(state);
       store.log(actor, 'create-from-clock', 'attendance', record.id, null, record);
@@ -394,7 +395,7 @@ export function correctClock(store, actor, input) {
   const original = rows(store, 'clock_events', value.employeeId).find(e => e.workDate === value.date && e.kind === 'in');
   if (!original) throw new AppError('Original time-in not found.');
   const state = store.read(), employee = state.employees.find(e => e.id === value.employeeId);
-  const record = { id: `clock-${original.id}`, employeeId: employee.id, date: value.date, status: 'present', scheduledIn: scheduleOn(employee, profileOf(state, employee.id, 'attendance'), value.date).start, timeIn: original.time, timeOut: value.timeOut, endNextDay: value.endNextDay, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: value.reason, holidayEligible: false, correctionReason: value.reason };
+  const record = { id: `clock-${original.id}`, employeeId: employee.id, date: value.date, status: 'present', scheduledIn: scheduleOn(employee, profileOf(state, employee.id, 'attendance'), value.date).start, timeIn: approvedTimeIn(store, employee.id, value.date)?.time || original.time, timeOut: value.timeOut, endNextDay: value.endNextDay, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: value.reason, holidayEligible: false, correctionReason: value.reason };
   const saved = saveRecord(store, actor, 'attendance', record);
   // A separate immutable reconciliation event closes the open shift, preserving both readings.
   if (!rows(store, 'clock_events', employee.id).some(e => e.clockInId === original.id)) {
