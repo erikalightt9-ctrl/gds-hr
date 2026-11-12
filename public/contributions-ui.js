@@ -6,7 +6,8 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
   // Per employee filters: Company (department) and employment status. The remittance and employer summaries stay for everyone.
   let fCompany = '', fStatus = '';
   const empOf = id => (employees() || []).find(e => e.id === id);
-  const isActive = e => !!e && !e.archived && e.active !== false;
+  // A draft profile in this report is a remittance-only person (e.g. the CEO): remitted every month, so counted as active.
+  const isActive = e => !!e && !e.archived && (e.active !== false || !!e.draft);
   const companyList = () => [...new Set([...(context()?.departments || []), ...(employees() || []).filter(e => !e.archived && e.department).map(e => e.department)])].sort();
   const keep = p => { const e = empOf(p.employeeId); return (!fCompany || e?.department === fCompany) && (!fStatus || (fStatus === 'active') === isActive(e)); };
   // Title only: no breadcrumb or subtitle on this page.
