@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { renderPayslipPdf } from './payslip-pdf.mjs';
+import { holidaySplit } from './holiday-pay.mjs';
 import { z } from 'zod';
 import { remittanceOnlyIds } from './remittance-only.mjs';
 import { AppError, permit, saveRecord } from './service.mjs';
@@ -474,7 +475,11 @@ export function payslipFromRow(run, row, { designation = '', company = '' } = {}
   const paidLeaveDays = (row.trace || []).filter(t => t.component === 'leavePay' && t.amount > 0).reduce((n, t) => n + (Number(/([\d.]+) day/.exec(t.formula)?.[1]) || 0), 0);
   const worked = Math.round(((row.creditedDays ?? row.daysPresent ?? 0) - (paidLeaveDays ? (row.leaveNotes || []).filter(n => /\(half day/.test(n)).length * 0.5 : 0)) * 10000) / 10000;
   const daysCredited = Math.round((worked + paidLeaveDays) * 10000) / 10000;
-  return { leaves, paidLeaveDays, daysWorked: worked, daysCredited, creditedHours: row.creditedHours ?? null, quantities: row.quantities || null, hoursPerDay: row.hoursPerDay || null, releasedAt: run.releasedAt || null, draft: run.status !== 'posted', company, designation, payBasis: row.payBasis || 'monthly', workBreakdown: row.workBreakdown || [], contributionBasis: row.contributionBasis || null, id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings: row.earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
+  // Holiday breakdown (src/holiday-pay.mjs): basic for the regular days and one day per holiday credited, so the payslip
+  // shows days worked + holiday days; the total of the two is the cutoff basic (paid once).
+  const split = holidaySplit(row);
+  const earnings = split.holidayDayPay ? Object.fromEntries(Object.entries(row.earnings).flatMap(([k, v]) => (k === 'basic' ? [['basic', split.regularBasic], ['holidayPay', split.holidayDayPay]] : [[k, v]]))) : row.earnings;
+  return { leaves, paidLeaveDays, daysWorked: row.regularDays !== undefined ? row.regularDays : worked, daysCredited, holidayDays: split.holidayDays, holidayDates: (row.holidays || []).filter(h => h.pay > 0).map(h => h.date), creditedHours: row.creditedHours ?? null, quantities: row.quantities || null, hoursPerDay: row.hoursPerDay || null, releasedAt: run.releasedAt || null, draft: run.status !== 'posted', company, designation, payBasis: row.payBasis || 'monthly', workBreakdown: row.workBreakdown || [], contributionBasis: row.contributionBasis || null, id: run.id, start: run.start, end: run.end, postedAt: run.postedAt, employeeId: row.employeeId, employeeName: row.employeeName, monthlySalary: row.monthlySalary, dailyRate: row.dailyRate, hourlyRate: row.hourlyRate, workingDays: row.workingDays, monthWorkingDays: row.monthWorkingDays, daysPresent: row.daysPresent, creditedDays: row.creditedDays ?? row.daysPresent, leaveDays: row.leaveDays, earnings, deductions: row.deductions, deductionItems, computation, gross: row.gross, totalDeductions: row.totalDeductions, net: row.net, loans, employer: row.employer || null, employerTotal: row.employerTotal ?? 0 };
 }
 // At 9:00 AM on salary day the server releases finalized payslips and tells each employee once (bell notice).
 export function announceDuePayslips(store, now = new Date()) {

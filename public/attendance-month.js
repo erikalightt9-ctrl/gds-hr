@@ -45,8 +45,12 @@ export function monthSheet({ state, esc, today, month, search = '', company = ''
   const grid = people.map(e => ({ e, days: dates.map(d => dayStatus(state, e, d, today, since)) }));
   const isWeekend = d => [0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay());
   const holiday = d => (state.holidays || []).find(h => h.date === d && h.kind !== 'ordinary');
-  // Work days per month are fixed by the payroll rules (26 for every month), as on the payroll screen.
-  const workDays = (state.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.dailyDivisor ?? 26;
+  // Scheduled work days this month, from the calendar and each person's rest day (holidays included): one number when
+  // everyone shown has the same rest day, otherwise one per rest day (Nov 2026: Sun rest 25 · Sat rest 26).
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const workDaysBy = new Map();
+  for (const e of people) { const key = (e.restDays || []).slice().sort().join(','); if (!workDaysBy.has(key)) workDaysBy.set(key, dates.filter(d => !(e.restDays || []).includes(new Date(`${d}T00:00:00Z`).getUTCDay())).length); }
+  const workDays = workDaysBy.size <= 1 ? (workDaysBy.values().next().value ?? dates.length) : [...workDaysBy].map(([key, n]) => `${key ? key.split(',').map(k => dayNames[k]).join('/') : 'no'} rest ${n}`).join(' · ');
   const counted = s => ['present', 'late', 'open', 'half', 'half-pending', 'wfh', 'offset'].includes(s);
   // A half day counts 0.5 present and 0.5 leave (0.5 absent while the half-day leave is pending).
   const sum = (days, weights) => days.reduce((s, d) => s + (weights[d] || 0), 0);

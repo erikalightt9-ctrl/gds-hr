@@ -29,8 +29,8 @@ test('ordinary OT and lateness are independently traced; staying after the shift
   const row = p.rows[0];
   assert.equal(row.earnings.regularOT, 426.14);
   assert.equal(row.deductions.late, undefined, 'no separate late deduction');
-  assert.equal(row.earnings.basic, 15000 - 42.61, 'the 15 late minutes lower credited time; staying late is not an approved offset');
-  assert.equal(row.creditedDays, 10.9688);
+  assert.equal(row.earnings.basic, 14959.09, 'the 15 late minutes lower credited time (10.96875 → 10.97 days × 1,363.64); staying late is not an approved offset');
+  assert.equal(row.creditedDays, 10.97, '10.96875 shown with 2 decimals');
   assert.equal(row.late[0].lateMinutes, 15); assert.equal(row.late[0].workedAfter, 15, 'shown to HR'); assert.equal(row.late[0].deductibleMinutes, 15);
   assert.equal(row.late[0].sourceId, '2026-09-01');
 });
@@ -163,7 +163,7 @@ test('payroll is real time: unapproved attendance and a time-in without time out
   s.openClockIns = [{ id: 'ci-1', employeeId: 'EMP-001', workDate: '2026-09-01', time: '08:30' }];
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
   assert.equal(row.daysPresent, 11, 'the open time-in day and the unapproved day both count');
-  assert.equal(row.creditedDays, 10.9375, '30 minutes late on the open day: 1 - 30/480');
+  assert.equal(row.creditedDays, 10.94, '30 minutes late on the open day: 11 - 30/480 = 10.9375 → 10.94');
   assert.ok(p.blockers.some(b => /no time out yet/.test(b)) && p.blockers.some(b => /not approved/.test(b)), 'flagged until complete');
 });
 
@@ -185,8 +185,8 @@ test('late time not made up reduces credited days, not a deduction line', () => 
   const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:00' })]; withOtherDays(s);
   const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
   assert.equal(row.deductions.late, undefined, 'no separate late deduction');
-  assert.equal(row.earnings.basic, 15000 - 42.61, '15 min of a 480-min day = 0.03125 day x 1,363.64 daily');
-  assert.equal(row.creditedDays, 10.9688, 'credited days are kept to 4 decimals (11 days present, 0.03125 day lost)');
+  assert.equal(row.earnings.basic, 14959.09, '15 min of a 480-min day = 0.03125 day: 10.96875 → 10.97 days x 30,000 / 22');
+  assert.equal(row.creditedDays, 10.97, 'monthly-paid days credited have 2 decimals (11 days present, 0.03125 day lost = 10.96875 → 10.97)');
   assert.equal(row.late[0].deductibleMinutes, 15);
 });
 

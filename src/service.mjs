@@ -225,14 +225,16 @@ export function reviewLeave(store, actor, id, input) {
   const status = { approve: 'approved', reject: 'rejected' }[decision];
   return saveRecord(store, actor, 'leaves', { ...leave, status, hrRemarks: remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(decision === 'approve' ? { eligibilityVerified: true } : {}) });
 }
-export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll(store.read(), start, end, pay13th, employeeIds);
+// Live payroll: days after today (Manila) are not credited until they arrive (engine state.asOf).
+export const manilaToday = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
+export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll({ ...store.read(), asOf: manilaToday() }, start, end, pay13th, employeeIds);
 export function postPayroll(store, actor, request) {
   permit(actor, ['admin', 'payroll']);
   return store.transaction(() => {
     const state = store.read();
     const existing = state.runs.find(run => run.status === 'posted' && run.fingerprint === request.fingerprint);
     if (existing) return existing; // Idempotent retry after a successful commit.
-    const computed = calculatePayroll(state, request.start, request.end, request.pay13th, request.employeeIds);
+    const computed = calculatePayroll({ ...state, asOf: manilaToday() }, request.start, request.end, request.pay13th, request.employeeIds);
     if (computed.fingerprint !== request.fingerprint) throw new AppError('Records changed after preview. Recalculate and review payroll.', 409);
     if (computed.blockers.length) throw new AppError(`Resolve payroll blockers before posting: ${computed.blockers.slice(0, 5).join(' ')}`);
     const run = { ...computed, id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };

@@ -49,25 +49,35 @@ test('daily-paid: a day not attended is not paid', () => {
   assert.equal(Math.round((a.earnings.basic + b.earnings.basic) * 100) / 100, 26 * 755);
 });
 
-test('the example: ₱27,000 monthly in a 31-day month → 13,500 per cutoff whether it has 13 or 14 workdays; one absence takes off ₱1,000 (÷ 27)', () => {
+test('monthly-paid (Nov 2026 rule): basic = monthly ÷ 26 × days credited; a 31-day month also uses ÷ 26 (₱27,000: one absence takes off ₱1,038.46)', () => {
   const full = month(state({ monthly: 27000 }));
   assert.deepEqual(full.map(r => r.workingDays), [13, 14], 'Oct 1-15 has 13 workdays, Oct 16-31 has 14');
   assert.deepEqual(full.map(r => r.earnings.basic), [13500, 13500], 'complete attendance: the full half-month in each cutoff');
-  assert.deepEqual(full.map(r => r.adjustmentDivisor), [27, 27], 'October has 31 days');
+  assert.deepEqual(full.map(r => r.adjustmentDivisor), [26, 26], 'October has 31 days but still uses 26');
   const s = state({ monthly: 27000 }); s.attendance = s.attendance.filter(a => a.date !== '2026-10-20');   // one unpaid absence in the 14-day cutoff
   const [a, b] = month(s);
   assert.equal(a.earnings.basic, 13500);
-  assert.equal(b.earnings.basic, 12500, '13,500 - 27,000 / 27');
-  assert.equal(a.earnings.basic + b.earnings.basic, 26000);
   assert.equal(b.creditedDays, 12, '13 days less the absent day');
+  assert.equal(b.earnings.basic, 12461.54, '27,000 ÷ 26 × 12');
   assert.equal(b.deductions.absence, 0, 'the absence lowers basic pay; it is not also a deduction line');
-  assert.ok(b.trace.some(t => t.component === 'basic' && t.amount === -1000 && /Absence \(days credited reduced\)/.test(t.formula)), 'shown in the basic-pay computation');
+  assert.ok(b.trace.some(t => t.component === 'basic' && /Absence \(days credited reduced\)/.test(t.formula)), 'shown in the basic-pay computation');
 });
 
-test('monthly-paid: late time over the threshold lowers that cutoff\'s half-month basic at monthly / 27 per day in a 31-day month', () => {
+test('monthly-paid: late time over the threshold lowers basic at monthly ÷ 26, also in a 31-day month', () => {
   const s = state({ monthly: 27000 }); Object.assign(s.attendance.find(a => a.date === '2026-10-20'), { timeIn: '09:30' });   // 30 min late, no offset
   const [, b] = month(s);
-  assert.equal(b.earnings.basic, 13500 - 62.5, '30 / 480 of a day × 27,000 / 27');
+  assert.equal(b.creditedDays, 12.94, '13 − 30/480 = 12.9375 → 12.94 (2 decimals)');
+  assert.equal(b.earnings.basic, 13437.69, '27,000 ÷ 26 × 12.94');
+});
+
+test('monthly-paid: basic always equals the shown days credited (2 decimals) × monthly ÷ 26', () => {
+  const s = state({ monthly: 21190 });   // 815.00 a day, as on the November 2026 payroll
+  for (const [d, t] of [['2026-10-19', '09:17'], ['2026-10-21', '09:23'], ['2026-10-27', '09:40']]) Object.assign(s.attendance.find(a => a.date === d), { timeIn: t });
+  s.attendance = s.attendance.filter(a => a.date !== '2026-10-30');
+  const [, b] = month(s);
+  assert.equal(Math.round(b.creditedDays * 100) / 100, b.creditedDays, 'days credited have at most 2 decimals');
+  assert.equal(b.earnings.basic, Math.round(b.creditedDays * 815 * 100) / 100, 'basic = days credited × 815 exactly');
+  assert.equal(b.applicableBasic, b.earnings.basic, 'the 13th-month basic follows the same figure');
 });
 
 test('monthly-paid: months that are not 31 days long use 26 for attendance adjustments', () => {
@@ -99,6 +109,6 @@ test('guide example: two approved paid-leave days are worth monthly / 26 each an
 test('monthly-paid hired mid-cutoff: days credited follow the share of the half-month worked (8 of 14 workdays)', () => {
   const s = state(); s.employees[0].startDate = '2026-10-23';   // Oct 23-24 and 26-31: 8 of the cutoff's 14 workdays
   const [, b] = month(s);
-  assert.equal(b.earnings.basic, 7428.57, '13,000 × 8 / 14');
-  assert.equal(b.creditedDays, 7.4286, '13 days × 8 / 14');
+  assert.equal(b.creditedDays, 7.43, '13 days × 8 / 14 = 7.4286 → 7.43 (2 decimals)');
+  assert.equal(b.earnings.basic, 7430, '7.43 days × 26,000 / 26');
 });

@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
-import { attendanceMinutes, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK } from './engine.mjs';
+import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 
 const HR = ['admin', 'hr'];
@@ -19,7 +19,8 @@ export function overtimeHours(state, employee, record, rule = ruleOn(state, reco
   const profile = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'attendance');
   const rest = isRest(employee, record.date), normalHours = scheduleOn(employee, profile, record.date, rule).hoursPerDay;
   const scheduled = stamp(`${record.date}T${record.scheduledIn}`);
-  const minutes = profile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduled) : attendanceMinutes(record);
+  const worked = attendanceMinutes(withScheduledLunch(record, scheduleOn(employee, profile, record.date, rule), profile, rest));
+  const minutes = profile?.paidFrom === 'schedule' && !rest ? worked.filter(m => m >= scheduled) : worked;
   return round(Math.max(0, minutes.length - normalHours * 60) / 60);
 }
 const rowsOf = (store, where = '', ...args) => store.db.prepare(`SELECT data FROM overtime_requests ${where} ORDER BY rowid DESC`).all(...args).map(r => JSON.parse(r.data));
@@ -175,7 +176,8 @@ export function overtimeCheck(state, employee, o, today = localToday()) {
   }
   const rule = ruleOn(state, o.date) || state.rules[0], profile = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'attendance');
   const sched = scheduleOn(employee, profile, o.date, rule), rest = isRest(employee, o.date), scheduled = stamp(`${o.date}T${record.scheduledIn}`);
-  const minutes = profile?.paidFrom === 'schedule' && !rest ? attendanceMinutes(record).filter(m => m >= scheduled) : attendanceMinutes(record);
+  const worked = attendanceMinutes(withScheduledLunch(record, sched, profile, rest));
+  const minutes = profile?.paidFrom === 'schedule' && !rest ? worked.filter(m => m >= scheduled) : worked;
   const [s, e] = overtimeWindow(o);
   const inPeriod = sched.flexible ? 0 : minutes.filter((m, i) => i >= sched.hoursPerDay * 60 && m >= s && m < e).length;
   const workedInPeriod = round(inPeriod / 60), payableHours = round(Math.floor(Math.min(inPeriod, Math.round(target * 60)) / OT_BLOCK) * OT_BLOCK / 60);

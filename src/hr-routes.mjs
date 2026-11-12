@@ -103,10 +103,12 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     // Late arrivals (15+ minutes): explanations to review and those the employees still owe, in Attendance → Explanations.
     if (['admin', 'hr'].includes(actor.role)) {
       const reviewDates = store.db.prepare("SELECT json_extract(data,'$.date') d FROM attendance_explanations WHERE json_extract(data,'$.status')='pending'").all().map(r => r.d), toReview = reviewDates.length;
-      if (toReview) items.push({ text: `${toReview} attendance explanation${toReview === 1 ? '' : 's'} to review`, nav: 'explanations', date: span(reviewDates) });
+      if (toReview) items.push({ text: `${toReview} attendance explanation${toReview === 1 ? '' : 's'} to review`, nav: 'explanations', focus: 'review', date: span(reviewDates) });
       const due = explanationsDue(store), today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }), now = due.filter(d => d.date >= today).length, earlier = due.length - now;
-      if (now) items.push({ text: `${now} late time in${now === 1 ? '' : 's'} today need${now === 1 ? 's' : ''} an explanation from the employee`, nav: 'explanations', date: fmt(today) });
-      if (earlier) items.push({ text: `${earlier} earlier late arrival${earlier === 1 ? '' : 's'} (15+ minutes) still need${earlier === 1 ? 's' : ''} an explanation`, nav: 'explanations', date: span(due.filter(d => d.date < today).map(d => d.date)) });
+      // Names in the item, so HR sees who is late before opening it (surname = the part before the comma).
+      const who = list => { const names = [...new Set(list.map(d => String(d.employeeName || '').split(',')[0].trim()))]; return names.length > 4 ? `${names.slice(0, 4).join(', ')} +${names.length - 4}` : names.join(', '); };
+      if (now) items.push({ text: `${now} late time in${now === 1 ? '' : 's'} today need${now === 1 ? 's' : ''} an explanation from the employee (${who(due.filter(d => d.date >= today))})`, nav: 'explanations', focus: 'waiting', dates: [today], date: fmt(today) });
+      if (earlier) items.push({ text: `${earlier} earlier late arrival${earlier === 1 ? '' : 's'} (15+ minutes) still need${earlier === 1 ? 's' : ''} an explanation (${who(due.filter(d => d.date < today))})`, nav: 'explanations', focus: 'waiting', dates: due.filter(d => d.date < today).map(d => d.date), date: span(due.filter(d => d.date < today).map(d => d.date)) });
     }
     if (HR_TEAM.includes(actor.role)) {
       const docs = documentSummary(store, actor), sheets = pendingSheets(store);

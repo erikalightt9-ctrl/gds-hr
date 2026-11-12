@@ -106,7 +106,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '', n
   y = header('EMPLOYEE INFORMATION', y);
   const daily = slip.payBasis === 'daily';
   const info = [['Employee name', slip.employeeName.toUpperCase()], ['Employee ID', slip.employeeId], ['Designation', designation || '-'],
-    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (scheduled)', String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
+    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (month)', slip.monthWorkingDays ? `${slip.monthWorkingDays} (${slip.workingDays} this cutoff)` : String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.holidayDays ? [['Holiday days', `${days2(slip.holidayDays)}${slip.holidayDates?.length ? ` (${slip.holidayDates.map(d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })).join(', ')})` : ''}`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
   const KEY = LEFT + 190;
   for (const [label, value] of info) {
     p.line(LEFT, y - 18, RIGHT, y - 18); p.line(KEY, y, KEY, y - 18);
@@ -121,11 +121,12 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '', n
   const rows = [
     ['Days worked (regular)', days2(slip.daysWorked ?? slip.creditedDays ?? slip.daysPresent), 'DAY', e.basic],
     ...(e.leavePay ? [['Paid leave', slip.paidLeaveDays || '', 'DAY', e.leavePay]] : []),
+    ...(e.holidayPay ? [['Holiday pay', days2(slip.holidayDays || 0), 'DAY', e.holidayPay]] : []),
     ['Overtime', hrs(hours.regularOT), 'HRS', e.regularOT],
     restDayRow(hours, slip.hoursPerDay, (e.restDay || 0) + (e.restOT || 0)),
     ['Night differential', hrs(hours.nsd), 'HRS', e.nsd],
-    ['Special holiday', hrs((hours.specialHoliday || 0) + (hours.specialOT || 0)), 'HRS', (e.specialHoliday || 0) + (e.specialOT || 0)],
-    ['Regular holiday', hrs((hours.regularHoliday || 0) + (hours.regularHolidayOT || 0)), 'HRS', (e.regularHoliday || 0) + (e.regularHolidayOT || 0)],
+    ['Special holiday worked', hrs((hours.specialHoliday || 0) + (hours.specialOT || 0)), 'HRS', (e.specialHoliday || 0) + (e.specialOT || 0)],
+    ['Regular holiday worked', hrs((hours.regularHoliday || 0) + (hours.regularHolidayOT || 0)), 'HRS', (e.regularHoliday || 0) + (e.regularHolidayOT || 0)],
     ...[['Other holiday', (e.otherHoliday || 0) + (e.otherOT || 0)], ['Allowance', e.allowance], ['Adjustment', e.additional], ['13th month pay', e.thirteenth]].filter(([, v]) => v).map(([l, v]) => [l, '', '', v]),
   ];
   for (const [label, qty, unit, value] of rows) {

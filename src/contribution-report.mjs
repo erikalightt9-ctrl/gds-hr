@@ -38,7 +38,7 @@ export function monthlyContributions(store, month) {
   for (const [start, end] of periods) {
     const posted = state.runs.find(r => r.status === 'posted' && r.start === start && r.end === end);
     if (!posted) draft = true;
-    const rows = posted ? posted.rows : calculatePayroll(state, start, end).rows;
+    const rows = posted ? posted.rows : calculatePayroll({ ...state, asOf: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()) }, start, end).rows;
     for (const row of rows) {
       const t = byEmployee.get(row.employeeId) || { employeeId: row.employeeId, name: row.employeeName, sssBasis: 0, phBasis: 0, sssEE: 0, sssER: 0, phEE: 0, phER: 0, piEE: 0, piER: 0, sssLoan: 0, piLoan: 0 };
       const d = row.deductions, er = row.employer || {};

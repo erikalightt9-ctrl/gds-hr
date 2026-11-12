@@ -19,8 +19,8 @@ const run = s => calculatePayroll(s, '2026-09-16', '2026-09-30').rows[0];
 test('unoffset late time reduces credited days in proportion to the time lost', () => {
   const row = run(lateOn(state(), '2026-09-21', '09:30'));    // 30 of 480 minutes = 0.0625 day
   assert.equal(row.daysPresent, 13);
-  assert.equal(row.creditedDays, 12.9375);
-  assert.equal(row.earnings.basic, 13000 - 62.5);
+  assert.equal(row.creditedDays, 12.94, '12.9375 shown with 2 decimals (Nov 2026 rule)');
+  assert.equal(row.earnings.basic, 12940, '12.94 days × 1,000');
   assert.equal(row.deductions.late, undefined);
   assert.equal(row.undertimeAmount, 0, 'late minutes are not counted again as undertime');
   assert.match(row.trace.find(t => t.component === 'basic' && t.amount < 0).formula, /30 min not offset/);
@@ -29,8 +29,8 @@ test('unoffset late time reduces credited days in proportion to the time lost', 
 test('an approved offset covers late time fully or partly', () => {
   assert.equal(run(lateOn(state(), '2026-09-21', '09:30', { offsetMinutes: 30 })).earnings.basic, 13000);
   const partly = run(lateOn(state(), '2026-09-21', '09:30', { offsetMinutes: 20 }));     // 10 min left
-  assert.equal(partly.creditedDays, round4(13 - 10 / 480));
-  assert.equal(partly.earnings.basic, 13000 - 20.83);
+  assert.equal(partly.creditedDays, 12.98, '13 - 10/480 = 12.9792 → 12.98');
+  assert.equal(partly.earnings.basic, 12980);
   assert.equal(run(lateOn(state(), '2026-09-21', '09:30', { exception: true })).earnings.basic, 13000, 'approved exception');
 });
 
@@ -39,17 +39,16 @@ test('daily-paid pay follows credited days; a 12-hour day loses less per minute'
   assert.equal(daily.earnings.basic, 13 * 1000 - 125);
   assert.equal(daily.creditedDays, 12.875);
   const long = run(lateOn(state({ hoursPerDay: 12 }), '2026-09-21', '10:00'));           // 60 of 720 min
-  assert.equal(long.creditedDays, round4(13 - 60 / 720));
+  assert.equal(long.creditedDays, round2(13 - 60 / 720), 'monthly-paid days shown with 2 decimals');
 });
 
 test('lateness is counted once: tax basis and 13th-month basic use the reduced pay without a second deduction', () => {
   const on = run(lateOn(state(), '2026-09-21', '09:30')), off = run(state());
-  assert.equal(round2(off.gross - on.gross), 62.5);
-  assert.equal(round2(off.applicableBasic - on.applicableBasic), 62.5);
-  assert.equal(round2(off.net - on.net), 62.5, 'no tax brackets configured, so net falls by exactly the late reduction');
+  assert.equal(round2(off.gross - on.gross), 60, '0.0625 day → 0.06 day (2 decimals) × 1,000');
+  assert.equal(round2(off.applicableBasic - on.applicableBasic), 60);
+  assert.equal(round2(off.net - on.net), 60, 'no tax brackets configured, so net falls by exactly the late reduction');
 });
 
-function round4(v) { return Math.round(v * 10000) / 10000; }
 function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
 
 test('undertime lowers credited time and basic pay like lateness, never as a separate deduction; each minute once', () => {
@@ -58,8 +57,8 @@ test('undertime lowers credited time and basic pay like lateness, never as a sep
   assert.equal(row.deductions.undertime, 0, 'no undertime deduction line');
   assert.equal(row.deductions.late, undefined, 'no late deduction line');
   assert.equal(row.undertimeMinutes, 30); assert.equal(row.undertimeAmount, 62.5, 'kept for verification');
-  assert.equal(row.earnings.basic, 13000 - 62.5 - 62.5, 'basic lowered once for the late half hour and once for the early half hour');
-  assert.equal(row.creditedDays, 12.875); assert.equal(row.creditedHours, 103, '13 days x 8 h less 1 h');
+  assert.equal(row.creditedDays, 12.88, '13 - 60/480 = 12.875 → 12.88 (2 decimals)');
+  assert.equal(row.earnings.basic, 12880, 'basic lowered once for the late half hour and once for the early half hour: 12.88 days × 1,000'); assert.equal(row.creditedHours, 103, '13 days x 8 h less 1 h');
   assert.equal(row.totalDeductions, Math.round(Object.values(row.deductions).reduce((s, n) => s + n, 0) * 100) / 100);
   assert.ok(row.trace.some(t => t.component === 'basic' && /Undertime 30 min not covered.*credited time reduced/.test(t.formula)), 'detail kept in the computation');
   assert.deepEqual(row.undertime, [{ date: '2026-09-21', minutes: 30, amount: 62.5 }]);
@@ -68,7 +67,7 @@ test('undertime lowers credited time and basic pay like lateness, never as a sep
 test('the example: 8 required hours, 30 min late without offset = 7.5 hours = 0.9375 day credited', () => {
   const row = run(lateOn(state(), '2026-09-21', '09:30'));
   assert.equal(row.creditedHours, 13 * 8 - 0.5);
-  assert.equal(Math.round((row.creditedDays - 12) * 10000) / 10000, 0.9375, 'the late day counts 0.9375 (shown as 0.94)');
+  assert.equal(Math.round((row.creditedDays - 12) * 100) / 100, 0.94, 'the late day counts 0.9375, credited as 0.94 (2 decimals)');
 });
 
 test('an undertime override (e.g. waived to 0) keeps credited time in step with pay', () => {
@@ -82,7 +81,7 @@ test('an undertime override (e.g. waived to 0) keeps credited time in step with 
 
 test('the example: 30 minutes late = 7.5 credited hours (0.9375 day); a full approved 30-minute offset restores 8 hours', () => {
   const none = run(lateOn(state(), '2026-09-21', '09:30', { timeOut: '18:00' }));
-  assert.equal(none.creditedHours, 13 * 8 - 0.5); assert.equal(none.earnings.basic, 13000 - 62.5);
+  assert.equal(none.creditedHours, 13 * 8 - 0.5); assert.equal(none.earnings.basic, 12940, '12.94 days × 1,000');
   const offset = run(lateOn(state(), '2026-09-21', '09:30', { timeOut: '18:00', offsetMinutes: 30, explanation: 'Approved offset' }));
   assert.equal(offset.creditedHours, 13 * 8); assert.equal(offset.creditedDays, 13); assert.equal(offset.earnings.basic, 13000);
   const late = offset.late.find(l => l.lateMinutes);

@@ -1797,3 +1797,24 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .th-filters { padding: 10px 14px 4px; }
 .contrib-filters { margin-left: auto; margin-right: 0; }
 .contrib-excluded { margin: 0; padding: 10px 16px; font-size: .85rem; color: #6b4e12; background: #fbf5e6; border-top: 1px solid #eadcb5; }
+/* Payroll history: company filter in the panel head */
+.pr-history .pr-panel-head { flex-wrap: wrap; }
+.pr-company-filter { margin: 0 0 0 auto; min-width: 200px; }
+.pr-company-filter + .pr-viewall { margin-left: 0; }
+
+/* Dropdown with a search box inside (searchable-select.js; Payroll → Employee). */
+.ss { position: relative; min-width: 220px; }
+.ss-button { width: 100%; text-align: left; font-size: 12px; font-weight: 400; color: #262626; padding: 9px 30px 9px 11px; border: 1px solid #d6d6d6; border-radius: 6px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23555' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ss-button:hover { background-color: #fffaf0; }
+.ss-panel { position: absolute; z-index: 30; left: 0; top: calc(100% + 4px); width: max(100%, 280px); max-height: 360px; overflow: auto; background: #fff; border: 1px solid #d6d6d6; border-radius: 8px; box-shadow: 0 10px 30px #0000002a; }
+.ss-top { padding: 8px; border-bottom: 1px solid var(--line); }
+.ss-list { list-style: none; margin: 0; padding: 4px 0; }
+.ss-group { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 12px 4px; font-size: 12px; font-weight: 700; color: #262626; }
+.ss-group .ss-search { min-width: 0; box-sizing: border-box; }
+.ss-search { font-size: 12px; padding: 6px 9px; width: 100%; }
+.ss-option { padding: 7px 12px 7px 24px; font-size: 12px; cursor: pointer; }
+.ss-list > .ss-option:first-child { padding-left: 12px; }
+.ss-option:hover, .ss-option:focus { background: #fff3d6; outline: none; }
+.ss-option[aria-selected="true"] { background: var(--brand); color: #fff; }
+.ss-none { margin: 0; padding: 10px 12px; font-size: 12px; color: var(--muted); }
+.ss-group[hidden], .ss-option[hidden], .ss-none[hidden] { display: none; }
