@@ -1795,3 +1795,4 @@ dialog .cb-compact table th:first-child, dialog .cb-compact table td:first-child
 .ar-policy { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid #b8892b; background: #fbf5e6; color: #5a4310; font-size: .85rem; line-height: 1.4; border-radius: 4px; }
 .th-grid .share-input.th-posted { cursor: default; }
 .th-filters { padding: 10px 14px 4px; }
+.contrib-filters { margin-left: auto; margin-right: 0; }

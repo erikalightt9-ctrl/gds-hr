@@ -2,7 +2,13 @@
 // (employee and employer shares), the remittance to the agencies and the employer share paid by GDS.
 // Employee government ID numbers are not shown here or in the downloads.
 // ratesPanel: the contribution rates, brackets and salary calculator (moved here from Rules & Rates).
-export function createContributionsPage({ api, esc, money, table, toast, shell, heading, today, ratesPanel, editContribution, employees, canAdd, openDialog, dialog }) {
+export function createContributionsPage({ api, esc, money, table, toast, shell, heading, today, ratesPanel, editContribution, employees, canAdd, openDialog, dialog, context = () => null }) {
+  // Per employee filters: Company (department) and employment status. The remittance and employer summaries stay for everyone.
+  let fCompany = '', fStatus = '';
+  const empOf = id => (employees() || []).find(e => e.id === id);
+  const isActive = e => !!e && !e.archived && e.active !== false;
+  const companyList = () => [...new Set([...(context()?.departments || []), ...(employees() || []).filter(e => !e.archived && e.department).map(e => e.department)])].sort();
+  const keep = p => { const e = empOf(p.employeeId); return (!fCompany || e?.department === fCompany) && (!fStatus || (fStatus === 'active') === isActive(e)); };
   // Title only: no breadcrumb or subtitle on this page.
   const plainHeading = title => heading(title, '').replace(/<div class="eyebrow">[\s\S]*?<\/div>/, '');
   let month = today().slice(0, 7);
@@ -12,14 +18,17 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
   async function render() {
     shell(plainHeading('Government contributions') + '<div class="loading">Loading contributions…</div>');
     const d = await api(`/contributions?month=${month}`), t = d.totals, s = d.summary;
-    const employeeShare = d.people.reduce((sum, p) => sum + p.sssEE + p.phEE + p.piEE, 0);
+    const people = d.people.filter(keep), filtered = people.length !== d.people.length;
+    const tot = k => people.reduce((sum, p) => sum + (p[k] || 0), 0);
+    const employeeShare = people.reduce((sum, p) => sum + p.sssEE + p.phEE + p.piEE, 0);
+    const filters = `<div class="bal-filters contrib-filters"><label class="field">Company<select data-contrib-company><option value="">All companies</option>${companyList().map(c => `<option ${c === fCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label><label class="field">Status<select data-contrib-status>${[['', 'All'], ['active', 'Active'], ['inactive', 'Not active']].map(([v, l]) => `<option value="${v}" ${v === fStatus ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`;
     const files = ['xlsx', 'pdf'].map(f => `<a class="small download-link" href="/api/reports/gov-contributions.${f}?month=${month}" download>${f === 'xlsx' ? 'Excel' : 'PDF'}</a>`).join('');
     shell(plainHeading('Government contributions')
       + `<div class="actions contrib-tools"><input type="month" id="contrib-month" value="${esc(month)}" aria-label="Month">${canAdd() ? '<button class="primary" data-contrib-add>+ Add employee</button>' : ''}<button class="small" data-nav="payroll">← Payroll</button><span class="download-links">${files}</span></div>`
-      + `<div class="cards">${card('Employee share', money(employeeShare), 'Deducted from salaries')}${card('Employer share', money(d.employer.total), 'Paid by GDS (SSS incl. EC)')}${card('Total remittance', money(s.total), `${d.monthName} · incl. loans and eGov fee`, true)}${card('Employees', d.people.length, 'In this month')}</div>`
-      + `<section class="panel"><div class="panel-head"><h2>Per employee · ${esc(d.monthName)}</h2>${d.recorded ? '<span class="badge">Recorded from the remittance sheet</span>' : ''}</div><div class="table-wrap">${table(['Employee', 'Monthly compensation', 'SSS EE', 'SSS ER', 'PhilHealth declared salary', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Loans', 'Employee deductions', ''],
-        [...d.people.map(p => [esc(p.name), money(p.sssBasis), money(p.sssEE), money(p.sssER), money(p.phBasis), money(p.phEE), money(p.phER), money(p.piEE), money(p.piER), money(p.sssLoan + p.piLoan + (p.cashLoan || 0)), `<strong>${money(p.deductions)}</strong>`, p.employeeId && !d.recorded ? `<button class="small" data-contrib-edit="${esc(p.employeeId)}" title="Adjust ${esc(p.name)}'s contribution basis or premiums">Edit</button>` : '']),
-          ['<strong>Total</strong>', money(t.basis), ...['sssEE', 'sssER', 'phBasis', 'phEE', 'phER', 'piEE', 'piER'].map(k => `<strong>${money(d.people.reduce((sum, p) => sum + p[k], 0))}</strong>`), `<strong>${money(t.sssLoan + t.piLoan + (t.cashLoan || 0))}</strong>`, `<strong>${money(t.deductions)}</strong>`, '']], 'No contributions for this month.')}</div></section>`
+      + `<div class="cards">${card('Employee share', money(employeeShare), filtered ? 'Filtered employees' : 'Deducted from salaries')}${card('Employer share', money(d.employer.total), 'Paid by GDS (SSS incl. EC)')}${card('Total remittance', money(s.total), `${d.monthName} · incl. loans and eGov fee`, true)}${card('Employees', people.length, filtered ? `Filtered · ${d.people.length} in this month` : 'In this month')}</div>`
+      + `<section class="panel"><div class="panel-head"><h2>Per employee · ${esc(d.monthName)}</h2>${d.recorded ? '<span class="badge">Recorded from the remittance sheet</span>' : ''}${filters}</div><div class="table-wrap">${table(['Employee', 'Monthly compensation', 'SSS EE', 'SSS ER', 'PhilHealth declared salary', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Loans', 'Employee deductions', ''],
+        [...people.map(p => [esc(p.name), money(p.sssBasis), money(p.sssEE), money(p.sssER), money(p.phBasis), money(p.phEE), money(p.phER), money(p.piEE), money(p.piER), money(p.sssLoan + p.piLoan + (p.cashLoan || 0)), `<strong>${money(p.deductions)}</strong>`, p.employeeId && !d.recorded ? `<button class="small" data-contrib-edit="${esc(p.employeeId)}" title="Adjust ${esc(p.name)}'s contribution basis or premiums">Edit</button>` : '']),
+          [`<strong>${filtered ? 'Total (filtered)' : 'Total'}</strong>`, money(filtered ? tot('sssBasis') : t.basis), ...['sssEE', 'sssER', 'phBasis', 'phEE', 'phER', 'piEE', 'piER'].map(k => `<strong>${money(tot(k))}</strong>`), `<strong>${money(filtered ? tot('sssLoan') + tot('piLoan') + tot('cashLoan') : t.sssLoan + t.piLoan + (t.cashLoan || 0))}</strong>`, `<strong>${money(filtered ? tot('deductions') : t.deductions)}</strong>`, '']], 'No contributions for this month.')}</div></section>`
       + `<div class="grid2"><section class="panel"><div class="panel-head"><h2>Remittance</h2><span class="legend">Paid to SSS, PhilHealth and Pag-IBIG</span></div><div class="panel-body">${lines(s.remittance, 'Total remittance', s.total)}</div></section>`
       + `<section class="panel"><div class="panel-head"><h2>Employer share</h2><span class="legend">Paid by GDS, not deducted from pay</span></div><div class="panel-body">${lines(s.employer, 'Total employer share', s.employerTotal)}</div></section></div>`
       + ratesPanel());
@@ -28,6 +37,10 @@ export function createContributionsPage({ api, esc, money, table, toast, shell, 
     document.querySelector('.content').onclick = e => {
       const b = e.target.closest('[data-contrib-edit]'); if (b) editContribution(b.dataset.contribEdit, refresh);
       if (e.target.closest('[data-contrib-add]')) addDialog(d.people.map(p => p.employeeId), refresh);
+    };
+    document.querySelector('.content').onchange = e => {
+      if (e.target.matches('[data-contrib-company]')) { fCompany = e.target.value; refresh(); }
+      else if (e.target.matches('[data-contrib-status]')) { fStatus = e.target.value; refresh(); }
     };
     document.querySelector('#contrib-month').onchange = e => { if (e.target.value) { month = e.target.value; render().catch(err => toast(err.message)); } };
   }
