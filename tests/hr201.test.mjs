@@ -248,3 +248,17 @@ test('TIN, SSS, PhilHealth and Pag-IBIG are complied by the number on file; no p
     assert.ok(!JSON.stringify(employeeChecklist(store, me, id)).includes('01-2345678-9'), 'the number itself is not exposed in the checklist');
   } finally { store.close(); }
 });
+
+test('remittance-only profiles (e.g. the CEO) receive no memos', async () => {
+  const { saveProfile } = await import('../src/profiles.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const ceo = createEmployee(store, hr, form('Demry', 'Boss')).created.id;
+    saveProfile(store, admin, ceo, 'payroll', { status: 'Remittance only' });
+    const memo = saveMemoDraft(store, staff, null, { title: 'Everyone memo', issueDate: '2026-10-01', body: 'Fictional memo text.', recipients: { mode: 'all' }, ackRequired: true, ackDeadline: '' });
+    publishMemo(store, hr, memo.id);
+    assert.equal(myMemos(store, { role: 'employee', username: 'ana', employeeId: a }).length, 1);
+    assert.equal(myMemos(store, { role: 'employee', username: 'ceo', employeeId: ceo }).length, 0);
+  } finally { store.close(); }
+});

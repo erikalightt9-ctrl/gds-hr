@@ -8,6 +8,7 @@ import { localToday } from './profiles.mjs';
 import { scopeEmployees, activity } from './hr201.mjs';
 import { validFile } from './documents201.mjs';
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
+import { remittanceOnlyIds } from './remittance-only.mjs';
 
 const dateField = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default('');
 const memoSchema = z.object({
@@ -21,7 +22,8 @@ const write = (store, memo) => store.db.prepare('INSERT INTO memos(id,data) VALU
 const profileOf = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
 
 function recipientIds(store, recipients) {
-  const people = store.read().employees.filter(e => !e.archived && activity(e, profileOf(store, e.id, 'employment')) === 'Active');
+  const skip = remittanceOnlyIds(store);   // remittance-only profiles (e.g. the CEO) receive no memos
+  const people = store.read().employees.filter(e => !e.archived && !skip.has(e.id) && activity(e, profileOf(store, e.id, 'employment')) === 'Active');
   const chosen = recipients.mode === 'all' ? people : recipients.mode === 'departments' ? people.filter(e => recipients.departments.includes(e.department)) : people.filter(e => recipients.employees.includes(e.id));
   return chosen.map(e => e.id);
 }

@@ -5,6 +5,7 @@
 // protects pay. The memo imposes no deduction or penalty. One memo per employee per month; everything is audited.
 import { scheduleOn, isRest, ruleOn } from './engine.mjs';
 import { issueSystemMemo } from './memos.mjs';
+import { remittanceOnlyIds } from './remittance-only.mjs';
 import { renderMemoPdf } from './memo-pdf.mjs';
 import { EXPLAIN_AFTER_MINUTES } from './late-explanations.mjs';
 
@@ -75,7 +76,8 @@ export function runTardinessMemos(store, now = new Date()) {
   if (Number(today.slice(8, 10)) < MEMO_DAY) return [];
   const month = previousMonth(today), monthEnd = `${month}-31`, issued = [];
   const state = store.read();
-  for (const e of state.employees.filter(x => !x.draft && !x.archived && x.startDate && x.startDate <= monthEnd && (!x.endDate || x.endDate >= today))) {
+  const remitOnly = remittanceOnlyIds(store);
+  for (const e of state.employees.filter(x => !x.draft && !remitOnly.has(x.id) && !x.archived && x.startDate && x.startDate <= monthEnd && (!x.endDate || x.endDate >= today))) {
     const key = `tardiness-memo:${month}:${e.id}`;
     if (store.db.prepare('SELECT 1 FROM hr_counters WHERE key=?').get(key)) continue;
     const occurrences = tardiness(store, state, e, month);

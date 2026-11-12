@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { z } from 'zod';
+import { remittanceOnlyIds } from './remittance-only.mjs';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { date, schemas } from './schema.mjs';
 import { leaveBalance, leaveSplit, leaveFraction, ruleOn, isRest, attendanceMinutes, scheduleOn, autoPresentRecord, OT_BLOCK } from './engine.mjs';
@@ -80,6 +81,7 @@ export function geofence(reading, workplace) {
 }
 export function punch(store, actor, input, now = new Date(), { ip = '', userAgent = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
+  if (remittanceOnlyIds(store).has(employee.id)) throw new AppError('This account does not use time in / out.');
   // Office attendance: the authorized office Wi-Fi (recognised by its public internet address, not the Wi-Fi name) or,
   // because the office reaches the internet through more than one address, a GPS reading inside the office radius;
   // GPS-only office records are flagged "Wi-Fi not verified" for HR. No office network saved yet = not restricted.
@@ -379,7 +381,8 @@ export function liveDashboard(store, actor, now = new Date()) {
   // Only people who clock in: not drafts (incomplete or remittance-only profiles such as the CEO), not archived, not separated.
   // Inactive employees (resigned, separated, set inactive) are not listed.
   const day = local(now).slice(0, 10);
-  const employees = state.employees.filter(e => !e.draft && !e.archived && e.active !== false && (!e.endDate || e.endDate >= day)).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now), reasons: reasonsFor(store, state, e.id, day) })).filter(e => e.status !== 'Inactive');
+  const remitOnly = remittanceOnlyIds(store);
+  const employees = state.employees.filter(e => !e.draft && !remitOnly.has(e.id) && !e.archived && e.active !== false && (!e.endDate || e.endDate >= day)).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now), reasons: reasonsFor(store, state, e.id, day) })).filter(e => e.status !== 'Inactive');
   const history = withPlace(store, store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data)));
   const companies = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').departments || []; } catch { return []; } })();
   return { companies, employees, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
