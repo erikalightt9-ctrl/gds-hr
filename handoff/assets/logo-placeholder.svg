@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="64" viewBox="0 0 240 64" role="img" aria-label="Your Company logo placeholder">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#d9b85c"/>
+  <text x="32" y="42" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700" fill="#a91e2d">YC</text>
+  <text x="74" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#1d1a14">Your Company</text>
+  <text x="74" y="50" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#5a4e34">Replace with your own logo</text>
+</svg>
