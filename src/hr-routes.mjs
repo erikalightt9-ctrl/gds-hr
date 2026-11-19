@@ -14,6 +14,8 @@ import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 import { fileOvertime, cancelOvertime, editOvertime, myOvertime } from './overtime.mjs';
 import { pushStatus, savePushSubscription, removePushSubscription, sendTestReminder } from './reminders.mjs';
 import { saveSchedule } from './work-schedule.mjs';
+import { createCase, updateIncident, startInvestigation, addCaseNote, addCaseFile, caseFile, issueNte, submitCaseExplanation, recordExplanation, recordNoExplanation, scheduleHearing, recordHearing, evaluateCase, proposeDecision, reviewDecision, closeCase, listCases, caseDetail, disciplinaryRecords, myCases, disciplineSettings, saveDisciplineSettings, disciplineSummary, DISCIPLINE_MANAGE, STATUSES, ACTIONS } from './discipline.mjs';
+import { templateList, buildTemplate, uploadReportFile, reportFiles, reportFileContent, removeReportFile } from './excel-templates.mjs';
 
 const BIG = 28_500_000;
 const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="document"; filename*=UTF-8''${encodeURIComponent(meta.name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
@@ -58,6 +60,10 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if ((p = m(/^\/api\/hr\/me\/loans\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelLoanApplication(store, actor, p[1])); return true; }
     if (pathname === '/api/hr/me/profile' && method === 'GET') { send(200, employeeForm(store, actor, actor.employeeId)); return true; }
     if (pathname === '/api/hr/me/memos' && method === 'GET') { send(200, myMemos(store, actor)); return true; }
+    // Own due process cases (from the Notice to Explain on): read, and answer with a written explanation.
+    if (pathname === '/api/hr/me/cases' && method === 'GET') { send(200, myCases(store, actor)); return true; }
+    if ((p = m(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/explanation$/)) && method === 'POST') { send(200, submitCaseExplanation(store, actor, p[1], await readBody(req, BIG))); return true; }
+    if ((p = m(/^\/api\/hr\/me\/case-files\/([a-f0-9-]+)$/)) && method === 'GET') { const { meta, content } = caseFile(store, actor, p[1]); res.writeHead(200, fileHeaders(meta, url.searchParams.has('download'))); res.end(content); return true; }
     if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/acknowledge$/)) && method === 'POST') { send(200, acknowledgeMemo(store, actor, p[1], Number(p[2]))); return true; }
     if (pathname === '/api/hr/me/trainings' && method === 'GET') { send(200, myTrainings(store, actor)); return true; }
     if ((p = m(/^\/api\/hr\/me\/trainings\/([a-f0-9-]+)\/registration$/)) && method === 'POST') { const b = await readBody(req); send(200, updateParticipant(store, actor, p[1], actor.employeeId, { registration: b.registration })); return true; }
@@ -125,6 +131,9 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
       if (docs.expired) items.push({ text: `${docs.expired} expired document${docs.expired === 1 ? '' : 's'}`, nav: 'files', filter: 'expired' });
       if (docs.overdue) items.push({ text: `${docs.overdue} overdue document submission${docs.overdue === 1 ? '' : 's'}`, nav: 'files', filter: 'missing' });
     }
+    const cases = disciplineSummary(store, actor);
+    if (cases?.awaitingApproval) items.push({ text: `${cases.awaitingApproval} disciplinary decision${cases.awaitingApproval === 1 ? '' : 's'} waiting for your approval`, nav: 'discipline' });
+    if (cases?.overdueExplanations && DISCIPLINE_MANAGE.includes(actor.role)) items.push({ text: `${cases.overdueExplanations} Notice${cases.overdueExplanations === 1 ? '' : 's'} to Explain past the answer deadline`, nav: 'discipline' });
     const memos = memoSummary(store, actor);
     if (memos.overdue) items.push({ text: `${memos.overdue} overdue memo acknowledgement${memos.overdue === 1 ? '' : 's'}`, nav: 'memos' });
     send(200, { count: items.length, items }); return true;
@@ -179,6 +188,36 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   if ((p = m(/^\/api\/hr\/employees\/([^/]+)\/requirements\/([a-z0-9-]+)$/)) && method === 'POST') { send(200, setNotApplicable(store, actor, decodeURIComponent(p[1]), p[2], await readBody(req))); return true; }
   if ((p = m(/^\/api\/hr\/documents\/([a-f0-9-]+)\/review$/)) && method === 'POST') { send(200, reviewDocument(store, actor, p[1], await readBody(req))); return true; }
   if ((p = m(/^\/api\/hr\/documents\/([a-f0-9-]+)\/content$/)) && method === 'GET') { const { meta, content } = document201Content(store, actor, p[1]); res.writeHead(200, fileHeaders(meta, url.searchParams.has('download'))); res.end(content); return true; }
+
+  // ---------- Due process / disciplinary cases ----------
+  if (pathname === '/api/hr/discipline/meta' && method === 'GET') { send(200, { statuses: STATUSES, actions: ACTIONS, settings: disciplineSettings(store), canManage: DISCIPLINE_MANAGE.includes(actor.role) }); return true; }
+  if (pathname === '/api/hr/discipline/settings' && method === 'POST') { send(200, saveDisciplineSettings(store, actor, await readBody(req))); return true; }
+  if (pathname === '/api/hr/discipline/cases' && method === 'GET') { send(200, listCases(store, actor, { status: url.searchParams.get('status') || '', q: url.searchParams.get('q') || '', employeeId: url.searchParams.get('employeeId') || '' })); return true; }
+  if (pathname === '/api/hr/discipline/cases' && method === 'POST') { send(201, createCase(store, actor, await readBody(req))); return true; }
+  if ((p = m(/^\/api\/hr\/discipline\/cases\/([a-f0-9-]+)$/)) && method === 'GET') { send(200, caseDetail(store, actor, p[1])); return true; }
+  if ((p = m(/^\/api\/hr\/discipline\/cases\/([a-f0-9-]+)\/(incident|investigate|note|files|nte|explanation|no-explanation|hearing|hearing-record|evaluate|propose|review|close)$/)) && method === 'POST') {
+    const action = p[2], body = await readBody(req, ['files', 'explanation'].includes(action) ? BIG : undefined);
+    const run = { incident: updateIncident, investigate: startInvestigation, note: addCaseNote, files: addCaseFile, nte: issueNte, explanation: recordExplanation, 'no-explanation': recordNoExplanation, hearing: scheduleHearing, 'hearing-record': recordHearing, evaluate: evaluateCase, propose: proposeDecision, review: reviewDecision, close: closeCase }[action];
+    send(200, run(store, actor, p[1], body)); return true;
+  }
+  if ((p = m(/^\/api\/hr\/discipline\/files\/([a-f0-9-]+)$/)) && method === 'GET') { const { meta, content } = caseFile(store, actor, p[1]); res.writeHead(200, fileHeaders(meta, url.searchParams.has('download'))); res.end(content); return true; }
+  if ((p = m(/^\/api\/hr\/discipline\/records\/([^/]+)$/)) && method === 'GET') { send(200, disciplinaryRecords(store, actor, decodeURIComponent(p[1]))); return true; }
+
+  // ---------- Excel report templates and maintained report files ----------
+  if (pathname === '/api/hr/templates' && method === 'GET') { send(200, templateList(store, actor)); return true; }
+  if ((p = m(/^\/api\/hr\/templates\/([a-z0-9-]+)\.xlsx$/)) && method === 'GET') {
+    const { filename, body } = buildTemplate(store, actor, p[1], { month: url.searchParams.get('month') || '', year: url.searchParams.get('year') || '' });
+    res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${filename}"` }); res.end(body); return true;
+  }
+  if ((p = m(/^\/api\/hr\/templates\/([a-z0-9-]+)\/files$/))) {
+    if (method === 'GET') { send(200, reportFiles(store, actor, p[1])); return true; }
+    if (method === 'POST') { send(201, uploadReportFile(store, actor, p[1], await readBody(req, 7_500_000))); return true; }
+  }
+  if ((p = m(/^\/api\/hr\/report-files\/([a-f0-9-]+)$/)) && method === 'GET') {
+    const { meta, content } = reportFileContent(store, actor, p[1]);
+    res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="report.xlsx"; filename*=UTF-8''${encodeURIComponent(meta.name)}` }); res.end(content); return true;
+  }
+  if ((p = m(/^\/api\/hr\/report-files\/([a-f0-9-]+)\/remove$/)) && method === 'POST') { send(200, removeReportFile(store, actor, p[1], await readBody(req))); return true; }
 
   // ---------- Memos ----------
   if (pathname === '/api/hr/memos' && method === 'GET') { send(200, listMemos(store, actor)); return true; }

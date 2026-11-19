@@ -9,6 +9,7 @@ import { scopeEmployees, activity } from './hr201.mjs';
 import { validFile } from './documents201.mjs';
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
 import { remittanceOnlyIds } from './remittance-only.mjs';
+import { warningCaseOk } from './discipline.mjs';
 
 const dateField = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).default('');
 const memoSchema = z.object({
@@ -16,6 +17,8 @@ const memoSchema = z.object({
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose the issue date.'), body: z.string().trim().min(1, 'Write the memo text.').max(20000),
   recipients: z.object({ mode: z.enum(['all', 'departments', 'employees']), departments: z.array(z.string().max(120)).max(100).default([]), employees: z.array(z.string().max(80)).max(1000).default([]) }).strict(),
   ackRequired: z.boolean().default(true), ackDeadline: dateField,
+  // Memos written from a template about one employee (incident report, explanation letter, written warning, notice).
+  details: z.object({ template: z.enum(['incident-report', 'explanation-letter', 'written-warning', 'notice']), employeeId: z.string().trim().min(1, 'Choose the employee concerned.').max(80), employeeName: z.string().trim().max(200).default(''), department: z.string().trim().max(120).default(''), position: z.string().trim().max(120).default(''), incidentDate: dateField, description: z.string().trim().max(8000).default(''), issuingOfficer: z.string().trim().min(2, 'Name the issuing officer.').max(200), caseId: z.string().trim().max(80).default('') }).strict().nullable().default(null),
 }).strict();
 const read = (store, id) => { const row = store.db.prepare('SELECT data FROM memos WHERE id=?').get(id); if (!row) throw new AppError('Memo not found.', 404); return JSON.parse(row.data); };
 const write = (store, memo) => store.db.prepare('INSERT INTO memos(id,data) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(memo.id, JSON.stringify(memo));
@@ -59,6 +62,11 @@ export function publishMemo(store, actor, id, input = {}) {
     if (memo.version > 0 && changeNote.length < 3) throw new AppError('Describe what changed in this revised version.');
     const content = memoSchema.parse(memo.draft), version = memo.version + 1, ids = recipientIds(store, content.recipients);
     if (!ids.length) throw new AppError('No active employees match the chosen recipients.');
+    // A written warning is a disciplinary sanction: it is issued only for a due process case whose approved decision
+    // is a warning, and only to that employee.
+    if (content.details?.template === 'written-warning' || /written warning/i.test(content.category)) {
+      if (!warningCaseOk(store, content.details?.caseId, ids)) throw new AppError('A written warning can be issued only to the employee of a due process case whose approved decision is a warning. Link the case first (Memos → template Written warning).');
+    }
     const now = new Date().toISOString();
     const issued = { ...content, reference: content.reference || memo.versions[0]?.reference || nextReference(store, content.issueDate), version, publishedAt: now, publishedBy: actor.username, changeNote, attachments: memo.attachments.filter(a => !a.version || a.version === version).map(a => ({ ...a, version })) };
     const insert = store.db.prepare('INSERT OR IGNORE INTO memo_assignments(memo_id,version,employee_id,assigned_at,acknowledged_at,ack_user) VALUES(?,?,?,?,NULL,NULL)');
@@ -94,7 +102,7 @@ export function startRevision(store, actor, id) {
     const memo = read(store, id);
     if (memo.status !== 'published') throw new AppError('Only issued memos can be revised.');
     const last = memo.versions.at(-1);
-    const updated = { ...memo, draft: { title: last.title, category: last.category, reference: last.reference, issueDate: localToday(), body: last.body, recipients: last.recipients, ackRequired: last.ackRequired, ackDeadline: '' } };
+    const updated = { ...memo, draft: { title: last.title, category: last.category, reference: last.reference, issueDate: localToday(), body: last.body, recipients: last.recipients, ackRequired: last.ackRequired, ackDeadline: '', details: last.details ?? null } };
     write(store, updated); return updated;
   });
 }

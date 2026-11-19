@@ -20,7 +20,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
       if (tab === 'loans201') return loans(box, await api('/hr/me/loans'));
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
-      if (tab === 'memos') return memos(box, await api('/hr/me/memos'));
+      if (tab === 'memos') return memos(box, await api('/hr/me/memos'), await api('/hr/me/cases').catch(() => []));
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       if (tab === 'files201') return file201(box);
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
@@ -164,13 +164,34 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       try { await api(`/hr/me/loans/${b.dataset.loanCancel}/cancel`, {}); confirm('Loan application cancelled', 'Your loan application was cancelled.'); await fill('loans201', box); } catch (error) { toast(error.message); }
     };
   }
-  function memos(box, list) {
+  // Due process cases addressed to the employee (from the Notice to Explain on), with the written explanation form.
+  function casesHtml(cases) {
+    if (!cases.length) return '';
+    return `<section class="panel"><div class="panel-head"><h2>My cases (due process)</h2><span class="legend">Confidential · only you and HR can see this</span></div><div class="panel-body memo-cards">${cases.map(c => `<article class="memo-card ${c.canExplain ? 'unread' : ''}"><header><strong>${esc(c.reference)} · ${esc(c.offense)}</strong><small>Incident ${fmtDate(c.incidentDate)} · ${esc(c.status)}</small></header>
+      ${c.nte ? `<details ${c.canExplain ? 'open' : ''}><summary>Notice to Explain ${esc(c.nte.memoReference || '')}</summary><div class="memo-body">${esc(c.nte.allegations)}</div><p class="legend">Rule / policy: ${esc(c.nte.rules)} · Possible penalty: ${esc(c.nte.possibleSanction)}</p></details>` : ''}
+      ${c.canExplain ? `<form class="form-grid" data-case-explain="${esc(c.id)}"><p class="full">Please submit your written explanation by <strong>${fmtDate(c.nte.responseDeadline)}</strong>. You may attach supporting documents.</p><label class="field full">Your written explanation<textarea name="text" rows="7" required minlength="10" maxlength="20000"></textarea></label><label class="check full"><input type="checkbox" name="requestsHearing"> I request a hearing or conference to present my side and evidence</label><label class="field full">Supporting documents (optional · up to 5 files, PDF/JPG/PNG, 10 MB each)<input type="file" name="files" multiple accept="application/pdf,image/png,image/jpeg"></label><div class="full"><button class="primary">Submit explanation</button></div></form>` : ''}
+      ${c.explanation ? `<p class="legend">Your explanation was received ${fmtDateTime(c.explanation.submittedAt)}${c.explanation.late ? ' (after the deadline)' : ''}${c.explanation.requestsHearing ? ' · hearing requested' : ''}.</p><details><summary>Your explanation</summary><div class="memo-body">${esc(c.explanation.text)}</div>${c.explanation.files.map(f => `<a href="/api/hr/me/case-files/${f.id}" target="_blank" rel="noopener">📎 ${esc(f.name)}</a>`).join(' ')}</details>` : ''}
+      ${c.hearing ? `<p>Hearing / conference: <strong>${fmtDate(c.hearing.date)} ${esc(c.hearing.time)}</strong> · ${esc(c.hearing.place)}</p>` : ''}
+      ${c.decision ? `<p>Decision: <strong>${esc(c.decision.label)}</strong> · ${fmtDate(c.decision.decisionDate)} · see memo ${esc(c.decision.memoReference)}</p>` : ''}</article>`).join('')}</div></section>`;
+  }
+  function memos(box, list, cases = []) {
     const pending = list.filter(m => m.ackRequired && !m.acknowledgedAt);
-    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${pending.length ? `${pending.length} waiting for your acknowledgement` : 'All caught up'}</span></div><div class="panel-body memo-cards">
+    box.innerHTML = casesHtml(cases) + `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${pending.length ? `${pending.length} waiting for your acknowledgement` : 'All caught up'}</span></div><div class="panel-body memo-cards">
       ${list.map(m => `<article class="memo-card ${m.ackRequired && !m.acknowledgedAt ? 'unread' : ''}"><header><strong>${esc(m.title)}</strong><small>${esc(m.reference)} · ${fmtDate(m.issueDate)} · version ${m.version}${m.latest ? '' : ' (replaced by a newer version)'}</small></header>
         ${m.changeNote ? `<p class="legend">What changed: ${esc(m.changeNote)}</p>` : ''}<details ${m.ackRequired && !m.acknowledgedAt ? 'open' : ''}><summary>Read memo</summary><div class="memo-body">${esc(m.body)}</div>${m.attachments.map(a => `<a href="/api/hr/me/memo-attachments/${a.id}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`).join(' ')}</details>
         <footer>${m.acknowledgedAt ? badge(`Receipt acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? `${m.overdue ? badge('Overdue', 'rejected') : m.ackDeadline ? badge(`Please acknowledge by ${fmtDate(m.ackDeadline)}`, 'pending') : ''}<button class="primary small" data-ack="${m.memoId}" data-version="${m.version}">I have received and read this memo</button>` : badge('No acknowledgement needed', 'neutral')}</footer></article>`).join('') || '<p class="muted">No memos addressed to you yet.</p>'}
       <p class="legend">Acknowledging confirms that you received and read the memo. It does not mean you agree with it.</p></div></section>`;
+    for (const form of box.querySelectorAll('[data-case-explain]')) form.onsubmit = async ev => {
+      ev.preventDefault(); const f = new FormData(form), picked = [...form.elements.files.files];
+      if (picked.length > 5 || picked.some(x => x.size > 10 * 1024 * 1024 || !['application/pdf', 'image/png', 'image/jpeg'].includes(x.type))) { toast('Attach up to 5 PDF, JPG or PNG files of 10 MB or less.'); return; }
+      if (!window.confirm('Submit your written explanation now? You cannot change it afterwards.')) return;
+      const button = form.querySelector('button'); button.disabled = true;
+      try {
+        const files = await Promise.all(picked.map(async x => ({ name: x.name, mime: x.type, data: await readFile(x), description: '' })));
+        await api(`/hr/me/cases/${form.dataset.caseExplain}/explanation`, { text: f.get('text'), requestsHearing: f.get('requestsHearing') === 'on', files });
+        confirm('Explanation submitted', 'Your written explanation was sent to HR. You will receive a memo with the decision after the case is evaluated.'); await fill('memos', box);
+      } catch (error) { toast(error.message); button.disabled = false; }
+    };
     box.onclick = async event => {
       const b = event.target.closest('[data-ack]'); if (!b) return;
       b.disabled = true;
