@@ -46,6 +46,8 @@ test('the final deduction never exceeds what is owed; rejected and cancelled app
     decideLoanApplication(store, hr, app.id, { decision: 'approve', approvedAmount: 500, months: 1, startDate: '2026-09-01' });
     const s = store.read(); s.loans[0].perPayroll = 5000; s.loans[0].monthlyAmortization = 5000; store.write(s);
     assert.equal(run(store).rows[0].loanDeductions[0].amount, 500);
+    // A new application needs the current loan below 20% left; record it as paid down first.
+    const paid = store.read(); paid.loans[0].balance = 50; store.write(paid);
     const two = applyLoan(store, worker, { type: 'Salary Loan', amount: 900, months: 2, purpose: 'Repairs (demo)' });
     assert.throws(() => decideLoanApplication(store, hr, two.id, { decision: 'reject', remarks: '' }), /reason/);
     decideLoanApplication(store, hr, two.id, { decision: 'reject', remarks: 'Existing loan active' });

@@ -1,7 +1,7 @@
 // HTTP routes for the HR 201 modules (/api/hr/...). Every handler enforces its own permission on the server.
 import { AppError, permit } from './service.mjs';
 import { explanationsDue } from './late-explanations.mjs';
-import { CATEGORIES as REQUEST_CATEGORIES } from './attendance-requests.mjs';
+import { CATEGORIES as REQUEST_CATEGORIES, ensure as ensureAttendanceRequests } from './attendance-requests.mjs';
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
@@ -94,9 +94,16 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     const fmt = d => new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     const span = dates => { const s = dates.filter(Boolean).sort(); return s.length ? (s[0] === s.at(-1) ? fmt(s[0]) : `${fmt(s[0])} – ${fmt(s.at(-1))}`) : ''; };
     if (['admin', 'hr'].includes(actor.role)) { const pending = store.read().leaves.filter(l => l.status === 'pending'), leaves = pending.length; if (leaves) items.push({ text: `${leaves} leave request${leaves === 1 ? '' : 's'} waiting for approval`, nav: 'leave', date: span(pending.map(l => l.startDate)) }); }
+    // Loan applications from the employee portal waiting for a decision (Admin, HR, Payroll), in Employee Loans.
+    if (['admin', 'hr', 'payroll'].includes(actor.role)) {
+      const names = new Map(store.read().employees.map(e => [e.id, e.name])), peso = n => `₱${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      for (const a of store.db.prepare("SELECT data FROM loan_applications WHERE status='pending' ORDER BY rowid").all().map(x => JSON.parse(x.data)))
+        items.push({ text: `${names.get(a.employeeId) || a.employeeId}: ${a.type} application ${peso(a.amount)} (${a.months} month${a.months === 1 ? '' : 's'}) waiting for approval`, nav: 'loans', date: fmt(a.appliedAt) });
+    }
     // Attendance requests (forgot time in / out, failed time in, system error, ...) waiting for HR, in Attendance → Requests.
     if (['admin', 'hr'].includes(actor.role)) {
       // One item per request, so each new request lights up the bell with the employee's name.
+      ensureAttendanceRequests(store);   // a new database has no requests table until the first request
       for (const r of store.db.prepare("SELECT data FROM attendance_requests WHERE status IN ('pending','review') ORDER BY rowid").all().map(x => JSON.parse(x.data)))
         items.push({ text: `${r.employeeName}: attendance request ${r.reference} (${REQUEST_CATEGORIES[r.category] || r.category}) waiting for approval`, nav: 'requests', date: fmt(r.date) });
     }

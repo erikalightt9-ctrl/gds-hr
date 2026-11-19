@@ -21,8 +21,9 @@ export function applyLoan(store, actor, input) {
   permit(actor, ['employee']);
   const v = applySchema.parse(input);
   return store.transaction(() => {
-    const employee = store.read().employees.find(e => e.id === actor.employeeId);
+    const state = store.read(), employee = state.employees.find(e => e.id === actor.employeeId);
     if (!employee) throw new AppError('Your employee record was not found.', 404);
+    assertMayBorrow(state, employee.id);
     if (apps(store, 'WHERE employee_id=? AND status=?', employee.id, 'pending').length >= 3) throw new AppError('You already have three pending loan applications.');
     const app = { id: randomUUID(), employeeId: employee.id, ...v, status: 'pending', appliedAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), by: actor.username, action: 'applied' }] };
     write(store, app);
@@ -44,8 +45,17 @@ export function cancelLoanApplication(store, actor, id) {
 }
 
 // ---------- HR / Payroll decision ----------
-const approveSchema = z.object({ decision: z.literal('approve'), approvedAmount: z.number().positive().max(10_000_000), interest: z.number().min(0).max(10_000_000).default(0), months: z.number().int().min(1).max(120), startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reference: z.string().trim().max(120).default(''), remarks: z.string().trim().max(1000).default('') }).strict();
+const approveSchema = z.object({ renewLoanIds: z.array(z.string().max(80)).max(10).default([]), decision: z.literal('approve'), approvedAmount: z.number().positive().max(10_000_000), interest: z.number().min(0).max(10_000_000).default(0), months: z.number().int().min(1).max(120), startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reference: z.string().trim().max(120).default(''), remarks: z.string().trim().max(1000).default('') }).strict();
 const rejectSchema = z.object({ decision: z.literal('reject'), remarks: z.string().trim().min(3, 'Give the employee a reason.').max(1000) }).strict();
+// A new loan (a renewal that pays the old balance off, or a separate loan) only when every active loan is down to less
+// than 20% of what was borrowed (principal + interest). Checked when the employee applies and again when HR approves.
+export const NEW_LOAN_BELOW_SHARE = 0.2;
+export function assertMayBorrow(state, employeeId) {
+  for (const l of state.loans.filter(x => x.employeeId === employeeId && x.authorized)) {
+    const owed = r2(l.balance + (l.interestBalance || 0)), share = owed / ((l.original || 0) + (l.interestTotal || 0) || 1);
+    if (owed > 0 && share >= NEW_LOAN_BELOW_SHARE - 1e-9) throw new AppError(`A new loan is possible only when less than 20% of the current loan is left. ${l.type} ${l.reference}: ${Math.round(share * 1000) / 10}% is still owed (₱${owed.toFixed(2)} of ₱${r2((l.original || 0) + (l.interestTotal || 0)).toFixed(2)}).`);
+  }
+}
 const addMonths = (date, n) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 export function decideLoanApplication(store, actor, id, input) {
   permit(actor, APPROVERS);
@@ -62,31 +72,57 @@ export function decideLoanApplication(store, actor, id, input) {
       return updated;
     }
     const state = store.read(), rule = ruleOn(state, v.startDate) || state.rules[0], perMonth = rule?.cutoff === 'monthly' ? 1 : 2;
+    assertMayBorrow(state, app.employeeId);
     const total = r2(v.approvedAmount + v.interest), monthly = r2(total / v.months), terms = v.months * perMonth;
+    // Renewal: the new loan first pays off the employee's chosen active loans (principal + interest still due); only
+    // the rest is released. Each old loan closes with a "Paid by renewal" payment, so its history stays complete.
+    const renewed = [...new Set(v.renewLoanIds)].map(lid => {
+      const old = state.loans.find(l => l.id === lid && l.employeeId === app.employeeId && l.authorized && r2(l.balance + (l.interestBalance || 0)) > 0);
+      if (!old) throw new AppError('One of the loans to renew is not an active loan of this employee.');
+      return { old, amount: r2(old.balance + (old.interestBalance || 0)) };
+    });
+    const payoff = r2(renewed.reduce((s, r) => s + r.amount, 0));
+    if (payoff > v.approvedAmount) throw new AppError(`The approved amount must cover the balance being renewed (₱${payoff.toFixed(2)}).`);
     const loan = {
       id: randomUUID(), employeeId: app.employeeId, type: app.type, reference: v.reference || `LOAN-${app.id.slice(0, 8).toUpperCase()}`,
       original: v.approvedAmount, balance: v.approvedAmount, interestTotal: v.interest, interestBalance: v.interest,
       monthlyAmortization: monthly, perPayroll: r2(monthly / perMonth), startDate: v.startDate, endDate: addMonths(v.startDate, v.months),
       terms, remainingTerms: terms, authorized: true, applicationId: app.id,
+      ...(renewed.length ? { payoff, renewalOf: renewed.map(r => ({ id: r.old.id, reference: r.old.reference, amount: r.amount })) } : {}),
     };
     saveRecord(store, actor, 'loans', loan, { trusted: true });
-    const updated = { ...app, status: 'approved', approvedAmount: v.approvedAmount, interest: v.interest, approvedMonths: v.months, startDate: v.startDate, loanId: loan.id, remarks: v.remarks, decidedBy: actor.username, decidedAt: now, history: [...app.history, { at: now, by: actor.username, action: 'approved', note: v.remarks }] };
+    if (renewed.length) {
+      const next = store.read(), paidOn = localToday();
+      for (const { old, amount } of renewed) {
+        const target = next.loans.find(l => l.id === old.id), before = structuredClone(target);
+        Object.assign(target, { priorPayments: [...(target.priorPayments || []), { date: paidOn, amount, note: `Paid by renewal (${loan.reference})` }], balance: 0, interestBalance: 0, remainingTerms: 0, renewedBy: loan.id });
+        store.log(actor, 'renewal-payoff', 'loans', target.id, before, target);
+      }
+      store.write(next);
+    }
+    const updated = { ...app, status: 'approved', approvedAmount: v.approvedAmount, interest: v.interest, approvedMonths: v.months, startDate: v.startDate, loanId: loan.id, ...(renewed.length ? { payoff, netRelease: r2(v.approvedAmount - payoff), renewed: loan.renewalOf } : {}), remarks: v.remarks, decidedBy: actor.username, decidedAt: now, history: [...app.history, { at: now, by: actor.username, action: 'approved', note: v.remarks }] };
     write(store, updated); store.log(actor, 'approve', 'loan-applications', id, app, updated);
-    store.notify(app.employeeId, `Your ${app.type} of ₱${v.approvedAmount.toFixed(2)} was approved. Payroll deducts ₱${loan.perPayroll.toFixed(2)} per cutoff from ${v.startDate}.`);
+    // The loan follows the terms HR approved; the notice spells them out and says what HR changed from the request.
+    const peso = n => `₱${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, mo = n => `${n} month${n === 1 ? '' : 's'}`;
+    const changes = [v.approvedAmount !== app.amount ? `amount ${peso(app.amount)} → ${peso(v.approvedAmount)}` : '', v.months !== app.months ? `${app.months} → ${mo(v.months)}` : '', v.interest ? `interest / fees ${peso(v.interest)} added` : ''].filter(Boolean);
+    store.notify(app.employeeId, `Your ${app.type} was approved: ${peso(v.approvedAmount)}${v.interest ? ` + ${peso(v.interest)} interest / fees` : ''} over ${mo(v.months)}. Payroll deducts ${peso(loan.perPayroll)} per payroll (${peso(loan.monthlyAmortization)} a month) from ${v.startDate}.${renewed.length ? ` Renewal: ${peso(payoff)} of it paid off your ${renewed.map(r => `${r.old.type} ${r.old.reference}`).join(' and ')}; ${peso(v.approvedAmount - payoff)} released to you.` : ''}${changes.length ? ` HR changed your requested terms: ${changes.join('; ')}.` : ''}${v.remarks ? ` HR remarks: ${v.remarks}` : ''}`);
     return { application: updated, loan };
   });
 }
 
 // ---------- Dashboard ----------
 function postedRepayments(state, loanId) {
-  return state.runs.filter(r => r.status === 'posted').flatMap(run => run.rows.flatMap(row => (row.loanDeductions || []).filter(l => l.loanId === loanId).map(l => ({ runId: run.id, start: run.start, end: run.end, postedAt: run.postedAt, amount: l.amount, principal: l.principal ?? l.amount, interest: l.interest ?? 0, balanceAfter: l.remainingBalance })))).sort((a, b) => a.start.localeCompare(b.start));
+  return state.runs.filter(r => r.status === 'posted').flatMap(run => run.rows.flatMap(row => (row.loanDeductions || []).filter(l => l.loanId === loanId).map(l => ({ runId: run.id, start: run.start, end: run.end, paidOn: payDateFor(run.start, run.end), postedAt: run.postedAt, amount: l.amount, principal: l.principal ?? l.amount, interest: l.interest ?? 0, balanceAfter: l.remainingBalance })))).sort((a, b) => a.start.localeCompare(b.start));
 }
 // Payment history: payments made before the system (recorded by HR on the loan) followed by posted payroll deductions.
 function repayments(state, loanId) {
   const loan = state.loans.find(l => l.id === loanId), prior = (loan?.priorPayments || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  // One running balance in the order the money was paid (a payroll deduction on its salary day: 1st-15th on the 22nd,
+  // 16th-end on the 8th of the next month), so payments encoded later still line up; below zero is an overpayment.
+  const before = prior.map(p => ({ prior: true, start: p.date, end: p.date, paidOn: p.date, amount: p.amount, principal: p.amount, interest: 0, note: p.note || 'Paid before the system' }));
   let paid = 0;
-  const before = prior.map(p => { paid += p.amount; return { prior: true, start: p.date, end: p.date, amount: p.amount, principal: p.amount, interest: 0, balanceAfter: r2((loan.original || 0) - paid), note: p.note || 'Paid before the system' }; });
-  return [...before, ...postedRepayments(state, loanId)];
+  return [...before, ...postedRepayments(state, loanId)].sort((a, b) => a.paidOn.localeCompare(b.paidOn))
+    .map(h => { paid += h.principal; return { ...h, balanceAfter: r2((loan?.original || 0) - paid) }; });
 }
 function nextDeduction(state, loan, today = localToday()) {
   if (!loan.authorized || r2(loan.balance + (loan.interestBalance || 0)) <= 0) return '';
@@ -135,6 +171,15 @@ export function setLoanSchedule(store, actor, loanId, input) {
     store.log(actor, 'change-loan-schedule', 'loans', loan.id, { deductOn: loan.deductOn || 'every' }, { deductOn: v.deductOn, reason: v.reason });
     return { id: loan.id, deductOn: v.deductOn };
   });
+}
+// One application with its employee and, once approved, the loan it created (for the printable application form).
+// Admin, HR and Payroll see every application; an employee only their own.
+export function loanApplicationRecord(store, actor, id) {
+  permit(actor, [...APPROVERS, 'employee']);
+  const application = apps(store, 'WHERE id=?', String(id))[0];
+  if (!application || (actor.role === 'employee' && application.employeeId !== actor.employeeId)) throw new AppError('Loan application not found.', 404);
+  const state = store.read();
+  return { application, employee: state.employees.find(e => e.id === application.employeeId) || null, loan: application.loanId ? state.loans.find(l => l.id === application.loanId) || null : null };
 }
 export const loanStatus = loan => (!loan.authorized ? 'Not authorized' : r2(loan.balance + (loan.interestBalance || 0)) <= 0 ? 'Fully paid' : 'Active');
 export function loanDashboard(store, actor) {

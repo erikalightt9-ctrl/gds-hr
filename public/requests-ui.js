@@ -129,6 +129,10 @@ export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, o
     dialog.querySelectorAll('[data-ar-act]').forEach(b => { b.onclick = async () => {
       const form = dialog.querySelector('#ar-decide'), f = new FormData(form), note = String(f.get('note') || '').trim(), err = form.querySelector('[data-ar-error]'), act = b.dataset.arAct;
       const body = { review: undefined, remark: { note }, info: { note }, reject: { remarks: note }, approve: { timeIn: String(f.get('timeIn') || ''), timeOut: String(f.get('timeOut') || ''), endNextDay: !!f.get('endNextDay'), remarks: note } }[act];
+      // Remark, Ask for information and Reject send the HR remarks text to the employee: ask for it in plain words and
+      // point at the box instead of showing the server's field message ("note: …").
+      const needsNote = { remark: 'Type the remark in the HR remarks box first.', info: 'Type in the HR remarks box what information or document you need from the employee, then click Ask for information again.', reject: 'Type the reason for rejecting in the HR remarks box first.' }[act];
+      if (needsNote && note.length < 3) { const box = form.elements.note; err.textContent = needsNote; err.hidden = false; box?.focus(); box?.scrollIntoView({ block: 'center', behavior: 'smooth' }); toast(needsNote); return; }
       try { const res = await api(`/attendance-requests/${r.id}/${act}`, body || {}); dialog.close(); if (res?.decision?.applyAtTimeOut) { toast(`Approved: the time in will read ${res.decision.approved.timeIn} once the day's time out is recorded.`); load(box); return; } toast({ review: 'Review started; the employee was notified.', remark: 'Remark added.', info: 'The employee was asked for more information.', reject: 'Request rejected; the record is unchanged.', approve: 'Approved; the attendance record was updated.' }[act]); load(box); } catch (error) { err.textContent = error.message; err.hidden = false; err.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); toast(error.message); }
     }; });
   }

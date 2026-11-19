@@ -55,7 +55,7 @@ export function createAdmin(ctx) {
     const s = settings, preview = `${[s.idFormat.prefix, s.idFormat.includeYear ? ctx.today().slice(0, 4) : ''].filter(Boolean).join('-')}${s.idFormat.prefix || s.idFormat.includeYear ? '-' : ''}${'1'.padStart(s.idFormat.digits, '0')}`;
     const field = (label, name, value, extra = '') => `<label class="field">${label}<input name="${name}" value="${esc(value ?? '')}" ${extra}></label>`;
     shell(heading('Settings', 'Manage company details, attendance access, and employee records.', `<span class="st-admin">${sIcon('lock')}System administrators only</span>`) +
-      `<nav class="st-tabs">${[['st-wifi', 'Office Wi-Fi'], ['st-company', 'Company details'], ['st-numbers', 'Employee numbers'], ['st-requirements', 'Document requirements']].map(([id, label], i) => `<button type="button" data-st-jump="${id}" class="${i === 0 ? 'active' : ''}">${label}</button>`).join('')}</nav>
+      `<nav class="st-tabs">${[['st-wifi', 'Office Wi-Fi'], ['st-phones', 'Phone sign-in'], ['st-feishu', 'Feishu alerts'], ['st-company', 'Company details'], ['st-numbers', 'Employee numbers'], ['st-requirements', 'Document requirements']].map(([id, label], i) => `<button type="button" data-st-jump="${id}" class="${i === 0 ? 'active' : ''}">${label}</button>`).join('')}</nav>
       <form id="settings-form">
       <section class="panel st-panel" id="st-company"><div class="st-head"><h2>Company details</h2></div><div class="panel-body">
         <h3 class="st-group">Company identity</h3><div class="form-grid">${field('Company name', 'company.name', s.company.name, 'required maxlength="120"')}${field('System title', 'company.systemTitle', s.company.systemTitle, 'required maxlength="120"')}</div>
@@ -90,6 +90,8 @@ export function createAdmin(ctx) {
       <div class="st-footer"><span>Changes apply across your organization.</span><span><button type="button" data-st-cancel>Cancel</button><button class="primary">Save settings</button></span></div></form>`);
     const form = document.querySelector('#settings-form');
     officeWifi(form);
+    phoneSignIn(form);
+    feishuAlerts(form);
     document.querySelector('.st-tabs').addEventListener('click', event => {
       const b = event.target.closest('[data-st-jump]'); if (!b) return;
       document.querySelectorAll('.st-tabs button').forEach(x => x.classList.toggle('active', x === b));
@@ -118,6 +120,57 @@ export function createAdmin(ctx) {
       };
       try { settings = await api('/hr/settings', next); toast('Settings saved.'); await ctx.reloadContext(); drawSettings(); } catch (error) { toast(error.message); }
     };
+  }
+  // Phone & fingerprint sign-in for employee accounts (src/devices.mjs): off until turned on here.
+  async function phoneSignIn(form) {
+    const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-phones'; form.before(box);
+    const draw = (d, message = '') => {
+      box.innerHTML = `<div class="st-head"><h2>Phone &amp; fingerprint sign-in</h2><span class="st-chip ${d.enforce ? 'ok' : ''}"><i></i>${d.enforce ? 'On' : 'Off'}</span></div><div class="panel-body">
+        <p class="legend">Employee accounts only. The first phone an employee signs in on is their registered phone. <strong>On:</strong> another phone can sign in only with the fingerprint the employee set up in Account &amp; security → Fingerprint sign-in; without it the sign-in is refused and HR is notified. <strong>Off:</strong> every phone can sign in; phones are only remembered. Phones used while it was off stay recognised.</p>
+        <label class="field check"><input type="checkbox" data-phone-enforce ${d.enforce ? 'checked' : ''}> On: require the registered phone or fingerprint for employees</label>
+        ${d.changedAt ? `<p class="legend">Last changed by ${ctx.esc(d.changedBy)} on ${ctx.esc(new Date(d.changedAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }))}.</p>` : ''}
+        ${message ? `<p class="notice success" role="status">${ctx.esc(message)}</p>` : ''}</div>`;
+    };
+    box.addEventListener('change', async event => {
+      if (!event.target.matches('[data-phone-enforce]')) return;
+      const on = event.target.checked;
+      if (on && !window.confirm('Turn on phone & fingerprint sign-in? Employees who sign in on a phone other than their registered one will be refused unless they set up fingerprint sign-in first.')) { event.target.checked = false; return; }
+      try { draw(await ctx.api('/devices/settings', { enforce: on }), on ? 'Turned on.' : 'Turned off.'); } catch (error) { ctx.toast(error.message); event.target.checked = !on; }
+    });
+    try { draw(await ctx.api('/devices/settings')); } catch (error) { box.innerHTML = `<div class="panel-body"><p class="muted">Phone sign-in settings are available after the HR server restarts. (${ctx.esc(error.message)})</p></div>`; }
+  }
+  // Feishu group alerts: HR notices are posted to an HR group chat through a Feishu custom bot (src/feishu.mjs).
+  async function feishuAlerts(form) {
+    const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-feishu'; form.before(box);
+    const when = s => (s ? new Date(s).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+    const draw = (d, message = '', ok = true) => {
+      box.innerHTML = `<div class="st-head"><h2>Feishu alerts</h2><span class="st-chip ${d.enabled ? 'ok' : ''}"><i></i>${d.enabled ? 'On' : d.configured ? 'Off' : 'Not set up'}</span></div><div class="panel-body">
+        <p class="legend">HR notices (attendance requests, explanations, overtime, documents, loans, leave applications, off-site time in / out, blocked sign-ins) are posted to a Feishu group. Employees' own notices are never sent.</p>
+        <ol class="legend"><li>In the Feishu HR group: Settings → Bots → Add bot → <strong>Custom bot</strong>.</li><li>Copy its <strong>webhook address</strong>. Optional: turn on <strong>Signature verification</strong> and copy the secret. If you use keywords, add <strong>HR</strong>.</li><li>Paste them here, tick On, Save, then Send test message.</li></ol>
+        <form data-feishu-form class="form-grid">
+          <label class="field">Webhook address<input name="webhook" type="password" autocomplete="off" placeholder="${ctx.esc(d.webhook || 'https://open.feishu.cn/open-apis/bot/v2/hook/…')}"><small>${d.configured ? 'Saved. Leave blank to keep it.' : 'Not saved yet.'}</small></label>
+          <label class="field">Signing secret (optional)<input name="secret" type="password" autocomplete="off" placeholder="${d.hasSecret ? 'Saved — leave blank to keep' : 'Only if signature verification is on'}"></label>
+          <label class="field check"><input type="checkbox" name="enabled" ${d.enabled ? 'checked' : ''}> On: send HR alerts to Feishu</label>
+          <div class="actions"><button class="primary">Save</button><button type="button" data-feishu-test ${d.configured ? '' : 'disabled'}>Send test message</button>${d.hasSecret ? '<button type="button" data-feishu-nosecret>Remove secret</button>' : ''}${d.configured ? '<button type="button" class="danger" data-feishu-remove>Remove</button>' : ''}</div>
+        </form>
+        <p class="legend">${d.lastSentAt ? `Last sent: ${ctx.esc(when(d.lastSentAt))}` : 'Nothing sent yet.'}${d.lastError ? ` · <span class="st-warn">Last error (${ctx.esc(when(d.lastErrorAt))}): ${ctx.esc(d.lastError)}</span>` : ''}</p>
+        ${message ? `<p class="${ok ? 'notice success' : 'form-error'}" role="status">${ctx.esc(message)}</p>` : ''}</div>`;
+    };
+    const run = async (body, path = '/integrations/feishu', done = '') => {
+      try { const r = await ctx.api(path, body); const status = r.status || r; draw(status, r.error ? r.error : done, !r.error); }
+      catch (error) { draw(await ctx.api('/integrations/feishu'), error.message, false); }
+    };
+    box.addEventListener('submit', event => {
+      event.preventDefault(); const f = event.target;
+      run({ webhook: f.elements.webhook.value, secret: f.elements.secret.value, enabled: f.elements.enabled.checked }, '/integrations/feishu', 'Saved.');
+    });
+    box.addEventListener('click', event => {
+      const b = event.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-feishu-test')) run({}, '/integrations/feishu/test', 'Test message sent. Check the Feishu group.');
+      if (b.hasAttribute('data-feishu-nosecret')) run({ removeSecret: true }, '/integrations/feishu', 'Secret removed.');
+      if (b.hasAttribute('data-feishu-remove') && window.confirm('Remove the Feishu connection? HR alerts stop going to the group.')) run({ remove: true }, '/integrations/feishu', 'Removed.');
+    });
+    try { draw(await ctx.api('/integrations/feishu')); } catch (error) { box.innerHTML = `<div class="panel-body"><p class="muted">Feishu alerts are available after the HR server restarts. (${ctx.esc(error.message)})</p></div>`; }
   }
   // Office Wi-Fi for time in / out: recognised by the office's internet address. Add it while on the office Wi-Fi.
   async function officeWifi(form) {

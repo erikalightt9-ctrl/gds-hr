@@ -1,3 +1,4 @@
+import { loanChangeText } from './loan-notice.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { initialState } from './defaults.mjs';
@@ -87,6 +88,8 @@ export class Store {
     this.db.prepare('INSERT INTO audit VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), new Date().toISOString(), actor.username, action, kind, id, before == null ? null : JSON.stringify(before), after == null ? null : JSON.stringify(after));
     if (kind === 'leaves' && after?.employeeId) { this.notify(after.employeeId, `Leave request ${after.startDate} to ${after.endDate}: ${after.status}${after.hrRemarks ? ` — HR remarks: ${after.hrRemarks}` : ''}.`); this.notify(null, `${after.employeeId}: leave request ${after.status}.`); }
     if (kind === 'runs' && action === 'post') for (const row of after?.rows || []) this.notify(row.employeeId, `Your payslip for ${after.start} to ${after.end} is available.`);
+    // HR recorded or changed a loan (any screen): tell the employee what changed. Payroll deductions are on the payslip.
+    if (kind === 'loans' && actor?.role !== 'employee') { const text = loanChangeText(before, after, action); if (text) this.notify(after.employeeId, text); }
     this.changed = true; if (!this.inTransaction) this.emitChange();
   }
   audit() { return this.db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT 1000').all().map(r => ({ id: r.id, at: r.at, actor: r.actor, action: r.action, kind: r.kind, recordId: r.record_id, before: JSON.parse(r.before_json), after: JSON.parse(r.after_json) })); }

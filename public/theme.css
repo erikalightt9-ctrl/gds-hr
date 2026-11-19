@@ -208,7 +208,7 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { border-color: var(--gold-500); box-shadow: 0 0 0 4px rgb(217 184 92 / .22); }
 
-.tabs button { border-radius: 999px; }
+.tabs button { border-radius: 6px; }   /* rectangular tab buttons everywhere (Nov 2026) */
 .tabs .active {
   background: linear-gradient(135deg, #fff1c8, #ebcf86);
   border-color: var(--glass-edge-strong);
@@ -333,7 +333,7 @@ dialog::backdrop { background: rgb(20 16 8 / .45); backdrop-filter: blur(6px); }
   border: 1px solid var(--line); border-radius: 999px;
   box-shadow: var(--glass-highlight), var(--glass-shadow);
 }
-.attendance-jump button { border-radius: 999px; }
+.attendance-jump button { border-radius: 6px; }
 .attendance-section { scroll-margin-top: 76px; }
 .clock-actions button[data-file-unpaid]{margin-top:10px}
 
@@ -437,16 +437,11 @@ dialog::backdrop { background: rgb(20 16 8 / .45); backdrop-filter: blur(6px); }
 .welcome-culture strong { font-size: 13.5px; }
 .welcome-culture span { font-size: 12.5px; }
 
-/* Sign-in greeting in Dancing Script (SIL OFL 1.1, self-hosted: see fonts/OFL.txt). */
-@font-face {
-  font-family: "Dancing Script";
-  src: url("/fonts/dancing-script-700.woff2") format("woff2");
-  font-weight: 700; font-style: normal; font-display: swap;
-}
+/* Sign-in title ("HRM System") in the same serif as "Our Company Culture" (not a script font). */
 .welcome-login .login-form h2 {
-  font-family: "Dancing Script", "Brush Script MT", cursive;
-  font-weight: 700; font-size: clamp(40px, 4vw, 54px); line-height: 1.05; letter-spacing: 0;
-  color: var(--red-600); margin: 6px 0 10px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700; font-size: clamp(30px, 3vw, 38px); line-height: 1.1; letter-spacing: .5px;
+  color: var(--red-600); margin: 8px 0 24px;
 }
 
 /* ======================================================================

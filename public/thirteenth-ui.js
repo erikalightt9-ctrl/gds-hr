@@ -148,6 +148,8 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       dd.querySelector('[data-leave-summary]').textContent = picked.join(', ') || 'None';
     });
     content.querySelector('#fp-form')?.addEventListener('submit', onCompute);
+    // Final pay → Employee: a dropdown with a search box (same as Payroll → Employee); the plain list stays if it fails to load.
+    if (content.querySelector('#fp-form select[data-searchable]')) import('./searchable-select.js').then(m => m.enhanceAll(content)).catch(() => {});
     // Choosing an employee fills in the last day from their 201 record (separation / resignation date), when there is one.
     content.querySelector('#fp-form [name=employeeId]')?.addEventListener('change', e => { const end = e.target.selectedOptions[0]?.dataset.end; if (end) e.target.form.separationDate.value = end; });
   }
@@ -196,7 +198,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
     const emps = data.ledger.slice().sort((a, b) => a.name.localeCompare(b.name));
     return `<section class="panel"><div class="panel-head"><h2>Final pay</h2><span class="legend">Labor Advisory 06-2020: release within 30 days of separation; Certificate of Employment within 3 days of request.</span></div>
       <form id="fp-form" class="panel-body form-grid">
-        <label class="field">Employee<select name="employeeId" required><option value="">Choose…</option>${emps.map(e => `<option value="${esc(e.employeeId)}" data-end="${esc(e.endDate || '')}">${esc(e.name)}</option>`).join('')}</select></label>
+        <label class="field">Employee<select name="employeeId" required data-searchable data-search-placeholder="Search employee name or ID" data-required-message="Choose the employee."><option value="">Choose…</option>${emps.map(e => `<option value="${esc(e.employeeId)}" data-end="${esc(e.endDate || '')}">${esc(e.name)}</option>`).join('')}</select></label>
         <label class="field">Last day / separation date<input type="date" name="separationDate" required value="${today()}"></label>
         <label class="field">Unpaid days worked (optional)<input type="number" name="unpaidDays" min="0" step="0.5"><small>Blank: scheduled workdays after the last paid cutoff up to the last day.</small></label>
         <label class="field">Separation pay<select name="separationCause"><option value="none">None (resignation, end of contract, just cause)</option><option value="redundancy">Redundancy / labor-saving devices (1 month per year)</option><option value="retrenchment">Retrenchment / closure / disease (½ month per year)</option></select></label>
