@@ -132,18 +132,31 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   function loans(box, data) {
     const money = n => `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const STATUS = { pending: 'Pending HR review', approved: 'Approved', rejected: 'Not approved', cancelled: 'Cancelled' };
+    // What HR approved (HR may change the amount, interest or months); the loan above follows these terms.
+    const approvedTerms = a => {
+      if (a.status !== 'approved') return '—';
+      const total = (Number(a.approvedAmount) || 0) + (Number(a.interest) || 0), months = a.approvedMonths || a.months, monthly = months ? Math.round(total / months * 100) / 100 : 0;
+      const changed = a.approvedAmount !== a.amount || months !== a.months || Number(a.interest) > 0;
+      return `<strong>${money(a.approvedAmount)}</strong>${a.interest ? ` + ${money(a.interest)} interest` : ''} · ${months} month${months === 1 ? '' : 's'}<small>${money(Math.round(monthly / 2 * 100) / 100)} per payroll from ${a.startDate ? fmtDate(a.startDate) : '—'}${changed ? ' · <strong>changed by HR</strong>' : ''}${a.payoff ? `<br>Renewal: ${money(a.payoff)} paid off your previous loan · <strong>${money(a.netRelease)} released to you</strong>` : ''}</small>`;
+    };
+    // A new loan only when every current loan is below 20% left (then HR may renew it: pay it off from the new loan).
+    // While a loan is at 20% or more, the form is shown disabled and cannot be sent (the server refuses it too).
+    const openLoans = data.loans.filter(l => l.status === 'Active' && l.outstanding > 0).map(l => ({ ...l, share: l.outstanding / ((l.original || 0) + (l.interestTotal || 0) || 1) }));
+    const overLimit = openLoans.filter(l => l.share >= 0.2 - 1e-9);
     box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My loans</h2><span class="legend">Approved loans are deducted from payroll automatically</span></div>
       ${table(['Loan', 'Loan date', 'Original', 'Per payroll', 'Repaid', 'Outstanding', 'Next deduction', 'Status'], data.loans.map(l => [esc(l.type), l.loanDate ? fmtDate(l.loanDate) : '—', money(l.original) + (l.interestTotal ? `<small>+ ${money(l.interestTotal)} interest</small>` : ''), money(l.perPayroll), money(l.totalRepaid), `<strong>${money(l.outstanding)}</strong>`, l.nextDeduction ? fmtDate(l.nextDeduction) : '—', esc(l.status)]), 'No loans yet.')}</section>
-      ${(() => { const paid = data.loans.flatMap(l => (l.history || []).map(h => ({ ...h, type: l.type }))).sort((a, b) => String(b.end).localeCompare(String(a.end))); return paid.length ? `<section class="panel"><div class="panel-head"><h2>Payment history</h2><span class="legend">Balance after each payment</span></div>${table(['Date / cutoff', 'Loan', 'Amount', 'Balance after'], paid.map(h => [h.prior ? fmtDate(h.end) : `${fmtDate(h.start)} – ${fmtDate(h.end)}`, esc(h.type), money(h.amount), `<strong>${money(h.balanceAfter)}</strong>`]))}</section>` : ''; })()}
-      <section class="panel"><div class="panel-head"><h2>Apply for a loan</h2></div><form id="loan-apply" class="panel-body form-grid">
+      ${(() => { const paid = data.loans.flatMap(l => (l.history || []).map(h => ({ ...h, type: l.type }))).sort((a, b) => String(b.paidOn || b.end).localeCompare(String(a.paidOn || a.end))); return paid.length ? `<section class="panel"><div class="panel-head"><h2>Payment history</h2><span class="legend">Balance after each payment</span></div>${table(['Date paid', 'Loan', 'Amount', 'Balance after'], paid.map(h => [h.prior ? fmtDate(h.end) : h.paidOn ? fmtDate(h.paidOn) : `${fmtDate(h.start)} – ${fmtDate(h.end)}`, esc(h.type), money(h.amount), `<strong>${(h.balanceAfter < 0 ? `Overpaid ${money(-h.balanceAfter)}` : money(h.balanceAfter))}</strong>`]))}</section>` : ''; })()}
+      <section class="panel"><div class="panel-head"><h2>Apply for a loan</h2></div>${overLimit.length ? `<p class="notice">You can apply for a new loan once less than 20% of your current loan is left. ${overLimit.map(l => `${esc(l.type)}: ${Math.round(l.share * 1000) / 10}% still owed (${money(l.outstanding)})`).join('; ')}.</p>`
+          : openLoans.length ? '<p class="legend">Less than 20% of your current loan is left, so you may apply. HR may renew it: the remaining balance is paid from the new loan and you receive the rest.</p>' : ''}<form id="loan-apply" class="panel-body form-grid"><fieldset class="form-grid full" style="border:0;padding:0;margin:0" ${overLimit.length ? 'disabled' : ''}>
         <label class="field">Loan type<select name="type"><option>Salary Loan</option><option>Emergency Loan</option><option>Medical Loan</option><option>Educational Loan</option><option>Housing Loan</option><option>Vehicle Loan</option><option>Calamity Loan</option><option>SSS Loan</option><option>Pag-IBIG Loan</option><option>Other Company Loan</option></select></label>
         <label class="field">Amount requested<input type="number" name="amount" min="1" step="0.01" required></label>
         <label class="field">Repayment months<input type="number" name="months" min="1" max="120" required value="6"></label>
         <label class="field full">Purpose<input name="purpose" required minlength="3" maxlength="1000"></label>
-        <div><button class="primary">Submit application</button></div></form>
-        ${table(['Applied', 'Type', 'Amount', 'Months', 'Status', 'HR remarks', ''], data.applications.map(a => [fmtDate(a.appliedAt.slice(0, 10)), esc(a.type), money(a.amount), a.months, esc(STATUS[a.status] || a.status), esc(a.remarks || '—'), a.status === 'pending' ? `<button class="small" data-loan-cancel="${a.id}">Cancel</button>` : '']), 'No applications yet.')}</section>`;
+        <div><button class="primary">${overLimit.length ? 'Not available yet' : 'Submit application'}</button></div></fieldset></form>
+        ${table(['Applied', 'Type', 'Requested', 'Approved terms', 'Status', 'HR remarks', ''], data.applications.map(a => [fmtDate(a.appliedAt.slice(0, 10)), esc(a.type), `${money(a.amount)}<small>${a.months} month${a.months === 1 ? '' : 's'}</small>`, approvedTerms(a), esc(STATUS[a.status] || a.status), esc(a.remarks || '—'), a.status === 'pending' ? `<button class="small" data-loan-cancel="${a.id}">Cancel</button>` : '']), 'No applications yet.')}</section>`;
     box.querySelector('#loan-apply').onsubmit = async event => {
       event.preventDefault(); const f = new FormData(event.target);
+      if (overLimit.length) { toast('You can apply for a new loan once less than 20% of your current loan is left.'); return; }
       try { await api('/hr/me/loans', { type: f.get('type'), amount: Number(f.get('amount')), months: Number(f.get('months')), purpose: f.get('purpose') }); confirm('Loan application submitted', `Your <strong>${esc(f.get('type'))}</strong> application was sent to HR.<br>Status: <strong>Pending HR review</strong>.`); await fill('loans201', box); } catch (error) { toast(error.message); }
     };
     box.onclick = async event => {

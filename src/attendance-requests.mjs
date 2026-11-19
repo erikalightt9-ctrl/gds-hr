@@ -25,7 +25,7 @@ const time = z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal('
 const text = max => z.string().trim().max(max).default('');
 const local = now => new Date(now.getTime() + 8 * 3600000).toISOString();
 
-const ensure = store => store.db.exec('CREATE TABLE IF NOT EXISTS attendance_requests (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, date TEXT NOT NULL, data TEXT NOT NULL)');
+export const ensure = store => store.db.exec('CREATE TABLE IF NOT EXISTS attendance_requests (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, date TEXT NOT NULL, data TEXT NOT NULL)');
 const load = (store, id) => { ensure(store); const row = store.db.prepare('SELECT data FROM attendance_requests WHERE id=?').get(id); if (!row) throw new AppError('Request not found.', 404); return JSON.parse(row.data); };
 const save = (store, r) => store.db.prepare('INSERT INTO attendance_requests(id,employee_id,status,date,data) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, data=excluded.data').run(r.id, r.employeeId, r.status, r.date, JSON.stringify(r));
 function nextReference(store, prefix, now) {

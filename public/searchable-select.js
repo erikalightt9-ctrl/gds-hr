@@ -20,16 +20,25 @@ export function enhanceSelect(select) {
     return `<li class="ss-group" role="presentation"><span>${esc(child.label)}</span>${here ? search : ''}</li>${[...child.children].map(item).join('')}`;
   });
   box.innerHTML = `<button type="button" class="ss-button" aria-haspopup="listbox" aria-expanded="false"></button>
-    <div class="ss-panel" hidden>${searchPlaced ? '' : `<div class="ss-top">${search}</div>`}<ul class="ss-list" role="listbox">${parts.join('')}</ul><p class="ss-none" hidden>No match.</p></div>`;
+    <div class="ss-panel" hidden>${searchPlaced ? '' : `<div class="ss-top">${search}</div>`}<ul class="ss-list" role="listbox">${parts.join('')}</ul><p class="ss-none" hidden>No match.</p></div><p class="ss-required" role="alert" hidden>${esc(select.dataset.requiredMessage || 'Choose an option from the list.')}</p>`;
   select.after(box);
   select.hidden = true;
+  // A required select is hidden now, so the browser cannot point at it: check it here and point at the button instead.
+  if (select.required) {
+    select.required = false;
+    select.form?.addEventListener('submit', event => {
+      if (select.value) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      const note = box.querySelector('.ss-required'); note.hidden = false; button.classList.add('ss-invalid'); open();
+    }, true);
+  }
   const button = box.querySelector('.ss-button'), panel = box.querySelector('.ss-panel'), input = box.querySelector('.ss-search');
   const options = () => [...box.querySelectorAll('.ss-option')], visible = () => options().filter(o => !o.hidden);
   const label = () => { button.textContent = select.selectedOptions[0]?.textContent || ''; };
   const open = () => { panel.hidden = false; button.setAttribute('aria-expanded', 'true'); input.value = ''; filter(); input.focus(); };
   const close = (focus = true) => { panel.hidden = true; button.setAttribute('aria-expanded', 'false'); if (focus) button.focus(); };
   const choose = value => {
-    select.value = value; label(); close();
+    select.value = value; label(); close(); box.querySelector('.ss-required').hidden = true; button.classList.remove('ss-invalid');
     options().forEach(o => o.setAttribute('aria-selected', String(o.dataset.value === value)));
     select.dispatchEvent(new Event('change', { bubbles: true }));
   };

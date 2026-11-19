@@ -174,3 +174,25 @@ export function readReason(values) {
   const choice = get('reasonChoice') === 'Other' ? get('reasonOther') : get('reasonChoice');
   return [choice, get('reasonDetails')].filter(Boolean).join(' — ');
 }
+
+// ---------- Fingerprint sign-in (WebAuthn passkeys; server: src/devices.mjs) ----------
+// The phone's own fingerprint (or face / screen lock) confirms the person; the browser hands the server only a
+// signature. Options and replies travel as base64url text.
+const toBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+const toB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+export const passkeySupported = () => typeof window !== 'undefined' && !!window.PublicKeyCredential && window.isSecureContext;
+// Per-phone note (browser storage, a device preference only): screen-lock sign-in is set up for this site on this
+// phone, so the sign-in page asks for the fingerprint / phone PIN as soon as the app opens.
+export const screenLockHere = {
+  get() { try { return localStorage.getItem('hr-screen-lock') === '1'; } catch { return false; } },
+  set(on) { try { if (on) localStorage.setItem('hr-screen-lock', '1'); else localStorage.removeItem('hr-screen-lock'); } catch { /* storage blocked: the button still works */ } },
+};
+export async function passkeyCreate(o) {
+  const credential = await navigator.credentials.create({ publicKey: { ...o, challenge: toBytes(o.challenge), user: { ...o.user, id: toBytes(o.user.id) }, excludeCredentials: (o.excludeCredentials || []).map(c => ({ ...c, id: toBytes(c.id) })) } });
+  return { id: credential.id, rawId: toB64u(credential.rawId), type: credential.type, response: { clientDataJSON: toB64u(credential.response.clientDataJSON), attestationObject: toB64u(credential.response.attestationObject) } };
+}
+export async function passkeyGet(o) {
+  const credential = await navigator.credentials.get({ publicKey: { ...o, challenge: toBytes(o.challenge), allowCredentials: (o.allowCredentials || []).map(c => ({ ...c, id: toBytes(c.id) })) } });
+  const r = credential.response;
+  return { id: credential.id, rawId: toB64u(credential.rawId), type: credential.type, response: { clientDataJSON: toB64u(r.clientDataJSON), authenticatorData: toB64u(r.authenticatorData), signature: toB64u(r.signature), ...(r.userHandle ? { userHandle: toB64u(r.userHandle) } : {}) } };
+}

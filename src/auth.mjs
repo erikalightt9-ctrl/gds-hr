@@ -68,7 +68,7 @@ export function checkLimit(store, key, maximum = 10) {
 }
 // A session lasts 8 hours from sign-in (no automatic sign-out for inactivity).
 const SESSION_MS = 8 * 3600000;
-export async function login(store, username, password, key, otp = '', { currentTokenHash = '' } = {}) {
+export async function login(store, username, password, key, otp = '', { currentTokenHash = '', gate = null } = {}) {
   checkLimit(store, key, 100);
   const accountKey = `account-login:${username.toLowerCase()}`; checkLimit(store, accountKey);
   let user = store.db.prepare('SELECT * FROM users WHERE username=? OR employee_id=? COLLATE NOCASE').get(username, username);
@@ -81,6 +81,12 @@ export async function login(store, username, password, key, otp = '', { currentT
     store.db.prepare('UPDATE users SET mfa_last_step=? WHERE id=?').run(step, user.id);
   }
   store.db.prepare('DELETE FROM login_limits WHERE key=?').run(accountKey);
+  // Employee phones (devices.mjs): a new phone needs fingerprint verification before a session is created.
+  const gated = gate ? gate(user) : null;
+  if (gated && !gated.allow) return gated;
+  return issueSession(store, user, currentTokenHash);
+}
+export function issueSession(store, user, currentTokenHash = '') {
   store.db.prepare('DELETE FROM sessions WHERE expires < ?').run(Date.now());
   // Every account may be signed in on several devices at once (Nov 2026); HR can still sign an account out everywhere.
   if (currentTokenHash) store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(currentTokenHash);   // same device signing in again

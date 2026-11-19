@@ -14,7 +14,8 @@ import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
-import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule } from './loans.mjs';
+import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
+import { renderLoanApplicationPdf } from './loan-pdf.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
 import { renderThirteenthPdf } from './thirteenth-pdf.mjs';
@@ -27,7 +28,9 @@ import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
 import { saveMonthEdit } from './contribution-month.mjs';
-import { addUser, login, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
+import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
+import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
+import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -83,6 +86,10 @@ export function employeeNotice(pathname, data = {}) {
 }
 export function createApp({ store, origin, setupToken, demo = false, mailer = null }) {
   const secure = origin.startsWith('https:');
+  // Fingerprint sign-in (WebAuthn) is bound to the site's host name; it needs https (or localhost).
+  const webauthn = { origin, rpId: new URL(origin).hostname, rpName: 'GDS HR' };
+  // Feishu group alerts: HR notices and new leave applications go to the HR group chat when set up (Settings).
+  connectFeishu(store, { origin });
   return http.createServer(async (req, res) => {
     let selfNotice = null;   // set for an employee's own submissions; recorded in their notification bell
     const send = (status, data) => {
@@ -127,7 +134,37 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       if (pathname === '/api/login' && req.method === 'POST') {
         const body = loginSchema.parse(await readBody(req));
-        const auth = await login(store, body.username, body.password, `login:${visitorIp}`, body.otp, { currentTokenHash: session(store, req.headers.cookie)?.tokenHash || '' });
+        // Employee phones are recognised by a long-lived device cookie; a new phone needs fingerprint verification.
+        const existingDevice = deviceTokenFromCookie(req.headers.cookie), deviceToken = existingDevice || newDeviceToken();
+        const deviceCookie = `hr_device=${deviceToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=157680000${secure ? '; Secure' : ''}`;
+        const gate = user => loginGate(store, user, deviceHash(deviceToken), webauthn, String(req.headers['user-agent'] || ''));
+        let auth;
+        try { auth = await login(store, body.username, body.password, `login:${visitorIp}`, body.otp, { currentTokenHash: session(store, req.headers.cookie)?.tokenHash || '', gate }); }
+        finally { if (!existingDevice) res.setHeader('Set-Cookie', deviceCookie); }
+        if (auth.needsPasskey) { send(200, { needsPasskey: true, pendingToken: auth.pendingToken, options: auth.options }); return; }
+        res.setHeader('Set-Cookie', [`hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`, ...(existingDevice ? [] : [deviceCookie])]);
+        send(200, { user: auth.user, csrf: auth.csrf, demo }); return;
+      }
+      if (pathname === '/api/login/passkey' && req.method === 'POST') {
+        checkLimit(store, `passkey:${visitorIp}`, 30);
+        const body = z.object({ pendingToken: z.string().max(80), credential: z.object({ id: z.string().max(1400), rawId: z.string().max(1400).optional(), type: z.string().max(40).optional(), response: z.record(z.string(), z.string().max(20000)) }).passthrough() }).strict().parse(await readBody(req));
+        const user = finishPasskeyLogin(store, body.pendingToken, body.credential, webauthn);
+        const auth = issueSession(store, user, session(store, req.headers.cookie)?.tokenHash || '');
+        res.setHeader('Set-Cookie', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
+        send(200, { user: auth.user, csrf: auth.csrf, demo }); return;
+      }
+      // Sign in with the fingerprint alone (employees with a fingerprint set up): no username or password.
+      if (pathname === '/api/login/fingerprint/options' && req.method === 'POST') {
+        checkLimit(store, `fingerprint:${visitorIp}`, 200);
+        const existing = deviceTokenFromCookie(req.headers.cookie), token = existing || newDeviceToken();
+        if (!existing) res.setHeader('Set-Cookie', `hr_device=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=157680000${secure ? '; Secure' : ''}`);
+        send(200, fingerprintOptions(store, deviceHash(token), webauthn, String(req.headers['user-agent'] || ''))); return;
+      }
+      if (pathname === '/api/login/fingerprint' && req.method === 'POST') {
+        checkLimit(store, `fingerprint:${visitorIp}`, 200);
+        const body = z.object({ token: z.string().max(80), credential: z.object({ id: z.string().max(1400), rawId: z.string().max(1400).optional(), type: z.string().max(40).optional(), response: z.record(z.string(), z.string().max(20000)) }).passthrough() }).strict().parse(await readBody(req));
+        const user = fingerprintSignIn(store, body.token, body.credential, webauthn);
+        const auth = issueSession(store, user, session(store, req.headers.cookie)?.tokenHash || '');
         res.setHeader('Set-Cookie', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
         send(200, { user: auth.user, csrf: auth.csrf, demo }); return;
       }
@@ -166,6 +203,27 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         const body = z.object({ currentPassword: z.string().max(200), newPassword: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         await changePassword(store, auth.user, body.currentPassword, body.newPassword); send(200, { ok: true }); return;
       }
+      // Feishu group alerts (feishu.mjs; admin only).
+      if (pathname === '/api/integrations/feishu' && req.method === 'GET') { send(200, feishuStatus(store, auth.user)); return; }
+      if (pathname === '/api/integrations/feishu' && req.method === 'POST') { send(200, saveFeishu(store, auth.user, await readBody(req))); return; }
+      if (pathname === '/api/integrations/feishu/test' && req.method === 'POST') { const result = await sendFeishuTest(store, auth.user); send(200, { ...result, status: feishuStatus(store, auth.user) }); return; }
+      // Phones and fingerprint sign-in (devices.mjs). The check is off until an administrator turns it on.
+      // The phone in use is remembered when the employee opens the list or sets up a fingerprint (rememberDevice).
+      const thisPhone = () => {
+        const existing = deviceTokenFromCookie(req.headers.cookie), token = existing || newDeviceToken();
+        if (!existing) res.setHeader('Set-Cookie', `hr_device=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=157680000${secure ? '; Secure' : ''}`);
+        rememberDevice(store, auth.user, deviceHash(token), String(req.headers['user-agent'] || ''));
+      };
+      if (pathname === '/api/devices/settings' && req.method === 'GET') { permit(auth.user, ['admin']); send(200, phoneCheck(store)); return; }
+      if (pathname === '/api/devices/settings' && req.method === 'POST') { const v = z.object({ enforce: z.boolean() }).strict().parse(await readBody(req)); send(200, setPhoneCheck(store, auth.user, v.enforce)); return; }
+      if (pathname === '/api/me/devices' && req.method === 'GET') { thisPhone(); send(200, myDevices(store, auth.user)); return; }
+      if (pathname === '/api/me/passkeys/options' && req.method === 'POST') { send(200, passkeyOptions(store, auth.user, webauthn)); return; }
+      if (pathname === '/api/me/passkeys' && req.method === 'POST') {
+        const body = z.object({ credential: z.object({ id: z.string().max(1400), rawId: z.string().max(1400).optional(), type: z.string().max(40).optional(), response: z.record(z.string(), z.string().max(40000)) }).passthrough() }).strict().parse(await readBody(req));
+        const enrolled = registerPasskey(store, auth.user, body.credential, webauthn); thisPhone(); send(201, enrolled); return;
+      }
+      const removeKey = pathname.match(/^\/api\/me\/passkeys\/([A-Za-z0-9_-]{1,1400})\/remove$/);
+      if (removeKey && req.method === 'POST') { send(200, removePasskey(store, auth.user, removeKey[1])); return; }
       if (pathname === '/api/mfa' && req.method === 'POST') {
         checkLimit(store, `mfa:${auth.user.id}`);
         const body = z.object({ action: z.enum(['begin', 'confirm', 'disable']), password: z.string().max(200), code: z.string().max(6).default('') }).strict().parse(await readBody(req));
@@ -284,6 +342,15 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       if (pathname === '/api/final-pay/compute' && req.method === 'POST') { send(200, computeFinalPay(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }
+      // Printable loan application form (HR: any; employee: own).
+      const loanPdf = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\.pdf$/);
+      if (loanPdf && req.method === 'GET') {
+        const { application, employee, loan } = loanApplicationRecord(store, auth.user, loanPdf[1]), c = readSettings(store).company;
+        store.log(auth.user, 'export', 'loan-applications', application.id, null, { format: 'pdf' });
+        const name = `loan-application-${application.employeeId}-${String(application.appliedAt || '').slice(0, 10)}.pdf`;
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `${new URL(req.url, 'http://x').searchParams.has('download') ? 'attachment' : 'inline'}; filename="${name}"` });
+        res.end(renderLoanApplicationPdf(application, { employee, loan, designation: designationOf(store, application.employeeId), decidedBy: application.decidedBy ? fullNameOf(store, application.decidedBy) : '', company: c.name || 'GDS CAPITAL INC.', verified: { name: c.leaveVerifiedName, title: c.leaveVerifiedTitle }, approved: { name: c.leaveApprovedName, title: c.leaveApprovedTitle } })); return;
+      }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
       if (pathname === '/api/office-networks' && req.method === 'GET') { permit(auth.user, ['admin', 'hr']); send(200, { networks: officeNetworks(store), current: visitorIp.replace(/^::ffff:/, '') }); return; }
@@ -366,6 +433,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/users/employee-accounts' && req.method === 'POST') { permit(auth.user, ['admin']); const v = z.object({ password: z.string().max(200) }).strict().parse(await readBody(req)); send(200, await createEmployeeAccounts(store, auth.user, v.password)); return; }
       const signOutUser = pathname.match(/^\/api\/users\/([A-Za-z0-9-]+)\/sign-out$/);
       if (signOutUser && req.method === 'POST') { send(200, signOutEverywhere(store, auth.user, signOutUser[1])); return; }
+      const resetUser = pathname.match(/^\/api\/users\/([A-Za-z0-9-]+)\/reset-devices$/);
+      if (resetUser && req.method === 'POST') { send(200, resetDevices(store, auth.user, resetUser[1])); return; }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
         if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }

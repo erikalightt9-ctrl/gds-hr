@@ -1,6 +1,7 @@
 const brandLogo = '/gds-logo.png'; // 菲龍集團 GDS Capital logo (white background)
 import { createProfileView } from './profiles.js';
-import { setStaffNames, who } from './hr-common.js';
+import { setStaffNames, who, passkeyGet, passkeySupported, screenLockHere } from './hr-common.js';
+let screenLockAsked = false;   // the sign-in page asks for the phone's screen lock once per app opening
 import { initMessages, messagesButton, messagesChanged, messagesSignedIn, messagesSignedOut } from './messages.js';
 import { createPortal } from './portal.js';
 import { contributionsSection, renderCalculation } from './contributions.js';
@@ -438,7 +439,7 @@ function balanceMatrix() {
     const text = ids.includes('unpaid') ? `${used}` : `${sum('entitled') + sum('carry')}/${used}`;
     return `<button class="link-cell bal-cell" data-leave-balance="${esc(e.id)}" data-leave-types="${esc(ids.join(','))}" title="Entitled / used · click for details">${text}</button>`;
   };
-  return `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}<span class="legend">As of ${today()} · entitled / used (days) · click a number for the details</span></div>${searchToolbar(filters)}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
+  return `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}</div>${searchToolbar(filters)}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
 }
 function leaveBalanceDialog(employeeId, typeIds = null) {
   const person = state.employees.find(e => e.id === employeeId), year = today().slice(0, 4);
@@ -467,7 +468,7 @@ function leavePage() {
   // Cancelled with search and filters. A decision moves the application to its folder at once.
   const LEAVE_FOLDERS = [['requests', 'pending', 'Pending'], ['approved', 'approved', 'Approved'], ['rejected', 'rejected', 'Rejected'], ['cancelled', 'cancelled', 'Cancelled']];
   const inFolder = s => state.leaves.filter(l => l.status === s).length;
-  let content = heading('Leave management', '<span class="lm-tagline">Time away, taken care of.</span>Review requests, track balances, and keep payroll in sync.') + `<div class="lm-cards">${lmCard('clock', 'Pending requests', pending, pending ? 'Waiting for HR review' : 'Nothing waiting')}${lmCard('check', 'Approved requests', inFolder('approved'), 'Connected to payroll')}${lmCard('doc', 'Rejected requests', inFolder('rejected'), 'Kept with remarks')}${lmCard('people', 'Leave types', state.leaveTypes.length, 'Statutory and company benefits')}</div>
+  let content = heading('Leave management', '') + `<div class="lm-cards">${lmCard('clock', 'Pending requests', pending, pending ? 'Waiting for HR review' : 'Nothing waiting')}${lmCard('check', 'Approved requests', inFolder('approved'), 'Connected to payroll')}${lmCard('doc', 'Rejected requests', inFolder('rejected'), 'Kept with remarks')}${lmCard('people', 'Leave types', state.leaveTypes.length, 'Statutory and company benefits')}</div>
     <div class="lm-tabs">${LEAVE_FOLDERS.map(([tab, s, label]) => `<button data-tab="${tab}" class="${subtab === tab ? 'active' : ''}">${label}${s === 'pending' ? ` <span class="lm-count">${pending}</span>` : ''}</button>`).join('')}<button data-tab="balances" class="${subtab === 'balances' ? 'active' : ''}">Balances</button><button data-tab="types" class="${subtab === 'types' ? 'active' : ''}">Leave policies</button></div>`;
   if (subtab === 'balances') content += balanceMatrix();
   else if (subtab === 'types') content += `<section class="panel"><div class="panel-head"><div><h2>Leave type configuration</h2><p>Statutory classification alone does not establish an employee’s entitlement.</p></div>${addButton('leaveTypes', 'Add leave type')}</div>${table(['Leave type', 'Category', 'Pay', 'Entitlement', 'Accrual', ''], state.leaveTypes.map(t => [esc(t.name), badge(t.category, 'neutral'), t.paid ? 'Paid' : 'Unpaid', `${t.entitledDays} days`, esc(t.accrual), editButton('leaveTypes', t.id)]))}</section>`;
@@ -533,7 +534,7 @@ function runForCompany(run, company) {
 }
 function payrollPage() {
   const run = currentRun, period = run || cutoffDefaults();
-  let html = heading('Payroll & 13th Month', 'Manage payroll, review payouts, and track annual accruals.', `<a class="pr-btn" href="${run?.id ? `/api/runs/${run.id}.xlsx` : '/api/reports/payroll-runs.xlsx'}" download>${prIcon('download')}Export report</a>`);
+  let html = heading('Payroll & 13th Month', '', `<a class="pr-btn" href="${run?.id ? `/api/runs/${run.id}.xlsx` : '/api/reports/payroll-runs.xlsx'}" download>${prIcon('download')}Export report</a>`);
   const prCard = (ic, label, value, foot, featured = false) => `<div class="pr-card${featured ? ' featured' : ''}">${prIcon(ic, 'pr-card-ico')}<div><span>${label}</span><strong>${value}</strong><small>${foot}</small></div></div>`;
   html += `<div class="pr-cards">${prCard('coins', 'Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${prCard('doc', 'Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${prCard('bars', 'Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${prCard('people', 'Employees', run?.rows.length || 0, 'In this payroll cutoff')}${prCard('bank', 'Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="pr-panel-head">${prIcon('calc', 'pr-head-ico')}<div><h2>Payroll computation</h2><p>Choose a cutoff to calculate employee pay.</p></div></div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee" data-searchable data-search-group="Employee"><option value="">All employees</option><optgroup label="Company">${companies().map(c => `<option value="company:${esc(c)}" ${payrollEmployee === `company:${c}` ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup><optgroup label="Employee">${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup></select></label><label><select name="pay13th" aria-label="13th month payout" title="13th month payout"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Generate payroll</button></form>`;
   const company = payrollEmployee.startsWith('company:') && run?.employeeIds?.length > 0 ? payrollEmployee.slice(8) : '';
@@ -568,8 +569,25 @@ function payrollPage() {
   const holidayList = r => (r.holidays || []).map(x => `${md(x.date)} ${x.name || ''} (${x.kind}${x.worked ? ', worked' : ''}${x.pay ? `: ${fixed2(x.pay)}` : ''})`).join(' · ');
   const holidayDaysCell = r => (r.holidays ? `<span class="pr-holidays" title="${esc(holidayList(r))}">${holidayDayPay(r) ? r.holidayDays ?? 0 : 0}</span>` : '—');
   const holidayCell = r => { const premium = sum(r, HOLIDAY_KEYS); const tip = [holidayList(r), premium ? `Holiday-work premium: ${fixed2(premium)}` : ''].filter(Boolean).join(' · '); return holidayPay(r) ? `<span class="pr-holidays" title="${esc(tip)}">${money(holidayPay(r))}</span>` : '—'; };
-  const cell = (row, amount, component = '') => `<button class="money-link" data-salary="${esc(row.employeeId)}" data-component="${esc(component)}" title="Show how this amount was calculated">${money(amount)}</button>`;
-  html += table(headers, (run?.rows || []).slice().sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' })).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, r.payBasis === 'daily' ? `${fixed2(r.dailyRate)} / day` : fixed2(r.monthlySalary), monthWorkDays(r), fixed2(daysPresentOf(r)), holidayDaysCell(r), notes(r), cell(r, regularBasic(r), 'basic'), r.earnings.leavePay ? money(r.earnings.leavePay) : '—', money(sum(r, OT_KEYS)), holidayCell(r), money(sum(r, ['additional', 'allowance', 'thirteenth'])), cell(r, r.gross, 'gross'), money(r.totalDeductions), `<strong>${cell(r, r.net, 'net')}</strong>`]), 'Choose a cutoff and generate payroll to see the computation.').replace(/<tr><td colspan="9" class="empty">[\s\S]*?<\/td><\/tr>/, `<tr><td colspan="9" class="pr-empty"><span class="pr-empty-ico">${prIcon('doc')}</span><strong>Ready for your next payroll</strong><small>Select a cutoff and generate payroll to see the computation.</small></td></tr>`) + `<div class="panel-foot"><span><strong>PHP</strong> · Applicable Statutory / Company Payroll Rate</span><span class="payroll-total">${run?.rows.length || 0} employees · Total gross ${money(run?.totals.gross)} · Total deductions ${money(run?.totals.deductions)} · <strong>Total net pay ${money(run?.totals.net)}</strong>${run ? ` · <button class="employer-share-link" data-contrib-month="${run.start.slice(0, 7)}" title="Employee and employer SSS, PhilHealth and Pag-IBIG for ${run.start.slice(0, 7)}">Employer share ${money(run.totals.employer)} · Government contributions →</button>` : ''}</span></div></section>`;
+  const cell = (row, amount, component = '', title = 'Show how this amount was calculated') => `<button class="money-link" data-salary="${esc(row.employeeId)}" data-component="${esc(component)}" title="${esc(title)}">${money(amount)}</button>`;
+  // Monthly-paid (rule A): a fixed half-month worth D/2 days (13) at monthly ÷ D, less what is not credited. The check
+  // formula is monthly ÷ D × days credited; days credited include the holidays (shown in Holiday pay) and can exceed the
+  // days present, because a cutoff with 12 working days is still worth 13 days of salary.
+  const monthlyRow = r => r.payBasis !== 'daily' && r.creditedDays !== undefined && r.adjustmentDivisor;
+  const halfMonthDays = r => r.adjustmentDivisor / 2;
+  const creditedNote = r => (monthlyRow(r) ? `<small class="credited-note" title="Monthly ÷ ${r.adjustmentDivisor} × days credited = basic + holiday pay">${fixed2(r.creditedDays)} credited of ${halfMonthDays(r)}</small>` : '');
+  const basicBreakdown = r => {
+    if (!monthlyRow(r)) return 'Show how this amount was calculated';
+    const rate = r.adjustmentRate || r.monthlySalary / r.adjustmentDivisor, half = (r.trace || []).find(t => t.component === 'basic' && /scheduled days employed/.test(t.formula || ''))?.amount ?? r.monthlySalary / 2;
+    const sumOf = test => Math.round((r.trace || []).filter(t => t.component === 'basic' && test(t.formula || '')).reduce((s, t) => s + t.amount, 0) * 100) / 100;
+    const notYet = sumOf(f => /not yet reached/.test(f)), absent = sumOf(f => /^Absence/.test(f) && !/not yet reached/.test(f)), late = -(r.lateReduction || 0), under = -(r.undertimeAmount || 0), leave = -(r.earnings.leavePay || 0);
+    const total = r.earnings.basic, other = Math.round((total - half - notYet - absent - late - under - leave) * 100) / 100, line = (label, v) => (v ? `
+${label}: ${v < 0 ? '−' : ''}${money(Math.abs(v))}` : '');
+    return `Half-month: ${money(half)} (${halfMonthDays(r)} days × ${money(rate)})${line('Less days not yet reached', notYet)}${line('Less absences', absent)}${line('Less late', late)}${line('Less undertime', under)}${line('Paid leave (in Leave pay)', leave)}${line('Rounding / other', other)}
+= Basic + holiday pay: ${money(total)} (${fixed2(r.creditedDays)} days credited)
+Basic pay column = this less Holiday pay ${money(holidayDayPay(r))}`;
+  };
+  html += table(headers, (run?.rows || []).slice().sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' })).map(r => [`<button class="employee-link" data-payroll-employee="${esc(r.employeeId)}" title="Open payroll computation">${employee(r.employeeId)}</button>`, r.payBasis === 'daily' ? `${fixed2(r.dailyRate)} / day` : fixed2(r.monthlySalary), monthWorkDays(r), `${fixed2(daysPresentOf(r))}${creditedNote(r)}`, holidayDaysCell(r), notes(r), cell(r, regularBasic(r), 'basic', basicBreakdown(r)), r.earnings.leavePay ? money(r.earnings.leavePay) : '—', money(sum(r, OT_KEYS)), holidayCell(r), money(sum(r, ['additional', 'allowance', 'thirteenth'])), cell(r, r.gross, 'gross'), money(r.totalDeductions), `<strong>${cell(r, r.net, 'net')}</strong>`]), 'Choose a cutoff and generate payroll to see the computation.').replace(/<tr><td colspan="9" class="empty">[\s\S]*?<\/td><\/tr>/, `<tr><td colspan="9" class="pr-empty"><span class="pr-empty-ico">${prIcon('doc')}</span><strong>Ready for your next payroll</strong><small>Select a cutoff and generate payroll to see the computation.</small></td></tr>`) + `<div class="panel-foot"><span><strong>PHP</strong> · Applicable Statutory / Company Payroll Rate</span><span class="payroll-total">${run?.rows.length || 0} employees · Total gross ${money(run?.totals.gross)} · Total deductions ${money(run?.totals.deductions)} · <strong>Total net pay ${money(run?.totals.net)}</strong>${run ? ` · <button class="employer-share-link" data-contrib-month="${run.start.slice(0, 7)}" title="Employee and employer SSS, PhilHealth and Pag-IBIG for ${run.start.slice(0, 7)}">Employer share ${money(run.totals.employer)} · Government contributions →</button>` : ''}</span></div></section>`;
   if (run?.id && run.status === 'posted') html += `<div class="final-banner"><strong>FINAL</strong><span>Finalized on ${esc(new Date(run.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }))} by ${esc(who(run.postedBy) || '—')} · This payroll can no longer be edited · Payslips appear in employee accounts on salary day, ${esc(payDateFor(run.start, run.end))}.</span></div>`;
   if (run?.id && run.status === 'posted' && auth.user.role === 'admin') html += `<div class="actions"><button data-reverse-run="${esc(run.id)}">Reverse this posting</button><span class="legend">Withdraws these payslips, restores loan balances and lets you correct and post the cutoff again. The posting stays in the audit trail.</span></div><br>`;
   if (run?.status === 'reversed') html += `<div class="notice">This payroll was reversed by ${esc(run.reversedBy)} on ${esc((run.reversedAt || '').slice(0, 10))}: ${esc(run.reversalReason || '')}</div>`;
@@ -633,6 +651,7 @@ function rulesPage() {
 const graceMinutes = () => (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
 const latestRules = () => state.rules.slice().sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
 async function signOut() {
+  screenLockAsked = true;   // signing out on purpose: do not ask for the screen lock again until the app is reopened
   await api('/logout', {}); auth = { user: null }; state = null; currentRun = null;
   if (dialog.open) dialog.close();
   renderLogin();
@@ -1123,17 +1142,42 @@ function renderLogin() {
   document.documentElement.dataset.theme = 'gds';   // the sign-in screen keeps its approved red-and-gold design
   page = 'dashboard'; currentRun = null;
   stopLive(); portal.reset(); document.querySelector('.install-banner')?.remove();
-  app.innerHTML = `<div class="login welcome-login"><section class="login-form"><form id="login-form"><img class="login-card-logo" src="${brandLogo}" alt="GDS Capital Inc. logo" width="661" height="245"><h2>${auth?.setup ? 'Set up your workspace' : 'Welcome back.'}</h2><p>${auth?.setup ? 'Create your administrator account using the one-time setup code shown in your server terminal.' : 'Sign in to your HR workspace or employee portal.'}</p><div id="login-error" class="form-error hidden" role="alert"></div>${auth?.setup ? '<label>One-time setup code<input name="token" type="password" autocomplete="off" required></label>' : ''}<label>Employee ID / username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label><label>Password<input name="password" type="password" autocomplete="${auth?.setup ? 'new-password' : 'current-password'}" required ${auth?.setup ? 'minlength="9"' : ''} maxlength="200"></label><label>Authenticator code (if enabled)<input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label><button class="primary" type="submit">${auth?.setup ? 'Create administrator account' : 'Sign in'} →</button><button type="button" data-recovery>Forgot password?</button>${auth?.setup ? '<p class="footnote">Use a unique password of at least 9 characters.</p>' : ''}</form></section><section class="welcome-body" aria-label="Our culture">${welcomeScene()}${welcomeCulture()}</section></div>`;
+  app.innerHTML = `<div class="login welcome-login"><section class="login-form"><form id="login-form"><img class="login-card-logo" src="${brandLogo}" alt="GDS Capital Inc. logo" width="661" height="245"><h2>${auth?.setup ? 'Set up your workspace' : 'HRM System'}</h2>${auth?.setup ? '<p>Create your administrator account using the one-time setup code shown in your server terminal.</p>' : ''}<div id="login-error" class="form-error hidden" role="alert"></div>${auth?.setup ? '<label>One-time setup code<input name="token" type="password" autocomplete="off" required></label>' : ''}<label>Employee ID / username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label><label>Password<input name="password" type="password" autocomplete="${auth?.setup ? 'new-password' : 'current-password'}" required ${auth?.setup ? 'minlength="9"' : ''} maxlength="200"></label><label>Authenticator code (if enabled)<input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label><button class="primary" type="submit">${auth?.setup ? 'Create administrator account' : 'Sign in'} →</button>${!auth?.setup && passkeySupported() ? '<button type="button" class="fingerprint-login" data-fingerprint-login><span aria-hidden="true">👆</span> Sign in with fingerprint</button>' : ''}<button type="button" data-recovery>Forgot password?</button>${auth?.setup ? '<p class="footnote">Use a unique password of at least 9 characters.</p>' : ''}</form></section><section class="welcome-body" aria-label="Our culture">${welcomeScene()}${welcomeCulture()}</section></div>`;
   document.querySelector('#login-form').onsubmit = async event => {
     event.preventDefault(); const form = event.target, button = form.querySelector('button'); button.disabled = true;
     const data = Object.fromEntries(new FormData(form));
     try {
       if (auth?.setup) await api('/setup', data);
-      auth = await api('/login', { username: data.username, password: data.password, otp: data.otp || '' }); await refresh(); render();
+      let result = await api('/login', { username: data.username, password: data.password, otp: data.otp || '' });
+      // A new phone for an employee account: confirm with the fingerprint registered on the account.
+      if (result.needsPasskey) {
+        if (!passkeySupported()) throw new Error('This phone is not registered to your account, and this browser cannot use fingerprint sign-in. Sign in on your registered phone.');
+        const error = document.querySelector('#login-error'); error.textContent = 'New phone: confirm with your fingerprint to continue.'; error.classList.remove('hidden');
+        let credential;
+        try { credential = await passkeyGet(result.options); } catch { throw new Error('Fingerprint sign-in was cancelled or is not available on this phone. If your fingerprint is not saved here, choose “Use a phone or tablet” and scan the code with your registered phone.'); }
+        result = await api('/login/passkey', { pendingToken: result.pendingToken, credential });
+      }
+      auth = result; await refresh(); render();
     } catch (e) { const error = document.querySelector('#login-error'); error.textContent = e.message; error.classList.remove('hidden'); button.disabled = false; }
   };
+  // Employees with a fingerprint set up (Account & security) sign in with it alone: no username or password. The phone
+  // confirms with the fingerprint or, without one, its own screen-lock PIN / pattern.
+  const fingerprintButton = document.querySelector('[data-fingerprint-login]');
+  const screenLockSignIn = async (automatic = false) => {
+    const error = document.querySelector('#login-error'); error.classList.add('hidden'); fingerprintButton.disabled = true;
+    try {
+      const start = await api('/login/fingerprint/options', {});
+      let credential;
+      try { credential = await passkeyGet(start.options); } catch { if (automatic) { fingerprintButton.disabled = false; return; } throw new Error('Fingerprint sign-in was cancelled, or no fingerprint is set up for this site on this phone. Sign in with your username and password, then set it up in Account & security → Fingerprint sign-in.'); }
+      auth = await api('/login/fingerprint', { token: start.token, credential }); screenLockHere.set(true); await refresh(); render();
+    } catch (e) { if (/not recognised/i.test(e.message)) screenLockHere.set(false); error.textContent = e.message; error.classList.remove('hidden'); fingerprintButton.disabled = false; }
+  };
+  if (fingerprintButton) fingerprintButton.onclick = () => screenLockSignIn();
   const resetLink = /^#reset=([a-f0-9]{64})$/.exec(location.hash);
   if (resetLink) { history.replaceState(null, '', location.pathname); portal.recovery(resetLink[1]); }
+  // App-style opening: on a phone where screen-lock sign-in is set up, ask for it at once (once per app opening; a
+  // cancel leaves the normal form). Not after signing out on purpose.
+  else if (fingerprintButton && !screenLockAsked && screenLockHere.get()) { screenLockAsked = true; screenLockSignIn(true); }
 }
 // Clear confirmation after a password change (every session is signed out, so the next step is signing in).
 function passwordSaved() {
