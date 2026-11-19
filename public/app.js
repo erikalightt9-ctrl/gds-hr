@@ -14,6 +14,9 @@ import { createFiles } from './hr-files.js';
 import { createDashboard } from './hr-dashboard.js';
 import { createMemos } from './hr-memos.js';
 import { createTrainings } from './hr-trainings.js';
+import { createBirPage } from './bir-ui.js';
+import { createDiscipline } from './discipline-ui.js';
+import { createTemplates } from './templates-ui.js';
 import { createAdmin } from './hr-admin.js';
 import { createPortalHr } from './portal-hr.js';
 import { createBreakdown } from './payroll-breakdown.js';
@@ -139,6 +142,8 @@ Object.assign(navigationIcons, {
   files: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   datasheets: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
   memos: '<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
+  discipline: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  bir: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7M9 8h3"/>',
   trainings: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/>',
 });
@@ -146,10 +151,10 @@ Object.assign(navigationIcons, {
 const PAY_GROUP = { id: 'payroll-attendance', label: 'Payroll & Attendance', icon: 'payroll' };
 function navGroups() {
   const role = auth.user.role, legacy = LEGACY.includes(role);
-  const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
+  const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['bir', 'BIR Form 1601-C'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
     ['', [['dashboard', 'Dashboard']]],
-    ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ['trainings', 'Trainings']]],
+    ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ...(['admin', 'hr', 'viewer'].includes(role) ? [['discipline', 'Due Process']] : []), ['trainings', 'Trainings']]],
     ...(payItems.length ? [['', payItems, PAY_GROUP]] : []),   // hidden entirely when the role may open none of them
     ['Administration', [['reports', 'Reports'], ...(legacy || role === 'maker' ? [['audit', 'Audit trail']] : []), ...(role === 'admin' ? [['settings', 'Settings']] : [])]],
   ];
@@ -217,7 +222,7 @@ async function loadBell() {
   } catch { /* the bell is optional; pages still work */ }
 }
 const hrCtx = {
-  api, esc, money, table, badge, toast, openDialog, dialog, heading, today,
+  api, esc, money, table, badge, toast, openDialog, dialog, heading, today, role: () => auth?.user?.role,
   shell: html => shell(html),
   context: () => hrContext, legacy: () => LEGACY.includes(auth.user.role),
   livePanel: () => (liveData ? portal.live(liveData, { countsOnly: true }) : ''),   // Live attendance on the dashboard (HR and Admin)
@@ -291,6 +296,7 @@ let clockRecordsUi = null;
 const loadClockRecords = async () => clockRecordsUi || (clockRecordsUi = (await import('./clock-records-ui.js')).createClockRecordsUi({ api, esc, badge, openDialog, employees: () => state.employees, today }));
 const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh() });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
+const birPage = createBirPage(hrCtx), discipline = createDiscipline(hrCtx), templatesUi = createTemplates(hrCtx);
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   if (nav.page === 'explanations') { attendanceView = 'explanations'; nav = { ...nav, page: 'attendance' }; }
@@ -669,6 +675,8 @@ async function reportsPage() {
     (hr.length ? `<section class="panel"><div class="panel-head"><h2>HR 201 reports</h2><span class="legend">Choose filters, then download</span></div><ul class="report-list wide">${hr.map(r => `<li><span>${esc(r.title)}</span>${filterForm(r)}<span class="download-links"><a class="small download-link" data-report-link="${esc(r.key)}" data-format="xlsx" href="/api/reports/${esc(r.key)}.xlsx" download>Excel</a><a class="small download-link" data-report-link="${esc(r.key)}" data-format="pdf" href="/api/reports/${esc(r.key)}.pdf" download>PDF</a></span></li>`).join('')}</ul></section>` : '') +
     (other.length ? `<section class="panel"><div class="panel-head"><h2>Attendance, leave &amp; payroll reports</h2><span class="legend">${other.length} reports available to your role</span></div><ul class="report-list">${other.map(r => r.filters.length ? `<li><span>${esc(r.title)}</span>${filterForm(r)}<span class="download-links"><a class="small download-link" data-report-link="${esc(r.key)}" data-format="xlsx" href="/api/reports/${esc(r.key)}.xlsx?month=${today().slice(0, 7)}" download>Excel</a><a class="small download-link" data-report-link="${esc(r.key)}" data-format="pdf" href="/api/reports/${esc(r.key)}.pdf?month=${today().slice(0, 7)}" download>PDF</a></span></li>` : `<li><span>${esc(r.title)}</span>${downloads(r.key)}</li>`).join('')}</ul></section>` : '') +
     (LEGACY.includes(auth.user.role) ? `<section class="panel"><div class="panel-head"><h2>Payroll registers</h2><span class="legend">One file per posted cutoff</span></div>${table(['Cutoff', 'Employees', 'Net', ''], runs.map(r => [`${r.start} → ${r.end}`, r.rows.length, money(r.totals.net), `<span class="download-links"><a class="small download-link" href="/api/runs/${r.id}.xlsx" download>Excel</a><a class="small download-link" href="/api/runs/${r.id}.pdf" download>PDF</a></span>`]))}</section>` : ''));
+  // Excel report templates (filled with records) and saved, edited versions.
+  templatesUi.section().then(box => { if (page === 'reports') document.querySelector('.content')?.append(box); }).catch(error => toast(error.message));
   // Keep each download link in step with its filters.
   document.querySelector('.content').addEventListener('change', event => {
     const form = event.target.closest('[data-report]'); if (!form) return;
@@ -703,7 +711,7 @@ function render() {
   if (page === 'overview') page = 'dashboard';
   if (page === 'employees') page = 'files';
   if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : [])].includes(page)) page = 'dashboard';
-  const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
+  const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), bir: () => birPage.render(), discipline: () => discipline.render(), loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') page = 'attendance';   // Live attendance is part of the Attendance page
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
@@ -1246,7 +1254,8 @@ document.addEventListener('click', async event => {
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
     if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }
-    if (b.dataset.nav) { page = b.dataset.nav; filter = ''; mobileDrawer = false; render(); }
+    if (b.dataset.navCase) { page = 'discipline'; discipline.render(b.dataset.navCase).catch(error => toast(error.message)); return; }
+    if (b.dataset.nav) { if (b.dataset.nav === 'bir') birPage.reset(); page = b.dataset.nav; filter = ''; mobileDrawer = false; render(); }
     if (b.dataset.contribMonth) { contributionsUi.setMonth(b.dataset.contribMonth); page = 'contributions'; render(); return; }
     if (b.dataset.profile) { page = 'profile'; await profiles.open(b.dataset.profile, 'personal'); }
     if (b.dataset.tab) { subtab = b.dataset.tab; filter = ''; render(); }

@@ -133,3 +133,43 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(pdf);
 }
+
+// ---------- Formatted workbooks (templates and filed returns) ----------
+// sheets: [{ name, rows, header (0-based index of the column-heading row; it gets bold shading, a filter and is frozen),
+//            widths: [column widths], money: [0-based columns shown as #,##0.00] }]
+// A cell is a string, a number, null (empty) or an object { v, f, s }: f is an Excel formula without '=' (e.g.
+// 'SUM(D5:D20)'), s is a style: 'title', 'bold', 'money', 'total' (bold money), 'head'. Text is never a formula unless
+// it is given as f, so typed data can never execute as one.
+const STYLE = { title: 1, head: 2, money: 3, total: 4, bold: 5, note: 6 };
+const STYLES_XML = `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts><fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FFB51F2B"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF666666"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF8E7B8"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><top style="thin"/><bottom style="thin"/></border></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="7"><xf/><xf fontId="1" applyFont="1"/><xf fontId="2" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1"><alignment wrapText="1" vertical="center"/></xf><xf numFmtId="164" applyNumberFormat="1"/><xf numFmtId="164" fontId="2" borderId="1" applyNumberFormat="1" applyFont="1" applyBorder="1"/><xf fontId="2" applyFont="1"/><xf fontId="3" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+export const colName = i => { let s = ''; for (i += 1; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s; };
+function richSheet({ rows, header = null, widths = [], money = [] }) {
+  const moneyCols = new Set(money), width = Math.max(1, ...rows.map(r => r.length));
+  const cell = (value, r, c) => {
+    const ref = `${colName(c)}${r + 1}`, o = value !== null && typeof value === 'object' ? value : { v: value };
+    let s = o.s ? STYLE[o.s] : r === header ? STYLE.head : typeof o.v === 'number' && moneyCols.has(c) ? STYLE.money : o.f && moneyCols.has(c) ? STYLE.money : 0;
+    if (o.s === 'money' && r === header) s = STYLE.head;
+    const attr = `r="${ref}"${s ? ` s="${s}"` : ''}`;
+    if (o.f) return `<c ${attr}><f>${xml(o.f)}</f>${typeof o.v === 'number' ? `<v>${o.v}</v>` : ''}</c>`;
+    if (o.v === null || o.v === undefined || o.v === '') return s ? `<c ${attr}/>` : '';
+    if (typeof o.v === 'number' && Number.isFinite(o.v)) return `<c ${attr}><v>${o.v}</v></c>`;
+    return `<c ${attr} t="inlineStr"><is><t xml:space="preserve">${xml(o.v)}</t></is></c>`;
+  };
+  const cols = widths.length ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+  const pane = header !== null ? `<pane ySplit="${header + 1}" topLeftCell="A${header + 2}" activePane="bottomLeft" state="frozen"/>` : '';
+  const lastData = rows.reduce((last, row, i) => (i > header && !row.some(v => v?.s === 'total') && row.some(v => v !== null && v !== '') ? i : last), header ?? 0);
+  const filter = header !== null ? `<autoFilter ref="A${header + 1}:${colName(width - 1)}${Math.max(lastData, header) + 1}"/>` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0">${pane}</sheetView></sheetViews>${cols}<sheetData>${rows.map((row, r) => `<row r="${r + 1}">${row.map((v, c) => cell(v, r, c)).join('')}</row>`).join('')}</sheetData>${filter}</worksheet>`;
+}
+export function formattedWorkbook(sheets) {
+  const list = sheets.map(s => ({ ...s, name: s.name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) }));
+  const files = {
+    '[Content_Types].xml': `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${list.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`,
+    '_rels/.rels': '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml': `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${list.map((s, i) => `<sheet name="${xml(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets><calcPr fullCalcOnLoad="1"/></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${list.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    'xl/styles.xml': STYLES_XML,
+  };
+  list.forEach((s, i) => { files[`xl/worksheets/sheet${i + 1}.xml`] = richSheet(s); });
+  return zip(files);
+}

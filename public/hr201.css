@@ -1861,3 +1861,33 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* Login: sign in with fingerprint (employees) */
 .login-form .fingerprint-login{display:flex;align-items:center;justify-content:center;gap:8px;border-color:#d9b85c;background:#fffaf0;color:#7a1720}
 .login-form .fingerprint-login:hover{background:#fff3d6}
+
+/* Due process: case steps, detail lists, files */
+.dp-steps{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px;padding:0;counter-reset:none}
+.dp-steps li{display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border:1px solid #eadfc4;border-radius:999px;background:#fffdf7;color:#6b6257;font-size:13px}
+.dp-steps li span{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#f1ece2;color:#6b6257;font-weight:700;font-size:12px}
+.dp-steps li small{color:#9a8f80;font-size:11px;margin-left:2px}
+.dp-steps li.done span{background:#b51f2b;color:#fff}
+.dp-steps li.current{border-color:#d9b85c;background:#fff4dd;color:#1d1d1d;font-weight:600}
+.dp-steps li.current span{background:#d9b85c;color:#1d1d1d}
+.dp-kv{display:grid;grid-template-columns:minmax(140px,max-content) 1fr;gap:6px 18px;margin:0 0 12px}
+.dp-kv dt{color:#6b6257;font-size:13px}
+.dp-kv dd{margin:0;font-weight:500}
+.dp-files{margin:0;padding-left:18px}.dp-files li{margin:4px 0}
+.dp-files small{color:#6b6257}
+.dp-search{display:flex;gap:8px;flex:1;max-width:560px}.dp-search input{flex:1}
+.dp-actions .actions{flex-wrap:wrap}
+[data-case-explain]{margin-top:10px}[data-case-explain] .full{grid-column:1/-1}
+.memo-details{border:1px solid #eadfc4;border-radius:10px;padding:10px 14px}
+.memo-details-line{font-size:13px;color:#4a443c}
+/* Excel templates on the Reports page */
+.tpl-cat{margin:18px 24px 6px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#8a6d1d}
+[data-tpl]{display:flex;align-items:center;gap:16px}
+[data-tpl]>span:first-child{flex:1;min-width:0}
+[data-tpl]>span:first-child small{display:block;margin-top:3px;color:#6b6257;font-weight:400;line-height:1.4}
+.tpl-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.tpl-actions input{width:180px}.tpl-actions .tpl-year{width:80px}
+/* BIR 1601-C lines */
+.bir-lines input.bir-num{width:110px;text-align:right}.bir-lines input.bir-tin{width:130px}
+.bir-lines td:first-child small{display:block}
+@media (max-width:760px){[data-tpl]{flex-direction:column;align-items:stretch}.tpl-actions{flex-wrap:wrap}.dp-kv{grid-template-columns:1fr}}
