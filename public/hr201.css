@@ -1861,3 +1861,40 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* Login: sign in with fingerprint (employees) */
 .login-form .fingerprint-login{display:flex;align-items:center;justify-content:center;gap:8px;border-color:#d9b85c;background:#fffaf0;color:#7a1720}
 .login-form .fingerprint-login:hover{background:#fff3d6}
+.login-form .feishu-login{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:7px;padding:10px 15px;border:1px solid #c9d7f2;border-radius:7px;background:#f3f7ff;color:#1f3f8f;font-weight:600;text-decoration:none}
+.login-form .feishu-login:hover{background:#e7efff}
+.login-form .feishu-login[hidden]{display:none}
+
+/* BIR Form 1601-C (bir-ui.js) */
+.bir-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.bir-month { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.bir-adjust { display: flex; gap: 6px; }
+.bir-adjust select { flex: 0 0 90px; }
+.bir-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 900px) { .bir-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Due Process & Discipline (discipline-ui.js, discipline-case.js, portal-cases.js) */
+.dp-tabs { flex-wrap: wrap; }
+.dp-steps { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0 0 12px; counter-reset: none; }
+.dp-steps li { display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid #e4dccb; border-radius: 6px; font-size: 12px; background: #fff; color: #6b6150; }
+.dp-steps li span, .dp-num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #f0ece3; font-size: 11px; font-weight: 700; flex: 0 0 20px; }
+.dp-steps li.done { border-color: #d9b85c; color: #1d1a14; }
+.dp-steps li.done span { background: #d9b85c; color: #fff; }
+.dp-steps li.current { border-color: #b31f2b; color: #1d1a14; font-weight: 600; box-shadow: 0 0 0 1px #b31f2b inset; }
+.dp-steps li.current span, .dp-num { background: #b31f2b; color: #fff; }
+.dp-next { margin-bottom: 14px; }
+.dp-text { white-space: normal; line-height: 1.55; padding: 12px 14px; border: 1px solid #ece4d3; border-radius: 6px; background: #fffdf8; margin: 8px 0; overflow-wrap: anywhere; }
+.dp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.dp-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.dp-inline input { flex: 1 1 240px; min-width: 0; }
+.dp-history { margin: 6px 0; padding-left: 18px; font-size: 12px; color: #5a4e34; }
+.dp-files { margin: 6px 0; padding-left: 18px; }
+.dp-step h3, .dp-step h4 { margin: 14px 0 4px; font-size: 13px; }
+.dp-case { margin-bottom: 14px; }
+.dp-case details { margin: 8px 0; border: 1px solid #ece4d3; border-radius: 6px; padding: 8px 10px; }
+.dp-case summary { cursor: pointer; font-weight: 600; }
+.dp-case footer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.report-group { margin: 12px 16px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #8a6d1f; }
+@media (max-width: 900px) { .dp-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.dp-case > header { display: block; }
+.dp-case > header .badge { display: inline-flex; width: auto; margin-left: 6px; vertical-align: middle; }

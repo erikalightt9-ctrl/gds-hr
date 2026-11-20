@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Store } from './store.mjs';
 import { mailerFromEnv } from './mailer.mjs';
 import { handleHrRoutes } from './hr-routes.mjs';
+import { handleComplianceRoutes } from './compliance-routes.mjs';
 import { savePayrollInput, deletePayrollInput } from './payroll-inputs.mjs';
 import { publicBranding, readSettings } from './hr201.mjs';
 import { LEGACY_WORKSPACE } from './roles.mjs';
@@ -29,6 +30,7 @@ import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-ne
 import { addContributionEmployee } from './contribution-encode.mjs';
 import { saveMonthEdit } from './contribution-month.mjs';
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
+import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
 import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
@@ -84,7 +86,7 @@ export function employeeNotice(pathname, data = {}) {
   const match = rules.find(([re]) => re.test(pathname));
   return match ? match[1]() : null;
 }
-export function createApp({ store, origin, setupToken, demo = false, mailer = null }) {
+export function createApp({ store, origin, setupToken, demo = false, mailer = null, fetchImpl = fetch }) {
   const secure = origin.startsWith('https:');
   // Fingerprint sign-in (WebAuthn) is bound to the site's host name; it needs https (or localhost).
   const webauthn = { origin, rpId: new URL(origin).hostname, rpName: 'GDS HR' };
@@ -107,7 +109,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/bir-ui.js': ['bir-ui.js', 'text/javascript'], '/discipline-ui.js': ['discipline-ui.js', 'text/javascript'], '/discipline-case.js': ['discipline-case.js', 'text/javascript'], '/report-library-ui.js': ['report-library-ui.js', 'text/javascript'], '/portal-cases.js': ['portal-cases.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -168,6 +170,26 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.setHeader('Set-Cookie', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
         send(200, { user: auth.user, csrf: auth.csrf, demo }); return;
       }
+      // Sign in with Feishu (feishu-login.mjs): start sends the browser to Feishu; the callback links or signs in.
+      // The callback page moves on with a same-site refresh so the Strict session cookie is used from the first page.
+      const backTo = (hash, cookie) => { if (cookie) res.setHeader('Set-Cookie', cookie); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(`<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/${hash}"><title>GDS HR</title><p>Continuing… <a href="/${hash}">Open the HR system</a></p>`); };
+      if (pathname === '/api/login/feishu/available' && req.method === 'GET') { send(200, feishuLoginAvailable(store)); return; }
+      if (pathname === '/api/login/feishu/start' && req.method === 'GET') {
+        checkLimit(store, `feishu:${visitorIp}`, 200);
+        try { res.writeHead(302, { Location: startFeishu(store, { kind: 'login' }, { origin }) }); res.end(); } catch (error) { backTo(`#feishu-error=${encodeURIComponent(error.message)}`); }
+        return;
+      }
+      if (pathname === '/api/login/feishu/callback' && req.method === 'GET') {
+        checkLimit(store, `feishu:${visitorIp}`, 200);
+        try {
+          if (url.searchParams.get('error')) throw new AppError('Feishu sign-in was cancelled.', 400);
+          const done = await finishFeishu(store, { code: url.searchParams.get('code'), state: url.searchParams.get('state') }, { origin, fetchImpl });
+          if (done.kind === 'link') { backTo('#feishu-linked'); return; }
+          const auth = issueSession(store, done.user, session(store, req.headers.cookie)?.tokenHash || '');
+          backTo('', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
+        } catch (error) { backTo(`#feishu-error=${encodeURIComponent(error.message)}`); }
+        return;
+      }
       if (pathname === '/api/recovery/request' && req.method === 'POST') {
         checkLimit(store, `recovery:${visitorIp}`); const body = z.object({ identifier: z.string().trim().min(1).max(80) }).strict().parse(await readBody(req));
         send(200, { message: requestRecovery(store, body.identifier, { mailer, origin }).message }); return;
@@ -203,6 +225,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         const body = z.object({ currentPassword: z.string().max(200), newPassword: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         await changePassword(store, auth.user, body.currentPassword, body.newPassword); send(200, { ok: true }); return;
       }
+      // Feishu sign-in: settings (admin) and each person's own link.
+      if (pathname === '/api/integrations/feishu-login' && req.method === 'GET') { send(200, feishuLoginStatus(store, auth.user, { origin })); return; }
+      if (pathname === '/api/integrations/feishu-login' && req.method === 'POST') { send(200, saveFeishuLogin(store, auth.user, await readBody(req), { origin })); return; }
+      if (pathname === '/api/me/feishu' && req.method === 'GET') { send(200, myFeishu(store, auth.user)); return; }
+      if (pathname === '/api/me/feishu/link' && req.method === 'POST') { send(200, { url: startFeishu(store, { kind: 'link', user: auth.user }, { origin }) }); return; }
+      if (pathname === '/api/me/feishu/unlink' && req.method === 'POST') { send(200, unlinkFeishu(store, auth.user)); return; }
       // Feishu group alerts (feishu.mjs; admin only).
       if (pathname === '/api/integrations/feishu' && req.method === 'GET') { send(200, feishuStatus(store, auth.user)); return; }
       if (pathname === '/api/integrations/feishu' && req.method === 'POST') { send(200, saveFeishu(store, auth.user, await readBody(req))); return; }
@@ -231,6 +259,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       const addressRoute = pathname.match(/^\/api\/location-address\/([a-f0-9-]+)$/);
       if (addressRoute && req.method === 'POST') { checkLimit(store, `geocoding:${auth.user.id}`); send(200, await locationAddress(store, auth.user, addressRoute[1])); return; }
+      if (await handleComplianceRoutes({ req, res, pathname, url, auth, store, send, readBody })) return;
       if (await handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody })) return;
       if (pathname.startsWith('/api/me/')) {
         permit(auth.user, ['employee']);

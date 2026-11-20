@@ -23,6 +23,8 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (tab === 'memos') return memos(box, await api('/hr/me/memos'));
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       if (tab === 'files201') return file201(box);
+      // Loaded on first use (Notices & due process).
+      if (tab === 'cases') return (await import('./portal-cases.js')).createPortalCases({ api, esc, toast, confirm }).fill(box);
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
@@ -281,5 +283,5 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['files201', 'My 201 file', '📁']], showDatasheet, showDocuments: () => { fileView = 'documents'; } };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['cases', 'Notices & due process', '⚖️'], ['files201', 'My 201 file', '📁']], showDatasheet, showDocuments: () => { fileView = 'documents'; } };
 }

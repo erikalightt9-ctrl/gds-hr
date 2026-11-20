@@ -15,9 +15,27 @@ function zip(files) {
   footer.writeUInt32LE(0x06054b50); footer.writeUInt16LE(count, 8); footer.writeUInt16LE(count, 10); footer.writeUInt32LE(centralBuffer.length, 12); footer.writeUInt32LE(offset, 16);
   return Buffer.concat([...local, centralBuffer, footer]);
 }
-function sheet(rows) {
-  return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>${rows.map((row, i) => `<row r="${i + 1}">${row.map(v => typeof v === 'number' ? `<c><v>${v}</v></c>` : `<c t="inlineStr"><is><t xml:space="preserve">${xml(v)}</t></is></c>`).join('')}</row>`).join('')}</sheetData></worksheet>`;
+// Cell values: number, string, or an object { v, f, bold, money, pct } (f = formula without '=', v = its cached value).
+// Styles: 0 plain, 1 bold, 2 peso amount (#,##0.00), 3 bold peso amount, 4 percent.
+export const colName = i => { let s = ''; for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
+function cell(value, ref, rowBold) {
+  const c = value !== null && typeof value === 'object' ? value : { v: value };
+  const bold = c.bold || rowBold, style = c.pct ? 4 : c.money ? (bold ? 3 : 2) : bold ? 1 : 0, s = style ? ` s="${style}"` : '';
+  if (c.f) return `<c r="${ref}"${s}><f>${xml(c.f)}</f>${typeof c.v === 'number' && Number.isFinite(c.v) ? `<v>${c.v}</v>` : ''}</c>`;
+  if (typeof c.v === 'number' && Number.isFinite(c.v)) return `<c r="${ref}"${s}><v>${c.v}</v></c>`;
+  if (c.v === '' || c.v === null || c.v === undefined) return style ? `<c r="${ref}"${s}/>` : '';
+  return `<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${xml(c.v)}</t></is></c>`;
 }
+// A sheet is either rows (first row frozen) or { rows, header (0-based index of the column headings: bold, frozen,
+// filter buttons), widths: [characters], boldRows: [indexes], totalRows (rows at the end left out of the filter) }.
+function sheet(spec) {
+  const o = Array.isArray(spec) ? { rows: spec } : spec, rows = o.rows, header = o.header ?? null, bold = new Set([...(o.boldRows || []), ...(header === null ? [] : [header])]);
+  const freeze = header === null ? 1 : header + 1, width = Math.max(1, ...rows.map(r => r.length)), lastData = rows.length - 1 - (o.totalRows || 0);
+  const cols = o.widths?.length ? `<cols>${o.widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+  const filter = header !== null && o.filter !== false && lastData > header ? `<autoFilter ref="A${header + 1}:${colName(width - 1)}${lastData + 1}"/>` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${rows.map((row, i) => `<row r="${i + 1}">${row.map((v, j) => cell(v, `${colName(j)}${i + 1}`, bold.has(i))).join('')}</row>`).join('')}</sheetData>${filter}</worksheet>`;
+}
+const STYLES = '<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
 export function payrollWorkbook(run) {
   const headers = ['Employee ID', 'Employee Name', 'Monthly Salary', 'Working Days (this cutoff)', 'Month Working Days', 'Days Present (regular workdays)', 'Holiday Days', 'Days Credited', 'Late Minutes Not Offset', 'Leave Days / Notes', 'Regular OT', 'Rest Day Pay', 'Rest Day OT', 'NSD', 'Special Holiday Pay', 'Special Holiday OT', 'Regular Holiday Pay', 'Regular Holiday OT', 'Other Holiday Pay', 'Other Holiday OT', 'Basic Salary (regular days)', 'Holiday Pay (holidays credited)', 'Holiday Pay (total incl. holiday-work premium)', 'Additional', 'Allowances', '13th Month Paid', 'Gross Salary', 'Undertime', 'Unpaid Leave / Absence', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Withholding Tax', 'Loan Deductions', 'Other Deductions', 'Total Deductions', 'Net Salary', 'Employer SSS', 'Employer SSS EC', 'Employer PhilHealth', 'Employer Pag-IBIG', 'Employer Total (not deducted)', 'Loan Balance', 'Loan Date', 'Loan Terms', 'Applicable Basic for 13th Month'];
   const payroll = [headers, ...run.rows.map(r => { const h = holidaySplit(r); return [r.employeeId, r.employeeName, r.monthlySalary, r.workingDays, r.monthWorkingDays ?? '', h.regularDays, h.holidayDays, r.creditedDays ?? r.daysPresent, r.lateMinutesUnoffset ?? 0, r.leaveNotes.join('; '), r.earnings.regularOT, r.earnings.restDay, r.earnings.restOT, r.earnings.nsd, r.earnings.specialHoliday, r.earnings.specialOT, r.earnings.regularHoliday, r.earnings.regularHolidayOT, r.earnings.otherHoliday, r.earnings.otherOT, h.regularBasic, h.holidayDayPay, h.holidayPay, r.earnings.additional, r.earnings.allowance, r.earnings.thirteenth, r.gross, r.deductions.undertime, r.deductions.absence, r.deductions.SSS, r.deductions.PhilHealth, r.deductions['Pag-IBIG'], r.deductions.tax, r.deductions.loans, r.deductions.other, r.totalDeductions, r.net, r.employer?.SSS ?? 0, r.employer?.['SSS EC'] ?? 0, r.employer?.PhilHealth ?? 0, r.employer?.['Pag-IBIG'] ?? 0, r.employerTotal ?? 0, r.loanBalance, r.loanDeductions.map(l => l.startDate).join('; '), r.loanDeductions.map(l => `${l.reference}: ${l.remainingTerms}/${l.terms}`).join('; '), r.applicableBasic]; })];
@@ -30,14 +48,28 @@ export function payrollWorkbook(run) {
 export function workbook(sheets) {
   const entries = Object.entries(sheets).map(([name, rows]) => [name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31), rows]);
   const files = {
-    '[Content_Types].xml': `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${entries.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`,
+    '[Content_Types].xml': `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${entries.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`,
     '_rels/.rels': '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-    'xl/workbook.xml': `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${entries.map(([name], i) => `<sheet name="${xml(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`,
-    'xl/_rels/workbook.xml.rels': `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${entries.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}</Relationships>`,
+    // fullCalcOnLoad: Excel recalculates every formula (totals, summaries) when the file is opened.
+    'xl/workbook.xml': `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${entries.map(([name], i) => `<sheet name="${xml(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${entries.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${entries.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    'xl/styles.xml': STYLES,
   };
   entries.forEach(([, rows], i) => { files[`xl/worksheets/sheet${i + 1}.xml`] = sheet(rows); });
   return zip(files);
 }
+// A titled table sheet: title, description, a blank row, the headings (bold, frozen, filter buttons), the rows, then a
+// TOTAL row with SUM formulas for the `totals` columns (indexes). `money` columns get the peso format; `formulas` maps a
+// column index to (excelRowNumber) => formula, so derived columns stay live when figures are edited in Excel.
+export function tableSheet({ title, description = '', headers, rows, totals = [], money = totals, formulas = {}, widths = null }) {
+  const top = [[{ v: title, bold: true }], [description], []], first = top.length + 2, last = top.length + 1 + rows.length;
+  const body = rows.map((r, i) => r.map((v, j) => { const f = formulas[j]?.(first + i); return f ? { f, v: typeof v === 'number' ? v : undefined, money: money.includes(j) } : money.includes(j) && typeof v === 'number' ? { v, money: true } : v; }));
+  const out = [...top, headers, ...body], withTotal = totals.length > 0 && rows.length > 0;
+  if (withTotal) out.push(headers.map((_, j) => (j === 0 ? { v: 'TOTAL', bold: true } : totals.includes(j) ? { f: `SUM(${colName(j)}${first}:${colName(j)}${last})`, v: Math.round(rows.reduce((s, r) => s + (Number(r[j]) || 0), 0) * 100) / 100, bold: true, money: money.includes(j) } : '')));
+  return { rows: out, header: top.length, totalRows: withTotal ? 1 : 0, widths: widths || headers.map((h, j) => Math.min(48, Math.max(10, String(h).length + 2, ...rows.slice(0, 200).map(r => String(r[j] ?? '').length + 2)))) };
+}
+// Plain values of a tableSheet (formulas replaced by their cached values), e.g. for the PDF of the same report.
+export const sheetValues = spec => spec.rows.slice(spec.header + 1).map(r => r.map(c => (c !== null && typeof c === 'object' ? c.v ?? '' : c)));
 
 // ---------- PDF tables (dependency-free, Helvetica, landscape A4) ----------
 const PAGE = { width: 842, height: 595, margin: 30 };

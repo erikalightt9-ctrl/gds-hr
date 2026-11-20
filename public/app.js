@@ -1,6 +1,6 @@
 const brandLogo = '/gds-logo.png'; // 菲龍集團 GDS Capital logo (white background)
 import { createProfileView } from './profiles.js';
-import { setStaffNames, who, passkeyGet, passkeySupported, screenLockHere } from './hr-common.js';
+import { setStaffNames, who, passkeyGet, passkeySupported, screenLockHere, mountFeishuLink } from './hr-common.js';
 let screenLockAsked = false;   // the sign-in page asks for the phone's screen lock once per app opening
 import { initMessages, messagesButton, messagesChanged, messagesSignedIn, messagesSignedOut } from './messages.js';
 import { createPortal } from './portal.js';
@@ -131,6 +131,8 @@ function searchToolbar(extra = '') { return `<div class="toolbar">${extra}<label
 function filtered(list) { return list.filter(x => JSON.stringify({ ...x, employeeName: state.employees.find(e => e.id === x.employeeId)?.name }).toLowerCase().includes(filter.toLowerCase())); }
 const navigationIcons = {"overview":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/>","employees":"<circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 5\"/>","live":"<path d=\"M2 12h4l3-8 6 16 3-8h4\"/>","attendance":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 6v6l4 2\"/>","leave":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4M16 3v4M3 11h18m-13 5 3 3 5-5\"/>","payroll":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M7 15h4M7 18h7\"/>","loans":"<path d=\"M3 7h18m-4-4 4 4-4 4M21 17H3m4-4-4 4 4 4\"/>","annual":"<path d=\"M12 3 3 8l9 5 9-5-9-5ZM3 12l9 5 9-5M3 16l9 5 9-5\"/>","holidays":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4M16 3v4M3 11h18M8 15h2M14 15h2M8 18h2\"/>","rules":"<path d=\"M4 6h16M4 12h16M4 18h16\"/><circle cx=\"8\" cy=\"6\" r=\"2\"/><circle cx=\"16\" cy=\"12\" r=\"2\"/><circle cx=\"10\" cy=\"18\" r=\"2\"/>","audit":"<path d=\"M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2\"/>"};
 navigationIcons.contributions = '<path d="M3 21h18"/><path d="M5 21V10l7-5 7 5v11"/><path d="M9 21v-6h6v6"/>';
+navigationIcons.bir1601c = '<path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h3"/>';
+navigationIcons.discipline = '<path d="M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0zM8 21h8"/>';
 navigationIcons.deductions = '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8"/>';
 navigationIcons.reports = '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/>';
 const LEGACY = ['admin', 'hr', 'payroll', 'viewer'], HR_TEAM = ['admin', 'hr', 'hr_staff', 'maker'];
@@ -146,10 +148,10 @@ Object.assign(navigationIcons, {
 const PAY_GROUP = { id: 'payroll-attendance', label: 'Payroll & Attendance', icon: 'payroll' };
 function navGroups() {
   const role = auth.user.role, legacy = LEGACY.includes(role);
-  const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
+  const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['bir1601c', 'BIR 1601-C'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
     ['', [['dashboard', 'Dashboard']]],
-    ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ['trainings', 'Trainings']]],
+    ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ...(['admin', 'hr', 'viewer'].includes(role) ? [['discipline', 'Due Process & Discipline']] : []), ['trainings', 'Trainings']]],
     ...(payItems.length ? [['', payItems, PAY_GROUP]] : []),   // hidden entirely when the role may open none of them
     ['Administration', [['reports', 'Reports'], ...(legacy || role === 'maker' ? [['audit', 'Audit trail']] : []), ...(role === 'admin' ? [['settings', 'Settings']] : [])]],
   ];
@@ -291,6 +293,12 @@ let clockRecordsUi = null;
 const loadClockRecords = async () => clockRecordsUi || (clockRecordsUi = (await import('./clock-records-ui.js')).createClockRecordsUi({ api, esc, badge, openDialog, employees: () => state.employees, today }));
 const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh() });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
+// Loaded on first use, so the rest of the app never depends on these files being served (e.g. before a restart).
+let birUi = null, disciplineUi = null, reportLibrary = null;
+const loadBir = async () => birUi || (birUi = (await import('./bir-ui.js')).createBirPage({ ...hrCtx, employees: () => state.employees }));
+const loadDiscipline = async () => disciplineUi || (disciplineUi = (await import('./discipline-ui.js')).createDisciplinePage({ ...hrCtx, employees: () => state.employees }));
+const loadReportLibrary = async () => reportLibrary || (reportLibrary = (await import('./report-library-ui.js')).createReportLibrary(hrCtx));
+let renderOptions = {};   // one-time options for the next render (e.g. the case to open from the bell)
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
 async function goTo(nav) {
   if (nav.page === 'explanations') { attendanceView = 'explanations'; nav = { ...nav, page: 'attendance' }; }
@@ -299,6 +307,7 @@ async function goTo(nav) {
   if (page === 'files') return files.directory({ status: nav.status || '', docs: nav.docs || '' });
   if (page === 'employee201') return files.openProfile(nav.id, nav.tab || 'overview');
   if (page === 'memos') return memos.render(nav.id);
+  if (page === 'discipline') { renderOptions = { caseId: nav.id || null, employeeId: nav.employeeId }; return render(); }
   if (page === 'trainings') return trainings.render(nav.id);
   render();
 }
@@ -661,14 +670,17 @@ function downloads(key) {
   return `<span class="download-links" aria-label="Download"><a class="small download-link" href="/api/reports/${key}.xlsx" download>Excel</a><a class="small download-link" href="/api/reports/${key}.pdf" download>PDF</a></span>`;
 }
 async function reportsPage() {
-  const reports = await api('/reports');
+  const [reports, lib] = await Promise.all([api('/reports'), loadReportLibrary().catch(() => null)]);
+  const libraryHtml = lib ? await lib.libraryPanel() : '';
   const runs = state.runs.filter(r => r.status === 'posted').sort((a, b) => b.start.localeCompare(a.start));
-  const hr = reports.filter(r => r.hr201), other = reports.filter(r => !r.hr201), depts = hrContext?.departments || [];
+  const hr = reports.filter(r => r.hr201), other = reports.filter(r => !r.hr201 && !r.template), depts = hrContext?.departments || [];
   const filterForm = r => r.filters.length ? `<form class="report-filters" data-report="${esc(r.key)}">${r.filters.includes('department') ? `<select name="department" aria-label="Department"><option value="">All departments</option>${depts.map(d => `<option>${esc(d)}</option>`).join('')}</select>` : ''}${r.filters.includes('status') ? '<select name="status" aria-label="Status"><option value="">Active and inactive</option><option>Active</option><option>Inactive</option><option>Archived</option></select>' : ''}${r.filters.includes('from') ? '<input type="date" name="from" aria-label="From date">' : ''}${r.filters.includes('to') ? '<input type="date" name="to" aria-label="To date">' : ''}${r.filters.includes('month') ? `<input type="month" name="month" aria-label="Month" value="${today().slice(0, 7)}">` : ''}</form>` : '';
   shell(heading('Reports & downloads', 'Download any list as an Excel workbook or a printable PDF. Files contain only what your role may see, and each export is recorded in the audit trail.') +
     (hr.length ? `<section class="panel"><div class="panel-head"><h2>HR 201 reports</h2><span class="legend">Choose filters, then download</span></div><ul class="report-list wide">${hr.map(r => `<li><span>${esc(r.title)}</span>${filterForm(r)}<span class="download-links"><a class="small download-link" data-report-link="${esc(r.key)}" data-format="xlsx" href="/api/reports/${esc(r.key)}.xlsx" download>Excel</a><a class="small download-link" data-report-link="${esc(r.key)}" data-format="pdf" href="/api/reports/${esc(r.key)}.pdf" download>PDF</a></span></li>`).join('')}</ul></section>` : '') +
     (other.length ? `<section class="panel"><div class="panel-head"><h2>Attendance, leave &amp; payroll reports</h2><span class="legend">${other.length} reports available to your role</span></div><ul class="report-list">${other.map(r => r.filters.length ? `<li><span>${esc(r.title)}</span>${filterForm(r)}<span class="download-links"><a class="small download-link" data-report-link="${esc(r.key)}" data-format="xlsx" href="/api/reports/${esc(r.key)}.xlsx?month=${today().slice(0, 7)}" download>Excel</a><a class="small download-link" data-report-link="${esc(r.key)}" data-format="pdf" href="/api/reports/${esc(r.key)}.pdf?month=${today().slice(0, 7)}" download>PDF</a></span></li>` : `<li><span>${esc(r.title)}</span>${downloads(r.key)}</li>`).join('')}</ul></section>` : '') +
-    (LEGACY.includes(auth.user.role) ? `<section class="panel"><div class="panel-head"><h2>Payroll registers</h2><span class="legend">One file per posted cutoff</span></div>${table(['Cutoff', 'Employees', 'Net', ''], runs.map(r => [`${r.start} → ${r.end}`, r.rows.length, money(r.totals.net), `<span class="download-links"><a class="small download-link" href="/api/runs/${r.id}.xlsx" download>Excel</a><a class="small download-link" href="/api/runs/${r.id}.pdf" download>PDF</a></span>`]))}</section>` : ''));
+    (lib ? lib.templatesPanel(reports) : '') +
+    (LEGACY.includes(auth.user.role) ? `<section class="panel"><div class="panel-head"><h2>Payroll registers</h2><span class="legend">One file per posted cutoff</span></div>${table(['Cutoff', 'Employees', 'Net', ''], runs.map(r => [`${r.start} → ${r.end}`, r.rows.length, money(r.totals.net), `<span class="download-links"><a class="small download-link" href="/api/runs/${r.id}.xlsx" download>Excel</a><a class="small download-link" href="/api/runs/${r.id}.pdf" download>PDF</a></span>`]))}</section>` : '') + libraryHtml);
+  if (lib) lib.bind(document.querySelector('.content'), () => reportsPage().catch(e => toast(e.message)));
   // Keep each download link in step with its filters.
   document.querySelector('.content').addEventListener('change', event => {
     const form = event.target.closest('[data-report]'); if (!form) return;
@@ -703,7 +715,7 @@ function render() {
   if (page === 'overview') page = 'dashboard';
   if (page === 'employees') page = 'files';
   if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : [])].includes(page)) page = 'dashboard';
-  const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
+  const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), bir1601c: async () => (await loadBir()).render(), discipline: async () => { const ui = await loadDiscipline(); const o = renderOptions; renderOptions = {}; return ui.render(o.caseId || null, o.employeeId !== undefined ? { employeeId: o.employeeId } : {}); }, loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') page = 'attendance';   // Live attendance is part of the Attendance page
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
@@ -1142,7 +1154,7 @@ function renderLogin() {
   document.documentElement.dataset.theme = 'gds';   // the sign-in screen keeps its approved red-and-gold design
   page = 'dashboard'; currentRun = null;
   stopLive(); portal.reset(); document.querySelector('.install-banner')?.remove();
-  app.innerHTML = `<div class="login welcome-login"><section class="login-form"><form id="login-form"><img class="login-card-logo" src="${brandLogo}" alt="GDS Capital Inc. logo" width="661" height="245"><h2>${auth?.setup ? 'Set up your workspace' : 'HRM System'}</h2>${auth?.setup ? '<p>Create your administrator account using the one-time setup code shown in your server terminal.</p>' : ''}<div id="login-error" class="form-error hidden" role="alert"></div>${auth?.setup ? '<label>One-time setup code<input name="token" type="password" autocomplete="off" required></label>' : ''}<label>Employee ID / username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label><label>Password<input name="password" type="password" autocomplete="${auth?.setup ? 'new-password' : 'current-password'}" required ${auth?.setup ? 'minlength="9"' : ''} maxlength="200"></label><label>Authenticator code (if enabled)<input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label><button class="primary" type="submit">${auth?.setup ? 'Create administrator account' : 'Sign in'} →</button>${!auth?.setup && passkeySupported() ? '<button type="button" class="fingerprint-login" data-fingerprint-login><span aria-hidden="true">👆</span> Sign in with fingerprint</button>' : ''}<button type="button" data-recovery>Forgot password?</button>${auth?.setup ? '<p class="footnote">Use a unique password of at least 9 characters.</p>' : ''}</form></section><section class="welcome-body" aria-label="Our culture">${welcomeScene()}${welcomeCulture()}</section></div>`;
+  app.innerHTML = `<div class="login welcome-login"><section class="login-form"><form id="login-form"><img class="login-card-logo" src="${brandLogo}" alt="GDS Capital Inc. logo" width="661" height="245"><h2>${auth?.setup ? 'Set up your workspace' : 'HRM System'}</h2>${auth?.setup ? '<p>Create your administrator account using the one-time setup code shown in your server terminal.</p>' : ''}<div id="login-error" class="form-error hidden" role="alert"></div>${auth?.setup ? '<label>One-time setup code<input name="token" type="password" autocomplete="off" required></label>' : ''}<label>Employee ID / username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label><label>Password<input name="password" type="password" autocomplete="${auth?.setup ? 'new-password' : 'current-password'}" required ${auth?.setup ? 'minlength="9"' : ''} maxlength="200"></label><label>Authenticator code (if enabled)<input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label><button class="primary" type="submit">${auth?.setup ? 'Create administrator account' : 'Sign in'} →</button>${!auth?.setup && passkeySupported() ? '<button type="button" class="fingerprint-login" data-fingerprint-login><span aria-hidden="true">👆</span> Sign in with fingerprint</button>' : ''}${auth?.setup ? '' : '<a class="feishu-login" data-feishu-login href="/api/login/feishu/start" hidden><span aria-hidden="true">💬</span> Sign in with Feishu</a>'}<button type="button" data-recovery>Forgot password?</button>${auth?.setup ? '<p class="footnote">Use a unique password of at least 9 characters.</p>' : ''}</form></section><section class="welcome-body" aria-label="Our culture">${welcomeScene()}${welcomeCulture()}</section></div>`;
   document.querySelector('#login-form').onsubmit = async event => {
     event.preventDefault(); const form = event.target, button = form.querySelector('button'); button.disabled = true;
     const data = Object.fromEntries(new FormData(form));
@@ -1173,11 +1185,16 @@ function renderLogin() {
     } catch (e) { if (/not recognised/i.test(e.message)) screenLockHere.set(false); error.textContent = e.message; error.classList.remove('hidden'); fingerprintButton.disabled = false; }
   };
   if (fingerprintButton) fingerprintButton.onclick = () => screenLockSignIn();
+  // Sign in with Feishu (src/feishu-login.mjs): shown only when HR set it up; a failed attempt comes back as #feishu-error=….
+  const feishuLink = document.querySelector('[data-feishu-login]');
+  if (feishuLink) fetch('/api/login/feishu/available').then(r => (r.ok ? r.json() : {})).then(d => { feishuLink.hidden = !d.enabled; }).catch(() => {});
+  const feishuError = /^#feishu-error=(.*)$/.exec(location.hash);
+  if (feishuError) { history.replaceState(null, '', location.pathname); const error = document.querySelector('#login-error'); try { error.textContent = decodeURIComponent(feishuError[1]); } catch { error.textContent = 'Feishu sign-in failed.'; } error.classList.remove('hidden'); }
   const resetLink = /^#reset=([a-f0-9]{64})$/.exec(location.hash);
   if (resetLink) { history.replaceState(null, '', location.pathname); portal.recovery(resetLink[1]); }
   // App-style opening: on a phone where screen-lock sign-in is set up, ask for it at once (once per app opening; a
   // cancel leaves the normal form). Not after signing out on purpose.
-  else if (fingerprintButton && !screenLockAsked && screenLockHere.get()) { screenLockAsked = true; screenLockSignIn(true); }
+  else if (fingerprintButton && !feishuError && !screenLockAsked && screenLockHere.get()) { screenLockAsked = true; screenLockSignIn(true); }
 }
 // Clear confirmation after a password change (every session is signed out, so the next step is signing in).
 function passwordSaved() {
@@ -1189,11 +1206,13 @@ async function myAccount() {
   openDialog('My account', `<div class="dialog-body">
     <section class="my-profile"><span class="hr-avatar large">${esc((me.employeeName || me.username).split(/[ ,]+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase())}</span><div><h3>${esc(me.employeeName || me.username)}</h3><p class="sub">${esc(me.username)} · ${esc(roleLabel)}${me.email ? ` · ${esc(me.email)}` : ''}</p>
       ${me.employeeId ? `<div class="actions"><button class="small primary" data-my-201="${esc(me.employeeId)}">Open my 201 file</button></div>` : ''}</div></section>
+    <section data-my-feishu hidden><hr><h3>Feishu sign-in</h3><div data-my-feishu-box>Loading…</div></section>
     <hr><h3>Change your password</h3><form id="password-form" class="form-grid"><label class="field">Current password<input type="password" name="currentPassword" autocomplete="current-password" required></label><label class="field">New password<input type="password" name="newPassword" autocomplete="new-password" minlength="9" maxlength="200" required></label><button class="primary" type="submit">Save new password</button></form>
     <p class="form-error hidden" role="alert" data-my-error></p></div>`);
   const fail = message => { const e = dialog.querySelector('[data-my-error]'); e.textContent = message; e.classList.remove('hidden'); };
   dialog.querySelector('#password-form').onsubmit = async event => { event.preventDefault(); try { await api('/password', Object.fromEntries(new FormData(event.target))); dialog.close(); auth = { user: null }; renderLogin(); passwordSaved(); } catch (e) { fail(e.message); } };
   dialog.querySelector('[data-my-201]')?.addEventListener('click', b => { dialog.close(); goTo({ page: 'employee201', id: b.currentTarget.dataset.my201 }); });
+  mountFeishuLink(dialog.querySelector('[data-my-feishu-box]'), { api, esc, toast, onVisible: on => { const s = dialog.querySelector('[data-my-feishu]'); if (s) s.hidden = !on; } });
 }
 async function account() {
   const users = auth.user.role === 'admin' ? await api('/users') : [];
@@ -1242,7 +1261,7 @@ document.addEventListener('click', async event => {
       menu.classList.toggle('hidden'); if (!menu.classList.contains('hidden')) markBellSeen(); return;
     }
     // A bell item opens the page (and tab) where it is handled, at the top, and closes the bell.
-    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'employee201') { await goTo({ page: 'employee201', id: item.id, tab: item.tab || 'requirements' }); showReviewButtons(); return; } if (item.nav === 'leave') subtab = 'requests'; if (item.nav === 'explanations') explanationFocus = item.focus ? { focus: item.focus, dates: item.dates || [] } : null; if (item.nav === 'requests') requestToOpen = (item.text.match(/AR-\d{4}-\d{4}/) || [''])[0]; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter }); window.scrollTo({ top: 0 }); return; }
+    if (b.dataset.bellItem) { const item = bellItems[Number(b.dataset.bellItem)]; document.querySelector('[data-bell-menu]')?.classList.add('hidden'); if (item.nav === 'employee201') { await goTo({ page: 'employee201', id: item.id, tab: item.tab || 'requirements' }); showReviewButtons(); return; } if (item.nav === 'leave') subtab = 'requests'; if (item.nav === 'explanations') explanationFocus = item.focus ? { focus: item.focus, dates: item.dates || [] } : null; if (item.nav === 'requests') requestToOpen = (item.text.match(/AR-\d{4}-\d{4}/) || [''])[0]; location.hash = `#/${item.nav === 'explanations' || item.nav === 'requests' ? 'attendance' : item.nav}`; await goTo({ page: item.nav, docs: item.filter, id: item.id }); window.scrollTo({ top: 0 }); return; }
     await portal.click(b, employeeData, liveData);
     if (b.hasAttribute('data-close')) { dialog.close(); return; }
     if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }
@@ -1408,3 +1427,5 @@ const enhancePasswords = root => root.querySelectorAll?.('input[type="password"]
 });
 enhancePasswords(document);
 new MutationObserver(changes => { for (const c of changes) for (const n of c.addedNodes) if (n.nodeType === 1) enhancePasswords(n.matches?.('input[type="password"]') ? n.parentNode : n); }).observe(document.body, { childList: true, subtree: true });
+// Back from linking Feishu in Account & security (the callback page lands on #feishu-linked).
+if (location.hash === '#feishu-linked') { history.replaceState(null, '', location.pathname); setTimeout(() => toast('Feishu account linked. Next time, tap “Sign in with Feishu” on the sign-in page.'), 1200); }

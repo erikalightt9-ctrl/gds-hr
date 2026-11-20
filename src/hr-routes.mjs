@@ -14,6 +14,7 @@ import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
 import { fileOvertime, cancelOvertime, editOvertime, myOvertime } from './overtime.mjs';
 import { pushStatus, savePushSubscription, removePushSubscription, sendTestReminder } from './reminders.mjs';
 import { saveSchedule } from './work-schedule.mjs';
+import { disciplineBell } from './discipline-views.mjs';
 
 const BIG = 28_500_000;
 const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="document"; filename*=UTF-8''${encodeURIComponent(meta.name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
@@ -125,6 +126,8 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
       if (docs.expired) items.push({ text: `${docs.expired} expired document${docs.expired === 1 ? '' : 's'}`, nav: 'files', filter: 'expired' });
       if (docs.overdue) items.push({ text: `${docs.overdue} overdue document submission${docs.overdue === 1 ? '' : 's'}`, nav: 'files', filter: 'missing' });
     }
+    // Due process: explanations to evaluate, deadlines passed, decisions waiting for approval or ready to issue.
+    items.push(...disciplineBell(store, actor));
     const memos = memoSummary(store, actor);
     if (memos.overdue) items.push({ text: `${memos.overdue} overdue memo acknowledgement${memos.overdue === 1 ? '' : 's'}`, nav: 'memos' });
     send(200, { count: items.length, items }); return true;
