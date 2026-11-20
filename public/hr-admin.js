@@ -205,7 +205,8 @@ export function createAdmin(ctx) {
         <label class="field st-ip">This device's network address<input value="${ctx.esc(d.current || 'unknown')}" readonly></label>
         ${d.networks.length ? `<ul class="plain-list office-net-list">${d.networks.map(n => `<li><span><strong>${ctx.esc(n.label)}</strong> · ${ctx.esc(n.ip)} <small>added by ${ctx.esc(n.addedBy)}</small>${n.ip === d.current ? ' <span class="badge">✓ This network</span>' : ''}</span><button type="button" class="small danger" data-net-remove="${ctx.esc(n.ip)}">Remove</button></li>`).join('')}</ul>` : `<p class="st-warn">${sIcon('info')}No office network saved. Time in / out is currently unrestricted.</p>`}
         ${here ? '' : '<div class="st-wifi-add"><button type="button" class="primary" data-net-add>Add this network as office Wi-Fi</button><small>Connect to office Wi-Fi before adding. Add the network again if your public address changes.</small></div>'}
-        <p class="form-error hidden" role="alert" data-net-error></p></div>`;
+        <div data-net-suggest></div><p class="form-error hidden" role="alert" data-net-error></p></div>`;
+      ctx.api('/office-networks/suggestions').then(list => { const s = box.querySelector('[data-net-suggest]'); if (s && list.length) s.innerHTML = `<div class="notice"><strong>Suggested office addresses</strong> — seen on office time in / out confirmed by the office GPS area but not on the saved Wi-Fi (the office may have a second internet line):<ul class="plain-list">${list.map(x => `<li>${ctx.esc(x.ip)} · ${x.punches} time in / out by ${x.employees} employees, last ${ctx.esc(x.last)} <button type="button" class="small primary" data-net-suggested="${ctx.esc(x.ip)}">Add as office Wi-Fi</button></li>`).join('')}</ul></div>`; }).catch(() => {});
     };
     const show = async body => {
       try { draw(await ctx.api('/office-networks', body)); }
@@ -214,6 +215,7 @@ export function createAdmin(ctx) {
     box.addEventListener('click', event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-net-add')) show({ action: 'add-current', label: 'Office Wi-Fi' });
+      if (b.dataset.netSuggested && window.confirm(`Add ${b.dataset.netSuggested} as office Wi-Fi? Time in / out from it will count as verified office attendance.`)) show({ action: 'add-suggested', ip: b.dataset.netSuggested, label: 'Office Wi-Fi (second line)' });
       if (b.dataset.netRemove && window.confirm(`Remove ${b.dataset.netRemove}? Time in from that network will need Off-site work.`)) show({ action: 'remove', ip: b.dataset.netRemove });
     });
     await show();

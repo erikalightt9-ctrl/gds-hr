@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { officeClaimFlag, withFlagState } from './clock-flags.mjs';
 import { workforce } from './workforce.mjs';
 import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { holidaySplit } from './holiday-pay.mjs';
@@ -142,7 +143,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
       addressCorrected: value.mode === 'outside' && !!detected && !!value.address && normal(value.address) !== normal(detected.formatted),
       ...(additional || clockIn?.additionalSession ? { additionalSession: true } : {}),
       ...(value.mode === 'office' && network.configured && !network.office ? { officeBy: 'gps' } : value.mode === 'office' && network.office ? { officeBy: 'wifi' } : {}),
-      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : []), ...(value.mode === 'office' && network.configured && !network.office ? ['Office Wi-Fi not verified: accepted by the office GPS area'] : [])] };
+      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...[officeClaimFlag(value.mode, value.reason)].filter(Boolean), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : []), ...(value.mode === 'office' && network.configured && !network.office ? ['Office Wi-Fi not verified: accepted by the office GPS area'] : [])] };
     if (clockIn?.additionalSession) {
       // Closing an additional session: the day's record now ends at this time out; the gap is an unpaid break.
       const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
@@ -308,7 +309,9 @@ export function submitExplanation(store, actor, input) {
 }
 export function reviewExplanation(store, actor, id, input) {
   permit(actor, ['admin', 'hr']);
-  const value = z.object({ status: z.enum(['approved', 'rejected']), approvedOffset: z.number().int().min(0).max(1440), note }).strict().parse(input);
+  // 'approved' has two outcomes (Nov 20, 2026): Late confirmed (explanation accepted, the late time stands less any
+  // approved offset) or Late excused (no lateness counted that day: the record becomes an exception).
+  const value = z.object({ status: z.enum(['approved', 'rejected']), outcome: z.enum(['confirmed', 'excused']).default('confirmed'), approvedOffset: z.number().int().min(0).max(1440), note }).strict().parse(input);
   return store.transaction(() => {
     const row = store.db.prepare('SELECT data FROM attendance_explanations WHERE id=?').get(id);
     if (!row) throw new AppError('Explanation not found.', 404);
@@ -318,15 +321,16 @@ export function reviewExplanation(store, actor, id, input) {
     // HR may approve any offset (up to a day), also when the employee asked for none.
     const state = store.read(), record = state.attendance.find(a => a.employeeId === before.employeeId && a.date === before.date);
     if (state.runs.some(r => r.start <= before.date && r.end >= before.date && r.rows.some(a => a.employeeId === before.employeeId))) throw new AppError('Attendance belongs to posted payroll; use a later authorized adjustment.');
-    const after = { ...before, ...value, approvedOffset: value.status === 'approved' ? value.approvedOffset : 0, reviewedBy: actor.username, reviewedAt: new Date().toISOString() };
+    const excused = value.status === 'approved' && value.outcome === 'excused';
+    const after = { ...before, ...value, outcome: value.status === 'approved' ? value.outcome : '', approvedOffset: value.status === 'approved' && !excused ? value.approvedOffset : 0, reviewedBy: actor.username, reviewedAt: new Date().toISOString() };
     if (record && after.status === 'approved') {
-      const previous = structuredClone(record); record.offsetMinutes = after.approvedOffset; record.explanation = after.explanation; record.approved = false;
+      const previous = structuredClone(record); record.offsetMinutes = after.approvedOffset; record.explanation = after.explanation; record.approved = false; if (excused) record.exception = true;
       const correction = { reason: value.note, correctedBy: actor.username, approver: actor.username, at: after.reviewedAt, before: previous, after: record };
       store.db.prepare('INSERT INTO attendance_corrections VALUES(?,?,?,?)').run(randomUUID(), before.employeeId, record.id, JSON.stringify(correction));
       state.version++; store.write(state); store.log(actor, 'explanation-offset', 'attendance', record.id, previous, { ...record, correction });
     }
     store.db.prepare('UPDATE attendance_explanations SET data=? WHERE id=?').run(JSON.stringify(after), id);
-    store.notify(before.employeeId, `Your attendance explanation for ${before.date} was ${after.status}.`);
+    store.notify(before.employeeId, `Your attendance explanation for ${before.date}: ${after.status === 'rejected' ? 'not accepted' : excused ? 'Late excused (no lateness counted)' : `Late confirmed${after.approvedOffset ? ` (offset ${after.approvedOffset} min)` : ''}`}.`);
     store.log(actor, 'review', 'explanations', id, before, after); return after;
   });
 }
@@ -537,7 +541,7 @@ export function employeeClockEvents(store, actor, employeeId, month) {
   if (!/^\d{4}-\d{2}$/.test(String(month || ''))) throw new AppError('Choose a month.');
   // One employee, or everyone when no employee is chosen (Attendance -> Time in / out records).
   const events = (employeeId ? store.db.prepare('SELECT data FROM clock_events WHERE employee_id=? AND work_date LIKE ? ORDER BY rowid DESC').all(String(employeeId), `${month}-%`) : store.db.prepare('SELECT data FROM clock_events WHERE work_date LIKE ? ORDER BY rowid DESC LIMIT 5000').all(`${month}-%`)).map(r => JSON.parse(r.data));
-  return withPlace(store, events).map(e => { const review = e.outOfOffice ? outOfOfficeReview(store, e.id) : null; return review ? { ...e, earlierDecision: review } : e; });
+  return withFlagState(store, withPlace(store, events)).map(e => { const review = e.outOfOffice ? outOfOfficeReview(store, e.id) : null; return review ? { ...e, earlierDecision: review } : e; });
 }
 
 // Attendance → Explanations (HR / Admin): late arrivals still waiting for an explanation and every explanation.

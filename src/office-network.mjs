@@ -2,6 +2,7 @@
 // internet (public IP) address: every device on the office Wi-Fi reaches the HR site from that address. Admins add
 // the address while connected to the office Wi-Fi ("Add this network"). With no address saved, the check is off.
 import { z } from 'zod';
+import { suggestedOfficeAddresses } from './clock-flags.mjs';
 import { AppError, permit } from './service.mjs';
 
 const ensure = store => store.db.exec('CREATE TABLE IF NOT EXISTS office_networks(ip TEXT PRIMARY KEY, label TEXT NOT NULL, added_by TEXT NOT NULL, added_at TEXT NOT NULL)');
@@ -25,7 +26,7 @@ export function networkStatus(store, ip) {
   const list = officeNetworks(store), address = clean(ip);
   return { configured: list.length > 0, office: list.some(n => n.ip === address) };
 }
-const changeSchema = z.object({ action: z.enum(['add-current', 'remove']), ip: z.string().trim().max(64).default(''), label: z.string().trim().max(80).default('') }).strict();
+const changeSchema = z.object({ action: z.enum(['add-current', 'add-suggested', 'remove']), ip: z.string().trim().max(64).default(''), label: z.string().trim().max(80).default('') }).strict();
 export function changeOfficeNetworks(store, actor, input, currentIp) {
   permit(actor, ['admin', 'hr']);
   const v = changeSchema.parse(input);
@@ -37,6 +38,11 @@ export function changeOfficeNetworks(store, actor, input, currentIp) {
       if (/^(127\.|::1$|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) throw new AppError('Open the HR site through its public address (hr.blkstone.site) while on the office Wi-Fi, then add the network.');
       store.db.prepare('INSERT INTO office_networks(ip,label,added_by,added_at) VALUES(?,?,?,?) ON CONFLICT(ip) DO UPDATE SET label=excluded.label').run(ip, v.label || 'Office Wi-Fi', actor.username, new Date().toISOString());
       store.log(actor, 'add', 'office-network', ip, null, { label: v.label || 'Office Wi-Fi' });
+    } else if (v.action === 'add-suggested') {
+      // Only an address the office punches suggest (GPS inside the office area, several employees).
+      if (!suggestedOfficeAddresses(store, actor).some(s => s.ip === v.ip)) throw new AppError('That address is not among the suggested office addresses.');
+      store.db.prepare('INSERT INTO office_networks(ip,label,added_by,added_at) VALUES(?,?,?,?) ON CONFLICT(ip) DO UPDATE SET label=excluded.label').run(v.ip, v.label || 'Office Wi-Fi (second line)', actor.username, new Date().toISOString());
+      store.log(actor, 'add', 'office-network', v.ip, null, { label: v.label || 'Office Wi-Fi (second line)', suggested: true });
     } else {
       store.db.prepare('DELETE FROM office_networks WHERE ip=?').run(v.ip);
       store.log(actor, 'remove', 'office-network', v.ip, null, null);

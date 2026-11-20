@@ -1944,3 +1944,4 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .pr-decide select, .pr-decide input { font-size: 12px; padding: 6px 8px; }
 .pr-decide input { flex: 1; min-width: 160px; }
 .pr-review .wrap { white-space: normal; min-width: 200px; }
+.cr-resolved { display: block; color: #2f6b3a; margin-top: 4px; }

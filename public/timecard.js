@@ -60,17 +60,28 @@ export function createTimecard(ctx) {
       const deducted = round(amount('deductions', c => ['undertime', 'absence'].includes(c)) + lateCut);
       const earned = round(trace.filter(t => t.side === 'earnings' && t.amount > 0).reduce((s, t) => s + t.amount, 0));   // overtime, premiums, night differential
       const undertime = trace.find(t => t.component === 'undertime');
-      const blocker = run.blockers.find(b => b.startsWith(`${employee.id} `) && b.includes(date));
+      // Same day treatment as the monthly sheet: work-from-home 'present without time in', unworked holidays and an
+      // open time in are not 'missing'; payroll review items give the specific issue of the day.
+      const todayLocal = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+      const profile = (state.employeeProfiles || []).find(p => p.employeeId === employee.id && p.section === 'attendance');
+      const wfh = !rest && date <= todayLocal && (profile?.daySchedules || []).some(x => x.day === weekday && x.autoPresent);
+      const openIn = (state.openClockIns || []).find(c => c.employeeId === employee.id && c.workDate === date);
+      const item = (run.reviewItems || []).find(i => i.employeeId === employee.id && i.date === date);
+      const blocker = item ? `${item.issueLabel}: ${item.detail}` : run.blockers.find(b => b.startsWith(`${employee.id} `) && b.includes(date));
       let status, tone = 'neutral';
       if (!employed) status = 'Not employed';
       else if (leave) { status = `${leave.status === 'approved' ? 'Leave' : 'Leave (pending)'} · ${state.leaveTypes.find(t => t.id === leave.typeId)?.name || leave.typeId}`; tone = leave.status === 'approved' ? '' : 'pending'; }
       else if (record) { status = STATUS[record.status] || record.status; tone = record.status === 'absent' ? 'rejected' : record.status === 'present' ? '' : 'neutral'; }
+      else if (openIn) { status = `Time in ${openIn.time} · no time out yet`; tone = 'pending'; }
       else if (rest) status = 'Rest day';
+      else if (wfh) status = 'Present · work from home (no time in needed)';
+      else if (holiday) status = `Holiday · ${holiday.name}`;
+      else if (date > todayLocal) status = 'Upcoming';
       else { status = 'Missing record'; tone = 'rejected'; }
-      if (holiday && employed) status += ` · ${holiday.name}`;
+      if (holiday && employed && !status.startsWith('Holiday')) status += ` · ${holiday.name}`;
       const breaks = record?.breaks?.reduce((s, b) => s + Math.max(0, minutesBetween(b.start.slice(11, 16), b.end.slice(11, 16))), 0) || 0;
       return {
-        date, record, blocker, missing: employed && !record && !leave && !rest,
+        date, record, blocker, missing: employed && !record && !leave && !rest && !wfh && !holiday && !openIn && date <= todayLocal,
         cells: [
           `<strong>${WEEKDAYS[weekday]} ${esc(date.slice(5))}</strong>`,
           `<span class="tc-pill tc-${tone || 'ok'}">${esc(status)}</span>` + (blocker && !blocker.includes('Missing') ? `<small class="timecard-flag">${esc(blocker.replace(`${employee.id} ${employee.name}: `, ''))}</small>` : ''),

@@ -13,6 +13,7 @@ import { dayStatuses } from './attendance-days.mjs';
 import { refreshCases, endOfDayCheck, listCases, myCases, setTreatment, decideOverpayment } from './attendance-cases.mjs';
 import { sendDailyReminders } from './memo-tracking.mjs';
 import { recordPayrollDecision } from './attendance-validation.mjs';
+import { resolveClockFlag, suggestedOfficeAddresses } from './clock-flags.mjs';
 import { requestSalaryChange, decideSalaryChange, salaryHistory, applyDueSalaryChanges } from './salary-changes.mjs';
 import { dpReminderLines } from './discipline-service.mjs';
 import { savePayrollInput, deletePayrollInput } from './payroll-inputs.mjs';
@@ -406,6 +407,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
+      if (pathname === '/api/office-networks/suggestions' && req.method === 'GET') { send(200, suggestedOfficeAddresses(store, auth.user)); return; }
+      { const m = pathname.match(/^\/api\/clock\/([A-Za-z0-9-]+)\/resolve-flag$/); if (m && req.method === 'POST') { send(200, resolveClockFlag(store, auth.user, m[1], await readBody(req))); return; } }
       if (pathname === '/api/office-networks' && req.method === 'GET') { permit(auth.user, ['admin', 'hr']); send(200, { networks: officeNetworks(store), current: visitorIp.replace(/^::ffff:/, '') }); return; }
       if (pathname === '/api/office-networks' && req.method === 'POST') { send(200, changeOfficeNetworks(store, auth.user, await readBody(req), visitorIp)); return; }
       const loanSkips = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/skips$/);
