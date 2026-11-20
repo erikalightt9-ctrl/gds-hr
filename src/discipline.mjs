@@ -24,6 +24,10 @@ export function ensure(store) {
     CREATE TABLE IF NOT EXISTS dp_files (id TEXT PRIMARY KEY, case_id TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, content BLOB NOT NULL);
     CREATE TABLE IF NOT EXISTS dp_actions (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL);`);
 }
+// Each case is limited to its named participants (Nov 20, 2026): the person who opened it and the HR / management
+// people named on it; Administrators always. Cases opened before this keep the role-based access.
+export const canSeeCase = (c, actor) => actor.role === 'admin' || !Array.isArray(c.participants) || c.participants.includes(actor.username);
+export function assertParticipant(c, actor) { if (actor.role !== 'employee' && !canSeeCase(c, actor)) throw new AppError('Case not found.', 404); }
 export function readCase(store, id) { ensure(store); const row = store.db.prepare('SELECT data FROM dp_cases WHERE id=?').get(id); if (!row) throw new AppError('Case not found.', 404); return JSON.parse(row.data); }
 const writeCase = (store, c) => store.db.prepare('INSERT INTO dp_cases VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(c.id, c.employeeId, JSON.stringify(c));
 export const allCases = store => { ensure(store); return store.db.prepare('SELECT data FROM dp_cases ORDER BY rowid DESC').all().map(r => JSON.parse(r.data)); };
@@ -38,6 +42,7 @@ function nextReference(store, prefix = 'DP') {
 function change(store, actor, id, action, fn, detail = '') {
   return store.transaction(() => {
     const before = readCase(store, id), now = new Date().toISOString();
+    assertParticipant(before, actor);
     const updated = fn(before, now);
     const after = { ...updated, updatedAt: now, history: [...before.history, { at: now, by: actor.username, action, detail }] };
     writeCase(store, after);
@@ -66,13 +71,15 @@ function incidentFrom(store, input) {
 }
 export function createCase(store, actor, input) {
   permit(actor, MANAGE);
-  const incident = incidentFrom(store, input);
+  const { participants: named = [], ...rest } = input || {};
+  const incident = incidentFrom(store, rest);
+  const participants = [...new Set([actor.username, ...(Array.isArray(named) ? named : []).map(String).filter(u => /^[A-Za-z0-9_.@-]{3,80}$/.test(u))])];
   ensure(store);
   return store.transaction(() => {
     const e = store.read().employees.find(x => x.id === incident.employeeId);
     if (!e) throw new AppError('Employee not found.', 404);
     const job = profileOf(store, e.id, 'employment'), now = new Date().toISOString();
-    const c = { id: randomUUID(), reference: nextReference(store), employeeId: e.id, employee: { name: e.name, number: displayNumber(e), department: e.department || '', position: job.position || '' }, status: 'pending', incident, nte: null, explanation: null, hearing: null, evaluation: null, decision: null, closure: null, files: [], notes: [], createdAt: now, createdBy: actor.username, updatedAt: now, history: [{ at: now, by: actor.username, action: 'create', detail: 'Incident documented' }] };
+    const c = { id: randomUUID(), reference: nextReference(store), participants, employeeId: e.id, employee: { name: e.name, number: displayNumber(e), department: e.department || '', position: job.position || '' }, status: 'pending', incident, nte: null, explanation: null, hearing: null, evaluation: null, decision: null, closure: null, files: [], notes: [], createdAt: now, createdBy: actor.username, updatedAt: now, history: [{ at: now, by: actor.username, action: 'create', detail: 'Incident documented' }] };
     writeCase(store, c);
     store.log(actor, 'create', 'discipline', c.id, null, { reference: c.reference, status: c.status, employeeId: e.id });
     return c;
@@ -240,6 +247,7 @@ export function closeCase(store, actor, id, input) {
   const { remarks } = z.object({ remarks: z.string().trim().max(4000).default('') }).strict().parse(input);
   return store.transaction(() => {
     const c = readCase(store, id);
+    assertParticipant(c, actor);
     if (c.status === 'closed') throw new AppError('This case is already closed.');
     if (c.nte?.issuedAt && !c.decision?.issuedAt) throw new AppError('Issue the decision before closing (it may be "No disciplinary action").');
     if (c.review?.requestedAt && !c.review.issuedAt) throw new AppError('The employee asked for a review of the decision. Issue the Review / Appeal Outcome before closing.');
@@ -256,4 +264,17 @@ export function closeCase(store, actor, id, input) {
     store.log(actor, 'close', 'discipline', id, { reference: c.reference, status: c.status }, { reference: c.reference, status: 'closed', outcome, employeeId: c.employeeId });
     return after;
   });
+}
+
+// Admin or the person who opened the case names who may work on it (HR handlers, the decision approvers).
+export function setParticipants(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const { participants } = z.object({ participants: z.array(z.string().regex(/^[A-Za-z0-9_.@-]{3,80}$/)).min(1).max(20) }).strict().parse(input);
+  return change(store, actor, id, 'set-participants', c => {
+    if (actor.role !== 'admin' && (c.participants || [])[0] !== actor.username) throw new AppError('Only an Administrator or the person who opened the case can change who may see it.');
+    const known = new Set(store.db.prepare("SELECT username FROM users WHERE role IN ('admin','hr','viewer') AND (disabled IS NULL OR disabled=0)").all().map(r => r.username));
+    const unknown = participants.filter(u => !known.has(u));
+    if (unknown.length) throw new AppError(`Not an HR, Management or Admin account: ${unknown.join(', ')}.`);
+    return { ...c, participants: [...new Set([...(c.participants || []).slice(0, 1), ...participants])] };
+  }, participants.join(', '));
 }

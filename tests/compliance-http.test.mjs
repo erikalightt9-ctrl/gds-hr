@@ -36,7 +36,7 @@ test('HTTP: due process case from incident to closure, with the employee portal 
   assert.equal((await staff('/discipline/cases')).status, 403);
   assert.equal((await emp('/discipline/cases')).status, 403);
   assert.equal((await hr('/discipline/options')).json.minResponseDays, 5);
-  const created = await hr('/discipline/cases', { employeeId: 'EMP-001', date: localToday(), offenseId: 'policy', description: 'Left the office without logging out the shared terminal.', issuingOfficer: 'HR Manager' });
+  const created = await hr('/discipline/cases', { participants: ['boss'], employeeId: 'EMP-001', date: localToday(), offenseId: 'policy', description: 'Left the office without logging out the shared terminal.', issuingOfficer: 'HR Manager' });
   assert.equal(created.status, 201);
   const id = created.json.id, step = (action, body = {}, who = hr) => who(`/discipline/cases/${id}/${action}`, body);
   assert.equal((await step('files', { name: 'log.pdf', mime: 'application/pdf', data: PDF })).status, 200);

@@ -4,14 +4,14 @@ import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
 import { localToday } from './profiles.mjs';
 import { readDpSettings, fillTemplate, SANCTIONS, TEMPLATE_TITLES } from './discipline-settings.mjs';
-import { VIEW, MANAGE, STATUS, ensure, readCase, allCases, storeFile, templateVars, longDate } from './discipline.mjs';
+import { VIEW, MANAGE, STATUS, ensure, readCase, allCases, storeFile, templateVars, longDate, canSeeCase, assertParticipant } from './discipline.mjs';
 import { NTE_ACK_WORDING, NOTICE_ACK_WORDING, withReceiptDeadline, markViewed, reviewDeadline, dpRequestBell, finalSanction } from './discipline-service.mjs';
 
 const summary = c => ({ id: c.id, reference: c.reference, employeeId: c.employeeId, employeeName: c.employee.name, employeeNumber: c.employee.number, department: c.employee.department, position: c.employee.position, incidentDate: c.incident.date, offense: c.incident.offense, severity: c.incident.severity, status: c.status, statusLabel: STATUS[c.status], deadline: c.nte?.deadline || '', decisionStatus: c.decision?.status || '', sanction: c.decision?.sanction || '', outcome: c.closure?.outcome || '', issuingOfficer: c.incident.issuingOfficer, createdAt: c.createdAt, updatedAt: c.updatedAt });
 export function listCases(store, actor, filters = {}) {
   permit(actor, VIEW);
   const q = String(filters.q || '').toLowerCase().slice(0, 100);
-  return allCases(store).map(summary).filter(c => (!filters.status || c.status === filters.status) && (!filters.employeeId || c.employeeId === filters.employeeId) && (!q || JSON.stringify(c).toLowerCase().includes(q)));
+  return allCases(store).filter(c => canSeeCase(c, actor)).map(summary).filter(c => (!filters.status || c.status === filters.status) && (!filters.employeeId || c.employeeId === filters.employeeId) && (!q || JSON.stringify(c).toLowerCase().includes(q)));
 }
 export function records(store, employeeId = null) {
   ensure(store);
@@ -54,6 +54,7 @@ function nextStep(c) {
 export function caseDetail(store, actor, id) {
   permit(actor, VIEW);
   const c = readCase(store, id), settings = readDpSettings(store), prior = records(store, c.employeeId).filter(r => r.caseId !== c.id);
+  assertParticipant(c, actor);
   const mayApprove = settings.approverRoles.includes(actor.role) && (!settings.separateApprover || ![c.decision?.draftedBy, c.decision?.submittedBy].includes(actor.username));
   return { ...c, statusLabel: STATUS[c.status], nextStep: nextStep(c), prior, sameOffense: prior.filter(r => r.offense === c.incident.offense).length, canManage: MANAGE.includes(actor.role), canApprove: mayApprove && c.decision?.status === 'for-approval', approverRoles: settings.approverRoles, separateApprover: settings.separateApprover, minResponseDays: settings.minResponseDays, deadlinePassed: !!c.nte?.deadline && localToday() > c.nte.deadline };
 }
@@ -123,14 +124,14 @@ export function caseFile(store, actor, fileId) {
   const row = store.db.prepare('SELECT * FROM dp_files WHERE id=?').get(fileId);
   if (!row) throw new AppError('File not found.', 404);
   const c = readCase(store, row.case_id), meta = c.files.find(f => f.id === fileId);
-  if (actor.role === 'employee') { if (c.employeeId !== actor.employeeId || !meta?.byEmployee) throw new AppError('File not found.', 404); } else permit(actor, VIEW);
+  if (actor.role === 'employee') { if (c.employeeId !== actor.employeeId || !meta?.byEmployee) throw new AppError('File not found.', 404); } else { permit(actor, VIEW); assertParticipant(c, actor); }
   store.log(actor, 'view-file', 'discipline', c.id, null, { reference: c.reference, file: row.name });
   return row;
 }
 // Bell items for HR and the decision approvers.
 export function disciplineBell(store, actor) {
   if (!VIEW.includes(actor.role)) return [];
-  const settings = readDpSettings(store), today = localToday(), items = [...dpRequestBell(store, actor)], cases = allCases(store);
+  const settings = readDpSettings(store), today = localToday(), items = [...dpRequestBell(store, actor)], cases = allCases(store).filter(c => canSeeCase(c, actor));
   if (MANAGE.includes(actor.role)) {
     for (const c of cases.filter(x => x.status === 'evaluation' && x.explanation && !x.explanation.none && !x.evaluation)) items.push({ text: `${c.employee.name}: written explanation received for ${c.reference}${c.explanation.hearingRequested ? ' (hearing requested)' : ''}`, nav: 'discipline', id: c.id, date: c.explanation.submittedAt.slice(0, 10) });
     for (const c of cases.filter(x => x.status === 'awaiting' && today > x.nte.deadline)) items.push({ text: `${c.employee.name}: no explanation by ${longDate(c.nte.deadline)} for ${c.reference}`, nav: 'discipline', id: c.id, date: c.nte.deadline });

@@ -70,7 +70,7 @@ export function casePdf(store, actor, id, kind) {
   if (actor.role === 'employee') {
     const issued = { nte: c.nte?.issuedAt, hearing: c.hearing?.noticeIssuedAt, decision: c.decision?.issuedAt, review: c.review?.issuedAt, explanation: c.explanation?.submittedAt }[kind];
     if (c.employeeId !== actor.employeeId || !issued) throw new AppError('Document not found.', 404);
-  } else permit(actor, VIEW);
+  } else { permit(actor, VIEW); if (actor.role !== 'admin' && Array.isArray(c.participants) && !c.participants.includes(actor.username)) throw new AppError('Document not found.', 404); }
   const to = `${c.employee.name} (${c.employee.number})${c.employee.position ? `, ${c.employee.position}` : ''}${c.employee.department ? `, ${c.employee.department}` : ''}`;
   const from = c.incident.issuingOfficer, settings = readDpSettings(store), sign = [from, 'Issuing officer', 'GDS CAPITAL INC.'];
   let doc;

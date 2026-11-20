@@ -3,7 +3,7 @@ import { AppError } from './service.mjs';
 import { month1601c, year1601c, saveRow, saveReturn, fileReturn, reopenReturn } from './bir1601c.mjs';
 import { export1601c } from './bir1601c-export.mjs';
 import { listLibrary, uploadReport, uploadVersion, updateReportInfo, downloadReport } from './report-library.mjs';
-import { createCase, updateIncident, addFile, addNote, saveNte, issueNte, toEvaluation, scheduleHearing, recordHearing, saveEvaluation, draftDecision, submitDecision, reviewDecision, issueDecision, closeCase } from './discipline.mjs';
+import { setParticipants, createCase, updateIncident, addFile, addNote, saveNte, issueNte, toEvaluation, scheduleHearing, recordHearing, saveEvaluation, draftDecision, submitDecision, reviewDecision, issueDecision, closeCase } from './discipline.mjs';
 import { listCases, caseDetail, dpOptions, listRecords, recordPriorAction, myCases, acknowledgeNotice, submitExplanation, caseFile } from './discipline-views.mjs';
 import { readDpSettings, saveDpSettings } from './discipline-settings.mjs';
 import { recordService, requestExtension, decideExtension, requestReview, recordReviewOutcome } from './discipline-service.mjs';
@@ -14,7 +14,7 @@ const BIG = 28_500_000;
 const attachment = (name, type, inline = false) => ({ 'Content-Type': type, 'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="download"; filename*=UTF-8''${encodeURIComponent(name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
 const CASE_ACTIONS = {
   incident: updateIncident, files: addFile, notes: addNote, nte: saveNte, 'issue-nte': (s, a, id) => issueNte(s, a, id), 'no-explanation': toEvaluation, hearing: scheduleHearing, 'hearing-record': recordHearing,
-  evaluation: saveEvaluation, decision: draftDecision, 'submit-decision': (s, a, id) => submitDecision(s, a, id), 'review-decision': reviewDecision, 'issue-decision': (s, a, id) => issueDecision(s, a, id), close: closeCase, service: recordService, extension: decideExtension, 'review-outcome': recordReviewOutcome,
+  evaluation: saveEvaluation, decision: draftDecision, 'submit-decision': (s, a, id) => submitDecision(s, a, id), 'review-decision': reviewDecision, 'issue-decision': (s, a, id) => issueDecision(s, a, id), close: closeCase, participants: setParticipants, service: recordService, extension: decideExtension, 'review-outcome': recordReviewOutcome,
 };
 
 export async function handleComplianceRoutes({ req, res, pathname, url, auth, store, send, readBody }) {

@@ -159,7 +159,7 @@ export function dpReminderLines(store, employeeId) {
 export function dpRequestBell(store, actor) {
   if (!MANAGE.includes(actor.role)) return [];
   const items = [];
-  for (const c of allCases(store)) {
+  for (const c of allCases(store).filter(x => actor.role === 'admin' || !Array.isArray(x.participants) || x.participants.includes(actor.username))) {
     for (const r of (c.nte?.extensionRequests || []).filter(x => x.status === 'pending')) items.push({ text: `${c.employee.name}: asks for more time to answer ${c.nte.reference} (until ${longDate(r.until)})`, nav: 'discipline', id: c.id, date: r.at.slice(0, 10) });
     if (c.review?.requestedAt && !c.review.issuedAt) items.push({ text: `${c.employee.name}: review of the decision asked for (${c.reference})`, nav: 'discipline', id: c.id, date: c.review.requestedAt.slice(0, 10) });
   }

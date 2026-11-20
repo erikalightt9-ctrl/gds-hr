@@ -76,7 +76,7 @@ export function createDisciplinePage(ctx) {
     };
   }
   function newCase() {
-    caseView.incidentForm(null, async value => { const c = await api('/discipline/cases', value); toast(`Case ${c.reference} opened.`); dialog.close(); await render(c.id); });
+    caseView.incidentForm(null, async ({ evidenceFiles = [], ...value }) => { const c = await api('/discipline/cases', value); for (const f of evidenceFiles) await api(`/discipline/cases/${c.id}/files`, f); toast(`Case ${c.reference} opened${evidenceFiles.length ? ` with ${evidenceFiles.length} evidence file${evidenceFiles.length === 1 ? '' : 's'}` : ''}.`); dialog.close(); await render(c.id); });
   }
   function priorAction() {
     openDialog('Record an earlier disciplinary action', `<form id="dp-prior"><div class="dialog-body"><div id="dp-prior-error" class="form-error hidden" role="alert"></div><p class="sub">For actions taken before the system (paper memos in the 201 folder). New actions are recorded by closing a case.</p><div class="form-grid">

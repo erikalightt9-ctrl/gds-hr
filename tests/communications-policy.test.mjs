@@ -83,7 +83,7 @@ test('due process: response period from documented receipt, extensions with reas
   const store = fixture();
   try {
     const today = localToday();
-    const c = createCase(store, hr, { employeeId: 'EMP-001', date: today, time: '09:30', place: 'Main office', offenseId: 'insubordination', description: 'Refused a lawful instruction from the supervisor twice.', reportedBy: 'Supervisor', witnesses: '', issuingOfficer: 'HR Manager' });
+    const c = createCase(store, hr, { participants: ['boss'], employeeId: 'EMP-001', date: today, time: '09:30', place: 'Main office', offenseId: 'insubordination', description: 'Refused a lawful instruction from the supervisor twice.', reportedBy: 'Supervisor', witnesses: '', issuingOfficer: 'HR Manager' });
     saveNte(store, hr, c.id, { allegations: 'On the date above you refused to complete the assigned report after two instructions.', rules: 'Code of Conduct section 4.2', possibleSanction: 'Written warning', responseDays: 5 });
     issueNte(store, hr, c.id);
     assert.deepEqual(dpReminderLines(store, 'EMP-001').map(l => /Pending Acknowledgment|Explanation Required/.exec(l)?.[0]), ['Pending Acknowledgment', 'Explanation Required'], 'receipt and explanation tracked separately');

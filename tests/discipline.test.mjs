@@ -22,7 +22,7 @@ const incident = { employeeId: 'EMP-001', date: localToday(), time: '09:30', pla
 const nte = { allegations: 'On the date above you refused to complete the assigned report after two instructions.', rules: 'Code of Conduct section 4.2', possibleSanction: 'Written warning', responseDays: 5 };
 // Moves a fresh case to "For Evaluation" through the employee's own explanation.
 function explained(store, hearingRequested = false) {
-  const c = createCase(store, hr, incident); saveNte(store, hr, c.id, nte); issueNte(store, hr, c.id);
+  const c = createCase(store, hr, { ...incident, participants: ['boss'] }); saveNte(store, hr, c.id, nte); issueNte(store, hr, c.id);
   submitExplanation(store, worker, c.id, { text: 'I was finishing an urgent task for the client and asked for one more hour.', hearingRequested, files: [{ name: 'proof.pdf', mime: 'application/pdf', data: PDF }] });
   return c.id;
 }
@@ -30,7 +30,7 @@ function explained(store, hearingRequested = false) {
 test('due process: the seven steps in order, management approval before issue, record kept on closure, audited', () => {
   const store = fixture();
   try {
-    const c = createCase(store, hr, incident);
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] });
     assert.equal(c.status, 'pending'); assert.match(c.reference, /^DP-\d{4}-0001$/);
     addFile(store, hr, c.id, { name: 'cctv.pdf', mime: 'application/pdf', data: PDF, kind: 'evidence' });
     assert.throws(() => issueNte(store, hr, c.id), /Prepare the Notice to Explain/);
@@ -104,7 +104,7 @@ test('due process: access is limited to HR managers and management; employees re
 test('due process: no explanation by the deadline, dismissal needs a hearing (setting), closing without a notice needs a reason', () => {
   const store = fixture();
   try {
-    const c = createCase(store, hr, incident); saveNte(store, hr, c.id, { ...nte, possibleSanction: 'Dismissal' }); issueNte(store, hr, c.id);
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] }); saveNte(store, hr, c.id, { ...nte, possibleSanction: 'Dismissal' }); issueNte(store, hr, c.id);
     // Pretend the deadline passed.
     const row = readCase(store, c.id);
     store.db.prepare('UPDATE dp_cases SET data=? WHERE id=?').run(JSON.stringify({ ...row, nte: { ...row.nte, deadline: addDays(localToday(), -1) } }), c.id);
@@ -119,7 +119,7 @@ test('due process: no explanation by the deadline, dismissal needs a hearing (se
     recordHearing(store, hr, c.id, { outcome: 'waived', minutes: 'Employee waived the hearing in writing on the NTE copy.' });
     draftDecision(store, hr, c.id, { sanction: 'Dismissal', effectiveFrom: localToday(), findings: 'Serious misconduct proven.' });
     assert.equal(myCases(store, worker)[0].canExplain, false);
-    const fresh = createCase(store, hr, incident);
+    const fresh = createCase(store, hr, { ...incident, participants: ['boss'] });
     assert.throws(() => closeCase(store, hr, fresh.id, {}), /Explain why/);
     assert.equal(closeCase(store, hr, fresh.id, { remarks: 'Report withdrawn by the supervisor after review.' }).closure.outcome, 'Closed without action');
     assert.equal(listRecords(store, hr).length, 0, 'no disciplinary record without a decision');
@@ -134,7 +134,7 @@ test('due process settings: minimum five days, approver roles configurable (admi
     assert.throws(() => saveDpSettings(store, hr, s), /permission/);
     assert.throws(() => saveDpSettings(store, admin, { ...s, minResponseDays: 3 }), /five \(5\) calendar days/);
     saveDpSettings(store, admin, { ...s, approverRoles: ['hr'], separateApprover: false, minResponseDays: 7 });
-    const c = createCase(store, hr, incident);
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] });
     assert.throws(() => saveNte(store, hr, c.id, nte), /at least 7/);
     saveNte(store, hr, c.id, { ...nte, responseDays: 7 }); issueNte(store, hr, c.id);
     submitExplanation(store, worker, c.id, { text: 'I accept the finding and will follow the instruction next time.', files: [] });
@@ -146,5 +146,18 @@ test('due process settings: minimum five days, approver roles configurable (admi
     recordPriorAction(store, hr, { employeeId: 'EMP-001', type: 'Written warning', date: '2025-03-01', offense: 'Habitual tardiness', reference: 'MEMO-2025-014', remarks: 'Paper memo in the 201 folder' });
     assert.equal(caseDetail(store, hr, c.id).prior.length, 1);
     assert.equal(buildReport(store, hr, 'discipline-records', 'xlsx').body.subarray(0, 2).toString(), 'PK');
+  } finally { store.close(); }
+});
+
+test('due process: each case is limited to its named participants (Admin always)', () => {
+  const store = fixture();
+  try {
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] });
+    const otherHr = { username: 'hr2', role: 'hr' };
+    assert.ok(listCases(store, hr).some(x => x.id === c.id) && listCases(store, boss).some(x => x.id === c.id));
+    assert.ok(!listCases(store, otherHr).some(x => x.id === c.id), 'not named: not listed');
+    assert.throws(() => caseDetail(store, otherHr, c.id), /not found/);
+    assert.throws(() => saveNte(store, otherHr, c.id, nte), /not found/);
+    assert.ok(caseDetail(store, admin, c.id), 'Admin always');
   } finally { store.close(); }
 });
