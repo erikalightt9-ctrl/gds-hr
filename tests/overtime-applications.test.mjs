@@ -36,7 +36,7 @@ test('the employee edits or cancels a pending application; decided ones are lock
     assert.match(edited.history[1].note, /was 2026-09-01 17:00–19:00, 2 h/);
     assert.throws(() => editOvertime(store, { ...worker, employeeId: 'EMP-002' }, o.id, { date: day, startTime: '17:00', endTime: '18:00', reason: 'Not mine (demo)' }), /not found/);
     assert.throws(() => decideOvertime(store, hr, o.id, { decision: 'approve', hours: 2 }), /reason for approving 2 h instead of the 2.75 h/);
-    const approved = decideOvertime(store, hr, o.id, { decision: 'approve', hours: 2, adjustReason: 'Review was not authorised (demo)', remarks: 'Thanks' });
+    const approved = decideOvertime(store, hr, o.id, { decision: 'approve', hours: 2, adjustReason: 'Review was not authorised (demo)', overrideReason: 'Attendance does not yet show these hours (demo)', remarks: 'Thanks' });
     assert.equal(approved.approvedHours, 2); assert.equal(approved.adjustReason, 'Review was not authorised (demo)');
     assert.equal(approved.history.at(-1).action, 'approved');
     assert.throws(() => editOvertime(store, worker, o.id, { date: day, startTime: '17:00', endTime: '18:00', reason: 'Too late (demo)' }), /Only pending/);
@@ -67,8 +67,8 @@ test('approved overtime the attendance does not support is flagged before postin
   const store = fixture(s => { leaveAt('19:00')(s); s.attendance = s.attendance.filter(a => a.date !== '2026-09-02'); });
   try {
     const short = fileOvertime(store, worker, { date: day, startTime: '18:00', endTime: '21:00', reason: 'Event (demo)' });
-    decideOvertime(store, hr, short.id, { decision: 'approve' });
-    const missing = fileOvertime(store, hr, { employeeId: 'EMP-001', date: '2026-09-02', startTime: '17:00', endTime: '19:00', reason: 'Recorded by HR (demo)' });
+    decideOvertime(store, hr, short.id, { decision: 'approve', overrideReason: 'Only one hour is on the attendance record (demo)' });
+    const missing = fileOvertime(store, hr, { employeeId: 'EMP-001', date: '2026-09-02', startTime: '17:00', endTime: '19:00', reason: 'Recorded by HR (demo)', overrideReason: 'No attendance recorded yet (demo)' });
     assert.equal(missing.status, 'approved');
     const computed = run(store);
     assert.equal(otHours(computed.rows[0]), 1, 'only 18:00-19:00 was worked inside the approved 18:00-21:00');
@@ -95,7 +95,7 @@ test('HR can waive the unsupported-overtime check for a cutoff: only the support
   const store = fixture(leaveAt('19:00'));
   try {
     const short = fileOvertime(store, worker, { date: day, startTime: '18:00', endTime: '21:00', reason: 'Event (demo)' });
-    decideOvertime(store, hr, short.id, { decision: 'approve' });
+    decideOvertime(store, hr, short.id, { decision: 'approve', overrideReason: 'Only one hour is on the attendance record (demo)' });
     store.db.prepare('INSERT INTO payroll_inputs(employee_id,start,end,data) VALUES(?,?,?,?)').run('EMP-001', '2026-09-01', '2026-09-15', JSON.stringify({ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveOvertimeCheck: true, updatedBy: 'hr1' }));
     const computed = run(store);
     assert.ok(!computed.blockers.some(b => /approved overtime on 2026-09-01/.test(b)), 'waived');

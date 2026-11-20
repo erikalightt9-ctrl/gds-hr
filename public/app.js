@@ -295,7 +295,7 @@ const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(
 // Loaded on first use, so the rest of the app never depends on this file being served.
 let clockRecordsUi = null;
 const loadClockRecords = async () => clockRecordsUi || (clockRecordsUi = (await import('./clock-records-ui.js')).createClockRecordsUi({ api, esc, badge, openDialog, employees: () => state.employees, today }));
-const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh() });
+const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh(), onOpenAttendance: (employeeId, date) => { page = 'attendance'; attendanceView = 'records'; render(); const record = state.attendance.find(a => a.employeeId === employeeId && a.date === date); if (record) edit('attendance', record.id); } });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 const birPage = createBirPage(hrCtx), discipline = createDiscipline(hrCtx), templatesUi = createTemplates(hrCtx);
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);

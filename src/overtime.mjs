@@ -58,7 +58,7 @@ function nightEstimate(state, employee, filing) {
   const hours = filing.status === 'approved' ? approvedNightHours : filing.nightHours;
   return { nightHours: filing.nightHours, approvedNightHours, nightRate: rule.nsd, nightPay: round(hours * hourly * rule.ordinaryOT * rule.nsd) };
 }
-const fileSchema = z.object({ date, startTime: time.optional(), endTime: time.optional(), breakMinutes: z.number().int().min(0).max(480).default(0), hours: z.number().min(0.25).max(16).optional(), reason: z.string().trim().min(3, 'Say what the overtime work was for.').max(1000), documentId: z.string().max(80).default(''), employeeId: z.string().max(80).optional() }).strict();
+const fileSchema = z.object({ date, startTime: time.optional(), endTime: time.optional(), breakMinutes: z.number().int().min(0).max(480).default(0), hours: z.number().min(0.25).max(16).optional(), reason: z.string().trim().min(3, 'Say what the overtime work was for.').max(1000), documentId: z.string().max(80).default(''), employeeId: z.string().max(80).optional(), overrideReason: z.string().trim().max(500).default('') }).strict();
 // Start and end given: hours are the period less unpaid breaks, never typed. Older callers may send hours only.
 function requested(parsed) {
   if (!!parsed.startTime !== !!parsed.endTime) throw new AppError('Enter both the overtime start and end time.');
@@ -99,6 +99,11 @@ export function fileOvertime(store, actor, input) {
     const now = new Date().toISOString();
     const value = { id: randomUUID(), employeeId, date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', breakMinutes: v.breakMinutes, nightHours: v.startTime ? Math.min(v.hours, nightHoursBetween(v.startTime, v.endTime)) : 0, hours: v.hours, reason: v.reason, documentId: self ? v.documentId : '', filedBy: actor.username, filedAt: now, status: self ? 'pending' : 'approved', approvedHours: self ? 0 : v.hours, adjustReason: '', decidedBy: self ? '' : actor.username, decidedAt: self ? '' : now, remarks: self ? '' : 'Recorded by HR', history: [historyEntry(actor, self ? 'submitted' : 'recorded and approved by HR')] };
     assertNoOverlap(store, employeeId, value);
+    if (!self) {
+      const blocks = approvalBlocks(state, employee, value, value.hours);
+      if (blocks.length && v.overrideReason.trim().length < 3) throw new AppError(`${blocks[0]} An override needs a written reason.`);
+      if (blocks.length) Object.assign(value, { overrideReason: v.overrideReason.trim(), overrideBy: actor.username, overrideByName: actor.displayName || actor.username, overrideAt: now });
+    }
     put(store, value);
     store.log(actor, 'file', 'overtime', employeeId, null, value);
     if (self) store.notify(null, `${employee.name} filed ${v.hours} h overtime for ${describe(value)}. Review it in Attendance → Overtime applications.`);
@@ -139,7 +144,7 @@ export function cancelOvertime(store, actor, id) {
     return after;
   });
 }
-const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default('') }).strict();
+const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default(''), overrideReason: z.string().trim().max(500).default('') }).strict();
 export function decideOvertime(store, actor, id, input) {
   permit(actor, HR);
   assertNamedActor(actor, getPolicy(store), 'overtime');
@@ -155,8 +160,11 @@ export function decideOvertime(store, actor, id, input) {
     // Approving other hours than filed is an adjustment and needs its own reason.
     const adjusted = v.decision === 'approve' && hours !== o.hours;
     if (adjusted && v.adjustReason.length < 3) throw new AppError(`Give the reason for approving ${hours} h instead of the ${o.hours} h filed.`);
-    const note = v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks;
-    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
+    const state = store.read(), employee = state.employees.find(e => e.id === o.employeeId);
+    const blocks = v.decision === 'approve' ? approvalBlocks(state, employee, o, hours) : [];
+    if (blocks.length && v.overrideReason.trim().length < 3) throw new AppError(`${blocks[0]} An override needs a written reason.`);
+    const note = v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${blocks.length ? ` · override: ${v.overrideReason.trim()}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks;
+    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(blocks.length ? { overrideReason: v.overrideReason.trim(), overrideBy: actor.username, overrideByName: actor.displayName || actor.username, overrideAt: new Date().toISOString() } : {}), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
     put(store, after); store.log(actor, v.decision, 'overtime', o.employeeId, o, after);
     store.notify(o.employeeId, `Your overtime for ${o.date} was ${v.decision === 'approve' ? `approved (${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''})` : 'not approved'}${v.remarks ? `: ${v.remarks}` : ''}.`);
     return after;
@@ -187,12 +195,22 @@ export function overtimeCheck(state, employee, o, today = localToday()) {
   if (['pending', 'approved'].includes(o.status) && target - workedInPeriod >= OT_BLOCK / 60) flags.push(`Worked ${workedInPeriod} h within the period, ${round(target - workedInPeriod)} h less than ${o.status === 'approved' ? 'approved' : 'filed'}`);
   return { workedInPeriod, payableHours, flags };
 }
+// Approval is blocked when attendance is not approved, payable hours are 0, or payable hours are below the hours being approved.
+export function approvalBlocks(state, employee, filing, hours) {
+  const record = state.attendance.find(a => a.employeeId === filing.employeeId && a.date === filing.date && a.status === 'present');
+  const blocks = [];
+  if (!record?.approved) blocks.push('Attendance for this date is not approved.');
+  const payable = employee ? overtimeCheck(state, employee, { ...filing, status: 'approved', approvedHours: hours }).payableHours : 0;
+  if (!(payable > 0)) blocks.push('Payable hours are 0.');
+  else if (hours - payable > 1e-9) blocks.push(`Payable hours (${payable}) are less than the ${hours} h to approve.`);
+  return blocks;
+}
 // HR / Payroll review list: every application (cancelled ones too, for the history) with attendance compared.
 export function overtimeQueue(store, actor) {
   permit(actor, [...HR, 'payroll']);
   const state = store.read(), people = new Map(state.employees.map(e => [e.id, e]));
   return rowsOf(store).slice(0, 500).map(o => {
     const e = people.get(o.employeeId), record = state.attendance.find(a => a.employeeId === o.employeeId && a.date === o.date);
-    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) };
+    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceId: record?.id || null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) };
   }).sort((a, b) => (a.status === 'pending') === (b.status === 'pending') ? b.date.localeCompare(a.date) : a.status === 'pending' ? -1 : 1);
 }
