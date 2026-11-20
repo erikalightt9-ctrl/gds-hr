@@ -90,6 +90,7 @@ export function createAdmin(ctx) {
       <div class="st-footer"><span>Changes apply across your organization.</span><span><button type="button" data-st-cancel>Cancel</button><button class="primary">Save settings</button></span></div></form>`);
     const form = document.querySelector('#settings-form');
     officeWifi(form);
+    letterheads(form);
     phoneSignIn(form);
     feishuAlerts(form);
     feishuSignIn(form);
@@ -196,6 +197,15 @@ export function createAdmin(ctx) {
     try { draw(await ctx.api('/integrations/feishu-login')); } catch (error) { box.innerHTML = `<div class="panel-body"><p class="muted">Feishu sign-in settings are available after the HR server restarts. (${ctx.esc(error.message)})</p></div>`; }
   }
   // Office Wi-Fi for time in / out: recognised by the office's internet address. Add it while on the office Wi-Fi.
+  // Letterhead per issuing company (memo PDFs): a JPEG uploaded here replaces the built-in image.
+  async function letterheads(form) {
+    if (ctx.context?.()?.roleLabel && !/Administrator|HR Manager/.test(ctx.context().roleLabel)) return;
+    const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-letterheads'; form.before(box);
+    const draw = list => { box.innerHTML = `<div class="st-head"><h2>Company letterheads (memo PDFs)</h2></div><div class="panel-body"><p class="legend">Each issuing company prints its own letterhead at the top of memo PDFs. Upload a JPEG (up to 3 MB, wide banner). Already issued memos keep the PDF they were issued with.</p>
+      <ul class="plain-list">${list.map(l => `<li><strong>${ctx.esc(l.company)}</strong> · ${l.uploaded ? `uploaded by ${ctx.esc(l.uploaded.by)} ${ctx.esc(l.uploaded.at.slice(0, 10))}` : l.builtIn ? 'built-in letterhead' : 'none yet: the company name is printed'} <label class="button small">Upload JPEG<input type="file" accept="image/jpeg" data-letterhead="${ctx.esc(l.company)}" hidden></label></li>`).join('')}</ul></div>`; };
+    box.addEventListener('change', async event => { const input = event.target.closest('[data-letterhead]'); const file = input?.files?.[0]; if (!file) return; try { const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => no(new Error('Unable to read the file.')); r.readAsDataURL(file); }); draw(await ctx.api('/hr/letterheads', { company: input.dataset.letterhead, data })); ctx.toast('Letterhead saved.'); } catch (error) { ctx.toast(error.message); } });
+    try { draw(await ctx.api('/hr/letterheads')); } catch { box.remove(); }
+  }
   async function officeWifi(form) {
     const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-wifi'; form.before(box);
     const draw = d => {

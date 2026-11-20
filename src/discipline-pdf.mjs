@@ -22,11 +22,11 @@ function wrap(text, size, width) {
   return lines;
 }
 export function letterPdf({ title, fields, body, signature = [], receipt = false, draft = false, letterhead = LETTERHEAD, company = '' }) {
-  const image = jpegFile(letterhead), pages = [];
+  const image = letterhead && typeof letterhead === 'object' ? letterhead : jpegFile(letterhead), pages = [];
   let p, y;
   const newPage = () => {
     p = new Page(); pages.push(p); y = H - 40;
-    if (image) { const h = 74, w = h * image.width / image.height; p.image(MARGIN - 12, y - h, w, h); y -= h + 18; } else { p.text('GDS CAPITAL', MARGIN, y - 30, { size: 22, bold: true, color: COLOR.red }); y -= 50; }
+    if (image) { const h = 74, w = h * image.width / image.height; p.image(MARGIN - 12, y - h, w, h); y -= h + 18; } else { p.text(company || 'GDS CAPITAL', MARGIN, y - 30, { size: 22, bold: true, color: COLOR.red }); y -= 50; }
     if (draft) { p.fill(COLOR.red, 0, H - 22, W, 22); p.text('DRAFT - NOT ISSUED', W / 2, H - 15, { size: 10, bold: true, color: COLOR.white, align: 'center' }); }
     p.line(MARGIN, 52, RIGHT, 52, COLOR.gold, 0.8); p.text(MEMO_FOOTER, W / 2, 38, { size: 8.5, color: COLOR.muted, align: 'center' });
   };

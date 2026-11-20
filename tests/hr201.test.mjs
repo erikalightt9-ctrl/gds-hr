@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Store } from '../src/store.mjs';
 import { createEmployee, updateEmployee, directory, dashboard, employeeForm, archiveEmployee, readSettings, saveSettings, leaveCredits, saveLeaveCredits } from '../src/hr201.mjs';
 import { upload201, reviewDocument, employeeChecklist, documentSummary, document201Content, setNotApplicable } from '../src/documents201.mjs';
+import { recordView } from '../src/memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, myMemos, acknowledgeMemo, memoSummary, startRevision, listMemos } from '../src/memos.mjs';
 import { saveTraining, assignParticipants, updateParticipant, trainingsForEmployee, participationRows } from '../src/trainings.mjs';
 import { saveMySheet, reviewSheet, listSheets } from '../src/datasheets.mjs';
@@ -145,12 +146,15 @@ test('memos reach only their recipients and an acknowledgement clears the pendin
     assert.equal(myMemos(store, ana).length, 1); assert.equal(myMemos(store, ben).length, 0);
     assert.equal(memoSummary(store, hr).pending, 1);
     assert.throws(() => acknowledgeMemo(store, ben, memo.id, 1), /not addressed/);
+    assert.throws(() => acknowledgeMemo(store, ana, memo.id, 1), /viewed/, 'acknowledgment only after viewing');
+    recordView(store, ana, memo.id, 1);
     acknowledgeMemo(store, ana, memo.id, 1);
     assert.equal(memoSummary(store, hr).pending, 0);
     assert.ok(myMemos(store, ana)[0].acknowledgedAt);
     startRevision(store, hr, memo.id);
     assert.throws(() => publishMemo(store, hr, memo.id), /what changed/);
-    publishMemo(store, hr, memo.id, { changeNote: 'Clarified section 2' });
+    assert.throws(() => publishMemo(store, hr, memo.id, { changeNote: 'Clarified section 2' }), /Another HR Manager/, 'the preparer cannot issue');
+    publishMemo(store, { username: 'admin2', role: 'admin' }, memo.id, { changeNote: 'Clarified section 2' });
     assert.equal(memoSummary(store, hr).pending, 1, 'a revision needs its own acknowledgement');
     assert.equal(listMemos(store, hr)[0].version, 2);
   } finally { store.close(); }

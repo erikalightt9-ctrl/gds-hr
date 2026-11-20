@@ -6,9 +6,9 @@ import { CATEGORIES as REQUEST_CATEGORIES, ensure as ensureAttendanceRequests } 
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
-import { memoPdf, officialPdf } from './memo-letter.mjs';
+import { memoPdf, officialPdf, companyLetterheads, saveLetterhead } from './memo-letter.mjs';
 import { pendingSalaryChanges } from './salary-changes.mjs';
-import { recordView, requestClarification, answerClarification, recordPaperAck, ackEvidence } from './memo-tracking.mjs';
+import { recordView, requestClarification, answerClarification, recordPaperAck, ackEvidence, remindNow } from './memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
 import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
@@ -203,6 +203,9 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if (method === 'POST') { send(200, saveMemoDraft(store, actor, p[1], await readBody(req))); return true; }
     if (method === 'DELETE') { send(200, deleteMemoDraft(store, actor, p[1])); return true; }
   }
+  if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)\/remind$/)) && method === 'POST') { send(200, remindNow(store, actor, p[1])); return true; }
+  if (pathname === '/api/hr/letterheads' && method === 'GET') { send(200, companyLetterheads(store, actor)); return true; }
+  if (pathname === '/api/hr/letterheads' && method === 'POST') { send(200, saveLetterhead(store, actor, await readBody(req, 5_000_000))); return true; }
   if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)\/(publish|revise|revision|archive|attachments)$/)) && method === 'POST') {
     const action = p[2], body = action === 'attachments' ? await readBody(req, 14_500_000) : ['publish', 'revision'].includes(action) ? await readBody(req) : null;
     if (action === 'publish') { const issued = publishMemo(store, actor, p[1], body); officialPdf(store, issued, issued.versions.at(-1)); send(200, issued); return true; }

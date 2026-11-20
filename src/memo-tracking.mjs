@@ -155,6 +155,17 @@ export function outstandingMemos(store, employeeId, now = new Date()) {
   return out;
 }
 
+// Manual reminder (HR): every recipient of the latest version who has not acknowledged gets a notice now.
+export function remindNow(store, actor, memoId) {
+  permit(actor, HR_TEAM);
+  const memo = readMemo(store, memoId), v = memo.versions.at(-1);
+  if (!v || memo.status !== 'published' || !v.ackRequired) throw new AppError('Only issued memos that need acknowledgment can be reminded.');
+  const rows = store.db.prepare('SELECT employee_id FROM memo_assignments WHERE memo_id=? AND version=? AND acknowledged_at IS NULL').all(memoId, v.version);
+  for (const r of rows) { store.notify(r.employee_id, `Reminder from HR: please read and acknowledge memo ${v.reference} — ${v.title}.`); addEvent(store, { memoId, version: v.version, employeeId: r.employee_id, kind: 'reminded', by: actor.username, data: { manual: true } }); }
+  store.log(actor, 'remind', 'memos', memoId, null, { version: v.version, recipients: rows.length });
+  return { reminded: rows.length };
+}
+export const ESCALATE_AFTER_DAYS = 2;
 // One in-account reminder per employee per day (from 8 AM Manila), listing every outstanding memo and due process
 // action; `extra(employeeId)` supplies the due process lines. Recorded per memo as 'reminded' for HR's monitoring.
 export function sendDailyReminders(store, now = new Date(), extra = () => []) {
@@ -172,6 +183,12 @@ export function sendDailyReminders(store, now = new Date(), extra = () => []) {
       const row = assignment(store, m.memoId, m.version, employeeId);
       return manilaNow(new Date(row.assigned_at)).slice(0, 10) < today && m.status !== 'clarification';
     });
+    for (const m of outstandingMemos(store, employeeId, now).filter(x => x.status === 'overdue' && addDays(x.due, ESCALATE_AFTER_DAYS) <= today)) {
+      if (eventsFor(store, m.memoId, m.version, employeeId).some(e => e.kind === 'escalated')) continue;
+      const name = store.read().employees.find(e => e.id === employeeId)?.name || employeeId;
+      store.notify(null, `Escalation: ${name} has not acknowledged memo ${m.reference} (${m.title}), due ${longDate(m.due)}. Check access, leave and other circumstances before any follow-up.`);
+      addEvent(store, { memoId: m.memoId, version: m.version, employeeId, kind: 'escalated', by: 'system', data: { day: today } });
+    }
     const other = extra(employeeId);
     if (!memos.length && !other.length) continue;
     const lines = [...memos.map(m => `${m.status === 'overdue' ? '⚠️ Overdue Acknowledgment' : m.status === 'answered' ? '🔔 Pending Acknowledgment (your question was answered)' : '🔔 Pending Acknowledgment'}: ${m.reference} ${m.title} (due ${longDate(m.due)})`), ...other];

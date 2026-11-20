@@ -116,3 +116,23 @@ test('due process: response period from documented receipt, extensions with reas
     assert.equal(closed.closure.outcome, 'Verbal warning', 'the sanction that stands after the review is recorded');
   } finally { store.close(); }
 });
+
+test('memos: manual reminder, escalation after the due date, confidential notices and a company without a letterhead image', async () => {
+  const { remindNow } = await import('../src/memo-tracking.mjs');
+  const store = fixture();
+  try {
+    const memo = memoFor(store, '2026-11-16');
+    store.db.prepare('UPDATE memo_assignments SET assigned_at=?').run('2026-11-16T01:00:00.000Z');
+    assert.equal(remindNow(store, hr, memo.id).reminded, 1);
+    sendDailyReminders(store, new Date('2026-11-19T01:00:00Z'));   // due Nov 17 + 2 days
+    assert.ok(store.db.prepare("SELECT 1 FROM notifications WHERE employee_id IS NULL AND message LIKE 'Escalation:%'").get(), 'HR is told once overdue 2 days');
+    sendDailyReminders(store, new Date('2026-11-20T01:00:00Z'));
+    assert.equal(store.db.prepare("SELECT COUNT(*) n FROM notifications WHERE message LIKE 'Escalation:%'").get().n, 1, 'escalated once');
+    const conf = store.transaction(() => issueSystemMemo(store, { title: 'Confidential notice', category: 'Confidential HR notice', body: 'Private.', employeeIds: ['EMP-001'], issuedBy: 'hr1' }));
+    assert.ok(!listMemos(store, { username: 'staff', role: 'hr_staff' }).some(m => m.id === conf.id), 'hidden from HR staff');
+    assert.ok(listMemos(store, hr).some(m => m.id === conf.id), 'HR managers see it');
+    assert.throws(() => memoPdf(store, { username: 'boss', role: 'viewer' }, conf.id), /not found/);
+    const draft = saveMemoDraft(store, { username: 'staff', role: 'hr_staff' }, null, { title: 'Recharge schedule', category: 'Office Order / Schedule', issueDate: '2026-11-20', body: 'Text', recipients: { mode: 'employees', employees: ['EMP-001'] }, company: 'PDMN RECHARGE' });
+    assert.match(memoPdf(store, hr, draft.id).body.toString('latin1'), /PDMN RECHARGE/);
+  } finally { store.close(); }
+});

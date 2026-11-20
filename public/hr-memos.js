@@ -5,8 +5,8 @@ let viewer = null;
 const loadViewer = () => (viewer ? Promise.resolve(viewer) : import('./memo-viewer.js').then(m => (viewer = m)).catch(() => null));
 // Routine memo categories (older memos keep their original category). Notices to Explain and disciplinary documents
 // go through Due Process & Discipline (confidential case workflow), never as memos.
-const MEMO_CATEGORIES = ['General Announcement', 'Policy / Guidelines', 'Advisory / Reminder', 'Office Order / Schedule'];
-const COMPANIES = ['GDS CAPITAL INC.', 'Philippine Dragon Media Network'];
+const MEMO_CATEGORIES = ['General Announcement', 'Policy / Guidelines', 'Advisory / Reminder', 'Office Order / Schedule', 'Confidential HR notice'];
+const COMPANIES = ['GDS CAPITAL INC.', 'Philippine Dragon Media Network', 'PDMN RECHARGE'];
 
 export function createMemos(ctx) {
   const { api, esc, table, badge, toast, openDialog, dialog, shell, heading } = ctx;
@@ -86,7 +86,7 @@ export function createMemos(ctx) {
         ${pdfPane(esc, `/api/hr/memos/${memo.id}.pdf`, body.title)}${attachments(latest ? latest.attachments : memo.attachments)}
         ${memo.versions.map(v => `<details class="memo-version" ${v.version === memo.version ? 'open' : ''}><summary>Version ${v.version} · issued ${fmtDateTime(v.publishedAt)} by ${esc(v.publishedBy)}${v.changeNote ? ` · ${esc(v.changeNote)}` : ''} · ${v.assignments.filter(a => a.acknowledgedAt).length}/${v.assignments.length} acknowledged</summary><div class="memo-recipients">${recipientsHtml(rctx, memo, v, v.version === memo.version ? filter : 'all')}</div></details>`).join('')}
         <p class="legend">Acknowledgement records that the employee received the memo. It does not mean they agree with its contents.</p></div>`,
-        `<div class="dialog-foot">${memo.canEdit && memo.status === 'draft' ? '<button data-act="edit">Edit draft</button><button class="danger" data-act="delete">Delete draft</button>' : ''}${memo.canPublish && memo.status === 'published' && !draft ? '<button data-act="revise">Revise (new version)</button>' : ''}${memo.canPublish && memo.status === 'published' && draft ? '<button data-act="edit-revision">Edit revision</button>' : ''}${memo.canPublish && memo.status === 'published' ? '<button data-act="archive">Archive</button>' : ''}${memo.canPublish && (memo.status === 'draft' || draft) ? `<button class="primary" data-act="publish">${memo.version ? 'Issue revised version' : 'Issue memo'}</button>` : ''}${memo.canEdit && !memo.canPublish && memo.status === 'draft' ? '<span class="legend">An HR Manager issues the memo.</span>' : ''}<button data-close>Close</button></div>`);
+        `<div class="dialog-foot">${memo.canEdit && memo.status === 'draft' ? '<button data-act="edit">Edit draft</button><button class="danger" data-act="delete">Delete draft</button>' : ''}${memo.canPublish && memo.status === 'published' && !draft ? '<button data-act="revise">Revise (new version)</button>' : ''}${memo.canPublish && memo.status === 'published' && draft ? '<button data-act="edit-revision">Edit revision</button>' : ''}${memo.canPublish && memo.status === 'published' ? '<button data-act="archive">Archive</button>' : ''}${memo.status === 'published' && latest?.ackRequired && latest.assignments.some(a => !a.acknowledgedAt) ? '<button data-act="remind">Send reminder now</button>' : ''}${memo.canPublish && (memo.status === 'draft' || draft) ? `<button class="primary" data-act="publish">${memo.version ? 'Issue revised version' : 'Issue memo'}</button>` : ''}${memo.canEdit && !memo.canPublish && memo.status === 'draft' ? '<span class="legend">An HR Manager issues the memo.</span>' : ''}<button data-close>Close</button></div>`);
       dialog.classList.add('wide-dialog'); dialog.addEventListener('close', () => dialog.classList.remove('wide-dialog'), { once: true });
       bindPrint(dialog); bindRecipients(rctx, dialog.querySelector('.dialog-body'), memo, () => detail(id, filter));
       if (filter !== 'all') dialog.querySelector('.memo-version[open] .memo-recipients')?.scrollIntoView({ block: 'start' });
@@ -102,6 +102,7 @@ export function createMemos(ctx) {
             if (!memo.version && !window.confirm('Issue this memo now? Recipients will see it and the issued text cannot be edited afterwards.')) return;
             await api(`/hr/memos/${id}/publish`, { changeNote: changeNote || '' }); toast('Memo issued to its recipients.'); await render(id);
           }
+          if (act === 'remind') { const r = await api(`/hr/memos/${id}/remind`, {}); toast(`Reminder sent to ${r.reminded} employee${r.reminded === 1 ? '' : 's'}.`); await render(id); }
           if (act === 'archive' && window.confirm('Archive this memo? It stays on record and recipients can still read it.')) { await api(`/hr/memos/${id}/archive`, {}); toast('Memo archived.'); dialog.close(); await render(); }
           if (act === 'delete' && window.confirm('Delete this unissued draft?')) { await api(`/hr/memos/${id}`, null, 'DELETE'); toast('Draft deleted.'); dialog.close(); await render(); }
         } catch (error) { toast(error.message); }
