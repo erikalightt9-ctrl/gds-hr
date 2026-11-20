@@ -51,7 +51,8 @@ test('late clock-out is not overtime: only filed and approved hours are paid, up
     const paid = run(store).rows[0], twoHours = paid.trace.filter(x => x.component === 'regularOT' && x.amount > 0);
     assert.equal(twoHours.reduce((s, x) => s + x.quantity, 0), 2, 'only the 2 approved hours are paid, not all 3 worked');
     assert.equal(overtimeQueue(store, hr)[0].worked, 3);
-    decideOvertime(store, hr, filing.id, { decision: 'reject', remarks: 'Not authorized (demo)' });
+    assert.throws(() => decideOvertime(store, hr, filing.id, { decision: 'reject', remarks: 'Not authorized (demo)' }), /reason for changing/);
+    decideOvertime(store, hr, filing.id, { decision: 'reject', remarks: 'Not authorized (demo)', changeReason: 'Manager withdrew the authorisation' });
     assert.equal(run(store).rows[0].earnings.regularOT, 0, 'rejected overtime is not paid');
     assert.equal(myOvertime(store, worker)[0].status, 'rejected');
   } finally { store.close(); }

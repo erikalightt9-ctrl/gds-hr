@@ -139,7 +139,9 @@ export function cancelOvertime(store, actor, id) {
     return after;
   });
 }
-const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default('') }).strict();
+const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default(''), overrideReason: z.string().trim().max(500).default(''), changeReason: z.string().trim().max(500).default('') }).strict();
+// The day's attendance is valid for overtime when HR approved it or it is System Validated (original punches).
+export const attendanceValid = (state, record) => !!record && (record.approved || (state.validation?.systemValidated || []).includes(record.id) || (state.validation?.correctionValidated || []).includes(record.id));
 export function decideOvertime(store, actor, id, input) {
   permit(actor, HR);
   const v = decisionSchema.parse(input);
@@ -150,13 +152,25 @@ export function decideOvertime(store, actor, id, input) {
     if (!['pending', 'approved', 'rejected'].includes(o.status)) throw new AppError('This filing was cancelled.');
     // Only overtime already paid is locked; a decision on a posted date is carried over to the next payroll.
     if (o.paidRunId) throw new AppError(`This overtime was already paid in the ${o.paidCutoff} payroll; the decision is locked. Reverse that payroll to correct it.`);
+    // Changing a decision already made needs its own reason (the earlier decision stays in the history).
+    if (['approved', 'rejected'].includes(o.status) && v.changeReason.length < 5) throw new AppError(`This overtime was already ${o.status}. Give the reason for changing the decision (at least 5 characters).`);
     const hours = v.decision === 'approve' ? round(v.hours ?? o.hours) : 0;
     if (hours > o.hours) throw new AppError(`Approved hours cannot exceed the ${o.hours} h filed.`);
     // Approving other hours than filed is an adjustment and needs its own reason.
     const adjusted = v.decision === 'approve' && hours !== o.hours;
     if (adjusted && v.adjustReason.length < 3) throw new AppError(`Give the reason for approving ${hours} h instead of the ${o.hours} h filed.`);
-    const note = v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks;
-    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
+    // Approval needs valid attendance and payable hours; otherwise only with a documented override.
+    let override = null;
+    if (v.decision === 'approve') {
+      const state = store.read(), employee = state.employees.find(e => e.id === o.employeeId);
+      const record = state.attendance.find(a => a.employeeId === o.employeeId && a.date === o.date && a.status === 'present');
+      const check = employee ? overtimeCheck(state, employee, { ...o, status: 'approved', approvedHours: hours }) : { payableHours: 0 };
+      const problems = [!record ? 'there is no attendance record for that day' : !attendanceValid(state, record) ? 'the day\'s attendance is not approved or validated yet' : '', check.payableHours <= 0 ? 'the attendance shows 0 payable overtime hours in the filed period' : ''].filter(Boolean);
+      if (problems.length && v.overrideReason.length < 10) throw new AppError(`Overtime cannot be approved because ${problems.join(' and ')}. Approve the attendance first, or give an override reason (at least 10 characters).`);
+      if (problems.length) override = { reason: v.overrideReason, problems, payableHours: check.payableHours, by: actor.username, at: new Date().toISOString() };
+    }
+    const note = `${v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks}${override ? ` · Override: ${v.overrideReason}` : ''}${v.changeReason && ['approved', 'rejected'].includes(o.status) ? ` · Changed from ${o.status}: ${v.changeReason}` : ''}`;
+    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', override, remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
     put(store, after); store.log(actor, v.decision, 'overtime', o.employeeId, o, after);
     store.notify(o.employeeId, `Your overtime for ${o.date} was ${v.decision === 'approve' ? `approved (${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''})` : 'not approved'}${v.remarks ? `: ${v.remarks}` : ''}.`);
     return after;
@@ -189,7 +203,7 @@ export function overtimeCheck(state, employee, o, today = localToday()) {
   const otFrom = rest || end0 === null ? null : stamp(`${o.date}T00:00`) + (end0 + Math.min(record.offsetMinutes || 0, lateMin)) * 60000;
   const inPeriod = sched.flexible ? 0 : minutes.filter((m, i) => (otFrom === null ? i >= sched.hoursPerDay * 60 : m >= otFrom) && m >= s && m < e).length;
   const workedInPeriod = round(inPeriod / 60), payableHours = round(Math.floor(Math.min(inPeriod, Math.round(target * 60)) / OT_BLOCK) * OT_BLOCK / 60);
-  if (!record.approved) flags.push('Attendance not approved yet');
+  if (!attendanceValid(state, record)) flags.push('Attendance not approved yet');
   if (['pending', 'approved'].includes(o.status) && target - workedInPeriod >= OT_BLOCK / 60) flags.push(`Worked ${workedInPeriod} h within the period, ${round(target - workedInPeriod)} h less than ${o.status === 'approved' ? 'approved' : 'filed'}`);
   return { workedInPeriod, payableHours, flags };
 }

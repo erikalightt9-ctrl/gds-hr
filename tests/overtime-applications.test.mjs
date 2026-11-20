@@ -36,7 +36,9 @@ test('the employee edits or cancels a pending application; decided ones are lock
     assert.match(edited.history[1].note, /was 2026-09-01 17:00–19:00, 2 h/);
     assert.throws(() => editOvertime(store, { ...worker, employeeId: 'EMP-002' }, o.id, { date: day, startTime: '17:00', endTime: '18:00', reason: 'Not mine (demo)' }), /not found/);
     assert.throws(() => decideOvertime(store, hr, o.id, { decision: 'approve', hours: 2 }), /reason for approving 2 h instead of the 2.75 h/);
-    const approved = decideOvertime(store, hr, o.id, { decision: 'approve', hours: 2, adjustReason: 'Review was not authorised (demo)', remarks: 'Thanks' });
+    assert.throws(() => decideOvertime(store, hr, o.id, { decision: 'approve', hours: 2, adjustReason: 'Review was not authorised (demo)' }), /0 payable overtime hours/, 'no approval without payable hours');
+    const approved = decideOvertime(store, hr, o.id, { decision: 'approve', hours: 2, adjustReason: 'Review was not authorised (demo)', remarks: 'Thanks', overrideReason: 'Attendance for this future date is not in yet (demo)' });
+    assert.equal(approved.override.problems.length, 1, 'override recorded');
     assert.equal(approved.approvedHours, 2); assert.equal(approved.adjustReason, 'Review was not authorised (demo)');
     assert.equal(approved.history.at(-1).action, 'approved');
     assert.throws(() => editOvertime(store, worker, o.id, { date: day, startTime: '17:00', endTime: '18:00', reason: 'Too late (demo)' }), /Only pending/);
