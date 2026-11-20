@@ -97,11 +97,11 @@ export function createMemos(ctx) {
   return { render, create: () => { if (!people.length) api('/hr/employees').then(p => { people = p; editor(null); }).catch(e => toast(e.message)); else editor(null); } };
 }
 
-// Memo list: the recipient's name (one employee) or the count (who still has to acknowledge is in the memo details).
+// Memo list: the recipient's name (one employee) or the count (who still has to acknowledge is in the Acknowledged column and the memo details).
 function recipientCell(m) {
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const names = m.recipientNames || [], pending = m.pendingNames || [];
+  const names = m.recipientNames || [];
   if (!names.length) return '—';
-  if (names.length === 1) return `<span class="memo-who">${esc(names[0])}</span>${pending.length ? '<small class="danger-text">Not yet acknowledged</small>' : ''}`;
+  if (names.length === 1) return `<span class="memo-who">${esc(names[0])}</span>`;
   return `<span class="memo-who">${names.length} employees</span>`;
 }
