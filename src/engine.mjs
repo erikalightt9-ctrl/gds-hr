@@ -600,6 +600,14 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       roundingAdjustment = round(exact - earnings.basic);
       if (roundingAdjustment) { earnings.basic = exact; trace.push({ side: 'earnings', component: 'basic', amount: roundingAdjustment, formula: `Basic = ${round(adjDaily)} × ${round4(shownDays)} days credited (monthly ÷ ${monthDays} working days in the month); rounding of the per-day amounts removed`, sourceId: r.id, sourceKind: 'rules', date: end, quantity: shownDays, multiplier: null }); }
     }
+    // Daily-paid: the days credited are rounded to 2 decimals the same way (HR decision Nov 20, 2026), so the days shown ×
+    // the daily rate equal the basic pay (₱755 × 10.87, not × 10.8729). Rules → rounding 'exact' keeps the minutes.
+    const dailyRaw = dailyPaid && daily ? daysPresent - lateDaysLost - undertimeAmount / daily : null;
+    const dailyRounded = dailyRaw !== null && !typedAmount && !basicOverridden && manual?.mode !== 'replace' && r.creditRounding !== 'exact';
+    if (dailyRounded) {
+      roundingAdjustment = round((round(dailyRaw) - dailyRaw) * daily);
+      if (roundingAdjustment) { earnings.basic = round(earnings.basic + roundingAdjustment); trace.push({ side: 'earnings', component: 'basic', amount: roundingAdjustment, formula: `Days credited ${round4(dailyRaw)} rounded to ${round(dailyRaw)} (2 decimals) × ${round(daily)} daily rate`, sourceId: r.id, sourceKind: 'rules', date: end, quantity: round(dailyRaw), multiplier: null }); }
+    }
     const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - undertimeAmount - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride + roundingAdjustment));
     // Days credited (worked; paid leave days are counted separately). A typed basic: basic / daily rate. Monthly-paid: the
     // cutoff's scheduled working days (12 or 13; no fixed 13), less paid leave days, less the unpaid basic taken off (absences,
@@ -608,6 +616,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const creditedDays = basicOverridden && manual?.mode === 'replace' && manual.daysWorked ? round4(manual.daysWorked)
       : basicOverridden && daily ? round4(earnings.basic / daily)
       : monthlyCredit ? (typedAmount || r.creditRounding === 'exact' ? round4(monthlyDays) : round(monthlyDays))
+      : dailyRounded ? round(dailyRaw)
       : round4(daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0));
     // Hours credited stay exact (e.g. 30 minutes late = 7.5 hours), also when the days are shown rounded to 2 decimals.
     const creditedHours = monthlyCredit ? round4(monthlyDays * dayHours) : basicOverridden ? round4(creditedDays * dayHours) : round4((creditedMinutes || Math.max(0, creditedDays) * dayHours * 60) / 60);
