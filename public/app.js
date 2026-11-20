@@ -1111,7 +1111,7 @@ function formField(f, values, existing) {
 }
 async function openSalaryChange(id) {
   const employee = state.employees.find(e => e.id === id);
-  let approvers = [];
+  let approvers;
   try { approvers = await api('/approval-policy/approvers?action=salary'); } catch (error) { toast(error.message); return; }
   const choices = approvers.filter(a => a.id !== auth.user.id && a.username !== auth.user.username);
   openDialog(`Edit pay · ${employee?.name || id}`, `<form id="salary-change" class="dialog-body form-grid">

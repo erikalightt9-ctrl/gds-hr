@@ -136,7 +136,7 @@ export function authenticateService(store, token) {
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const row = store.db.prepare("SELECT * FROM users WHERE service_token_hash=? AND account_kind='service'").get(tokenHash);
   if (!row || row.disabled) return null;
-  let permissions = [];
+  let permissions;
   try { permissions = JSON.parse(row.service_permissions || '[]'); } catch { permissions = []; }
   return {
     id: row.id, username: row.username, role: 'service', displayName: row.display_name || row.username,
