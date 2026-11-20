@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
+import { assertNamedActor, getPolicy } from './actors.mjs';
 
 export { AppError } from './errors.mjs';
 import { AppError } from './errors.mjs';
@@ -46,6 +47,7 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
         store.log(actor, 'update', 'profile:employment', value.id, before, after);
       }
     }
+    if (kind === 'rules' && previous?.approvedBy) throw new AppError('Approved rules cannot be edited. Create a new draft version with a later effective date.');
     assertUnlocked(state, kind, value); if (previous) assertUnlocked(state, kind, previous);
     if (kind === 'attendance' && previous && value.id.startsWith('clock-') && (value.employeeId !== previous.employeeId || value.date !== previous.date)) throw new AppError('Clock-linked attendance must retain its original employee and work date.');
     const employee = value.employeeId ? state.employees.find(e => e.id === value.employeeId) : null;
@@ -118,12 +120,19 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
     if (kind === 'loans' && previous && !scheduleOnly && state.runs.some(r => r.rows.some(row => row.loanDeductions.some(l => l.loanId === value.id)))) throw new AppError('A loan used in posted payroll is immutable. Record a separately authorized adjustment or new loan.');
     if (kind === 'loans' && state.loans.some(l => l.id !== value.id && l.employeeId === value.employeeId && l.reference === value.reference)) throw new AppError('Duplicate employee loan reference.');
     if (kind === 'rules') {
-      // Approved rates can be corrected until a posted payroll uses them; after that the version is locked for audit integrity.
+      // An approved version is immutable. A correction is a new draft; posted payroll keeps the version it was computed with.
       if (previous && state.runs.some(run => run.status === 'posted' && run.ruleId === previous.id)) throw new AppError('This rules version is used by posted payroll and is locked. Create a new version with a later effective date.');
-      if (state.rules.some(r => r.id !== value.id && r.approvedBy && r.effectiveDate === value.effectiveDate)) throw new AppError('An approved rules version already uses that effective date.');
+      if (state.rules.some(r => r.id !== value.id && r.approvedBy && r.effectiveDate === value.effectiveDate && value.approvedBy)) throw new AppError('An approved rules version already uses that effective date.');
       Object.entries(value.contributions).forEach(([name, brackets]) => validateBrackets(brackets, name));
       validateBrackets(value.taxBrackets, 'Tax');
-      value.approvedBy = value.approvedBy ? actor.username : ''; value.updatedAt = new Date().toISOString();
+      if (value.approvedBy) {
+        assertNamedActor(actor, getPolicy(store), 'rules');
+        if (/\bdraft\b/i.test(value.basis)) throw new AppError('An approved rules version cannot keep a draft legal basis. Update the legal basis on this draft, then approve it.');
+        value.approvedBy = actor.displayName || actor.username;
+        value.approvedAt = new Date().toISOString();
+        value.approvedByUserId = actor.id || '';
+      } else { value.approvedBy = ''; value.approvedAt = ''; value.approvedByUserId = ''; }
+      value.updatedAt = new Date().toISOString();
     }
     if (kind === 'attendance' && (previous || correctionReason !== undefined) && (typeof correctionReason !== 'string' || correctionReason.trim().length < 3 || correctionReason.length > 2000)) throw new AppError('Enter a reason for the attendance correction or approval (3–2,000 characters).');
     state[kind] = [...state[kind].filter(x => x.id !== value.id), value];

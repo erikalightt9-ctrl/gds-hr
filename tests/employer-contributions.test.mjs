@@ -53,17 +53,19 @@ test('HR can override one employee\'s calculated shares; viewers cannot', () => 
   } finally { store.close(); }
 });
 
-test('HR can edit rates; rules used by posted payroll stay locked, unused approved rules can be corrected', () => {
+test('approved rules are immutable; a later version does not rewrite posted payroll', () => {
   const store = new Store(':memory:');
   try {
     const state = withTables(completeState()); state.rules[0].id = 'r-2026'; store.write(state);
     const rule = store.read().rules[0];
-    saveRecord(store, hr, 'rules', { ...rule, contributions: { ...rule.contributions, 'Pag-IBIG': [{ ...pagIbig[0], fixed: 150 }] }, approvedBy: 'approve' });
-    assert.equal(store.read().rules[0].contributions['Pag-IBIG'][0].fixed, 150, 'approved but unused version corrected');
-    saveRecord(store, hr, 'rules', { ...store.read().rules[0], contributions: { ...rule.contributions, 'Pag-IBIG': pagIbig }, approvedBy: 'approve' });
+    assert.throws(() => saveRecord(store, hr, 'rules', { ...rule, contributions: { ...rule.contributions, 'Pag-IBIG': [{ ...pagIbig[0], fixed: 150 }] }, approvedBy: 'approve' }), /cannot be edited/);
+    assert.equal(store.read().rules[0].contributions['Pag-IBIG'][0].fixed, 200, 'the approved version is unchanged');
+    saveRecord(store, hr, 'rules', { ...rule, id: 'r-2026-b', effectiveDate: '2026-10-01', contributions: { ...rule.contributions, 'Pag-IBIG': [{ ...pagIbig[0], fixed: 150 }] }, approvedBy: 'approve' });
+    assert.equal(store.read().rules.find(r => r.id === 'r-2026-b').contributions['Pag-IBIG'][0].fixed, 150);
     const p = preview(store, '2026-09-01', '2026-09-15');
     postPayroll(store, admin, { start: p.start, end: p.end, pay13th: false, fingerprint: p.fingerprint });
-    assert.throws(() => saveRecord(store, hr, 'rules', { ...store.read().rules[0], approvedBy: 'approve' }), /posted payroll/);
+    assert.equal(store.read().runs[0].ruleId, 'r-2026');
+    assert.throws(() => saveRecord(store, hr, 'rules', { ...store.read().rules[0], approvedBy: 'approve' }), /cannot be edited/);
     assert.equal(store.read().runs[0].rows[0].employerTotal, 1990, 'posted payroll keeps its employer amounts');
   } finally { store.close(); }
 });
