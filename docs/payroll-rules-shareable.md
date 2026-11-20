@@ -117,9 +117,10 @@ Each minute is counted once: as late time, undertime, lunch or overtime, never t
 | Rule | Behavior |
 | --- | --- |
 | Late under 15 min | Nothing lost |
-| Late 15 min or more | The whole late time counts, less any approved offset; lost as late min ÷ day min of a day |
+| Late 15 min or more | The whole late time is deducted (late min ÷ day min of a day). An approved offset does not reduce it |
 | Staying after the end | Not an automatic offset (shown to HR) |
-| Approved offset | Covers late time first; what is left covers undertime that day |
+| Approved offset | Does not reduce a late of 15 min or more, and is not used up by it, so it can cover undertime that day. A late under 15 min still uses the offset first |
+| Waive late for a cutoff | Clears late deductions for that cutoff; the minutes stay on record |
 | Attendance exception | Clears late time and undertime for that day |
 | Lunch | Taken out automatically on regular working days when no break is recorded (from 12:00 PM, the scheduled length); recorded breaks are used as recorded; not on rest days, flexible days, or schedules with no meal break |
 | Undertime | Scheduled hours − hours worked − late − leave hours − offset left; no grace period |

@@ -27,6 +27,16 @@ test('a worked half beside a half-day leave is a half day: 0.5 present and 0.5 l
   assert.deepEqual(totals(monthSheet({ state: whole, esc, today: '2026-10-28', month: '2026-10' })), [2, 0, 0], 'without a half-day leave the day stays present');
 });
 
+test('a late of 15 minutes or more stays late when an offset is approved; under 15 stays present', () => {
+  const s = base(); s.leaves = [];
+  s.rules = [{ approvedBy: 'admin', effectiveDate: '2026-01-01', graceMinutes: 15 }];
+  s.attendance.push({ employeeId: 'E1', date: '2026-10-26', status: 'present', timeIn: '09:20', scheduledIn: '09:00', timeOut: '18:00', offsetMinutes: 20 });
+  s.attendance.push({ employeeId: 'E1', date: '2026-10-29', status: 'present', timeIn: '09:10', scheduledIn: '09:00', timeOut: '18:00', offsetMinutes: 10 });
+  const html = monthSheet({ state: s, esc, today: '2026-10-29', month: '2026-10' });
+  assert.match(html, /am-mark am-late" title="Late"/);
+  assert.equal((html.match(/am-mark am-late/g) || []).length, 2, 'the legend plus the 20-minute late; the 10-minute arrival is not marked late');
+});
+
 test('a recorded day off is shown as a day off, not as leave', () => {
   const s = base(); s.leaves = [];
   s.attendance.push({ employeeId: 'E1', date: '2026-10-26', status: 'off', timeIn: '', timeOut: '', scheduledIn: '08:00' });

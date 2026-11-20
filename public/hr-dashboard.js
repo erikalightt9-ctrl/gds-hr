@@ -1,5 +1,6 @@
 // HR dashboard: every figure is calculated on the server from current records; each card opens the matching list.
 import { celebrationsHtml, bindCelebrationPhotos } from './hr-common.js';
+import { isGraceLate, lateMinutes } from './late-mark.js';
 
 // Outline icons for the dashboard cards.
 const ICONS = {
@@ -16,14 +17,13 @@ const svg = k => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke
 // People analytics: attendance trend (present / late per day, from attendance records), workforce composition
 // (active / inactive) and document compliance. Every figure comes from the system's own records.
 const RANGES = [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days']];
-const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
 function attendanceTrend(state, days, today) {
   const out = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(`${today}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - i); const date = d.toISOString().slice(0, 10);
     const recs = (state?.attendance || []).filter(a => a.date === date && a.status === 'present');
     const grace = (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
-    const late = recs.filter(a => { const raw = mins(a.timeIn) !== null && mins(a.scheduledIn) !== null ? mins(a.timeIn) - mins(a.scheduledIn) : 0; return raw >= Math.max(1, grace) && raw > (a.offsetMinutes || 0); }).length;
+    const late = recs.filter(a => isGraceLate(lateMinutes(a.timeIn, a.scheduledIn), grace)).length;
     const open = (state?.openClockIns || []).filter(c => c.workDate === date).length;
     out.push({ date, present: recs.length - late + open, late });
   }

@@ -237,7 +237,7 @@ Basic = Days credited × Daily
 Daily rate × scheduled working days attended, less absences and unworked time at daily ÷ hours. *Example:* rate 800, 12 working days → 9,600.00; one absence → 8,800.00.
 
 ### 8.5 Attendance adjustments
-Under 15 min late: nothing lost. 15 min or more: whole late time less approved offset. Offsets cover late time first, then undertime. Lunch is taken out automatically on regular working days when no break is recorded. Undertime has no grace. A scheduled day without attendance or leave is not credited; days not yet reached are never credited in advance. Adjustments lower Days present and Basic pay (not separate deduction lines).
+Under 15 min late: nothing lost. 15 min or more: the whole late time is deducted, and an approved offset does not reduce it. That offset is not used up by the late, so it can still cover undertime. A late under 15 min still uses an offset before undertime. An approved exception, or waiving late for the cutoff, still clears the late. Lunch is taken out automatically on regular working days when no break is recorded. Undertime has no grace. A scheduled day without attendance or leave is not credited; days not yet reached are never credited in advance. Adjustments lower Days present and Basic pay (not separate deduction lines).
 
 ### 8.6 Holidays
 Holiday days on scheduled working days are credited once (Holiday Days column + Holiday Pay amount, between Overtime and Other additions); a holiday on a rest day is not counted; a Sunday holiday moves only with a substitute date. Worked holidays add the premium.

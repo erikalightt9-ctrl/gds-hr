@@ -380,22 +380,25 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const worked = attendanceMinutes(withScheduledLunch(record, daySched, attendanceProfile, rest));
       const minutes = attendanceProfile?.paidFrom === 'schedule' && !rest ? worked.filter(m => m >= scheduledMinute) : worked;
       const lateMinutes = rest ? 0 : Math.max(0, (startMinute - scheduledMinute) / 60000);
-      // Lateness rules (November 2026): under the grace threshold (15 minutes) nothing is lost. From the threshold on,
-      // the whole late time counts less the approved offset (the threshold applies to the original lateness: 30 min late
-      // with a 20 min offset loses 10). Staying after the scheduled end is not an offset unless HR approves it.
-      // HR may also waive late time for a whole cutoff (manual entry); the minutes stay on record.
+      // Lateness (owner decision, 20 Nov 2026): under the grace threshold nothing is deducted. At or above it, the
+      // whole late time is deducted. An approved offset does not reduce that deduction. An approved exception, or
+      // waiveLate for the cutoff, still clears it. Staying after the scheduled end is not an offset unless HR records one.
       const withinGrace = lateMinutes > 0 && lateMinutes < graceMinutes;
       const workedAfter = Math.max(0, Math.min(lateMinutes, minutes.length + lateMinutes + leaveCoverMinutes - normalHours * 60));   // shown to HR only
-      const deductibleMinutes = record.exception || manual?.waiveLate || withinGrace ? 0 : Math.max(0, lateMinutes - (record.offsetMinutes || 0));
-      // Unoffset late time is converted to a fraction of the scheduled day and taken off the days credited for pay.
-      const dayMinutes = normalHours * 60, lostDay = r.deductLate ? deductibleMinutes / dayMinutes : 0, deduction = round(lostDay * adjDaily);
-      late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, withinGrace, workedOffset: 0, workedAfter, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
+      const clearsLate = record.exception || manual?.waiveLate || withinGrace;
+      const deductibleMinutes = clearsLate || !r.deductLate ? 0 : lateMinutes;
+      // Deductible late time is a fraction of the scheduled day and is taken off the days credited for pay.
+      const dayMinutes = normalHours * 60, lostDay = deductibleMinutes / dayMinutes, deduction = round(lostDay * adjDaily);
+      late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, withinGrace, waived: !!manual?.waiveLate, workedOffset: 0, workedAfter, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
       if (deduction) {
         lateDaysLost += lostDay; lateReduction += deduction; lateMinutesUnoffset += deductibleMinutes;
-        add(earnings, 'basic', -deduction, `Late ${deductibleMinutes} min not offset ÷ ${dayMinutes} min day = ${Math.round(lostDay * 10000) / 10000} day × ${round(adjDaily)} (days credited reduced)`, record, d);
+        const offsetNote = (record.offsetMinutes || 0) > 0 ? ` (approved offset ${record.offsetMinutes} min does not reduce it)` : '';
+        add(earnings, 'basic', -deduction, `Late ${deductibleMinutes} min${offsetNote} ÷ ${dayMinutes} min day = ${Math.round(lostDay * 10000) / 10000} day × ${round(adjDaily)} (days credited reduced)`, record, d);
       }
-      // An approved offset covers late time first; what is left of it covers undertime (e.g. leaving at 5 PM on a 9-6 day).
-      const offsetLeft = Math.max(0, (record.offsetMinutes || 0) - lateMinutes);
+      // A deductible late does not use up the offset, so the whole offset can cover undertime.
+      // A late that is not deducted (under the threshold, an exception, waived, or late deductions off) still uses the
+      // offset first; what is left covers undertime (e.g. leaving at 5 PM on a 9-6 day).
+      const offsetLeft = Math.max(0, (record.offsetMinutes || 0) - (deductibleMinutes ? 0 : lateMinutes));
       const under = rest || record.exception ? 0 : Math.max(0, normalHours * 60 - minutes.length - lateMinutes - leaveCoverMinutes - offsetLeft);
       const underLost = r.deductUndertime && under && !manual?.waiveUndertime ? under : 0;
       // A weekday may price missing time with its own hours ("Hours used to price missing time", e.g. 4 on a Saturday

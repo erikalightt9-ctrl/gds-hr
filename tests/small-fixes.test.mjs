@@ -27,13 +27,13 @@ test('a weekday can price missing time with its own hours (Saturday 4-hour day: 
   assert.equal('priceHours' in profileSchemas.attendance.parse({ daySchedules: [{ day: 6 }] }).daySchedules[0], false, 'blank stays blank');
 });
 
-test('minutes an offset covers are never also paid as overtime', () => {
+test('minutes after the shift that fill a late arrival are not also paid as overtime', () => {
   // 30 min late, stays 30 min after 6 PM, offset 30 approved AND an overtime filing for 6:00-6:30 PM.
-  const s = state({ record: { date: '2026-11-10', timeIn: '09:30', timeOut: '18:30', offsetMinutes: 30 } });
+  const s = state({ record: { date: '2026-11-10', timeIn: '09:30', timeOut: '18:30', offsetMinutes: 30, explanation: 'Approved offset' } });
   s.overtimeRequests = [{ id: 'ot1', employeeId: 'E1', date: '2026-11-10', startTime: '18:00', endTime: '18:30', hours: 0.5, approvedHours: 0.5, status: 'approved' }];
   const row = run(s);
   assert.equal(row.earnings.regularOT, 0, 'the 30 minutes after 6 PM make up the late time');
-  assert.equal(row.late.find(l => l.date === '2026-11-10').deductibleMinutes, 0, 'late fully offset');
+  assert.equal(row.late.find(l => l.date === '2026-11-10').deductibleMinutes, 30, 'the offset does not reduce the 30-minute late');
 });
 
 test('rounding of days credited is a rules setting: 2 decimals (default) or exact', () => {
