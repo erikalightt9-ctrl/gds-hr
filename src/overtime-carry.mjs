@@ -4,6 +4,7 @@
 // day, night) and rules, keeping the original date, hours, reason and history. Posting marks every filing it paid as
 // Paid (paidRunId), so nothing is paid twice; reversing that payroll clears the mark.
 import { randomUUID } from 'node:crypto';
+import { payDateFor } from './paydays.mjs';
 import { scheduleOn, isRest, round, OT_BLOCK } from './engine.mjs';
 
 // Earnings an overtime filing can change (overtime, premiums, night differential).
@@ -49,7 +50,7 @@ export function markOvertimePaid(store, run) {
     for (const o of [...own, ...carried]) {
       if (o.paidRunId) continue;
       const carry = (row.carriedOvertime || []).find(c => c.id === o.id);
-      const paid = { ...o, paidRunId: run.id, paidAt: at, paidCutoff: `${run.start} to ${run.end}`, ...(carry ? { carriedAmount: carry.amount } : {}), history: [...(o.history || []), { at, by: run.postedBy, action: 'paid', note: `Paid in the ${run.start} to ${run.end} payroll${carry ? ` (carried over, ${carry.amount})` : ''}` }] };
+      const paid = { ...o, paidRunId: run.id, paidAt: at, paidCutoff: `${run.start} to ${run.end}`, paidPayDate: payDateFor(run.start, run.end), ...(carry ? { carriedAmount: carry.amount } : {}), history: [...(o.history || []), { at, by: run.postedBy, action: 'paid', note: `Paid in the ${run.start} to ${run.end} payroll${carry ? ` (carried over, ${carry.amount})` : ''}` }] };
       update.run(JSON.stringify(paid), o.id); marked++;
     }
   }

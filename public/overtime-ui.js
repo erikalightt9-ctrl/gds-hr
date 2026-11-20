@@ -1,6 +1,10 @@
 // Attendance → Overtime applications (HR / Admin decide; Payroll reads): every application with filters, the hours
 // attendance shows inside the filed period, flags to settle before posting, a review window and HR filing.
 import { who, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS } from './hr-common.js';
+// Approved → Included (in a finalized payroll, before its salary day) → Paid (salary day reached).
+const salaryDayOf = cut => { const [y, m, d] = String(cut || '').slice(0, 10).split('-').map(Number); if (!y) return ''; return d === 1 ? `${y}-${String(m).padStart(2, '0')}-22` : new Date(Date.UTC(y, m, 8)).toISOString().slice(0, 10); };
+const manilaDay = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+export const payStage = o => { if (!o.paidRunId) return null; const day = o.paidPayDate || salaryDayOf(o.paidCutoff); return day && day <= manilaDay() ? { label: `Paid · ${day}`, tone: '' } : { label: `Included · ${o.paidCutoff} (salary day ${day})`, tone: 'pending' }; };
 
 const STATUS = { pending: ['Pending', 'pending'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'], cancelled: ['Cancelled', 'neutral'] };
 const fmtDay = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -11,7 +15,7 @@ export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, c
   let list = [], filters = { employee: '', from: '', to: '', status: 'pending' };
   // Carryover (Nov 20, 2026): paid filings show the payroll that paid them; filings whose cutoff is posted but are not
   // paid yet show that they are carried over to the next payroll.
-  const statusBadge = o => { const s = typeof o === 'string' ? o : o.status, [label, tone] = STATUS[s] || [s, 'neutral']; if (typeof o === 'object' && o.paidRunId) return badge(`Paid · ${o.paidCutoff}`, ''); if (typeof o === 'object' && o.carriedOver) return badge(s === 'pending' ? 'Pending Overtime · carried over' : 'Approved · paid in the next payroll', 'pending'); return badge(label, tone); };
+  const statusBadge = o => { const s = typeof o === 'string' ? o : o.status, [label, tone] = STATUS[s] || [s, 'neutral']; if (typeof o === 'object' && o.paidRunId) { const p = payStage(o); return badge(p.label, p.tone); } if (typeof o === 'object' && o.carriedOver) return badge(s === 'pending' ? 'Pending Overtime · carried over' : 'Approved · paid in the next payroll', 'pending'); return badge(label, tone); };
 
   function rows() {
     return list.filter(o => (!filters.employee || o.employeeId === filters.employee) && (!filters.from || o.date >= filters.from) && (!filters.to || o.date <= filters.to) && (!filters.status || (filters.status === 'flagged' ? o.flags?.length && ['pending', 'approved'].includes(o.status) : o.status === filters.status)));

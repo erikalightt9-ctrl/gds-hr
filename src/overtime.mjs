@@ -4,6 +4,7 @@
 // Pending filings do not block posting: they are carried over (src/overtime-carry.mjs) and paid by the next payroll
 // once approved; paid filings are locked. Every step is audited and notified.
 import { randomUUID } from 'node:crypto';
+import { payDateFor } from './paydays.mjs';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
 import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK, monthlyDailyRate } from './engine.mjs';
@@ -179,7 +180,7 @@ export function decideOvertime(store, actor, id, input) {
 export function myOvertime(store, actor) {
   if (actor.role !== 'employee') throw new AppError('Only employees have their own overtime filings.', 403);
   const state = store.read(), employee = state.employees.find(e => e.id === actor.employeeId);
-  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId).map(o => ({ ...o, ...nightEstimate(state, employee, o), carriedOver: !o.paidRunId && ['pending', 'approved'].includes(o.status) && posted(state, o.employeeId, o.date) }));
+  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId).map(o => ({ ...o, ...(o.paidCutoff && !o.paidPayDate ? { paidPayDate: payDateFor(...o.paidCutoff.split(' to ')) } : {}), ...nightEstimate(state, employee, o), carriedOver: !o.paidRunId && ['pending', 'approved'].includes(o.status) && posted(state, o.employeeId, o.date) }));
 }
 // Attendance against one filing, counted the way payroll counts it: minutes after the scheduled day that fall inside
 // the filed period (unpaid attendance breaks excluded), paid in whole 30-minute blocks up to the approved hours.
