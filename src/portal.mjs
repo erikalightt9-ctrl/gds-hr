@@ -90,6 +90,14 @@ export function geofence(reading, workplace) {
   const status = distance + reading.accuracy <= workplace.radiusMeters ? 'Within' : distance - reading.accuracy > workplace.radiusMeters ? 'Outside' : 'Uncertain';
   return { status, distance: Math.round(distance), radius: workplace.radiusMeters, poorAccuracy: reading.accuracy > Math.min(100, workplace.radiusMeters) };
 }
+// 'Erika Hernando – Time In: 9:00 AM – Location: Office' (first and last name, 12-hour time).
+export function attendanceAlert(store, employee, kind, time, location) {
+  const personal = JSON.parse(store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(employee.id)?.data ?? '{}');
+  const [last, given = ''] = String(employee.name || '').split(',').map(x => x.trim());
+  const name = personal.firstName && personal.lastName ? `${personal.firstName} ${personal.lastName}` : [given.split(' ')[0], last].filter(Boolean).join(' ') || employee.name;
+  const [h, m] = String(time || '').split(':').map(Number), clock = Number.isFinite(h) ? `${h % 12 || 12}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}` : time;
+  return `${name} – Time ${kind === 'in' ? 'In' : 'Out'}: ${clock} – Location: ${location}`;
+}
 export function punch(store, actor, input, now = new Date(), { ip = '', userAgent = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
   if (remittanceOnlyIds(store).has(employee.id)) throw new AppError('This account does not use time in / out.');
@@ -170,7 +178,10 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
         store.notify(null, `${employee.id} ${employee.name}: timed in ${lateMin} minutes late on ${workDate}. Explanation required.`);
       }
     }
-    store.notify(null, value.mode === 'outside' ? `${employee.id}: off-site work time ${value.kind} at ${event.time}. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
+    // HR / Feishu attendance alert (Nov 20, 2026): full name, time in / out and the location only. 'Office' only when the
+    // device is on the office Wi-Fi; otherwise the exact address recorded with the punch (the address the employee
+    // confirmed off-site, or the office's own address when the office GPS area accepted it without the Wi-Fi).
+    store.notify(null, attendanceAlert(store, employee, value.kind, event.time, network.office ? 'Office' : event.address || detected?.formatted || (value.mode === 'office' && officeArea ? companyOf(store).officeAddress || 'Office area (not on the office Wi-Fi)' : 'Location unavailable')));
     store.log(actor, `time-${value.kind}`, 'clock', event.id, null, event);
     return event;
   });

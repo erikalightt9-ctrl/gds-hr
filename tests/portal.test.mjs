@@ -231,3 +231,15 @@ test('open time in: a time out HR records later for an earlier day does not hide
   assert.equal(openTimeIn([{ id: 'hr-out', kind: 'out', workDate: '2026-11-20', clockInId: 'in-today' }, today]), null, 'HR closing this time in closes it');
   assert.equal(openTimeIn([]), null);
 });
+
+test('attendance alert: full name, 12-hour time and Office or the exact address only', async () => {
+  const { attendanceAlert } = await import('../src/portal.mjs');
+  const { Store } = await import('../src/store.mjs');
+  const store = new Store(':memory:');
+  try {
+    const e = { id: 'E9', name: 'Hernando, Erika Lima' };
+    assert.equal(attendanceAlert(store, e, 'in', '09:00', 'Office'), 'Erika Hernando – Time In: 9:00 AM – Location: Office');
+    store.db.prepare('INSERT INTO employee_profiles VALUES(?,?,?)').run('E9', 'personal', JSON.stringify({ firstName: 'Ma. Rita', lastName: 'Dormiendo' }));
+    assert.equal(attendanceAlert(store, e, 'out', '18:05', '12 Sample St., Brgy. Example, Makati City'), 'Ma. Rita Dormiendo – Time Out: 6:05 PM – Location: 12 Sample St., Brgy. Example, Makati City');
+  } finally { store.close(); }
+});

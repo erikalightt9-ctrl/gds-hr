@@ -106,7 +106,7 @@ export function nameFeishuAlert(store, line) {
 }
 
 // Hooks HR notices and leave applications on this store. Safe to call again (the latest settings are used).
-export function connectFeishu(store, { fetchImpl = globalThis.fetch, delayMs = 3000, origin = '', title = 'GDS HR' } = {}) {
+export function connectFeishu(store, { fetchImpl = globalThis.fetch, delayMs = 3000, origin = '' } = {}) {   // no title line: each alert is only its own line
   const queue = [];
   let timer = null, pending = Promise.resolve();
   const flush = () => {
@@ -116,7 +116,7 @@ export function connectFeishu(store, { fetchImpl = globalThis.fetch, delayMs = 3
     const c = config(store);
     if (!c.enabled || !c.webhook) return pending;
     const shown = lines.slice(0, MAX_LINES), more = lines.length - shown.length;
-    const text = `【${title}】\n${shown.map(l => `• ${l}`).join('\n')}${more ? `\n• … and ${more} more` : ''}${origin ? `\nOpen: ${origin}` : ''}`;
+    const text = `${shown.map(l => `• ${l}`).join('\n')}${more ? `\n• … and ${more} more` : ''}${origin ? `\nOpen: ${origin}` : ''}`;
     pending = pending.then(() => post(store, text, fetchImpl)).catch(() => {});
     return pending;
   };
