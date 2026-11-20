@@ -16,7 +16,9 @@ import { contributionReview, submitContributionChange, reviewContributionChange,
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
 import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
 import { renderLoanApplicationPdf } from './loan-pdf.mjs';
-import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
+import { overtimeQueue, decideOvertime, fileOvertime, adjustOvertime } from './overtime.mjs';
+import { approveSalaryChange, listSalary, requestSalaryChange } from './salary-changes.mjs';
+import { payrollCutoffs, savePayrollDraft, setPayrollStage } from './payroll-stages.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
 import { renderThirteenthPdf } from './thirteenth-pdf.mjs';
 import { thirteenthStatement, finalizeThirteenthPayslip, voidThirteenthPayslip, thirteenthPayslip, thirteenthPayslips, addThirteenthAdjustment, reviewThirteenthAdjustment, thirteenthAdjustments } from './thirteenth-payslip.mjs';
@@ -30,7 +32,8 @@ import { addContributionEmployee } from './contribution-encode.mjs';
 import { saveMonthEdit } from './contribution-month.mjs';
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
-import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
+import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount, passwordHash } from './auth.mjs';
+import { authenticateService, createServiceAccount, getPolicy, savePolicy, approverChoices } from './actors.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -62,6 +65,12 @@ function interfaceVersion() {
   return readdirSync(dir).filter(f => /\.(js|css|html)$/.test(f)).map(f => `${f}:${Math.round(statSync(path.join(dir, f)).mtimeMs)}`).sort().join('|').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36);
 }
 function constantEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && timingSafeEqual(x, y); }
+// A service token is not a person and is not a System Administrator. Only the actions management put on the account are reachable.
+function serviceCallAllowed(user, method, pathname) {
+  const overtime = user.permissions?.includes('overtime') && ((method === 'GET' && pathname === '/api/overtime-requests') || (method === 'POST' && /^\/api\/overtime-requests\/[a-f0-9-]+\/(decision|adjustment)$/.test(pathname)));
+  const payrollStage = method === 'POST' && /^\/api\/runs\/[^/]+\/stage$/.test(pathname);
+  return overtime || payrollStage || (method === 'GET' && (pathname === '/api/approval-policy' || pathname === '/api/payroll/cutoffs'));
+}
 // What an employee sees in their notification bell after each of their own submissions.
 const days = (a, b) => (b && b !== a ? `${a} to ${b}` : a);
 export function employeeNotice(pathname, data = {}) {
@@ -108,7 +117,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/bir-ui.js': ['bir-ui.js', 'text/javascript'], '/discipline-ui.js': ['discipline-ui.js', 'text/javascript'], '/templates-ui.js': ['templates-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/rules-view.js': ['rules-view.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/bir-ui.js': ['bir-ui.js', 'text/javascript'], '/discipline-ui.js': ['discipline-ui.js', 'text/javascript'], '/templates-ui.js': ['templates-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -177,9 +186,13 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         checkLimit(store, `reset:${visitorIp}`); const body = z.object({ token: z.string().max(64), password: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         send(200, await redeemPasswordReset(store, body.token, body.password)); return;
       }
-      const auth = session(store, req.headers.cookie);
+      const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''))?.[1];
+      const serviceUser = bearer ? authenticateService(store, bearer) : null;
+      if (bearer && !serviceUser) throw new AppError('Service token was not recognized.', 401);
+      const auth = serviceUser ? { user: serviceUser, csrf: '', tokenHash: '', service: true } : session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
-      if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      if (auth.user.service && !serviceCallAllowed(auth.user, req.method, pathname)) throw new AppError('This service account is not allowed to call that.', 403);
+      if (mutation && !auth.service && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
       if (auth.user.mustChangePassword && !['/api/events', '/api/logout', '/api/password', '/api/version'].includes(pathname)) throw new AppError('Choose your own password first.', 403);
@@ -205,6 +218,10 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         await changePassword(store, auth.user, body.currentPassword, body.newPassword); send(200, { ok: true }); return;
       }
       // Feishu group alerts (feishu.mjs; admin only).
+      if (pathname === '/api/approval-policy' && req.method === 'GET') { send(200, getPolicy(store)); return; }
+      if (pathname === '/api/approval-policy' && req.method === 'POST') { send(200, savePolicy(store, auth.user, await readBody(req))); return; }
+      if (pathname === '/api/approval-policy/approvers' && req.method === 'GET') { send(200, approverChoices(store, url.searchParams.get('action') || '')); return; }
+      if (pathname === '/api/service-accounts' && req.method === 'POST') { const created = await createServiceAccount(store, auth.user, await readBody(req), passwordHash); send(201, created); return; }
       if (pathname === '/api/integrations/feishu' && req.method === 'GET') { send(200, feishuStatus(store, auth.user)); return; }
       if (pathname === '/api/integrations/feishu' && req.method === 'POST') { send(200, saveFeishu(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/integrations/feishu/test' && req.method === 'POST') { const result = await sendFeishuTest(store, auth.user); send(200, { ...result, status: feishuStatus(store, auth.user) }); return; }
@@ -302,6 +319,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/overtime-requests' && req.method === 'POST') { send(201, fileOvertime(store, auth.user, await readBody(req))); return; }
       const otDecision = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/decision$/);
       if (otDecision && req.method === 'POST') { send(200, decideOvertime(store, auth.user, otDecision[1], await readBody(req))); return; }
+      const otAdjust = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/adjustment$/);
+      if (otAdjust && req.method === 'POST') { send(201, adjustOvertime(store, auth.user, otAdjust[1], await readBody(req))); return; }
       if (pathname === '/api/contributions/month-edit' && req.method === 'POST') { send(200, saveMonthEdit(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions/employees' && req.method === 'POST') { send(200, addContributionEmployee(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions' && req.method === 'GET') { send(200, contributionOverview(store, auth.user, url.searchParams.get('month') || '', readSettings(store).company.egovFee ?? 15)); return; }
@@ -475,6 +494,14 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="payslip-${slip.employeeId}-${slip.start}-${slip.end}.pdf"` });
         res.end(payslipPdf(slip)); return;
       }
+      if (pathname === '/api/salary-changes' && req.method === 'GET') { permit(auth.user, ['admin', 'hr', 'payroll', 'viewer']); send(200, listSalary(store, url.searchParams.get('employeeId') || '')); return; }
+      if (pathname === '/api/salary-changes' && req.method === 'POST') { send(201, requestSalaryChange(store, auth.user, await readBody(req))); return; }
+      const salaryDecision = pathname.match(/^\/api\/salary-changes\/([a-f0-9-]+)\/approve$/);
+      if (salaryDecision && req.method === 'POST') { send(200, approveSalaryChange(store, auth.user, salaryDecision[1])); return; }
+      if (pathname === '/api/payroll/cutoffs' && req.method === 'GET') { send(200, payrollCutoffs(url.searchParams.get('year') || new Date().getFullYear())); return; }
+      if (pathname === '/api/payroll/draft' && req.method === 'POST') { send(201, savePayrollDraft(store, auth.user, previewSchema.parse(await readBody(req)))); return; }
+      const payrollStage = pathname.match(/^\/api\/runs\/([^/]+)\/stage$/);
+      if (payrollStage && req.method === 'POST') { const body = z.object({ stage: z.enum(['approved', 'included', 'paid']) }).strict().parse(await readBody(req)); send(200, setPayrollStage(store, auth.user, payrollStage[1], body.stage)); return; }
       if (pathname === '/api/payroll/preview' && req.method === 'POST') {
         const p = previewSchema.parse(await readBody(req)); send(200, preview(store, p.start, p.end, p.pay13th, p.employeeIds)); return;
       }

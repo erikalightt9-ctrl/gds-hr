@@ -45,9 +45,9 @@ test('late clock-out is not overtime: only filed and approved hours are paid, up
     assert.throws(() => fileOvertime(store, worker, { date: day, hours: 1, reason: 'Duplicate (demo)' }), /already filed/);
     const pending = run(store);
     assert.equal(pending.rows[0].earnings.regularOT, 0); assert.ok(pending.blockers.some(b => /pending approval/.test(b)));
-    assert.throws(() => decideOvertime(store, worker, filing.id, { decision: 'approve' }), /permission/);
+    assert.throws(() => decideOvertime(store, worker, filing.id, { decision: 'approve', reason: 'Authorised (demo)' }), /permission/);
     assert.throws(() => decideOvertime(store, hr, filing.id, { decision: 'approve', hours: 5 }), /cannot exceed/);
-    decideOvertime(store, hr, filing.id, { decision: 'approve', hours: 2 });
+    decideOvertime(store, hr, filing.id, { decision: 'approve', hours: 2, reason: 'Authorised (demo)' });
     const paid = run(store).rows[0], twoHours = paid.trace.filter(x => x.component === 'regularOT' && x.amount > 0);
     assert.equal(twoHours.reduce((s, x) => s + x.quantity, 0), 2, 'only the 2 approved hours are paid, not all 3 worked');
     assert.equal(overtimeQueue(store, hr)[0].worked, 3);
@@ -98,7 +98,7 @@ test('night differential (10 PM - 6 AM) on approved overtime is computed and rea
     const filing = fileOvertime(store, worker, { date: day, startTime: '16:00', endTime: '23:00', reason: 'Month-end closing (demo)' });
     assert.equal(filing.hours, 7); assert.equal(filing.nightHours, 1);
     assert.equal(run(store).rows[0].earnings.nsd, 0, 'nothing before approval');
-    decideOvertime(store, hr, filing.id, { decision: 'approve' });
+    decideOvertime(store, hr, filing.id, { decision: 'approve', reason: 'Authorised (demo)' });
     const row = run(store).rows[0], r = completeState().rules[0];
     assert.equal(row.earnings.nsd, Math.round(1 * row.hourlyRate * r.ordinaryOT * r.nsd * 100) / 100, '1 night hour × hourly × OT rate × 10%');
     const queued = overtimeQueue(store, hr)[0];

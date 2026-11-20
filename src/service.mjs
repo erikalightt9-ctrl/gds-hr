@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
+import { assertNamedActor, getPolicy } from './actors.mjs';
+import { rulesSnapshot } from './payroll-stages.mjs';
 
-export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
+export { AppError } from './errors.mjs';
+import { AppError } from './errors.mjs';
 // Leave of this many days or more needs a supporting document (November 2026 policy); shorter leave only when HR asks.
 export const PROOF_FROM_DAYS = 2;   // kept for reference only: supporting documents are optional (Nov 11, 2026)
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }
@@ -26,7 +29,7 @@ function validateBrackets(brackets, name) {
   });
 }
 // `trusted` is for internal callers (e.g. the 201 form) that have already checked a narrower permission.
-export function saveRecord(store, actor, kind, input, { trusted = false } = {}) {
+export function saveRecord(store, actor, kind, input, { trusted = false, salaryApproval = false } = {}) {
   if (!schemas[kind]) throw new AppError('Unknown record type.', 404);
   if (!trusted) permit(actor, entityRoles[kind]);
   const recordInput = { ...input };
@@ -45,12 +48,14 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
         store.log(actor, 'update', 'profile:employment', value.id, before, after);
       }
     }
+    if (kind === 'rules' && previous?.approvedBy) throw new AppError('Approved rules cannot be edited. Create a new draft version with a later effective date.');
     assertUnlocked(state, kind, value); if (previous) assertUnlocked(state, kind, previous);
     if (kind === 'attendance' && previous && value.id.startsWith('clock-') && (value.employeeId !== previous.employeeId || value.date !== previous.date)) throw new AppError('Clock-linked attendance must retain its original employee and work date.');
     const employee = value.employeeId ? state.employees.find(e => e.id === value.employeeId) : null;
     if (value.employeeId && !employee) throw new AppError('Employee ID does not exist.');
     if (employee?.draft) throw new AppError('Complete this draft employee profile before adding attendance, leave, loans or payroll adjustments.');
     if (kind === 'employees' && value.draft && state.runs.some(r => r.rows.some(row => row.employeeId === value.id))) throw new AppError('An employee with posted payroll cannot be changed back to a draft.');
+    if (kind === 'employees' && previous && previous.monthlySalary != null && value.monthlySalary !== previous.monthlySalary && !salaryApproval && !trusted) throw new AppError('A salary change needs a reason, an effective date and a second approver. Use Edit pay.');
     if (kind === 'employees' && value.leaveEligibility.some(id => !state.leaveTypes.some(t => t.id === id))) throw new AppError('Unknown leave eligibility type.');
     if (kind === 'employees' && previous && state.runs.some(r => r.rows.some(row => row.employeeId === value.id)) && (value.startDate !== previous.startDate || (value.endDate && state.runs.some(r => r.end > value.endDate && r.rows.some(row => row.employeeId === value.id)))) ) throw new AppError('Employment dates cannot rewrite posted payroll.');
     if (kind === 'attendance') {
@@ -117,12 +122,19 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
     if (kind === 'loans' && previous && !scheduleOnly && state.runs.some(r => r.rows.some(row => row.loanDeductions.some(l => l.loanId === value.id)))) throw new AppError('A loan used in posted payroll is immutable. Record a separately authorized adjustment or new loan.');
     if (kind === 'loans' && state.loans.some(l => l.id !== value.id && l.employeeId === value.employeeId && l.reference === value.reference)) throw new AppError('Duplicate employee loan reference.');
     if (kind === 'rules') {
-      // Approved rates can be corrected until a posted payroll uses them; after that the version is locked for audit integrity.
+      // An approved version is immutable. A correction is a new draft; posted payroll keeps the version it was computed with.
       if (previous && state.runs.some(run => run.status === 'posted' && run.ruleId === previous.id)) throw new AppError('This rules version is used by posted payroll and is locked. Create a new version with a later effective date.');
-      if (state.rules.some(r => r.id !== value.id && r.approvedBy && r.effectiveDate === value.effectiveDate)) throw new AppError('An approved rules version already uses that effective date.');
+      if (state.rules.some(r => r.id !== value.id && r.approvedBy && r.effectiveDate === value.effectiveDate && value.approvedBy)) throw new AppError('An approved rules version already uses that effective date.');
       Object.entries(value.contributions).forEach(([name, brackets]) => validateBrackets(brackets, name));
       validateBrackets(value.taxBrackets, 'Tax');
-      value.approvedBy = value.approvedBy ? actor.username : ''; value.updatedAt = new Date().toISOString();
+      if (value.approvedBy) {
+        assertNamedActor(actor, getPolicy(store), 'rules');
+        if (/\bdraft\b/i.test(value.basis)) throw new AppError('An approved rules version cannot keep a draft legal basis. Update the legal basis on this draft, then approve it.');
+        value.approvedBy = actor.displayName || actor.username;
+        value.approvedAt = new Date().toISOString();
+        value.approvedByUserId = actor.id || '';
+      } else { value.approvedBy = ''; value.approvedAt = ''; value.approvedByUserId = ''; }
+      value.updatedAt = new Date().toISOString();
     }
     if (kind === 'attendance' && (previous || correctionReason !== undefined) && (typeof correctionReason !== 'string' || correctionReason.trim().length < 3 || correctionReason.length > 2000)) throw new AppError('Enter a reason for the attendance correction or approval (3–2,000 characters).');
     state[kind] = [...state[kind].filter(x => x.id !== value.id), value];
@@ -227,7 +239,11 @@ export function reviewLeave(store, actor, id, input) {
 }
 // Live payroll: days after today (Manila) are not credited until they arrive (engine state.asOf).
 export const manilaToday = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
-export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll({ ...store.read(), asOf: manilaToday() }, start, end, pay13th, employeeIds);
+export const preview = (store, start, end, pay13th = false, employeeIds = null) => {
+  const state = { ...store.read(), asOf: manilaToday() };
+  const computed = calculatePayroll(state, start, end, pay13th, employeeIds);
+  return { ...computed, rulesVersion: rulesSnapshot(state, computed.ruleId) };
+};
 export function postPayroll(store, actor, request) {
   permit(actor, ['admin', 'payroll']);
   return store.transaction(() => {
@@ -237,7 +253,7 @@ export function postPayroll(store, actor, request) {
     const computed = calculatePayroll({ ...state, asOf: manilaToday() }, request.start, request.end, request.pay13th, request.employeeIds);
     if (computed.fingerprint !== request.fingerprint) throw new AppError('Records changed after preview. Recalculate and review payroll.', 409);
     if (computed.blockers.length) throw new AppError(`Resolve payroll blockers before posting: ${computed.blockers.slice(0, 5).join(' ')}`);
-    const run = { ...computed, id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };
+    const run = { ...computed, rulesVersion: rulesSnapshot(state, computed.ruleId), id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };
     for (const row of run.rows) for (const deduction of row.loanDeductions) {
       const loan = state.loans.find(l => l.id === deduction.loanId), before = structuredClone(loan);
       loan.balance = deduction.remainingBalance; loan.remainingTerms = deduction.remainingTerms;

@@ -49,7 +49,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS location_addresses (event_id TEXT PRIMARY KEY, address TEXT NOT NULL, fetched_at TEXT NOT NULL);
     `);
     const columns = new Set(this.db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
-    for (const [name, definition] of [['employee_id', 'TEXT'], ['display_name', 'TEXT'], ['disabled', 'INTEGER NOT NULL DEFAULT 0'], ['mfa_secret', 'TEXT'], ['mfa_pending', 'TEXT'], ['mfa_last_step', 'INTEGER'], ['email', 'TEXT'], ['must_change_password', 'INTEGER NOT NULL DEFAULT 0']]) if (!columns.has(name)) this.db.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+    for (const [name, definition] of [['employee_id', 'TEXT'], ['display_name', 'TEXT'], ['disabled', 'INTEGER NOT NULL DEFAULT 0'], ['mfa_secret', 'TEXT'], ['mfa_pending', 'TEXT'], ['mfa_last_step', 'INTEGER'], ['email', 'TEXT'], ['must_change_password', 'INTEGER NOT NULL DEFAULT 0'], ['account_kind', "TEXT NOT NULL DEFAULT 'human'"], ['service_permissions', 'TEXT'], ['service_token_hash', 'TEXT'], ['service_integration', 'TEXT'], ['shared_admin', 'INTEGER NOT NULL DEFAULT 0']]) if (!columns.has(name)) this.db.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+    const auditCols = new Set(this.db.prepare('PRAGMA table_info(audit)').all().map(c => c.name));
+    for (const [name, definition] of [['actor_user_id', 'TEXT'], ['actor_name', 'TEXT'], ['via', 'TEXT']]) if (!auditCols.has(name)) this.db.exec(`ALTER TABLE audit ADD COLUMN ${name} ${definition}`);
     // One employee login per employee record; staff logins linked to their own record (for their name) are not counted.
     if (!/role IN/.test(this.db.prepare("SELECT sql FROM sqlite_master WHERE name='user_employee'").get()?.sql || '')) this.db.exec('DROP INDEX IF EXISTS user_employee');
     this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS user_employee ON users(employee_id) WHERE employee_id IS NOT NULL AND role IN ('employee','dept_manager')");
@@ -71,9 +73,13 @@ export class Store {
     state.openClockIns = this.db.prepare("SELECT id, employee_id, work_date, data FROM clock_events WHERE kind='in'").all().filter(r => !recorded.has(`clock-${r.id}`) && !JSON.parse(r.data).additionalSession).map(r => ({ id: r.id, employeeId: r.employee_id, workDate: r.work_date, time: JSON.parse(r.data).time }));
     state.overtimeRequests = this.db.prepare("SELECT data FROM overtime_requests WHERE status IN ('pending','approved')").all().map(r => JSON.parse(r.data));
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
+    try {
+      const salaryHistory = this.db.prepare("SELECT data FROM salary_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
+      if (salaryHistory.length) state.salaryHistory = salaryHistory;
+    } catch { /* The salary history table is created with the first salary change. */ }
     return state;
   }
-  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.overtimeRequests; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
+  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.overtimeRequests; delete copy.salaryHistory; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
   transaction(fn) {
     if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');
@@ -85,13 +91,14 @@ export class Store {
   onChange(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   notify(employeeId, message) { this.db.prepare('INSERT INTO notifications VALUES(?,?,?,?)').run(randomUUID(), employeeId, new Date().toISOString(), message); }
   log(actor, action, kind, id, before, after) {
-    this.db.prepare('INSERT INTO audit VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), new Date().toISOString(), actor.username, action, kind, id, before == null ? null : JSON.stringify(before), after == null ? null : JSON.stringify(after));
+    const name = actor?.displayName || '', via = actor?.via || '';
+    this.db.prepare('INSERT INTO audit(id, at, actor, action, kind, record_id, before_json, after_json, actor_user_id, actor_name, via) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(), new Date().toISOString(), actor.username, action, kind, id, before == null ? null : JSON.stringify(before), after == null ? null : JSON.stringify(after), actor?.id || '', name, via);
     if (kind === 'leaves' && after?.employeeId) { this.notify(after.employeeId, `Leave request ${after.startDate} to ${after.endDate}: ${after.status}${after.hrRemarks ? ` — HR remarks: ${after.hrRemarks}` : ''}.`); this.notify(null, `${after.employeeId}: leave request ${after.status}.`); }
     if (kind === 'runs' && action === 'post') for (const row of after?.rows || []) this.notify(row.employeeId, `Your payslip for ${after.start} to ${after.end} is available.`);
     // HR recorded or changed a loan (any screen): tell the employee what changed. Payroll deductions are on the payslip.
     if (kind === 'loans' && actor?.role !== 'employee') { const text = loanChangeText(before, after, action); if (text) this.notify(after.employeeId, text); }
     this.changed = true; if (!this.inTransaction) this.emitChange();
   }
-  audit() { return this.db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT 1000').all().map(r => ({ id: r.id, at: r.at, actor: r.actor, action: r.action, kind: r.kind, recordId: r.record_id, before: JSON.parse(r.before_json), after: JSON.parse(r.after_json) })); }
+  audit() { return this.db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT 1000').all().map(r => ({ id: r.id, at: r.at, actor: r.actor, actorUserId: r.actor_user_id || '', actorName: r.actor_name || '', via: r.via || '', action: r.action, kind: r.kind, recordId: r.record_id, before: JSON.parse(r.before_json), after: JSON.parse(r.after_json) })); }
   close() { this.db.close(); }
 }

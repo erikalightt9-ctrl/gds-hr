@@ -1,5 +1,6 @@
 const brandLogo = '/gds-logo.png'; // 菲龍集團 GDS Capital logo (white background)
 import { createProfileView } from './profiles.js';
+import { rulesView, rulesViewText } from './rules-view.js';
 import { setStaffNames, who, passkeyGet, passkeySupported, screenLockHere } from './hr-common.js';
 let screenLockAsked = false;   // the sign-in page asks for the phone's screen lock once per app opening
 import { initMessages, messagesButton, messagesChanged, messagesSignedIn, messagesSignedOut } from './messages.js';
@@ -230,7 +231,7 @@ const hrCtx = {
   setPage: p => { page = p; }, refresh: () => refresh(), daysAgo: n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10),
   go: nav => goTo(nav), quick: kind => (kind === 'employee' ? files.addEmployee() : kind === 'memo' ? memos.create() : trainings.create()),
   openLegacyProfile: async id => { page = 'profile'; await profiles.open(id, 'personal'); },
-  editPay: id => edit('employees', id),
+  editPay: id => openSalaryChange(id),
   reloadContext: async () => { hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme); },
   openAccounts: () => account(),
   getState: () => state,   // attendance records for the dashboard analytics (HR workspace roles)
@@ -294,7 +295,7 @@ const thirteenthUi = createThirteenthPage({ ...hrCtx, downloads: k => downloads(
 // Loaded on first use, so the rest of the app never depends on this file being served.
 let clockRecordsUi = null;
 const loadClockRecords = async () => clockRecordsUi || (clockRecordsUi = (await import('./clock-records-ui.js')).createClockRecordsUi({ api, esc, badge, openDialog, employees: () => state.employees, today }));
-const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh() });
+const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh(), onOpenAttendance: (employeeId, date) => { page = 'attendance'; attendanceView = 'records'; render(); const record = state.attendance.find(a => a.employeeId === employeeId && a.date === date); if (record) edit('attendance', record.id); } });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 const birPage = createBirPage(hrCtx), discipline = createDiscipline(hrCtx), templatesUi = createTemplates(hrCtx);
 const files = createFiles(hrCtx), hrDashboard = createDashboard(hrCtx), memos = createMemos(hrCtx), trainings = createTrainings(hrCtx), hrAdmin = createAdmin(hrCtx);
@@ -538,11 +539,34 @@ function runForCompany(run, company) {
   const totals = company ? { gross: sum('gross'), deductions: sum('totalDeductions'), net: sum('net') } : run.totals;
   return { ...run, rows, totals, companies: [...new Set(rows.map(row => companyOf(row.employeeId)).filter(Boolean))].sort() };
 }
+function cutoffChoices(period) {
+  const year = Number((period.start || today()).slice(0, 4));
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  let html = '';
+  for (const y of [year - 1, year, year + 1]) for (let m = 1; m <= 12; m++) {
+    const mm = String(m).padStart(2, '0'), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    for (const [start, end, label] of [[`${y}-${mm}-01`, `${y}-${mm}-15`, `1–15 ${months[m - 1]} ${y}`], [`${y}-${mm}-16`, `${y}-${mm}-${String(last).padStart(2, '0')}`, `16–${last} ${months[m - 1]} ${y}`]]) html += `<option value="${start}|${end}" ${period.start === start && period.end === end ? 'selected' : ''}>${label}</option>`;
+  }
+  return html;
+}
+function rulesVersionLine(run) {
+  const v = run?.rulesVersion;
+  if (!v) return '<p class="legend">Choose a cutoff and preview it. Preview does not save or finalize a payroll run.</p>';
+  return `<p class="legend">Rules version ${esc(v.id)} · effective ${esc(v.effectiveDate)} · monthly divisor ${esc(v.dailyDivisor)} · hourly divisor ${esc(v.hourlyDivisor)} · ordinary OT ${esc(v.rates?.ordinaryOT)} · regular holiday ${esc(v.rates?.regular)} · rest day ${esc(v.rates?.rest)} · NSD ${esc(v.rates?.nsd)}. ${v.approvedBy ? `Approved by ${esc(who(v.approvedBy))}.` : ''} Preview is not saved.</p>`;
+}
+function payrollStatusCell(r) {
+  const stages = r.stages || {};
+  const chip = (key, label) => stages[key] ? `<span class="pr-status" title="${esc(`${stages[key].byName || stages[key].by} · ${stages[key].at}`)}">${label}</span>` : '';
+  const flow = `${chip('approved', 'Approved')}${chip('included', 'Included')}${chip('paid', 'Paid')}`;
+  if (r.status === 'reversed') return `${badge('Reversed', 'neutral')}<small>by ${esc(r.reversedBy || '')}</small>`;
+  if (r.status === 'posted') return `<span class="pr-status">Finalized</span>${flow}`;
+  return flow || badge('Draft', 'pending');
+}
 function payrollPage() {
   const run = currentRun, period = run || cutoffDefaults();
   let html = heading('Payroll & 13th Month', '', `<a class="pr-btn" href="${run?.id ? `/api/runs/${run.id}.xlsx` : '/api/reports/payroll-runs.xlsx'}" download>${prIcon('download')}Export report</a>`);
   const prCard = (ic, label, value, foot, featured = false) => `<div class="pr-card${featured ? ' featured' : ''}">${prIcon(ic, 'pr-card-ico')}<div><span>${label}</span><strong>${value}</strong><small>${foot}</small></div></div>`;
-  html += `<div class="pr-cards">${prCard('coins', 'Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${prCard('doc', 'Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${prCard('bars', 'Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${prCard('people', 'Employees', run?.rows.length || 0, 'In this payroll cutoff')}${prCard('bank', 'Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="pr-panel-head">${prIcon('calc', 'pr-head-ico')}<div><h2>Payroll computation</h2><p>Choose a cutoff to calculate employee pay.</p></div></div><form class="toolbar" id="cutoff-form"><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee" data-searchable data-search-group="Employee"><option value="">All employees</option><optgroup label="Company">${companies().map(c => `<option value="company:${esc(c)}" ${payrollEmployee === `company:${c}` ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup><optgroup label="Employee">${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup></select></label><label><select name="pay13th" aria-label="13th month payout" title="13th month payout"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Generate payroll</button></form>`;
+  html += `<div class="pr-cards">${prCard('coins', 'Gross earnings', money(run?.totals.gross), 'Basic salary + approved earnings')}${prCard('doc', 'Total deductions', money(run?.totals.deductions), 'Attendance, contributions & loans')}${prCard('bars', 'Net payroll', money(run?.totals.net), run?.status === 'posted' ? 'Approved and posted' : 'Preview before posting', true)}${prCard('people', 'Employees', run?.rows.length || 0, 'In this payroll cutoff')}${prCard('bank', 'Employer contributions', money(run?.totals.employer), 'SSS, EC, PhilHealth, Pag-IBIG · paid by GDS, not deducted')}</div><section class="panel payroll-computation"><div class="pr-panel-head">${prIcon('calc', 'pr-head-ico')}<div><h2>Payroll computation</h2><p>Choose a cutoff to calculate employee pay.</p></div></div><form class="toolbar" id="cutoff-form"><label>Cutoff<select name="cutoff" aria-label="Payroll cutoff">${cutoffChoices(period)}</select></label><label>Cutoff start<input type="date" name="start" value="${period.start}" required></label><label>Cutoff end<input type="date" name="end" value="${period.end}" required></label><label>Employee<select name="employee" data-searchable data-search-group="Employee"><option value="">All employees</option><optgroup label="Company">${companies().map(c => `<option value="company:${esc(c)}" ${payrollEmployee === `company:${c}` ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup><optgroup label="Employee">${state.employees.filter(e => !e.draft).map(e => `<option value="${esc(e.id)}" ${e.id === (run?.employeeIds?.length === 1 ? run.employeeIds[0] : payrollEmployee) ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup></select></label><label><select name="pay13th" aria-label="13th month payout" title="13th month payout"><option value="false">Accrue only</option><option value="true" ${run?.pay13th ? 'selected' : ''}>Pay accrued balance</option></select></label><button class="primary" type="submit">Preview payroll</button></form>${rulesVersionLine(run)}`;
   const company = payrollEmployee.startsWith('company:') && run?.employeeIds?.length > 0 ? payrollEmployee.slice(8) : '';
   if (company) html += `<div class="notice" role="status">Payroll for <strong>${esc(company)}</strong> only (${run.employeeIds.length} employee${run.employeeIds.length === 1 ? '' : 's'}). ${run.id ? 'This posting covers only this company.' : 'Finalizing covers only this company; the other company is generated and finalized separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
   else if (run?.employeeIds?.length) html += `<div class="notice" role="status">Showing payroll for <strong>${run.employeeIds.map(id => esc(state.employees.find(e => e.id === id)?.name || id)).join(', ')}</strong> only. ${run.id ? 'This posting covers only this employee.' : 'Posting will cover only this employee; others can be posted separately for the same cutoff.'} Choose <em>All employees</em> to see everyone.</div>`;
@@ -597,12 +621,13 @@ Basic pay column = this less Holiday pay ${money(holidayDayPay(r))}`;
   if (run?.id && run.status === 'posted') html += `<div class="final-banner"><strong>FINAL</strong><span>Finalized on ${esc(new Date(run.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }))} by ${esc(who(run.postedBy) || '—')} · This payroll can no longer be edited · Payslips appear in employee accounts on salary day, ${esc(payDateFor(run.start, run.end))}.</span></div>`;
   if (run?.id && run.status === 'posted' && auth.user.role === 'admin') html += `<div class="actions"><button data-reverse-run="${esc(run.id)}">Reverse this posting</button><span class="legend">Withdraws these payslips, restores loan balances and lets you correct and post the cutoff again. The posting stays in the audit trail.</span></div><br>`;
   if (run?.status === 'reversed') html += `<div class="notice">This payroll was reversed by ${esc(run.reversedBy)} on ${esc((run.reversedAt || '').slice(0, 10))}: ${esc(run.reversalReason || '')}</div>`;
-  if (run && !run.id && ['admin', 'payroll'].includes(auth.user.role)) html += `<div class="actions"><button class="primary" data-post>Finalize payroll</button><span class="legend">Once final, this payroll can no longer be edited. The date and who finalized it are kept in the payroll history.</span></div><br>`;
+  if (run && !run.id && ['admin', 'payroll', 'hr'].includes(auth.user.role)) html += `<div class="actions"><button data-save-draft>Save draft for approval</button>${['admin', 'payroll'].includes(auth.user.role) ? '<button class="primary" data-post>Finalize payroll</button>' : ''}<span class="legend">Preview and Save draft do not finalize payroll. Approved, Included and Paid stay separate after a draft or a finalized run is saved.</span></div><br>`;
+  if (run?.id && ['admin', 'payroll', 'hr'].includes(auth.user.role)) { const s = run.stages || {}; html += `<div class="actions">${s.approved ? '' : '<button data-payroll-stage="approved">Mark approved</button>'}${s.approved && !s.included ? '<button data-payroll-stage="included">Mark included</button>' : ''}${s.included && !s.paid ? '<button data-payroll-stage="paid">Mark paid</button>' : ''}<span class="legend">Who may mark Approved, Included or Paid is configurable. Management has not confirmed that list.</span></div><br>`; }
   const companyList = companies();
   if (runsCompany && !companyList.includes(runsCompany)) runsCompany = '';
   const runsShown = state.runs.filter(r => r.status !== 'reversed').reverse().map(r => runForCompany(r, runsCompany)).filter(r => r.rows.length);
   const runsFilter = `<label class="field pr-company-filter">Company<select data-runs-company><option value="">All companies</option>${companyList.map(c => `<option ${c === runsCompany ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
-  html += `<section class="panel pr-history"><div class="pr-panel-head">${prIcon('history', 'pr-head-ico')}<div><h2>Payroll history</h2><p>View past payroll runs and their status.</p></div>${runsFilter}${runsShown.length > 5 ? `<button class="pr-viewall" data-runs-all>${showAllRuns ? 'Show recent' : 'View all →'}</button>` : ''}</div>${table(['Cutoff', 'Salary day', 'Finalized on', 'Company', 'Employees', 'Gross', 'Deductions', 'Net', 'Status', ''], (showAllRuns ? runsShown : runsShown.slice(0, 5)).map(r => [`<a class="cutoff-link" href="/api/runs/${r.id}.pdf?view=1" target="_blank" rel="noopener" title="Open the payroll register PDF">${esc(fmtCutoff(r.start, r.end))}</a>`, esc(new Date(`${payDateFor(r.start, r.end)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })), `<span title="Finalized by ${esc(who(r.postedBy) || '—')}">${esc(r.postedAt ? new Date(r.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '—')}</span>`, esc(r.companies.join(', ') || '—'), r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.status === 'reversed' ? `${badge('Reversed', 'neutral')}<small>by ${esc(r.reversedBy || '')}</small>` : '<span class="pr-status">Finalized</span>', `<span class="download-links">${r.releasedAt || payDateFor(r.start, r.end) <= today() ? `<span class="pr-sent" title="Payslips are in employee accounts">${prIcon('check')}Sent</span>` : `<button class="small primary" data-release-run="${r.id}" title="Send the payslips to the employees' accounts now">Send payslips</button>`}</span>`]), runsCompany ? `No finalized payroll for ${esc(runsCompany)} yet.` : 'No payroll has been finalized yet.')}</section>`;
+  html += `<section class="panel pr-history"><div class="pr-panel-head">${prIcon('history', 'pr-head-ico')}<div><h2>Payroll history</h2><p>View past payroll runs and their status.</p></div>${runsFilter}${runsShown.length > 5 ? `<button class="pr-viewall" data-runs-all>${showAllRuns ? 'Show recent' : 'View all →'}</button>` : ''}</div>${table(['Cutoff', 'Salary day', 'Finalized on', 'Company', 'Employees', 'Gross', 'Deductions', 'Net', 'Status', ''], (showAllRuns ? runsShown : runsShown.slice(0, 5)).map(r => [`<a class="cutoff-link" href="/api/runs/${r.id}.pdf?view=1" target="_blank" rel="noopener" title="Open the payroll register PDF">${esc(fmtCutoff(r.start, r.end))}</a>`, esc(new Date(`${payDateFor(r.start, r.end)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })), `<span title="Finalized by ${esc(who(r.postedBy) || '—')}">${esc(r.postedAt ? new Date(r.postedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '—')}</span>`, esc(r.companies.join(', ') || '—'), r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.status === 'reversed' ? `${badge('Reversed', 'neutral')}<small>by ${esc(r.reversedBy || '')}</small>` : payrollStatusCell(r), `<span class="download-links">${r.releasedAt || payDateFor(r.start, r.end) <= today() ? `<span class="pr-sent" title="Payslips are in employee accounts">${prIcon('check')}Sent</span>` : `<button class="small primary" data-release-run="${r.id}" title="Send the payslips to the employees' accounts now">Send payslips</button>`}</span>`]), runsCompany ? `No finalized payroll for ${esc(runsCompany)} yet.` : 'No payroll has been finalized yet.')}</section>`;
   return html;
 }
 function loansPage() { return heading('Employee loans', 'Scheduled deductions, clear balances, and a complete repayment history.', addButton('loans', 'Add loan')) + `<div class="cards">${card('Outstanding balance', money(state.loans.reduce((s, l) => s + l.balance, 0)), 'Across all loan types', true)}${card('Active loans', state.loans.filter(l => l.balance > 0).length, 'With an outstanding balance')}${card('Total original amount', money(state.loans.reduce((s, l) => s + l.original, 0)), 'Recorded loans')}${card('Repaid / opening credits', money(state.loans.reduce((s, l) => s + l.original - l.balance, 0)), 'Original amount less remaining balance')}</div><section class="panel"><div class="panel-head"><h2>Loan register</h2>${downloads('loans')}</div>${searchToolbar()}${table(['Employee', 'Type / reference', 'Original', 'Balance', 'Monthly amortization', 'Per payroll', 'Dates', 'Remaining terms', 'Authorization', ''], filtered(state.loans).map(l => [employee(l.employeeId), `${esc(l.type)}<br><small>${esc(l.reference)}</small>`, money(l.original), money(l.balance), money(l.monthlyAmortization), money(l.perPayroll), `${l.startDate}<br><small>to ${l.endDate}</small>`, `${l.remainingTerms} / ${l.terms}`, badge(l.authorized ? 'Authorized' : 'Pending', l.authorized ? '' : 'pending'), editButton('loans', l.id)]))}</section>`; }
@@ -650,8 +675,9 @@ document.addEventListener('input', event => {
 });
 function rulesPage() {
   const r = state.rules.filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0] || state.rules[0];
+  const view = rulesView(r);
   const rateRows = [['Regular overtime', `1 × ${r.ordinaryOT}`, r.ordinaryOT], ['Rest day', `${r.rest}`, r.rest], ['Rest day overtime', `${r.rest} × ${r.premiumOT}`, r.rest * r.premiumOT], ['Ordinary day + NSD', `1 × (1 + ${r.nsd})`, 1 + r.nsd], ['Rest day + NSD', `${r.rest} × (1 + ${r.nsd})`, r.rest * (1 + r.nsd)], ['Special holiday overtime', `${r.special} × ${r.premiumOT}`, r.special * r.premiumOT], ['Regular holiday overtime', `${r.regular} × ${r.premiumOT}`, r.regular * r.premiumOT], ['Regular holiday + NSD', `${r.regular} × (1 + ${r.nsd})`, r.regular * (1 + r.nsd)], ['Regular holiday + rest day + OT', `${r.regular} × ${r.rest} × ${r.premiumOT}`, r.regular * r.rest * r.premiumOT]];
-  return heading('Payroll rules & rates', 'Versioned policies. Transparent formulas. An approval behind every change.', addButton('rules', 'New rules version')) + `<div class="notice ${r.approvedBy ? 'success' : ''}">${r.approvedBy ? `Reference version effective ${esc(r.effectiveDate)}, approved by ${esc(who(r.approvedBy))}. Payroll selects the version effective on its cutoff start.` : 'The starting rules are an unapproved template. Review employee coverage, contribution and tax tables, and your company policy before approving a version.'}</div><div class="grid2"><section class="panel"><div class="panel-head"><h2>Applicable Statutory / Company Payroll Rate</h2></div>${table(['Work category', 'Underlying formula', 'Combined rate'], rateRows.map(([name, formula, rate]) => [name, formula, badge(`${Math.round(rate * 10000) / 100}%`)]))}<div class="panel-foot">NSD earnings add only the differential; base pay is counted once.</div></section><section class="panel"><div class="panel-head"><h2>Rules history</h2></div>${table(['Effective', 'Approval', ''], state.rules.slice().sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate)).map(v => [v.effectiveDate, v.approvedBy ? esc(who(v.approvedBy)) : badge('Draft', 'pending'), editButton('rules', v.id)]))}<div class="panel-body"><h3>Policy reference</h3><p class="legend">${esc(r.basis)}</p><a class="legend" href="https://nwpc.dole.gov.ph/wp-content/uploads/2024/11/Workers-Statutory-Monetary-Benefits-Handbook-2024-Edition.pdf" target="_blank" rel="noreferrer">Read the DOLE/NWPC handbook ↗</a></div></section></div>`;
+  return heading('Payroll rules & rates', 'Versioned policies. Transparent formulas. An approval behind every change.', addButton('rules', 'New rules version')) + `<div class="notice ${view.status === 'Approved' ? 'success' : ''}">${view.status === 'Approved' ? `Version ${esc(view.versionId)} effective ${esc(r.effectiveDate)}, ${esc(view.status).toLowerCase()} by ${esc(who(view.approver))}${view.approvedAt ? ` on ${esc(new Date(view.approvedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }))}` : ''}. Payroll for a cutoff keeps this version when it was the one in effect.` : 'The starting rules are an unapproved template. Review employee coverage, contribution and tax tables, and your company policy before approving a version.'}</div><div class="grid2"><section class="panel"><div class="panel-head"><h2>Applicable Statutory / Company Payroll Rate</h2></div>${table(['Work category', 'Underlying formula', 'Combined rate'], rateRows.map(([name, formula, rate]) => [name, formula, badge(`${Math.round(rate * 10000) / 100}%`)]))}<div class="panel-foot">NSD earnings add only the differential; base pay is counted once. Rates change only by approving a new version.</div></section><section class="panel"><div class="panel-head"><h2>Rules history</h2></div>${table(['Effective', 'Version', 'Status', ''], state.rules.slice().sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate)).map(v => { const item = rulesView(v); return [v.effectiveDate, esc(item.versionId), item.status === 'Approved' ? `${badge('Approved', '')}<small>${esc(who(item.approver))}</small>` : badge('Draft', 'pending'), editButton('rules', v.id)]; }))}<div class="panel-body"><h3>Legal basis</h3><p class="legend">${esc(view.legal)}</p><a class="legend" href="https://nwpc.dole.gov.ph/wp-content/uploads/2024/11/Workers-Statutory-Monetary-Benefits-Handbook-2024-Edition.pdf" target="_blank" rel="noreferrer">Read the DOLE/NWPC handbook ↗</a></div></section></div>`;
 }
 // The newest version by effective date, draft or approved, so pending tables can be reviewed before approval.
 const graceMinutes = () => (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
@@ -686,7 +712,7 @@ async function reportsPage() {
 }
 async function auditPage() {
   const entries = await api('/audit');
-  shell(heading('Audit trail', 'Who changed what, when, and why. Payroll snapshots preserve their original records.') + `<section class="panel"><div class="panel-head"><h2>Recent activity</h2>${downloads('audit')}<span class="legend">Latest 1,000 events</span></div>${table(['Time', 'Actor', 'Action', 'Record', ''], entries.map((e, i) => [esc(new Date(e.at).toLocaleString()), esc(who(e.actor)), badge(e.action, 'neutral'), `${esc(e.kind)}<br><small>${esc(e.recordId)}</small>`, `<button class="small" data-audit-index="${i}">Inspect change</button>`]))}</section>`);
+  shell(heading('Audit trail', 'Who changed what, when, and why. Payroll snapshots preserve their original records.') + `<section class="panel"><div class="panel-head"><h2>Recent activity</h2>${downloads('audit')}<span class="legend">Latest 1,000 events</span></div>${table(['Time', 'Actor', 'Action', 'Record', ''], entries.map((e, i) => [esc(new Date(e.at).toLocaleString()), esc(e.actorName ? `${e.actorName}${e.via ? ` (via ${e.via})` : ''}` : who(e.actor)), badge(e.action, 'neutral'), `${esc(e.kind)}<br><small>${esc(e.recordId)}</small>`, `<button class="small" data-audit-index="${i}">Inspect change</button>`]))}</section>`);
   document.querySelectorAll('[data-audit-index]').forEach(b => b.onclick = () => showObject('Audit event', entries[Number(b.dataset.auditIndex)]));
 }
 function renderForcedPassword() {
@@ -1083,12 +1109,39 @@ function formField(f, values, existing) {
   else control = `<input name="${f.key}" id="${id}" type="${type.replace('optional-', '')}" value="${esc(value)}" ${type === 'number' ? 'min="0" step="any"' : ''} ${type.startsWith('optional') ? '' : 'required'} ${existing && f.key === 'id' ? 'readonly' : ''}>`;
   return `<label class="field ${type.includes('textarea') || type === 'multi' ? 'full' : ''}" for="${id}">${f.title}${control}${f.hint ? `<small>${f.hint}</small>` : ''}</label>`;
 }
+async function openSalaryChange(id) {
+  const employee = state.employees.find(e => e.id === id);
+  let approvers;
+  try { approvers = await api('/approval-policy/approvers?action=salary'); } catch (error) { toast(error.message); return; }
+  const choices = approvers.filter(a => a.id !== auth.user.id && a.username !== auth.user.username);
+  openDialog(`Edit pay · ${employee?.name || id}`, `<form id="salary-change" class="dialog-body form-grid">
+      <p class="full legend">The current salary stays until a different approver accepts the change. Who may approve is configurable and is still an open management decision.</p>
+      <label class="field">New monthly salary<input name="monthlySalary" type="number" min="0.01" step="0.01" value="${employee?.monthlySalary ?? ''}" required></label>
+      <label class="field">Effective date<input name="effectiveDate" type="date" required value="${today()}"></label>
+      <label class="field full">Reason<textarea name="reason" required minlength="3" maxlength="1000"></textarea></label>
+      <label class="field full">Second approver<select name="approverUserId" required>${choices.map(a => `<option value="${esc(a.id)}">${esc(a.name)} · ${esc(a.role)}</option>`).join('') || '<option value="">No other approver yet</option>'}</select></label></form>`,
+    '<div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary" form="salary-change">Submit for approval</button></div>');
+  dialog.querySelector('#salary-change').onsubmit = async event => {
+    event.preventDefault();
+    const form = event.target;
+    try {
+      await api('/salary-changes', { employeeId: id, effectiveDate: form.elements.effectiveDate.value, reason: form.elements.reason.value.trim(), approverUserId: form.elements.approverUserId.value, monthlySalary: Number(form.elements.monthlySalary.value) });
+      dialog.close(); toast('Submitted. The current salary is unchanged until the second approver accepts it.'); await refresh(); render();
+    } catch (error) { toast(error.message); }
+  };
+}
 function edit(kind, id, preset = {}) {
   const existing = state[kind].find(x => x.id === id), values = structuredClone(existing || { ...defaults(kind), ...preset });
-  const fields = definitions(kind), locked = kind === 'rules' && existing?.approvedBy;
+  if (kind === 'rules' && existing?.approvedBy) {
+    const view = rulesView(existing);
+    openDialog(`Payroll rules version ${view.versionId}`, `<div class="dialog-body"><p>${esc(rulesViewText(existing)).replaceAll('\n', '<br>')}</p><p class="legend">This version is locked. Save as draft and Approve do not change it. Create a new rules version to revise a rate.</p></div>`, '<div class="dialog-foot"><button type="button" class="primary" data-close>Close</button></div>');
+    return;
+  }
+  const fields = definitions(kind), locked = false;
   if (kind === 'attendance' && existing) fields.push(field('correctionReason', 'Correction / approval reason', 'textarea', null, 'Required. Original attendance, your changes, reason and approver remain in the audit history.'));
   openDialog(`${existing ? 'Review' : 'New'} ${kind === 'leaveTypes' ? 'leave policy' : kind === 'rules' ? 'payroll rules version' : label(kind).replace(/s$/, '')}`, `<form id="record-form"><div class="dialog-body"><div id="form-error" class="form-error hidden" role="alert"></div>${locked ? '<div class="notice">Approved rules cannot be edited. Close this dialog and create a new rules version.</div>' : ''}<div class="form-grid">${fields.map(f => formField(f, values, !!existing)).join('')}</div></div><div class="dialog-foot">${existing && ['leaves', 'holidays', 'adjustments', 'deductions'].includes(kind) ? '<button type="button" class="danger" id="delete-record">Delete record</button>' : ''}<button type="button" data-close>Cancel</button><button type="submit" class="primary" ${locked ? 'disabled' : ''}>Save ${kind === 'rules' ? 'version' : 'record'}</button></div></form>`);
   const form = dialog.querySelector('form');
+  if (kind === 'employees' && existing?.monthlySalary != null && form.elements.monthlySalary) form.elements.monthlySalary.readOnly = true;
   if (kind === 'leaves' && /^[a-f0-9-]{36}$/.test(existing?.documentReference || '')) {
     const attachment = document.createElement('a'); attachment.href = `/api/documents/${existing.documentReference}/content`; attachment.textContent = 'Download supporting document'; attachment.className = 'button'; form.querySelector('.dialog-body').prepend(attachment);
   }
@@ -1316,10 +1369,18 @@ document.addEventListener('click', async event => {
       const safe = v => typeof v === 'string' ? (/^[=+@\-\t\r]/.test(v) ? `'${v}` : v).replace(/[\t\r\n]/g, ' ') : v;
       await navigator.clipboard.writeText(rows.map(row => row.map(safe).join('\t')).join('\n')); toast('Payroll summary copied with employee IDs.');
     }
+    if (b.hasAttribute('data-save-draft') && currentRun && !currentRun.id) {
+      currentRun = await api('/payroll/draft', { start: currentRun.start, end: currentRun.end, pay13th: !!currentRun.pay13th, ...(currentRun.employeeIds ? { employeeIds: currentRun.employeeIds } : {}) });
+      await refresh(); render(); toast('Draft saved. It is not finalized, included or paid.'); return;
+    }
+    if (b.dataset.payrollStage && currentRun?.id) {
+      const updated = await api(`/runs/${currentRun.id}/stage`, { stage: b.dataset.payrollStage });
+      await refresh(); currentRun = state.runs.find(r => r.id === updated.id) || updated; render(); return;
+    }
     if (b.hasAttribute('data-post')) {
       const run = currentRun;
       // Items still to fix are shown here (not as a list on the page); the payroll cannot be finalized until they are resolved.
-      if (run.blockers?.length) { openDialog(`${run.blockers.length} item${run.blockers.length === 1 ? '' : 's'} to resolve first`, `<div class="dialog-body"><p class="sub">Fix these before finalizing ${esc(run.start)} — ${esc(run.end)}, then click Generate payroll again.</p><ul class="blocker-list">${run.blockers.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>'); return; }
+      if (run.blockers?.length) { openDialog(`${run.blockers.length} item${run.blockers.length === 1 ? '' : 's'} to resolve first`, `<div class="dialog-body"><p class="sub">Fix these before finalizing ${esc(run.start)} — ${esc(run.end)}, then click Preview payroll again.</p><ul class="blocker-list">${run.blockers.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>'); return; }
       openDialog('Finalize payroll', `<div class="dialog-body"><p>Finalize payroll for <strong>${run.start} — ${run.end}</strong>?</p><p>${run.rows.length} employees · Net payroll <strong>${money(run.totals.net)}</strong></p><p>Payslips will appear in employee accounts on salary day, <strong>${esc(payDateFor(run.start, run.end))}</strong>.</p><p class="sub">Once final, this payroll can no longer be edited: amounts, attendance and adjustments for this cutoff are locked, loan balances are updated, and payslips are released. The date, time and your name are recorded in the payroll history. Corrections afterwards go through an adjustment in a later cutoff.</p></div>`, '<div class="dialog-foot"><button data-close>Continue reviewing</button><button class="primary" id="confirm-post">Post payroll</button></div>');
       dialog.querySelector('#confirm-post').onclick = async event => {
         event.target.disabled = true;
@@ -1343,6 +1404,11 @@ document.addEventListener('click', async event => {
 // Semi-monthly cutoffs: choosing a start date fills the matching end (1st → 15th, 16th → last day of the month),
 // so a payroll is never run over a whole month by mistake (manual entries are saved per cutoff).
 document.addEventListener('change', event => {
+  const select = event.target;
+  if (select.name === 'cutoff' && select.closest('#cutoff-form')) {
+    const [start, end] = select.value.split('|'), form = select.closest('form');
+    form.elements.start.value = start; form.elements.end.value = end; return;
+  }
   const input = event.target; if (input.name !== 'start' || !input.closest('#cutoff-form') || !input.value) return;
   const [y, m, d] = input.value.split('-').map(Number), end = input.closest('form').elements.end;
   const startDay = d <= 15 ? 1 : 16, last = new Date(Date.UTC(y, m, 0)).getUTCDate();

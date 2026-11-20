@@ -7,7 +7,7 @@ const fmtDay = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { wee
 const period = o => (o.startTime ? `${o.startTime} – ${o.endTime}${o.endTime <= o.startTime ? ' (next day)' : ''}` : 'Hours only');
 const stamp = iso => (iso ? new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '');
 
-export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide, employees, onChanged }) {
+export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide, employees, onChanged, onOpenAttendance }) {
   let list = [], filters = { employee: '', from: '', to: '', status: 'pending' };
   const statusBadge = s => { const [label, tone] = STATUS[s] || [s, 'neutral']; return badge(label, tone); };
 
@@ -58,29 +58,51 @@ export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, c
         <div class="notice-rows">${facts.map(([k, v]) => `<div class="notice-row"><span>${k}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
         <p class="ot-reason"><span>Work to be done</span>${esc(o.reason)}</p>
         ${o.documentId ? `<p><a class="button" href="/api/documents/${esc(o.documentId)}/content" target="_blank" rel="noopener">📎 View attachment</a></p>` : ''}
+        ${o.attendanceId ? `<p><a href="#/attendance/${encodeURIComponent(o.employeeId)}/${encodeURIComponent(o.date)}" data-ot-attendance="${esc(o.employeeId)}|${esc(o.date)}">Attendance record for ${esc(fmtDay(o.date))}</a></p>` : '<p>No attendance recorded for this date.</p>'}
         ${o.flags?.length ? `<div class="ot-flags">${o.flags.map(f => `<p>⚠ ${esc(f)}</p>`).join('')}</div>` : ''}
+        ${o.overrideReason ? `<p class="legend">Override by ${esc(who(o.overrideByName || o.overrideBy))}: ${esc(o.overrideReason)}</p>` : ''}
         ${o.status === 'approved' && o.adjustReason ? `<p class="legend">Adjusted: ${esc(o.adjustReason)}</p>` : ''}${o.remarks ? `<p class="legend">Remarks: ${esc(o.remarks)}</p>` : ''}
         ${open ? `<fieldset class="ot-decide"><legend>${o.status === 'pending' ? 'Decision' : 'Change the decision'}</legend>
           <label class="field">Hours to approve<input type="number" name="hours" min="0.25" max="${o.hours}" step="0.25" value="${start}" required></label>
           <label class="field ot-adjust ${start === o.hours ? 'hidden' : ''}">Reason for approving different hours<input name="adjustReason" maxlength="500" value="${esc(o.adjustReason || '')}" placeholder="e.g. Only 2 h were authorised"></label>
-          <label class="field">Remarks to the employee <small>(required to reject)</small><textarea name="remarks" rows="2" maxlength="500">${esc(o.remarks || '')}</textarea></label></fieldset>` : o.locked ? '<p class="legend">Payroll for this date is posted; the decision is locked.</p>' : ''}
+          <label class="field full ot-override">Override reason <small>(required when attendance is not approved, payable hours are 0, or payable hours are below the hours to approve)</small><textarea name="overrideReason" maxlength="500" placeholder="Why this is approved anyway"></textarea></label>
+          <label class="field full">Reason for this decision <small>(required to change the status or the hours)</small><textarea name="reason" rows="2" maxlength="500"></textarea></label>
+          <label class="field">Remarks to the employee <small>(required to reject)</small><textarea name="remarks" rows="2" maxlength="500">${esc(o.remarks || '')}</textarea></label></fieldset>` : o.locked ? '<p class="legend">This overtime is included in payroll. The decision is locked. A correction is a separate adjustment and does not change this row.</p>' : ''}
         <details class="ot-history"><summary>History</summary><ul>${history}</ul></details></form>`,
       `<div class="dialog-foot"><button type="button" data-close>Close</button>${open ? `<button type="button" class="danger" data-ot-reject>✕ Reject</button><button type="button" class="primary" data-ot-approve>✓ Approve ${start} h</button>` : ''}</div>`);
     if (!open) return;
     const form = dialog.querySelector('#ot-review'), approveBtn = dialog.querySelector('[data-ot-approve]');
-    form.elements.hours.addEventListener('input', () => {
-      const h = Number(form.elements.hours.value || 0);
-      approveBtn.textContent = `✓ Approve ${h} h`;
-      form.querySelector('.ot-adjust').classList.toggle('hidden', h === o.hours);
+    const needsOverride = () => {
+      const hours = Number(form.elements.hours.value || 0);
+      return !o.attendanceApproved || !(Number(o.payableHours) > 0) || Number(o.payableHours) + 1e-9 < hours;
+    };
+    const syncApprove = () => {
+      const hours = Number(form.elements.hours.value || 0);
+      approveBtn.textContent = `✓ Approve ${hours} h`;
+      form.querySelector('.ot-adjust').classList.toggle('hidden', hours === o.hours);
+      const blocked = needsOverride();
+      form.querySelector('.ot-override').classList.toggle('hidden', !blocked);
+      approveBtn.disabled = blocked && form.elements.overrideReason.value.trim().length < 3;
+    };
+    form.elements.hours.addEventListener('input', syncApprove);
+    form.elements.overrideReason.addEventListener('input', syncApprove);
+    syncApprove();
+    dialog.querySelector('[data-ot-attendance]')?.addEventListener('click', event => {
+      event.preventDefault();
+      const [employeeId, date] = event.currentTarget.dataset.otAttendance.split('|');
+      dialog.close();
+      onOpenAttendance?.(employeeId, date);
     });
     const decide = async decision => {
-      const hours = Number(form.elements.hours.value), remarks = form.elements.remarks.value.trim(), adjustReason = form.elements.adjustReason.value.trim();
+      const hours = Number(form.elements.hours.value), remarks = form.elements.remarks.value.trim(), adjustReason = form.elements.adjustReason.value.trim(), overrideReason = form.elements.overrideReason.value.trim(), reason = form.elements.reason.value.trim();
+      if (reason.length < 3 && !(decision === 'reject' && remarks.length >= 3) && !(decision === 'approve' && hours !== o.hours && adjustReason.length >= 3)) { toast('Give a reason for this decision.'); form.elements.reason.focus(); return; }
       if (decision === 'reject' && remarks.length < 3) { toast('Write the reason for rejecting in Remarks.'); form.elements.remarks.focus(); return; }
       if (decision === 'approve' && !(hours > 0)) { toast('Enter the hours to approve.'); return; }
       if (decision === 'approve' && hours !== o.hours && adjustReason.length < 3) { toast('Give the reason for approving different hours.'); form.elements.adjustReason.focus(); return; }
+      if (decision === 'approve' && needsOverride() && overrideReason.length < 3) { toast('An override needs a written reason.'); form.elements.overrideReason.focus(); return; }
       dialog.querySelectorAll('.dialog-foot button').forEach(b => { b.disabled = true; });
       try {
-        await api(`/overtime-requests/${o.id}/decision`, { decision, remarks, ...(decision === 'approve' ? { hours, adjustReason } : {}) });
+        await api(`/overtime-requests/${o.id}/decision`, { decision, remarks, reason, ...(decision === 'approve' ? { hours, adjustReason, overrideReason } : {}) });
         await fill(box); onChanged?.();
         openDialog(decision === 'approve' ? 'Overtime approved' : 'Overtime rejected', `<div class="dialog-body confirm-box"><p class="confirm-icon" aria-hidden="true">${decision === 'approve' ? '✅' : '❌'}</p><p>${esc(decision === 'approve' ? `${hours} h approved for ${o.name} on ${fmtDay(o.date)}. Payroll pays the time worked inside the period, up to ${hours} h.` : `Overtime for ${o.name} on ${fmtDay(o.date)} was rejected.`)} The employee has been notified.</p></div>`, '<div class="dialog-foot"><button class="primary" data-close>OK</button></div>');
       } catch (error) { dialog.querySelectorAll('.dialog-foot button').forEach(b => { b.disabled = false; }); toast(error.message); }

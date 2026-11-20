@@ -72,6 +72,7 @@ export async function login(store, username, password, key, otp = '', { currentT
   checkLimit(store, key, 100);
   const accountKey = `account-login:${username.toLowerCase()}`; checkLimit(store, accountKey);
   let user = store.db.prepare('SELECT * FROM users WHERE username=? OR employee_id=? COLLATE NOCASE').get(username, username);
+  if (user && (user.role === 'service' || user.account_kind === 'service')) throw new AppError('The AI service account cannot sign in, including as System Administrator. Use its scoped token.', 403);
   const stored = user?.password_hash || `${'0'.repeat(32)}:${'0'.repeat(128)}`;
   const computed = await passwordHash(password, stored.split(':')[0]);
   user = user ? store.db.prepare('SELECT * FROM users WHERE id=?').get(user.id) : null;
@@ -92,14 +93,15 @@ export function issueSession(store, user, currentTokenHash = '') {
   if (currentTokenHash) store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(currentTokenHash);   // same device signing in again
   const token = randomBytes(32).toString('hex'), csrf = randomBytes(32).toString('hex');
   store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + SESSION_MS);
-  return { token, csrf, user: { id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret, mustChangePassword: !!user.must_change_password } };
+  return { token, csrf, user: sessionUser(user) };
 }
+const sessionUser = user => ({ id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, displayName: user.display_name || '', sharedAdmin: !!user.shared_admin, accountKind: user.account_kind || 'human', mfaEnabled: !!user.mfa_secret, mustChangePassword: !!user.must_change_password });
 export function session(store, cookie = '') {
   const token = cookie.split(';').map(v => v.trim()).find(v => v.startsWith('hr_session='))?.slice(11);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
-  if (!row || row.disabled || row.expires < Date.now()) return null;
-  return { user: { id: row.id, username: row.username, role: row.role, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
+  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.display_name, u.disabled, u.mfa_secret, u.must_change_password, u.account_kind, u.shared_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
+  if (!row || row.disabled || row.expires < Date.now() || row.role === 'service' || row.account_kind === 'service') return null;
+  return { user: sessionUser(row), csrf: row.csrf, tokenHash: hashToken(token) };
 }
 export async function changePassword(store, user, currentPassword, newPassword) {
   const row = store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id);
