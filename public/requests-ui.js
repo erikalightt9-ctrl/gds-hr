@@ -27,7 +27,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
   let list = [];
   const badge = s => { const [label, tone] = STATUS[s] || [s, 'neutral']; return `<span class="badge ${tone}">${esc(label)}</span>`; };
   function render(box) {
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>My attendance requests</h2><p class="legend">Forgot to time in or out, a failed time in, a system error or another reason? File a request; HR approves it before your record changes.</p><p class="ar-policy">${esc(POLICY)}</p></div><button class="primary" data-ar-new>New request</button></div>
+    box.innerHTML = `<div data-my-cases></div><section class="panel"><div class="panel-head"><div><h2>My attendance requests</h2><p class="legend">Forgot to time in or out, a failed time in, a system error or another reason? File a request; HR approves it before your record changes.</p><p class="ar-policy">${esc(POLICY)}</p></div><button class="primary" data-ar-new>New request</button></div>
       ${list.length ? `<div class="ar-list">${list.map(r => `<article class="ar-item"><header><strong>${esc(r.reference)}</strong>${badge(r.status)}</header>
         <p><b>${esc(CATEGORIES[r.category])}</b> · ${esc(nice(r.date))} · requested ${esc(times(r))}</p>
         ${r.decision?.approved && r.status === 'approved' ? `<p>Approved: ${esc(times(r.decision.approved))}</p>` : ''}
@@ -38,6 +38,8 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
   }
   async function fill(box) {
     try { list = await api('/me/attendance-requests'); render(box); } catch (error) { box.innerHTML = `<p class="muted">${esc(error.message)}</p>`; }
+    // Records to correct (incomplete attendance), loaded on demand so this screen works even before a server restart.
+    import('./attendance-cases-ui.js').then(m => m.mountMyCases(box.querySelector('[data-my-cases]'), { api, esc, openForm: (category, done, date) => openForm(category, () => { done(); fill(box); }, date) })).catch(() => {});
     box.onclick = async event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-ar-new')) openForm('', () => fill(box));
@@ -55,10 +57,10 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
     };
   }
   // The request form; the fields follow the chosen category.
-  function openForm(category = '', done = () => {}) {
+  function openForm(category = '', done = () => {}, date = '') {
     openDialog('New attendance request', `<form class="dialog-body form-grid" id="ar-form">
       <label class="field full">Request<select name="category" required><option value="">Choose…</option>${Object.entries(CATEGORIES).map(([k, v]) => `<option value="${k}" ${k === category ? 'selected' : ''}>${esc(v)}</option>`).join('')}<option value="leave">Leave application</option></select></label>
-      <label class="field">Date to correct<input type="date" name="date" required max="${manilaToday()}" value="${manilaToday()}"></label>
+      <label class="field">Date to correct<input type="date" name="date" required max="${manilaToday()}" value="${date || manilaToday()}"></label>
       <label class="field" data-show="failed system other">Transaction<select name="transaction"><option value="in">Time in</option><option value="out">Time out</option><option value="both">Time in and time out</option></select></label>
       <label class="field" data-show="forgot-in failed system other offsite">Requested time in<input type="time" name="timeIn"></label>
       <label class="field" data-show="forgot-out failed system other offsite forgot-in">Requested time out<input type="time" name="timeOut"></label>
@@ -100,7 +102,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
 
 // ---------- HR / Admin ----------
 export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, onLeave }) {
-  let data = { requests: [], leave: { pending: 0, needsInfo: 0 } }, filter = 'open', who = '';
+  let data = { requests: [], leave: { pending: 0, needsInfo: 0 } }, filter = 'open', who = '', cases = null;
   const statusBadge = s => { const [label, tone] = STATUS[s] || [s, 'neutral']; return badge(label, tone); };
   const open = r => ['pending', 'review', 'info'].includes(r.status);
   const shown = () => data.requests.filter(r => (!who || r.employeeId === who) && (filter === 'open' ? ['pending', 'review'].includes(r.status) : filter === 'all' ? true : CATEGORIES[filter] ? r.category === filter && open(r) : r.status === filter));
@@ -108,12 +110,14 @@ export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, o
     const n = f => data.requests.filter(f).length, waiting = r => ['pending', 'review'].includes(r.status);
     const tile = (key, count, label) => `<button data-ar-filter="${key}" class="${filter === key ? 'active' : ''}"><strong>${count}</strong>${label}</button>`;
     const people = [...new Map(data.requests.map(r => [r.employeeId, r.employeeName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>Attendance requests</h2><p class="legend">Nothing changes in attendance until you approve. Approved requests become HR-approved adjustments; the original record stays in the correction history.</p><p class="ar-policy">${esc(POLICY)}</p></div></div>
+    box.innerHTML = `<div data-cases-box></div><section class="panel"><div class="panel-head"><div><h2>Attendance requests</h2><p class="legend">Nothing changes in attendance until you approve. Approved requests become HR-approved adjustments; the original record stays in the correction history.</p><p class="ar-policy">${esc(POLICY)}</p></div></div>
       <div class="ot-summary ar-tiles">${tile('open', n(waiting) + data.leave.pending, 'Total pending')}${tile('forgot-in', n(r => r.category === 'forgot-in' && open(r)), 'Forgot time in')}${tile('forgot-out', n(r => r.category === 'forgot-out' && open(r)), 'Forgot time out')}${tile('failed', n(r => r.category === 'failed' && open(r)), 'Failed time in / out')}${tile('system', n(r => r.category === 'system' && open(r)), 'System error')}${tile('other', n(r => r.category === 'other' && open(r)), 'Other reason')}${tile('offsite', n(r => r.category === 'offsite' && open(r)), 'Off-site reconsideration')}<button data-ar-leave><strong>${data.leave.pending}</strong>Leave applications</button>${tile('info', n(r => r.status === 'info') + data.leave.needsInfo, 'Awaiting more information')}${tile('approved', n(r => r.status === 'approved'), 'Approved')}${tile('rejected', n(r => r.status === 'rejected'), 'Rejected')}${tile('all', data.requests.length, 'All requests')}</div>
       <div class="ot-filters"><label class="field">Employee<select data-ar-who><option value="">All employees</option>${people.map(([id, name]) => `<option value="${esc(id)}" ${id === who ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label></div>
       <div class="table-wrap"><table><thead><tr><th>Reference</th><th>Employee</th><th>Request</th><th>Date</th><th>Requested</th><th>Status</th><th>Submitted</th><th></th></tr></thead><tbody>
       ${shown().map(r => `<tr><td><strong>${esc(r.reference)}</strong></td><td>${esc(r.employeeName)}</td><td>${esc(CATEGORIES[r.category])}</td><td>${esc(nice(r.date))}</td><td>${esc(times(r))}</td><td>${statusBadge(r.status)}</td><td>${esc(stamp(r.submittedAt))}</td><td><button class="small" data-ar-open="${esc(r.id)}">Open</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">Nothing to show yet.</td></tr>'}
       </tbody></table></div></section>`;
+    // Incomplete attendance cases above the requests (loaded on demand).
+    import('./attendance-cases-ui.js').then(m => (cases ||= m.createHrCases({ api, esc, badge, openDialog, dialog, toast })).mount(box.querySelector('[data-cases-box]'))).catch(() => {});
   }
   function detail(r, box) {
     const cur = r.current, clock = (r.clock || []).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)} · ${e.type === 'offsite' ? 'Off-site' : 'Office'}${e.hrApproved ? ' · HR-approved' : ''}${e.address ? ` · ${esc(e.address)}` : ''}`).join('<br>') || 'No time in / out recorded';

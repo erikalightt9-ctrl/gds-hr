@@ -148,7 +148,7 @@ export function createFiles(ctx) {
 
   // ---------- Profile ----------
   async function openProfile(id, startTab = 'overview') {
-    profileId = id; tab = startTab; ctx.setPage('employee201'); otCache = null;   // fresh overtime decisions on every opening
+    profileId = id; tab = startTab; ctx.setPage('employee201'); otCache = null; dayCache.clear();   // fresh overtime decisions on every opening
     await drawProfile();
   }
   async function drawProfile() {
@@ -210,21 +210,32 @@ export function createFiles(ctx) {
   function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Subsidiary', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
   // Attendance history for one month: recorded attendance and approved leave, newest first.
   let attMonth = '';
-  // Time in / out records (off-site work: reason, time recorded, location), loaded per employee and month.
-  const clockCache = new Map();
-  function clockEventsHtml(id, month) {
+  // Consolidated Attendance History (Nov 20, 2026): every date of the month in order, from the server (attendance-days):
+  // kind of day, time in / out, late, gaps (Missing Time-In, Missing Time-Out, No Time-In / Time-Out), days recorded but
+  // not yet approved (Attendance for Verification), the correction case, remarks and off-site reasons / places.
+  const dayCache = new Map();
+  const CHIP = { 'missing-in': ['Missing Time-In', 'att-chip-in'], 'missing-out': ['Missing Time-Out', 'att-chip-out'], 'no-record': ['No Time-In / Time-Out', 'att-chip-none'], verify: ['Attendance for Verification', 'att-chip-verify'], rest: ['Rest day', 'att-chip-rest'], holiday: ['Holiday', 'att-chip-holiday'], leave: ['Approved leave', 'att-chip-leave'], wfh: ['Work from home', 'att-chip-wfh'] };
+  const chip = (key, text) => `<span class="att-chip ${CHIP[key][1]}">${esc(text || CHIP[key][0])}</span>`;
+  function historyHtml(id, month) {
     const key = `${id}|${month}`;
-    if (!clockCache.has(key)) {
-      clockCache.set(key, null);
-      ctx.api(`/clock-events?employeeId=${encodeURIComponent(id)}&month=${month}`).then(list => { clockCache.set(key, list); const box = document.querySelector('[data-att-box]'); if (box && (attMonth || ctx.today().slice(0, 7)) === month) box.innerHTML = attendanceHtml(id); }).catch(() => clockCache.set(key, []));
-      return '<p class="muted">Loading time records…</p>';
+    if (!dayCache.has(key)) {
+      dayCache.set(key, null);
+      ctx.api(`/attendance-days?employeeId=${encodeURIComponent(id)}&month=${month}`).then(list => { dayCache.set(key, list); const box = document.querySelector('[data-att-box]'); if (box && (attMonth || ctx.today().slice(0, 7)) === month) box.innerHTML = attendanceHtml(id); }).catch(error => dayCache.set(key, { error: error.message }));
     }
-    const list = clockCache.get(key);
-    if (list === null) return '<p class="muted">Loading time records…</p>';
-    const away = list.filter(e => e.outOfOffice);
-    const where = e => (e.latitude === null || e.latitude === undefined ? 'No GPS reading' : `<a href="https://www.google.com/maps/search/?api=1&query=${e.latitude},${e.longitude}" target="_blank" rel="noopener noreferrer">${esc(e.place || `${e.latitude}, ${e.longitude}`)}</a><small> ±${esc(e.accuracy)} m</small>`);
-    const stampOf = iso => new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
-    return `<h3>Off-site work time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
+    const list = dayCache.get(key);
+    if (list === null) return '<p class="muted">Loading attendance…</p>';
+    if (list.error) return `<div class="notice">${esc(list.error)}</div>`;
+    const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const today = ctx.today(), verify = d => !d.issue && d.status === 'present' && !d.approved && d.timeIn && d.timeOut;
+    const where = o => (o.latitude === null || o.latitude === undefined ? esc(o.place || '') : `<a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noopener noreferrer">${esc(o.place || 'Map')}</a>`);
+    const statusCell = d => (d.issue ? chip(d.issue) : verify(d) ? chip('verify') : d.date > today ? '<small class="muted">Not yet</small>' : d.status === 'present' ? (d.late >= 15 ? 'Late' : 'Present') : d.status ? esc(d.status.replace(/-/g, ' ')) : '');
+    const kindCell = d => (CHIP[d.kind] && d.kind !== 'workday' ? chip(d.kind, d.label) : esc(d.label));
+    const caseCell = d => { const c = d.case; if (!c) return ''; if (c.status === 'resolved') return `<small>Corrected${c.adjustment && c.adjustment.status !== 'none' ? ` · pay adjustment ${esc(c.adjustment.status)}` : ''}</small>`; return `<small>${today > c.due ? '<strong class="att-overdue">Overdue</strong>' : `Correction due ${esc(c.due)}`}${c.treatment ? ` · ${c.treatment.mode === 'credit' ? 'credited pending verification' : 'held until corrected'}` : ''}</small>`; };
+    const remarks = d => [d.explanation ? esc(d.explanation) : '', ...d.offsite.map(o => `Off-site ${o.kind === 'in' ? 'time in' : 'time out'} ${esc(o.time)}${o.reason ? ` — ${esc(o.reason)}` : ''}${o.place || o.latitude !== null ? ` · ${where(o)}` : ''}`)].filter(Boolean).join('<br>');
+    const n = k => list.filter(d => d.issue === k).length;
+    const counts = `${list.filter(d => d.status === 'present').length} present · ${n('missing-in')} missing time-in · ${n('missing-out')} missing time-out · ${n('no-record')} with no time-in / time-out · ${list.filter(verify).length} for verification`;
+    const legend = `<div class="att-legend">${Object.keys(CHIP).map(k => chip(k)).join('')}</div>`;
+    return `<p class="legend">${counts}</p>${legend}` + table(['Date', 'Day', 'Time in', 'Time out', 'Late (min)', 'Status', 'Correction', 'Remarks'], list.map(d => [day(d.date), kindCell(d), esc(d.timeIn || '—'), esc(d.timeOut ? `${d.timeOut}${d.endNextDay ? ' (+1)' : ''}` : '—'), d.late || '—', statusCell(d), caseCell(d), `<span class="wrap">${remarks(d)}</span>`]), 'No days in this month.');
   }
   // Overtime applications of this employee for the month (filed hours, decision, hours payroll can pay); decided on the
   // Attendance → Overtime applications page. Loaded once per open profile (the whole list, filtered here).
@@ -240,7 +251,14 @@ export function createFiles(ctx) {
     return '<h3>Overtime applications</h3>' + table(['Date', 'Period', 'Hours filed', 'Status', 'Approved', 'Payable (worked)', 'Work / reason', 'Notes'], rows.map(o => [esc(o.date), o.startTime ? `${esc(o.startTime)}–${esc(o.endTime)}${o.breakMinutes ? ` (less ${o.breakMinutes} min break)` : ''}` : '—', esc(o.hours), esc(STATUS[o.status] || o.status), o.status === 'approved' ? esc(o.approvedHours) : '—', o.status === 'approved' ? `${esc(o.payableHours)} h` : '—', `<span class="wrap">${esc(o.reason || o.work || '')}</span>`, `<span class="wrap">${esc([o.remarks, ...(o.flags || [])].filter(Boolean).join(' · '))}</span>`]), 'No overtime applications this month.') + '<p class="legend">Approve or reject them in Attendance → Overtime applications.</p>';
   }
   function attendanceHtml(id) {
-    const state = ctx.getState(), month = attMonth || ctx.today().slice(0, 7);
+    const month = attMonth || ctx.today().slice(0, 7), can = ctx.context?.()?.can || {};
+    // HR / Admin / Payroll: the consolidated day-by-day history; other roles keep the recorded list below.
+    if (can.approve || can.payroll || ctx.context?.()?.roleLabel === 'Payroll') {
+      const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(`${ctx.today().slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - i); return d.toISOString().slice(0, 7); });
+      const label = m => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      return block('🕒', 'Attendance history', `<div class="att-tools"><label class="field">Month<select data-att-month>${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${label(m)}</option>`).join('')}</select></label></div>` + historyHtml(id, month) + (can.approve ? overtimeHtml(id, month) : ''));
+    }
+    const state = ctx.getState();
     const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
     const grace = state.rules.filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 15;
     const typeName = tid => state.leaveTypes.find(x => x.id === tid)?.name || tid;
@@ -261,7 +279,7 @@ export function createFiles(ctx) {
     const count = s => list.filter(r => r.status.startsWith(s)).length;
     return block('🕒', 'Attendance history', `<div class="att-tools"><label class="field">Month<select data-att-month>${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${label(m)}</option>`).join('')}</select></label><span class="legend">${count('Present')} present · ${count('Late')} late · ${count('Absent')} absent · ${count('On leave')} on leave</span></div>`
       + table(['Date', 'Status', 'Time in', 'Time out', 'Late (min)', 'Remarks'], list.map(r => [day(r.date), esc(r.status), esc(r.timeIn || '—'), esc(r.timeOut || '—'), r.late || '—', `<span class="wrap">${esc(r.note || '')}</span>`]), 'No attendance recorded for this month.')
-      + (ctx.context?.()?.can?.approve ? clockEventsHtml(id, month) + overtimeHtml(id, month) : ''));
+      + (ctx.context?.()?.can?.approve ? overtimeHtml(id, month) : ''));
   }
   function safeBody(...args) {
     try { return tabBody(...args); } catch (error) { return `<div class="notice">This tab could not be shown: ${esc(error.message)}. Reload the page (Ctrl+F5) and try again.</div>`; }

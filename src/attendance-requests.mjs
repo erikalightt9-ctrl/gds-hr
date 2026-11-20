@@ -41,7 +41,9 @@ const employeeOf = (store, actor) => {
   if (!employee) throw new AppError('Your employee record was not found.', 404);
   return employee;
 };
-const posted = (state, employeeId, day) => state.runs.some(r => r.status === 'posted' && r.start <= day && r.end >= day && r.rows.some(row => row.employeeId === employeeId));
+// A day with an open incomplete-attendance case stays correctable after its payroll is posted (the difference is settled later).
+const openCase = (state, employeeId, day) => (state.attendanceCases || []).some(c => c.employeeId === employeeId && c.date === day && c.status === 'open');
+const posted = (state, employeeId, day) => !openCase(state, employeeId, day) && state.runs.some(r => r.status === 'posted' && r.start <= day && r.end >= day && r.rows.some(row => row.employeeId === employeeId));
 function checkEvidence(store, actor, ids) {
   for (const id of ids) {
     const doc = getDocument(store, actor, id);

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
 import { markOvertimePaid, unmarkOvertimePaid, carryUnfiledOvertime } from './overtime-carry.mjs';
+import { markCaseAdjustments, unmarkCaseAdjustments } from './attendance-cases.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
@@ -18,6 +19,9 @@ function affectedPeriod(kind, value) {
 }
 function assertUnlocked(state, kind, value) {
   const period = affectedPeriod(kind, value);
+  // A day with an open incomplete-attendance case may be corrected after its payroll is posted: the difference is then
+  // settled by the next payroll (src/attendance-cases.mjs). Every other posted day stays locked.
+  if (kind === 'attendance' && (state.attendanceCases || []).some(c => c.employeeId === value.employeeId && c.date === value.date && c.status === 'open')) return;
   if (period && state.runs.some(r => r.status === 'posted' && overlaps(...period, r.start, r.end) && (!value.employeeId || r.rows.some(row => row.employeeId === value.employeeId)))) throw new AppError('This record affects posted payroll and is locked. Use an approved adjustment in an open cutoff.');
 }
 function validateBrackets(brackets, name) {
@@ -202,6 +206,7 @@ export function reversePayroll(store, actor, runId, input) {
     }
     const wasReleased = payslipReleased(run, manilaNow());
     unmarkOvertimePaid(store, run.id);
+    unmarkCaseAdjustments(store, run.id);
     run.status = 'reversed'; run.reversedBy = actor.username; run.reversedAt = new Date().toISOString(); run.reversalReason = reason;
     state.version++; store.write(state);
     // Employees are told only when the payslip was already visible to them (on or after salary day).
@@ -249,6 +254,7 @@ export function postPayroll(store, actor, request) {
     state.runs.push(run); state.version++; store.write(state);
     // Overtime this payroll paid is marked Paid; overtime worked but not filed is carried over as Pending Overtime.
     markOvertimePaid(store, run);
+    markCaseAdjustments(store, run);
     const carried = carryUnfiledOvertime(store, run, state);
     if (carried.length) store.notify(null, `${carried.length} unfiled overtime record${carried.length === 1 ? '' : 's'} from ${run.start} to ${run.end} carried over as Pending Overtime (Attendance → Overtime applications).`);
     const payDate = payDateFor(run.start, run.end);

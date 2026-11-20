@@ -1898,3 +1898,16 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 @media (max-width: 900px) { .dp-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .dp-case > header { display: block; }
 .dp-case > header .badge { display: inline-flex; width: auto; margin-left: 6px; vertical-align: middle; }
+
+/* Consolidated Attendance History legend (hr-files.js historyHtml) */
+.att-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.att-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.att-chip-in { background: #fff1e0; color: #a14a00; border-color: #f2b56b; }        /* Missing Time-In */
+.att-chip-out { background: #fde8ec; color: #a1182e; border-color: #ef9aa8; }       /* Missing Time-Out */
+.att-chip-none { background: #b31f2b; color: #fff; }                                 /* No Time-In / Time-Out */
+.att-chip-verify { background: #e8f0fe; color: #1f4fa3; border-color: #9fbbef; }    /* Attendance for Verification */
+.att-chip-rest { background: #eeeeee; color: #555; }
+.att-chip-holiday { background: #fff6d6; color: #7a5a00; border-color: #e3c568; }
+.att-chip-leave { background: #e6f5ea; color: #1d6b35; border-color: #9cd3ac; }
+.att-chip-wfh { background: #e3f4f4; color: #12635f; border-color: #92cfcb; }
+.att-overdue { color: #b31f2b; }
