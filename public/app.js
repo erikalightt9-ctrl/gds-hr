@@ -356,7 +356,11 @@ function attendancePage() {
       } else { look = 'leave'; label = a.status.replace(/-/g, ' ').replace(/^./, c => c.toUpperCase()); icon = 'cal'; }
       offset = a.offsetMinutes ? `${a.offsetMinutes} min` : '—';
       approval = `<span class="dr-tag ${a.approved ? 'ok' : 'wait'}">${a.approved ? 'Approved' : 'Pending'}</span>`;
-    } else if (open) { recorded = true; look = 'ok'; label = 'Time in recorded'; sub = 'Time out pending'; icon = 'ok'; clockIn = open.time; }
+    } else if (open) {
+      recorded = true; clockIn = open.time;
+      const raw = mins(open.time) !== null && mins(e.scheduleStart) !== null ? mins(open.time) - mins(e.scheduleStart) : 0;
+      if (raw > 0 && raw >= Math.max(1, graceMinutes())) { look = 'late'; label = 'Late'; sub = `${raw} min late · time out pending`; icon = 'clock'; } else { look = 'ok'; label = 'Present'; sub = 'Time out pending'; icon = 'ok'; }
+    }
     else if (leave) { look = 'leave'; label = 'On leave'; icon = 'cal'; }
     else if ((e.restDays || []).includes(weekday)) { look = 'rest'; label = 'Rest day'; icon = 'cal'; }
     else if (day <= today() && (state.employeeProfiles || []).find(p => p.employeeId === e.id && p.section === 'attendance')?.daySchedules?.some(s => s.day === weekday && s.autoPresent)) { recorded = true; look = 'ok'; label = 'Present'; sub = 'Work from home · no time in needed'; icon = 'ok'; clockIn = 'WFH'; }

@@ -1,5 +1,6 @@
 // HTTP routes for the HR 201 modules (/api/hr/...). Every handler enforces its own permission on the server.
 import { AppError, permit } from './service.mjs';
+import { workforce } from './workforce.mjs';
 import { explanationsDue } from './late-explanations.mjs';
 import { CATEGORIES as REQUEST_CATEGORIES, ensure as ensureAttendanceRequests } from './attendance-requests.mjs';
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
@@ -90,7 +91,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   if (pathname === '/api/hr/context' && method === 'GET') {
     permit(actor, DASHBOARD);
     const s = readSettings(store);
-    send(200, { roleLabel: ROLE_LABELS[actor.role], company: s.company, departments: s.departments, positions: s.positions, classifications: s.classifications, requirements: s.documentRequirements.map(r => ({ id: r.id, name: r.name, category: r.category, required: r.required, expires: r.expires, restricted: r.restricted })), optionalFields: s.optionalFields, uploads: s.uploads, can: { manage: HR_TEAM.includes(actor.role), approve: ['admin', 'hr'].includes(actor.role), settings: actor.role === 'admin', sensitiveIds: SENSITIVE_IDS.includes(actor.role) } });
+    send(200, { workforce: (({ records, active, inactive, timekeeping, notTimekeeping }) => ({ records, active, inactive, timekeeping, notTimekeeping }))(workforce(store)), roleLabel: ROLE_LABELS[actor.role], company: s.company, departments: s.departments, positions: s.positions, classifications: s.classifications, requirements: s.documentRequirements.map(r => ({ id: r.id, name: r.name, category: r.category, required: r.required, expires: r.expires, restricted: r.restricted })), optionalFields: s.optionalFields, uploads: s.uploads, can: { manage: HR_TEAM.includes(actor.role), approve: ['admin', 'hr'].includes(actor.role), settings: actor.role === 'admin', sensitiveIds: SENSITIVE_IDS.includes(actor.role) } });
     return true;
   }
   if (pathname === '/api/hr/settings' && method === 'GET') { permit(actor, ['admin']); send(200, readSettings(store)); return true; }

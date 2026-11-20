@@ -183,7 +183,7 @@ export function createPortal(ctx) {
     const t = data.today;
     const returned = (data.explanations || []).find(e => e.status === 'returned'), due = data.explanationsDue || [];
     const kind = t.open ? 'out' : 'in', done = data.employee.draft || (!t.open && t.actualOut && t.date === today()), net = data.network || {}, away = net.configured && !net.office;
-    const chip = { Late: 'late', Present: 'ok', 'Missing time out': 'late', Absent: 'late', 'On leave': 'leave' }[t.status] || 'idle';
+    const chip = { Late: 'late', Present: 'ok', 'Missing time out': 'late', Absent: 'late', 'No time in': 'late', 'On leave': 'leave' }[t.status] || 'idle';
     const alertIcon = '<svg class="pm-ico pm-alert-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>';
     const lateBox = returned ? `<div class="pm-alert">${alertIcon}<div><strong>HR sent back your explanation</strong><small>${esc((returned.comments || []).at(-1)?.text || '')}</small></div><button class="pm-link" data-portal-tab="explanations">Reply to HR →</button></div>`
       : due.length ? `<div class="pm-alert">${alertIcon}<div><strong>Written explanation required</strong><small>You timed in 15 minutes or more after your scheduled start on:</small><small>${due.slice(0, 6).map(d => `${esc(d.date)} (${d.lateMinutes} min late)`).join(' · ')}${due.length > 6 ? ` and ${due.length - 6} more` : ''}</small></div><button class="pm-link" data-portal-tab="explanations">Submit explanation →</button></div>` : '';
@@ -456,7 +456,9 @@ export function createPortal(ctx) {
     dots: '<circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>',
   };
   const icon = (name, cls = '') => `<svg class="lv-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${SVG[name]}</svg>`;
-  const STATUS_LOOK = { Present: ['present', 'check'], Late: ['late', 'late'], Absent: ['absent', 'absent'], 'On leave': ['leave', 'leave'], 'Missing time out': ['missing', 'missing'] };
+  const STATUS_LOOK = { Present: ['present', 'check'], Late: ['late', 'late'], Absent: ['absent', 'absent'], 'No time in': ['absent', 'absent'], 'Awaiting time in': ['idle', 'late'], 'On leave': ['leave', 'leave'], 'Missing time out': ['missing', 'missing'] };
+  // One grouping for the live list, its cards and the dashboard tile (they add up to All, like Attendance → Daily).
+  const liveGroup = e => (['Present', 'Late', 'On leave', 'Missing time out'].includes(e.status) ? e.status : ['Awaiting time in', 'No time in', 'Absent'].includes(e.status) ? 'No time in' : 'Other');
   const initialsOf = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return `${(first || '').charAt(0)}${(last || '').charAt(0)}`.toUpperCase() || '?'; };
   // Search, status and location filters hide rows in place (no redraw, so typing is not interrupted).
   const filterLive = panel => {
@@ -479,10 +481,10 @@ export function createPortal(ctx) {
     openDialog(`Reasons today · ${e.name}`, `<div class="dialog-body"><p class="sub">${esc(e.employeeId)} · ${esc(e.status)}${e.actualIn ? ` · in ${esc(e.actualIn)}` : ''}${e.actualOut ? ` · out ${esc(e.actualOut)}` : ''}</p>${(e.reasons || []).map(block).join('')}</div>`, '<div class="dialog-foot"><button class="primary" data-close>Close</button></div>');
   }
   function live(data, { countsOnly = false } = {}) {
-    const statuses = ['All', 'Present', 'Late', 'Absent', 'On leave', 'Missing time out'];
-    const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => e.status === s).length);
-    const CARD = { All: ['all', 'All employees'], Present: ['present', 'Present'], Late: ['late', 'Late'], Absent: ['absent', 'Absent'], 'On leave': ['leave', 'On leave'], 'Missing time out': ['missing', 'Missing time out'] };
-    const filtered = data.employees.filter(e => liveFilter === 'All' || e.status === liveFilter);
+    const statuses = ['All', 'Present', 'Late', 'No time in', 'On leave', 'Missing time out', 'Other'];
+    const count = s => (s === 'All' ? data.employees.length : data.employees.filter(e => liveGroup(e) === s).length);
+    const CARD = { All: ['all', 'All employees'], Present: ['present', 'Present'], Late: ['late', 'Late'], 'No time in': ['absent', 'No time in'], 'On leave': ['leave', 'On leave'], 'Missing time out': ['missing', 'Missing time out'], Other: ['leave', 'Rest day / holiday / other'] };
+    const filtered = data.employees.filter(e => liveFilter === 'All' || liveGroup(e) === liveFilter);
     const located = e => !!(e.clockOut || e.clockIn) && (e.clockOut || e.clockIn).latitude !== null;
     const row = e => {
       const [look, pill] = STATUS_LOOK[e.status] || ['idle', 'late'], ev = e.clockOut || e.clockIn;
@@ -504,10 +506,10 @@ export function createPortal(ctx) {
         <select data-lv-status aria-label="Status"><option value="">Status</option>${[...new Set(data.employees.map(e => e.status))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select>
         <select data-lv-loc aria-label="Location"><option value="">Location</option><option value="yes">With location</option><option value="no">No location</option></select></div>
       <div class="lv-table-wrap"><table class="lv-table"><thead><tr><th>Employee</th><th>Status</th><th>Time in</th><th>Time out</th><th>Location</th><th>Reason</th><th>Action</th></tr></thead><tbody>${filtered.map(row).join('') || '<tr><td colspan="7" class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
-      <p class="lv-foot" data-lv-count>${filtered.length} employee${filtered.length === 1 ? '' : 's'} total</p></section>`;
+      <p class="lv-foot" data-lv-count>${filtered.length} employee${filtered.length === 1 ? '' : 's'} shown${data.workforce ? ` · ${data.workforce.timekeeping} who time in, of ${data.workforce.active} active employees${data.workforce.notTimekeeping.length ? ` (not timekeeping: ${data.workforce.notTimekeeping.map(n => `${esc(n.name)} — ${esc(n.why)}`).join('; ')})` : ''}` : ''}</p></section>`;
     if (!countsOnly) return html;
     // Dashboard: today's attendance at a glance.
-    const glance = { All: ['all', 'All'], Present: ['dot-green', 'Present'], Late: ['dot-amber', 'Late'], Absent: ['late', 'Absent'], 'On leave': ['leave', 'On leave'], 'Missing time out': ['missing', 'Missing time out'] };
+    const glance = { All: ['all', 'All'], Present: ['dot-green', 'Present'], Late: ['dot-amber', 'Late'], 'No time in': ['late', 'No time in'], 'On leave': ['leave', 'On leave'], 'Missing time out': ['missing', 'Missing time out'], Other: ['leave', 'Rest day / other'] };
     const when = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric' });
     return `<section class="panel db-live"><div class="db-live-head"><div><h2>Today's attendance <span class="lv-live"><i></i>Live</span></h2><p>Live attendance at a glance · ${esc(when)}</p></div><button class="db-open" data-nav="live">Open live attendance ↗</button></div><div class="db-live-stats">${statuses.map(s => { const [k, label] = glance[s]; return `<button data-nav="live" title="Open live attendance"><span class="db-live-label">${k.startsWith('dot') ? `<i class="db-dot ${k}"></i>` : icon(k)}${label}</span><strong>${count(s)}</strong></button>`; }).join('')}</div></section>`;
   }

@@ -84,7 +84,7 @@ export function createFiles(ctx) {
     const from = list.length ? (pageNo - 1) * size + 1 : 0, to = Math.min(pageNo * size, list.length);
     return `<div class="ml-header"><div><h1>Employee Masterlist</h1><p>Manage employee profiles and employment records</p></div><div class="ml-header-tools"><a class="ml-btn" href="/api/reports/employees.xlsx" download>${svg('export')}Export</a>${can().manage ? `<button class="ml-btn primary" data-hr-add-employee>${svg('plus')}Add employee</button>` : ''}</div></div>
       <div class="ml-layout"><section class="ml-main">
-        <div class="ml-cards">${card('', 'all', current.length, 'Total employees')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}</div>
+        <div class="ml-cards">${card('', 'all', current.length, 'Employee records')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}</div>
         <div class="ml-filters"><label class="ml-search">${svg('search')}<input type="search" data-q value="${esc(query.q)}" placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
           <select data-f="department" aria-label="Subsidiary">${options(people.map(p => p.department), query.department, 'Subsidiary')}</select>
           <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>

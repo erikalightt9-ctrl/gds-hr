@@ -85,7 +85,7 @@ export function createDashboard(ctx) {
     const asOf = new Date(`${String(d.asOf).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     shell(heading('Dashboard', `${esc(ctx.context().company.name)} · Overview as of ${asOf}`) +
       `${celebrationsHtml(esc, party)}<section class="an an-top" id="dash-analytics">${(spotCard = spot, analyticsHtml(t))}</section><div class="db-grid db-grid8">
-        ${card('total', t.total, 'Total employees', { page: 'files' }, { tone: 'red', sub: t.archived ? `${t.archived} archived not counted` : '' })}
+        ${card('total', t.total, 'Employee records', { page: 'files' }, { tone: 'red', sub: `${t.active} active · ${t.inactive} inactive${t.archived ? ` · ${t.archived} archived not counted` : ''}` })}
         ${card('active', t.active, 'Active employees', { page: 'files', status: 'Active' }, { tone: 'green' })}
         ${card('inactive', t.inactive, 'Inactive employees', { page: 'files', status: 'Inactive' }, { tone: 'red' })}
         ${card('newHires', t.newHires, 'New hires', { page: 'files', docs: 'newhires' }, { tone: 'red', sub: 'Last 30 days' })}

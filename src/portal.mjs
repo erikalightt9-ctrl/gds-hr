@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { workforce } from './workforce.mjs';
 import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { holidaySplit } from './holiday-pay.mjs';
 import { z } from 'zod';
@@ -203,10 +204,11 @@ export function todayAttendance(store, employee, now = new Date()) {
   else if (record?.status === 'rest-day-swap') status = 'Rest-day swap';
   else if (record?.status === 'offset') status = 'Offset';
   else if (record?.status === 'off') status = 'Off duty';
-  else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
+  else if (record?.status === 'absent') status = 'Absent';
+  else if (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes) status = 'No time in';
   else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late && !graceLate ? 'Late' : 'Present';
   // Work-from-home day counted present without time in / out.
-  const autoPresent = !record && !actualIn && ['Awaiting time in', 'Absent'].includes(status) && !!autoPresentRecord(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
+  const autoPresent = !record && !actualIn && ['Awaiting time in', 'No time in'].includes(status) && !!autoPresentRecord(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
   if (autoPresent) status = 'Present';
   const exceptions = events.filter(e => ['Outside', 'Uncertain'].includes(e.geofence.status) || e.geofence.poorAccuracy).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'}: ${e.geofence.status}, accuracy ±${e.accuracy} m`);
   return { date: workDate, status, autoPresent, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
@@ -391,11 +393,11 @@ export function liveDashboard(store, actor, now = new Date()) {
   // Only people who clock in: not drafts (incomplete or remittance-only profiles such as the CEO), not archived, not separated.
   // Inactive employees (resigned, separated, set inactive) are not listed.
   const day = local(now).slice(0, 10);
-  const remitOnly = remittanceOnlyIds(store);
-  const employees = state.employees.filter(e => !e.draft && !remitOnly.has(e.id) && !e.archived && e.active !== false && (!e.endDate || e.endDate >= day)).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now), reasons: reasonsFor(store, state, e.id, day) })).filter(e => e.status !== 'Inactive');
+  const force = workforce(store, day, state), keep = new Set(force.timekeepingIds);
+  const employees = state.employees.filter(e => keep.has(e.id)).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now), reasons: reasonsFor(store, state, e.id, day) })).filter(e => e.status !== 'Inactive');
   const history = withPlace(store, store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data)));
   const companies = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').departments || []; } catch { return []; } })();
-  return { companies, employees, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
+  return { workforce: { active: force.active, timekeeping: force.timekeeping, notTimekeeping: force.notTimekeeping }, companies, employees, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
 }
 export function correctClock(store, actor, input) {
   permit(actor, ['admin', 'hr']);
