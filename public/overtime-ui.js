@@ -9,7 +9,9 @@ const stamp = iso => (iso ? new Date(iso).toLocaleString('en-PH', { timeZone: 'A
 
 export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide, employees, onChanged }) {
   let list = [], filters = { employee: '', from: '', to: '', status: 'pending' };
-  const statusBadge = s => { const [label, tone] = STATUS[s] || [s, 'neutral']; return badge(label, tone); };
+  // Carryover (Nov 20, 2026): paid filings show the payroll that paid them; filings whose cutoff is posted but are not
+  // paid yet show that they are carried over to the next payroll.
+  const statusBadge = o => { const s = typeof o === 'string' ? o : o.status, [label, tone] = STATUS[s] || [s, 'neutral']; if (typeof o === 'object' && o.paidRunId) return badge(`Paid · ${o.paidCutoff}`, ''); if (typeof o === 'object' && o.carriedOver) return badge(s === 'pending' ? 'Pending Overtime · carried over' : 'Approved · paid in the next payroll', 'pending'); return badge(label, tone); };
 
   function rows() {
     return list.filter(o => (!filters.employee || o.employeeId === filters.employee) && (!filters.from || o.date >= filters.from) && (!filters.to || o.date <= filters.to) && (!filters.status || (filters.status === 'flagged' ? o.flags?.length && ['pending', 'approved'].includes(o.status) : o.status === filters.status)));
@@ -30,7 +32,7 @@ export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, c
           <span class="ot-who"><strong>${esc(o.name)}</strong><small>${esc(o.employeeId)}</small></span>
           <span class="ot-when"><strong>${esc(fmtDay(o.date))}</strong><small>${esc(period(o))}${o.breakMinutes ? ` · ${o.breakMinutes} min break` : ''}</small></span>
           <span class="ot-hours"><strong>${o.status === 'approved' ? `${o.approvedHours} of ${o.hours} h` : `${o.hours} h`}</strong><small>${o.status === 'approved' ? 'approved' : 'filed'} · worked ${o.workedInPeriod ?? 0} h in period</small></span>
-          <span class="ot-state">${statusBadge(o.status)}${o.flags?.length && ['pending', 'approved'].includes(o.status) ? `<small class="ot-flag">⚠ ${esc(o.flags[0])}${o.flags.length > 1 ? ` (+${o.flags.length - 1})` : ''}</small>` : ''}${o.locked ? '<small>Payroll posted</small>' : ''}</span>
+          <span class="ot-state">${statusBadge(o)}${o.flags?.length && ['pending', 'approved'].includes(o.status) ? `<small class="ot-flag">⚠ ${esc(o.flags[0])}${o.flags.length > 1 ? ` (+${o.flags.length - 1})` : ''}</small>` : ''}${o.locked ? '<small>Payroll posted</small>' : ''}</span>
         </button>`).join('') || '<p class="muted ot-empty">Nothing to show yet.</p>'}</div></section>`;
   }
   async function fill(box) {
@@ -54,7 +56,7 @@ export function createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, c
     const history = (o.history || []).map(h => `<li><strong>${esc(h.action[0].toUpperCase() + h.action.slice(1))}</strong> · ${esc(who(h.by))} · ${esc(stamp(h.at))}${h.note ? `<small>${esc(h.note)}</small>` : ''}</li>`).join('') || `<li><strong>Submitted</strong> · ${esc(who(o.filedBy))} · ${esc(stamp(o.filedAt))}</li>`;
     const start = o.status === 'approved' ? o.approvedHours : Math.min(o.hours, Math.max(o.payableHours || 0, 0) || o.hours);
     openDialog(`Overtime · ${o.name}`, `<form id="ot-review" class="dialog-body ot-review">
-        <div class="ot-review-top">${statusBadge(o.status)}<span class="legend">${esc(o.employeeId)} · filed by ${esc(who(o.filedBy))} on ${esc(stamp(o.filedAt))}</span></div>
+        <div class="ot-review-top">${statusBadge(o)}<span class="legend">${esc(o.employeeId)} · filed by ${esc(who(o.filedBy))} on ${esc(stamp(o.filedAt))}</span></div>
         <div class="notice-rows">${facts.map(([k, v]) => `<div class="notice-row"><span>${k}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
         <p class="ot-reason"><span>Work to be done</span>${esc(o.reason)}</p>
         ${o.documentId ? `<p><a class="button" href="/api/documents/${esc(o.documentId)}/content" target="_blank" rel="noopener">📎 View attachment</a></p>` : ''}

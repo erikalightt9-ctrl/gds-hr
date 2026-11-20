@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { carryableFilings, carriedAmounts } from './overtime-carry.mjs';
 import { date as dateSchema } from './schema.mjs';
 
 // Computed amounts an authorized user may override. Loans (balances), contributions (own approval flow) and the
@@ -422,7 +423,8 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const separateOT = (r.overtimeApproval || 'separate') === 'separate', filings = (state.overtimeRequests || []).filter(o => o.employeeId === e.id && o.date === d);
       const approvedFilings = filings.filter(o => o.status === 'approved'), gatedOT = separateOT && e.coveredOT;
       const approvedOTMinutes = approvedFilings.reduce((s, o) => s + Math.round(o.approvedHours * 60), 0);
-      if (gatedOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime applications before posting.`);
+      // Pending overtime does not hold the payroll (Nov 20, 2026): it is carried over and paid by the next payroll once approved.
+      if (gatedOT && filings.some(o => o.status === 'pending')) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `Overtime filed for ${d} is pending HR approval: not paid in this cutoff; carried over to the next payroll once approved`, sourceKind: 'overtime', sourceId: filings.find(o => o.status === 'pending').id, date: d });
       let unfiledMinutes = 0, belowBlock = 0, paidOT = 0, regularCounted = 0;
       // A minute after the schedule is approved overtime when it falls inside an approved filing's period (each filing
       // pays at most its approved hours, unpaid breaks already excluded); older filings without times use their hours
@@ -576,6 +578,13 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
     };
     override('earnings', earnings, OVERRIDE_EARNINGS.filter(c => c !== 'basic'));
+    // Carried-over overtime: approved after its own cutoff was posted, paid here at the rates of its original date.
+    const carriedOvertime = [];
+    if (!state.noCarry && e.coveredOT) for (const o of carryableFilings(state, e, start)) {
+      const amounts = carriedAmounts(state, e, o, calculatePayroll), total = round(Object.values(amounts).reduce((sum, v) => sum + v, 0));
+      for (const [component, amount] of Object.entries(amounts)) add(earnings, component, amount, `Carried-over overtime ${o.date}${o.startTime ? ` ${o.startTime}-${o.endTime}` : ''} (${o.approvedHours} h approved${o.decidedAt ? ` ${o.decidedAt.slice(0, 10)}` : ''}): ${o.reason || ''}`.slice(0, 300), { id: o.id, sourceKind: 'overtime' }, o.date);
+      carriedOvertime.push({ id: o.id, date: o.date, hours: o.approvedHours, amount: total, components: amounts, reason: o.reason || '' });
+    }
     override('deductions', deductions, ['absence', 'undertime', 'other', 'sssLoan', 'pagibigLoan', 'salaryDeduction']);
     // Hours behind each premium line, for the payslip: from the per-day breakdown, or worked back from the amount
     // (amount / hourly rate / multiplier) when the line was overridden or typed as an amount.
@@ -706,7 +715,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     const workedHolidays = holidays.filter(h => h.worked && h.pay > 0).length;
     const restWorked = perDayWorked ? 0 : state.attendance.filter(a => a.employeeId === e.id && a.status === 'present' && a.date >= start && a.date <= end && employed.includes(a.date) && isRest(e, a.date) && !holidays.some(h => h.date === a.date)).length;
     const regularDays = typedDays ? creditedDays : Math.round(Math.max(0, daysPresent - workedHolidays - restWorked - lateDaysLost - (rateForDay ? undertimeAmount / rateForDay : 0)) * 100) / 100;
-    return { employeeId: e.id, employeeName: e.name, monthWorkingDays: monthWorkdays(e, start.slice(0, 7)), holidays, holidayPay, holidayDays, regularDays, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays, creditedHours, hoursPerDay: scheduledHours, quantities, adjustmentDivisor, adjustmentRate: round(adjDaily), undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, paidLeaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { carriedOvertime, employeeId: e.id, employeeName: e.name, monthWorkingDays: monthWorkdays(e, start.slice(0, 7)), holidays, holidayPay, holidayDays, regularDays, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays, creditedHours, hoursPerDay: scheduledHours, quantities, adjustmentDivisor, adjustmentRate: round(adjDaily), undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, paidLeaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

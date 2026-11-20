@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
+import { markOvertimePaid, unmarkOvertimePaid, carryUnfiledOvertime } from './overtime-carry.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
@@ -200,6 +201,7 @@ export function reversePayroll(store, actor, runId, input) {
       store.log(actor, 'payroll-reversal', 'loans', loan.id, before, loan);
     }
     const wasReleased = payslipReleased(run, manilaNow());
+    unmarkOvertimePaid(store, run.id);
     run.status = 'reversed'; run.reversedBy = actor.username; run.reversedAt = new Date().toISOString(); run.reversalReason = reason;
     state.version++; store.write(state);
     // Employees are told only when the payslip was already visible to them (on or after salary day).
@@ -245,6 +247,10 @@ export function postPayroll(store, actor, request) {
       store.log(actor, 'payroll-deduction', 'loans', loan.id, before, loan);
     }
     state.runs.push(run); state.version++; store.write(state);
+    // Overtime this payroll paid is marked Paid; overtime worked but not filed is carried over as Pending Overtime.
+    markOvertimePaid(store, run);
+    const carried = carryUnfiledOvertime(store, run, state);
+    if (carried.length) store.notify(null, `${carried.length} unfiled overtime record${carried.length === 1 ? '' : 's'} from ${run.start} to ${run.end} carried over as Pending Overtime (Attendance → Overtime applications).`);
     const payDate = payDateFor(run.start, run.end);
     for (const row of run.rows) store.notify(row.employeeId, payDate <= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()) ? `Your payslip for ${run.start} to ${run.end} is available.` : `Payroll for ${run.start} to ${run.end} is final. Your payslip will be available on salary day, ${payDate}.`);
     store.log(actor, 'post', 'runs', run.id, null, { start: run.start, end: run.end, totals: run.totals, fingerprint: run.fingerprint });

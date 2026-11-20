@@ -1,7 +1,8 @@
 // Overtime filing. Employees may clock out before or after their schedule; staying late is not overtime by itself.
 // Under the default policy ("separate" in Rules & rates) overtime is paid only when the employee files it and HR
 // approves it, and never for more hours than attendance shows beyond the schedule. Unfiled extra time is not paid.
-// Pending filings block posting so they are decided first. Every step is audited and notified.
+// Pending filings do not block posting: they are carried over (src/overtime-carry.mjs) and paid by the next payroll
+// once approved; paid filings are locked. Every step is audited and notified.
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
@@ -93,7 +94,7 @@ export function fileOvertime(store, actor, input) {
     if (!employee) throw new AppError('Employee not found.', 404);
     if (!employee.coveredOT) throw new AppError('This employee is not covered for overtime pay (exempt). Use an approved additional-pay entry instead.');
     if (v.date > addDays(localToday(), 31)) throw new AppError('Overtime can be filed at most 31 days in advance.');
-    if (posted(state, employeeId, v.date)) throw new AppError('Payroll for that date is already posted. Contact HR or Payroll.');
+    // A date whose payroll is posted may still be filed: the overtime is carried over to the next payroll once approved.
     if (self) checkAttachment(store, employeeId, v.documentId);
     const now = new Date().toISOString();
     const value = { id: randomUUID(), employeeId, date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', breakMinutes: v.breakMinutes, nightHours: v.startTime ? Math.min(v.hours, nightHoursBetween(v.startTime, v.endTime)) : 0, hours: v.hours, reason: v.reason, documentId: self ? v.documentId : '', filedBy: actor.username, filedAt: now, status: self ? 'pending' : 'approved', approvedHours: self ? 0 : v.hours, adjustReason: '', decidedBy: self ? '' : actor.username, decidedAt: self ? '' : now, remarks: self ? '' : 'Recorded by HR', history: [historyEntry(actor, self ? 'submitted' : 'recorded and approved by HR')] };
@@ -114,7 +115,7 @@ export function editOvertime(store, actor, id, input) {
     if (!o || o.employeeId !== actor.employeeId) throw new AppError('Overtime application not found.', 404);
     if (o.status !== 'pending') throw new AppError('Only pending applications can be edited. Ask HR to change a decided application.');
     if (v.date > addDays(localToday(), 31)) throw new AppError('Overtime can be filed at most 31 days in advance.');
-    if (posted(state, o.employeeId, v.date)) throw new AppError('Payroll for that date is already posted. Contact HR or Payroll.');
+    if (o.paidRunId) throw new AppError(`This overtime was already paid (${o.paidCutoff}). Contact HR or Payroll.`);
     checkAttachment(store, o.employeeId, v.documentId);
     const changed = { date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', breakMinutes: v.breakMinutes, hours: v.hours, nightHours: v.startTime ? Math.min(v.hours, nightHoursBetween(v.startTime, v.endTime)) : 0, reason: v.reason, documentId: v.documentId };
     const note = `was ${describe(o)}, ${o.hours} h`;
@@ -147,7 +148,8 @@ export function decideOvertime(store, actor, id, input) {
     const o = rowsOf(store, 'WHERE id=?', id)[0];
     if (!o) throw new AppError('Overtime filing not found.', 404);
     if (!['pending', 'approved', 'rejected'].includes(o.status)) throw new AppError('This filing was cancelled.');
-    if (posted(store.read(), o.employeeId, o.date)) throw new AppError('Payroll for that date is posted; the decision is locked. Reverse the payroll to correct it.');
+    // Only overtime already paid is locked; a decision on a posted date is carried over to the next payroll.
+    if (o.paidRunId) throw new AppError(`This overtime was already paid in the ${o.paidCutoff} payroll; the decision is locked. Reverse that payroll to correct it.`);
     const hours = v.decision === 'approve' ? round(v.hours ?? o.hours) : 0;
     if (hours > o.hours) throw new AppError(`Approved hours cannot exceed the ${o.hours} h filed.`);
     // Approving other hours than filed is an adjustment and needs its own reason.
@@ -163,7 +165,7 @@ export function decideOvertime(store, actor, id, input) {
 export function myOvertime(store, actor) {
   if (actor.role !== 'employee') throw new AppError('Only employees have their own overtime filings.', 403);
   const state = store.read(), employee = state.employees.find(e => e.id === actor.employeeId);
-  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId).map(o => ({ ...o, ...nightEstimate(state, employee, o) }));
+  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId).map(o => ({ ...o, ...nightEstimate(state, employee, o), carriedOver: !o.paidRunId && ['pending', 'approved'].includes(o.status) && posted(state, o.employeeId, o.date) }));
 }
 // Attendance against one filing, counted the way payroll counts it: minutes after the scheduled day that fall inside
 // the filed period (unpaid attendance breaks excluded), paid in whole 30-minute blocks up to the approved hours.
@@ -197,6 +199,6 @@ export function overtimeQueue(store, actor) {
   const state = store.read(), people = new Map(state.employees.map(e => [e.id, e]));
   return rowsOf(store).slice(0, 500).map(o => {
     const e = people.get(o.employeeId), record = state.attendance.find(a => a.employeeId === o.employeeId && a.date === o.date);
-    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) };
+    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceApproved: !!record?.approved, locked: !!o.paidRunId, carriedOver: !o.paidRunId && ['pending', 'approved'].includes(o.status) && posted(state, o.employeeId, o.date) };
   }).sort((a, b) => (a.status === 'pending') === (b.status === 'pending') ? b.date.localeCompare(a.date) : a.status === 'pending' ? -1 : 1);
 }

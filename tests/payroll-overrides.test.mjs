@@ -44,7 +44,7 @@ test('late clock-out is not overtime: only filed and approved hours are paid, up
     const filing = fileOvertime(store, worker, { date: day, hours: 2, reason: 'Month-end closing (demo)' });
     assert.throws(() => fileOvertime(store, worker, { date: day, hours: 1, reason: 'Duplicate (demo)' }), /already filed/);
     const pending = run(store);
-    assert.equal(pending.rows[0].earnings.regularOT, 0); assert.ok(pending.blockers.some(b => /pending approval/.test(b)));
+    assert.equal(pending.rows[0].earnings.regularOT, 0); assert.ok(!pending.blockers.some(b => /pending/.test(b)), 'pending overtime no longer holds the payroll'); assert.ok(pending.rows[0].trace.some(t => /pending HR approval: not paid in this cutoff; carried over/.test(t.formula)));
     assert.throws(() => decideOvertime(store, worker, filing.id, { decision: 'approve' }), /permission/);
     assert.throws(() => decideOvertime(store, hr, filing.id, { decision: 'approve', hours: 5 }), /cannot exceed/);
     decideOvertime(store, hr, filing.id, { decision: 'approve', hours: 2 });

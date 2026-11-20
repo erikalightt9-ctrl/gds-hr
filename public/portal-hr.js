@@ -89,7 +89,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
         <div class="full ot-form-actions"><button class="primary">${editing ? 'Save changes' : 'Submit for approval'}</button>${editing ? '<button type="button" data-ot-edit-cancel>Discard changes</button>' : ''}</div></form>
       ${nightSummary}</section>
       <section class="panel"><div class="panel-head"><h2>My applications</h2></div><div class="ot-mine">${list.map(o => `<article class="ot-card">
-        <div class="ot-card-head"><strong>${fmtDate(o.date)}</strong>${pill(o.status)}</div>
+        <div class="ot-card-head"><strong>${fmtDate(o.date)}</strong>${o.paidRunId ? `<span class="ot-pill ot-approved">Paid · ${esc(o.paidCutoff || '')}</span>` : o.carriedOver ? `<span class="ot-pill ot-pending">${o.status === 'pending' ? 'Pending Overtime · carried over' : 'Approved · paid in the next payroll'}</span>` : pill(o.status)}</div>
         <p class="ot-card-time">${esc(period(o))}${o.breakMinutes ? ` · ${o.breakMinutes} min break` : ''} · <strong>${o.hours} h</strong>${o.status === 'approved' ? ` · approved <strong>${o.approvedHours} h</strong>` : ''}${o.nightHours ? ` · 🌙 ${o.nightHours} h night` : ''}</p>
         <p class="ot-card-reason">${esc(o.reason)}</p>
         ${o.adjustReason ? `<p class="legend">HR approved ${o.approvedHours} of ${o.hours} h: ${esc(o.adjustReason)}</p>` : ''}${o.remarks ? `<p class="legend">HR remarks: ${esc(o.remarks)}</p>` : ''}
