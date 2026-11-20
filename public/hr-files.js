@@ -224,7 +224,7 @@ export function createFiles(ctx) {
     }
     const list = dayCache.get(key);
     if (list === null) return '<p class="muted">Loading attendance…</p>';
-    if (list.error) return `<div class="notice">${esc(list.error)}</div>`;
+    if (list.error) return `<div class="notice">${list.error === 'Not found.' ? 'The attendance history is available after the HR server restarts.' : esc(list.error)}</div>`;
     const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
     const today = ctx.today(), verify = d => !d.issue && d.status === 'present' && !d.approved && d.timeIn && d.timeOut;
     const where = o => (o.latitude === null || o.latitude === undefined ? esc(o.place || '') : `<a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noopener noreferrer">${esc(o.place || 'Map')}</a>`);
