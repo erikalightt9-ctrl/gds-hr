@@ -176,7 +176,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     box.onclick = async event => {
       const b = event.target.closest('[data-ack]'); if (!b) return;
       b.disabled = true;
-      try { await api(`/hr/me/memos/${b.dataset.ack}/${b.dataset.version}/acknowledge`, {}); confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); await fill('memos', box); } catch (error) { toast(error.message); b.disabled = false; }
+      try { await api(`/hr/me/memos/${b.dataset.ack}/${b.dataset.version}/acknowledge`, {}); confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); await fill('memos', box); memoNotice(document, false).catch(() => {}); } catch (error) { toast(error.message); b.disabled = false; }
     };
   }
 
@@ -217,8 +217,23 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   const toComply = list => list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status));
   const statusText = i => (i.numberOnly ? (i.status === 'Verified' ? 'Complied — number on file' : 'Not complied — enter the number in My data sheet') : STATUS_TEXT[i.status] || i.status);
   const STATUS_TEXT = { Missing: 'Not complied — upload required', Rejected: 'Rejected — upload again', Expired: 'Expired — upload a renewed copy', Submitted: 'Submitted — waiting for HR review', 'Under Review': 'Under HR review', Verified: 'Complied', 'Not Applicable': 'Not applicable' };
+  // Memos waiting for acknowledgement: a count on the Memos menu item and a red notice on the dashboard that stay
+  // until the employee acknowledges each memo (the bell notice alone can be cleared by opening the bell).
+  async function memoNotice(app, onDashboard) {
+    const pending = (await api('/hr/me/memos')).filter(m => m.ackRequired && !m.acknowledgedAt && m.latest !== false && !m.archived);
+    const tabButton = app.querySelector('[data-portal-tab="memos"]');
+    tabButton?.querySelector('.nav-flag')?.remove();
+    if (tabButton && pending.length) tabButton.insertAdjacentHTML('beforeend', `<span class="nav-flag" aria-label="${pending.length} memo${pending.length === 1 ? '' : 's'} to acknowledge">${pending.length}</span>`);
+    const main = app.querySelector('.employee-main');
+    if (!onDashboard || !pending.length || !main || main.querySelector('.memo-ack-alert')) return;
+    const box = document.createElement('section'); box.className = 'compliance-alert memo-ack-alert'; box.setAttribute('role', 'alert');
+    box.innerHTML = `<div><strong>📝 ${pending.length} memo${pending.length === 1 ? '' : 's'} waiting for your acknowledgement</strong><ol class="comply-list">${pending.map(m => `<li>${esc(m.reference || '')} ${esc(m.title)}${m.overdue ? ' <small>(overdue)</small>' : m.ackDeadline ? ` <small>(by ${fmtDate(m.ackDeadline)})</small>` : ''}</li>`).join('')}</ol><p class="legend">Read and acknowledge receipt in Memos. This notice stays until every memo is acknowledged.</p></div><button class="primary" data-portal-tab="memos">Open memos</button>`;
+    const anchor = main.querySelector('.compliance-alert') || main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
+    if (anchor) anchor.after(box); else main.prepend(box);
+  }
   async function compliance(app, onDashboard) {
     if (onDashboard) missingNotice(app).catch(() => {});
+    memoNotice(app, onDashboard).catch(() => {});
     try {
       const list = await api('/hr/me/documents'), due = toComply(list);
       const tabButton = app.querySelector('[data-portal-tab="files201"]');
