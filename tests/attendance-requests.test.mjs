@@ -9,7 +9,8 @@ const worker = { id: 'worker', username: 'employee1', role: 'employee', employee
 const NOW = new Date('2026-09-03T03:00:00Z');   // Sep 3, 11:00 Manila
 function fixture() { const store = new Store(':memory:'); const state = completeState(); state.attendance = []; store.write(state); return store; }
 const dayRecord = (store, day) => store.read().attendance.find(a => a.employeeId === 'EMP-001' && a.date === day);
-const forgotIn = extra => ({ category: 'forgot-in', date: '2026-09-02', timeIn: '08:55', timeOut: '18:05', location: 'Head office, Makati', reason: 'Phone battery was empty in the morning', ...extra });
+const V = { verifiedBy: 'Supervisor / manager confirmation', verification: 'Supervisor confirmed the hours' };
+const forgotIn = extra => ({ category: 'forgot-in', date: '2026-09-02', timeIn: '08:55', timeOut: '18:05', location: 'Head office, Makati', reason: 'Phone battery was empty in the morning', reasonType: 'Phone problem (no battery, broken, no data or signal)', ...extra });
 
 test('submit: reference number, Pending HR approval, notices; nothing in attendance changes yet', () => {
   const store = fixture();
@@ -23,7 +24,7 @@ test('submit: reference number, Pending HR approval, notices; nothing in attenda
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ date: '2026-09-04' }), NOW), /today or earlier/);
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ location: '' }), NOW), /exact place/);
     assert.throws(() => submitAttendanceRequest(store, worker, { category: 'failed', date: '2026-09-02', timeIn: '09:00', reason: 'Wi-Fi was down all morning' }, NOW), /Describe the problem/);
-    assert.throws(() => submitAttendanceRequest(store, worker, { category: 'offsite', date: '2026-09-02', timeIn: '09:00', location: 'Client site', reason: 'Forgot to time in' }, NOW), /purpose/);
+    assert.throws(() => submitAttendanceRequest(store, worker, { category: 'offsite', date: '2026-09-02', timeIn: '09:00', location: 'Client site', reason: 'At the client site the whole morning' }, NOW), /purpose/);
     assert.throws(() => submitAttendanceRequest(store, worker, { category: 'system', date: '2026-09-02', timeIn: '09:00', reason: 'The app showed an error' }, NOW), /Describe the problem/);
     const system = submitAttendanceRequest(store, worker, { category: 'system', transaction: 'in', date: '2026-09-02', timeIn: '09:00', problem: 'The time in button showed a server error', reason: 'System error' }, NOW);
     assert.equal(system.category, 'system');
@@ -40,9 +41,9 @@ test('HR flow: review, ask for information, employee replies, approve with a dif
     const r = submitAttendanceRequest(store, worker, forgotIn(), NOW);
     assert.equal(startReview(store, admin, r.id).status, 'review');
     assert.equal(requestInformation(store, admin, r.id, { note: 'Please attach your gate log.' }).status, 'info');
-    assert.throws(() => approveAttendanceRequest(store, admin, r.id, { timeIn: '09:10', remarks: 'x' }), /different time than filed needs a remark/);
+    assert.throws(() => approveAttendanceRequest(store, admin, r.id, { ...V, timeIn: '09:10', remarks: 'x' }), /different time than filed needs a remark/);
     assert.equal(replyAttendanceRequest(store, worker, r.id, { note: 'The guard confirmed 08:55.' }).status, 'pending');
-    const done = approveAttendanceRequest(store, admin, r.id, { timeIn: '09:10', remarks: 'Guard log shows 09:10' });
+    const done = approveAttendanceRequest(store, admin, r.id, { ...V, timeIn: '09:10', remarks: 'Guard log shows 09:10' });
     assert.equal(done.status, 'approved'); assert.deepEqual(done.decision.requested, { timeIn: '08:55', timeOut: '18:05', endNextDay: false });
     assert.equal(done.decision.approved.timeIn, '09:10'); assert.equal(done.decision.by, admin.username);
     const record = dayRecord(store, '2026-09-02');
@@ -57,8 +58,8 @@ test('forgot time out: approval completes the open time in; the original time in
   const store = fixture(), day = '2026-09-02', at = new Date(`${day}T09:00:00+08:00`);
   try {
     punch(store, worker, { kind: 'in', requestId: '91111111-1111-4111-8111-111111111111', latitude: 14.55, longitude: 121.02, accuracy: 10, capturedAt: at.toISOString() }, at, { ip: '1.2.3.4' });
-    const r = submitAttendanceRequest(store, worker, { category: 'forgot-out', date: day, timeOut: '18:20', reason: 'Left in a hurry for a client call' }, NOW);
-    approveAttendanceRequest(store, admin, r.id, {});
+    const r = submitAttendanceRequest(store, worker, { category: 'forgot-out', date: day, timeOut: '18:20', reason: 'Left in a hurry for a client call', reasonType: 'Urgent work or meeting on arrival / departure' }, NOW);
+    approveAttendanceRequest(store, admin, r.id, { ...V });
     const record = dayRecord(store, day);
     assert.equal(record.timeIn, '09:00'); assert.equal(record.timeOut, '18:20');
     assert.ok(!store.read().openClockIns.some(c => c.workDate === day), 'no longer an open time in');
@@ -88,8 +89,8 @@ test('"next day" with a later time out is refused as over 24 hours, on filing an
   try {
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ endNextDay: true }), NOW), /more than 24 hours.*Untick/);
     const r = submitAttendanceRequest(store, worker, forgotIn(), NOW);
-    assert.throws(() => approveAttendanceRequest(store, admin, r.id, { endNextDay: true, remarks: 'Checking the next-day box' }), /more than 24 hours/);
-    assert.equal(approveAttendanceRequest(store, admin, r.id, { remarks: '' }).status, 'approved', 'as filed it approves');
+    assert.throws(() => approveAttendanceRequest(store, admin, r.id, { ...V, endNextDay: true, remarks: 'Checking the next-day box' }), /more than 24 hours/);
+    assert.equal(approveAttendanceRequest(store, admin, r.id, { ...V, remarks: '' }).status, 'approved', 'as filed it approves');
   } finally { store.close(); }
 });
 
@@ -98,12 +99,29 @@ test('forgot time in while already timed in (later) today: approval is accepted 
   try {
     punch(store, worker, { kind: 'in', requestId: '92222222-2222-4222-8222-222222222222', latitude: 14.55, longitude: 121.02, accuracy: 10, capturedAt: at.toISOString() }, at, { ip: '1.2.3.4' });
     const r = submitAttendanceRequest(store, worker, forgotIn({ date: day, timeOut: '', reason: 'Phone broke in the morning' }), at);
-    const approved = approveAttendanceRequest(store, admin, r.id, {}, at);
+    const approved = approveAttendanceRequest(store, admin, r.id, { ...V }, at);
     assert.equal(approved.status, 'approved'); assert.equal(approved.decision.applyAtTimeOut, true);
     assert.equal(dayRecord(store, day), undefined, 'nothing written until the day is closed');
     punch(store, worker, { kind: 'out', requestId: '93333333-3333-4333-8333-333333333333', latitude: 14.55, longitude: 121.02, accuracy: 10, capturedAt: later.toISOString() }, later, { ip: '1.2.3.4' });
     const record = dayRecord(store, day);
     assert.equal(record.timeIn, '08:55'); assert.equal(record.timeOut, '18:05');
     assert.match(record.explanation, /HR-approved time in AR-/);
+  } finally { store.close(); }
+});
+
+test('missed time in / out: a justifiable reason is required, forgetfulness alone is refused, HR verifies before approving', async () => {
+  const { forgetfulnessOnly } = await import('../src/attendance-requests.mjs');
+  for (const text of ['I forgot to time in', 'Nakalimutan ko po mag time out', 'forgot', 'Sorry I just forgot to clock in this morning']) assert.ok(forgetfulnessOnly(text), text);
+  for (const text of ['Forgot because the client called me at the gate and I went straight to the meeting room', 'Phone battery was empty in the morning']) assert.ok(!forgetfulnessOnly(text), text);
+  const store = fixture();
+  try {
+    assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ reasonType: '' }), NOW), /Choose why/);
+    assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ reasonType: 'Other justifiable reason', reason: 'I forgot to time in this morning' }), NOW), /Forgetfulness alone is not accepted/);
+    assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ reason: 'Phone died' }), NOW), /at least 20 characters/);
+    const r = submitAttendanceRequest(store, worker, forgotIn(), NOW);
+    assert.throws(() => approveAttendanceRequest(store, admin, r.id, {}), /verified/);
+    assert.throws(() => approveAttendanceRequest(store, admin, r.id, { verifiedBy: 'CCTV or building / guard logbook', verification: '' }), /Describe the verification/);
+    const done = approveAttendanceRequest(store, admin, r.id, { verifiedBy: 'CCTV or building / guard logbook', verification: 'Guard logbook shows 08:55' });
+    assert.deepEqual(done.decision.verification, { method: 'CCTV or building / guard logbook', note: 'Guard logbook shows 08:55' });
   } finally { store.close(); }
 });
