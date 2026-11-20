@@ -306,3 +306,23 @@ test('201 checklist: due dates never before tracking began, waived requirements 
     assert.ok(documentSummary(store, hr).employeesMissing <= before, 'inactive staff are not counted');
   } finally { store.close(); }
 });
+
+test('movements: second-person approval, applied on the effective date; separation starts the clearance', async () => {
+  const { requestMovement, decideMovement, clearItem, applyDueMovements } = await import('../src/movements.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const other = { username: 'admin2', role: 'admin' };
+    const promo = requestMovement(store, hr, { employeeId: a, type: 'promotion', effectiveDate: '2026-01-01', reason: 'Annual review: promoted to team lead', position: 'Team Lead' });
+    assert.throws(() => decideMovement(store, hr, promo.id, { decision: 'approve' }), /second HR Manager/);
+    assert.equal(decideMovement(store, other, promo.id, { decision: 'approve' }).status, 'applied');
+    assert.equal(employeeForm(store, hr, a).form.employment.position, 'Team Lead');
+    const sep = requestMovement(store, hr, { employeeId: a, type: 'separation', effectiveDate: '2099-01-31', reason: 'Resignation letter received and accepted', separationKind: 'Resignation' });
+    assert.equal(decideMovement(store, other, sep.id, { decision: 'approve' }).status, 'approved', 'future: waits for its date');
+    assert.equal(applyDueMovements(store, new Date('2099-02-01T00:00:00Z')), 1);
+    const done = clearItem(store, hr, sep.id, { key: 'assets', status: 'cleared', note: 'ID and laptop returned' });
+    assert.equal(done.clearance.find(i => i.key === 'assets').status, 'cleared');
+    assert.equal(done.clearanceCompleteAt, null, 'other items still pending');
+    assert.equal(store.read().employees.find(x => x.id === a).endDate, '2099-01-31');
+  } finally { store.close(); }
+});

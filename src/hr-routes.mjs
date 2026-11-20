@@ -8,6 +8,7 @@ import { profileExtras, saveProfileSection, readSettings, saveSettings, director
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
 import { memoPdf, officialPdf, companyLetterheads, saveLetterhead } from './memo-letter.mjs';
 import { pendingSalaryChanges } from './salary-changes.mjs';
+import { listMovements } from './movements.mjs';
 import { recordView, requestClarification, answerClarification, recordPaperAck, ackEvidence, remindNow } from './memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
@@ -139,6 +140,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     items.push(...disciplineBell(store, actor));
     const memos = memoSummary(store, actor);
     if (memos.overdue) items.push({ text: `${memos.overdue} overdue memo acknowledgement${memos.overdue === 1 ? '' : 's'}`, nav: 'memos' });
+    if (['admin', 'hr'].includes(actor.role)) for (const mv of listMovements(store, actor).filter(x => x.canDecide)) items.push({ text: `${mv.typeLabel} for ${mv.employeeName} (effective ${mv.effectiveDate}) waiting for your approval`, nav: 'employee201', id: mv.employeeId, tab: 'employment', date: mv.requestedAt.slice(0, 10) });
     for (const c of pendingSalaryChanges(store, actor)) items.push({ text: `Salary change for ${c.employeeName} (effective ${c.effectiveDate}) waiting for your approval`, nav: 'employee201', id: c.employeeId, tab: 'compensation', date: c.requestedAt.slice(0, 10) });
     if (memos.clarifications) items.push({ text: `${memos.clarifications} memo clarification request${memos.clarifications === 1 ? '' : 's'} waiting for an answer`, nav: 'memos' });
     send(200, { count: items.length, items }); return true;

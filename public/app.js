@@ -151,7 +151,7 @@ function navGroups() {
   const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['bir1601c', 'BIR 1601-C'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
     ['', [['dashboard', 'Dashboard']]],
-    ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ...(['admin', 'hr', 'viewer'].includes(role) ? [['discipline', 'Due Process & Discipline']] : []), ['trainings', 'Trainings']]],
+    ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ...(['admin', 'hr', 'viewer'].includes(role) ? [['discipline', 'Due Process & Discipline']] : []), ...(['admin', 'hr', 'hr_staff', 'payroll', 'viewer'].includes(role) ? [['movements', 'Movements & clearance']] : []), ['trainings', 'Trainings']]],
     ...(payItems.length ? [['', payItems, PAY_GROUP]] : []),   // hidden entirely when the role may open none of them
     ['Administration', [['reports', 'Reports'], ...(legacy || role === 'maker' ? [['audit', 'Audit trail']] : []), ...(['admin', 'hr', 'viewer', 'payroll'].includes(role) ? [['approvals', 'Approval matrix']] : []), ...(role === 'admin' ? [['users', 'Users & roles'], ['settings', 'Settings']] : [])]],
   ];
@@ -752,13 +752,14 @@ function render() {
   if (auth.user.role === 'employee') { portal.draw(employeeData, auth); return; }
   if (page === 'overview') page = 'dashboard';
   if (page === 'employees') page = 'files';
-  if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : []), 'approvals'].includes(page)) page = 'dashboard';
+  if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : []), 'approvals', 'movements'].includes(page)) page = 'dashboard';
   const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), bir1601c: async () => (await loadBir()).render(), discipline: async () => { const ui = await loadDiscipline(); const o = renderOptions; renderOptions = {}; return ui.render(o.caseId || null, o.employeeId !== undefined ? { employeeId: o.employeeId } : {}); }, loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') page = 'attendance';   // Live attendance is part of the Attendance page
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
   const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, holidays: holidaysPage, rules: rulesPage };
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
+  if (page === 'movements') { shell(heading('Movements & clearance', 'Promotions, transfers, regularizations, separations and offboarding clearance.') + '<div data-mv-page></div>'); import('./movements-ui.js').then(m => m.mountMovements(document.querySelector('[data-mv-page]'), { api, esc, badge, toast, openDialog, dialog, today })).catch(e => toast(e.message)); return; }
   if (page === 'approvals' || page === 'users') { import('./access-ui.js').then(m => m[page === 'users' ? 'usersPage' : 'approvalsPage']({ api, esc, shell, heading, table, badge, account: () => account() })).catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   shell(views[page]());
