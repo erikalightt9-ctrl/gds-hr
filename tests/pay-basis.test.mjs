@@ -27,10 +27,11 @@ test('October 2026 has 27 scheduled workdays from the schedule and rest days', (
   assert.equal(a.workingDays + b.workingDays, 27);
 });
 
-test('monthly-paid: a 27-workday month pays exactly the agreed monthly salary (fixed 26-day divisor)', () => {
+test('monthly-paid: the daily rate is the salary ÷ the month’s scheduled working days; a full month pays exactly the salary', () => {
   const [a, b] = month(state());
-  assert.equal(a.dailyRate, 1000, '26,000 / 26');
-  assert.equal(Math.round((a.earnings.basic + b.earnings.basic) * 100) / 100, 26000, 'not 27 x 1,000');
+  assert.equal(a.dailyRate, 962.96, '26,000 / 27 working days in October');
+  assert.deepEqual([a.earnings.basic, b.earnings.basic], [12518.52, 13481.48], '13 and 14 working days, not a fixed 13 each');
+  assert.equal(Math.round((a.earnings.basic + b.earnings.basic) * 100) / 100, 26000, 'the monthly salary stays fixed');
   assert.equal(a.payBasis, 'monthly');
 });
 
@@ -49,38 +50,38 @@ test('daily-paid: a day not attended is not paid', () => {
   assert.equal(Math.round((a.earnings.basic + b.earnings.basic) * 100) / 100, 26 * 755);
 });
 
-test('monthly-paid (Nov 2026 rule): basic = monthly ÷ 26 × days credited; a 31-day month also uses ÷ 26 (₱27,000: one absence takes off ₱1,038.46)', () => {
+test('monthly-paid (Nov 20, 2026 rule): basic = monthly ÷ the month’s working days × days credited (₱27,000 ÷ 27: one absence takes off ₱1,000)', () => {
   const full = month(state({ monthly: 27000 }));
   assert.deepEqual(full.map(r => r.workingDays), [13, 14], 'Oct 1-15 has 13 workdays, Oct 16-31 has 14');
-  assert.deepEqual(full.map(r => r.earnings.basic), [13500, 13500], 'complete attendance: the full half-month in each cutoff');
-  assert.deepEqual(full.map(r => r.adjustmentDivisor), [26, 26], 'October has 31 days but still uses 26');
+  assert.deepEqual(full.map(r => r.earnings.basic), [13000, 14000], 'complete attendance: each cutoff pays its own working days');
+  assert.deepEqual(full.map(r => r.adjustmentDivisor), [27, 27], 'October: 27 working days with Sunday rest');
   const s = state({ monthly: 27000 }); s.attendance = s.attendance.filter(a => a.date !== '2026-10-20');   // one unpaid absence in the 14-day cutoff
   const [a, b] = month(s);
-  assert.equal(a.earnings.basic, 13500);
-  assert.equal(b.creditedDays, 12, '13 days less the absent day');
-  assert.equal(b.earnings.basic, 12461.54, '27,000 ÷ 26 × 12');
+  assert.equal(a.earnings.basic, 13000);
+  assert.equal(b.creditedDays, 13, '14 days less the absent day');
+  assert.equal(b.earnings.basic, 13000, '27,000 ÷ 27 × 13');
   assert.equal(b.deductions.absence, 0, 'the absence lowers basic pay; it is not also a deduction line');
   assert.ok(b.trace.some(t => t.component === 'basic' && /Absence \(days credited reduced\)/.test(t.formula)), 'shown in the basic-pay computation');
 });
 
-test('monthly-paid: late time over the threshold lowers basic at monthly ÷ 26, also in a 31-day month', () => {
+test('monthly-paid: late time over the threshold lowers basic at the month’s daily rate', () => {
   const s = state({ monthly: 27000 }); Object.assign(s.attendance.find(a => a.date === '2026-10-20'), { timeIn: '09:30' });   // 30 min late, no offset
   const [, b] = month(s);
-  assert.equal(b.creditedDays, 12.94, '13 − 30/480 = 12.9375 → 12.94 (2 decimals)');
-  assert.equal(b.earnings.basic, 13437.69, '27,000 ÷ 26 × 12.94');
+  assert.equal(b.creditedDays, 13.94, '14 − 30/480 = 13.9375 → 13.94 (2 decimals)');
+  assert.equal(b.earnings.basic, 13940, '27,000 ÷ 27 × 13.94');
 });
 
-test('monthly-paid: basic always equals the shown days credited (2 decimals) × monthly ÷ 26', () => {
-  const s = state({ monthly: 21190 });   // 815.00 a day, as on the November 2026 payroll
+test('monthly-paid: basic always equals the shown days credited (2 decimals) × the daily rate', () => {
+  const s = state({ monthly: 21600 });   // 800.00 a day in a 27-workday October
   for (const [d, t] of [['2026-10-19', '09:17'], ['2026-10-21', '09:23'], ['2026-10-27', '09:40']]) Object.assign(s.attendance.find(a => a.date === d), { timeIn: t });
   s.attendance = s.attendance.filter(a => a.date !== '2026-10-30');
   const [, b] = month(s);
   assert.equal(Math.round(b.creditedDays * 100) / 100, b.creditedDays, 'days credited have at most 2 decimals');
-  assert.equal(b.earnings.basic, Math.round(b.creditedDays * 815 * 100) / 100, 'basic = days credited × 815 exactly');
+  assert.equal(b.earnings.basic, Math.round(b.creditedDays * 800 * 100) / 100, 'basic = days credited × 800 exactly');
   assert.equal(b.applicableBasic, b.earnings.basic, 'the 13th-month basic follows the same figure');
 });
 
-test('monthly-paid: months that are not 31 days long use 26 for attendance adjustments', () => {
+test('monthly-paid: September 2026 (26 working days with Sunday rest) prices attendance adjustments at ÷ 26', () => {
   const s = state({ monthly: 26000 }), sept = dates('2026-09-01', '2026-09-30').filter(d => !isRest(s.employees[0], d));
   s.attendance = sept.filter(d => d !== '2026-09-21').map(d => ({ id: d, employeeId: 'E1', date: d, status: 'present', scheduledIn: '09:00', timeIn: '09:00', timeOut: '18:00', endNextDay: false, breaks: [{ start: `${d}T12:00`, end: `${d}T13:00` }], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true }));
   const row = calculatePayroll(s, '2026-09-16', '2026-09-30').rows[0];
@@ -95,20 +96,29 @@ test('daily-paid: the 27 / 26 divisor does not apply', () => {
   assert.equal(b.earnings.basic, 13 * 755);
 });
 
-test('guide example: two approved paid-leave days are worth monthly / 26 each and stay inside the ₱13,000 half-month (31-day month)', () => {
+test('two approved paid-leave days are worth one daily rate each and stay inside the cutoff’s basic (not counted twice)', () => {
   const s = state(); s.employees[0].leaveEligibility = ['sil'];
   s.leaves = ['2026-10-20', '2026-10-21'].map(d => ({ id: `lv-${d}`, employeeId: 'E1', typeId: 'sil', startDate: d, endDate: d, days: 1, startTime: '', endTime: '', reason: 'Rest', status: 'approved', eligibilityVerified: true }));
   s.attendance = s.attendance.filter(a => !['2026-10-20', '2026-10-21'].includes(a.date));
   const [, b] = month(s);
-  assert.equal(b.earnings.leavePay, 2000, '2 days × 26,000 / 26');
-  assert.equal(b.earnings.basic + b.earnings.leavePay, 13000, 'not counted twice: the half-month stays 13,000');
+  assert.equal(b.earnings.leavePay, 1925.92, '2 days × 26,000 / 27 (962.96)');
+  assert.equal(Math.round((b.earnings.basic + b.earnings.leavePay) * 100) / 100, 13481.48, 'not counted twice: the cutoff stays 14 days × 962.96');
   assert.equal(b.paidLeaveDays, 2);
-  assert.equal(b.creditedDays + b.paidLeaveDays, 13, 'days present: 11 worked + 2 paid leave');
+  assert.equal(b.creditedDays + b.paidLeaveDays, 14, 'days present: 12 worked + 2 paid leave');
 });
 
-test('monthly-paid hired mid-cutoff: days credited follow the share of the half-month worked (8 of 14 workdays)', () => {
+test('monthly-paid hired mid-cutoff: only the working days employed are credited (8 of the cutoff’s 14)', () => {
   const s = state(); s.employees[0].startDate = '2026-10-23';   // Oct 23-24 and 26-31: 8 of the cutoff's 14 workdays
   const [, b] = month(s);
-  assert.equal(b.creditedDays, 7.43, '13 days × 8 / 14 = 7.4286 → 7.43 (2 decimals)');
-  assert.equal(b.earnings.basic, 7430, '7.43 days × 26,000 / 26');
+  assert.equal(b.creditedDays, 8, '8 working days employed');
+  assert.equal(b.earnings.basic, 7703.7, '8 days × 26,000 / 27');
+});
+
+test('days present leave out rest-day work (paid in its own column): salary ÷ working days × days present = basic pay', () => {
+  const s = state({ monthly: 27000 });
+  s.attendance.push({ id: 'sun', employeeId: 'E1', date: '2026-10-25', status: 'present', scheduledIn: '09:00', timeIn: '09:00', timeOut: '18:00', endNextDay: false, breaks: [{ start: '2026-10-25T12:00', end: '2026-10-25T13:00' }], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true });
+  const [, b] = month(s);
+  assert.equal(b.regularDays, 14, 'the 14 scheduled workdays, not the Sunday worked');
+  assert.ok(b.earnings.restDay > 0, 'the Sunday is paid as rest-day pay');
+  assert.equal(b.earnings.basic, Math.round(27000 / 27 * b.regularDays * 100) / 100);
 });

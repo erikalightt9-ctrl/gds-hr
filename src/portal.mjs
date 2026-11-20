@@ -396,7 +396,8 @@ export function correctClock(store, actor, input) {
   const original = rows(store, 'clock_events', value.employeeId).find(e => e.workDate === value.date && e.kind === 'in');
   if (!original) throw new AppError('Original time-in not found.');
   const state = store.read(), employee = state.employees.find(e => e.id === value.employeeId);
-  const record = { id: `clock-${original.id}`, employeeId: employee.id, date: value.date, status: 'present', scheduledIn: scheduleOn(employee, profileOf(state, employee.id, 'attendance'), value.date).start, timeIn: approvedTimeIn(store, employee.id, value.date)?.time || original.time, timeOut: value.timeOut, endNextDay: value.endNextDay, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: value.reason, holidayEligible: false, correctionReason: value.reason };
+  // HR enters this time out itself: the corrected day is HR-approved and payroll uses it as recorded (Nov 20, 2026).
+  const record = { id: `clock-${original.id}`, employeeId: employee.id, date: value.date, status: 'present', scheduledIn: scheduleOn(employee, profileOf(state, employee.id, 'attendance'), value.date).start, timeIn: approvedTimeIn(store, employee.id, value.date)?.time || original.time, timeOut: value.timeOut, endNextDay: value.endNextDay, breaks: [], approved: true, offsetMinutes: 0, exception: false, explanation: value.reason, holidayEligible: false, correctionReason: value.reason };
   const saved = saveRecord(store, actor, 'attendance', record);
   // A separate immutable reconciliation event closes the open shift, preserving both readings.
   if (!rows(store, 'clock_events', employee.id).some(e => e.clockInId === original.id)) {

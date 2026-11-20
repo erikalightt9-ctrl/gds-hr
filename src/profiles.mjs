@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { date } from './schema.mjs';
 import { AppError, permit } from './service.mjs';
-import { leaveBalance, ruleOn } from './engine.mjs';
+import { leaveBalance, ruleOn, monthlyDailyRate } from './engine.mjs';
 import { sectionNames } from './names.mjs';
 
 const text = z.string().trim().max(1000).default('');
@@ -169,7 +169,7 @@ export function getProfile(store, actor, id) {
   for (const row of store.db.prepare('SELECT section,data FROM employee_profiles WHERE employee_id=?').all(id)) if (canReadSection(actor, row.section)) sections[row.section] = JSON.parse(row.data);
   if (canReadSection(actor, 'personal') && !sections.personal) sections.personal = personalName(employee);
   const documents = store.db.prepare('SELECT metadata FROM employee_documents WHERE employee_id=?').all(id).map(r => JSON.parse(r.metadata)).filter(d => canReadDocument(actor, d.type)).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
-  const rule = ruleOn(state, localToday()), dailyRate = sections.payroll?.dailyRate ?? (rule && employee.monthlySalary ? employee.monthlySalary / rule.dailyDivisor : null);
+  const rule = ruleOn(state, localToday()), dailyRate = sections.payroll?.dailyRate ?? (employee.monthlySalary ? Math.round(monthlyDailyRate(employee, localToday()) * 100) / 100 : null);
   return { employee, sections, derived: { ...derivedInformation(employee, sections.personal), dailyRate, hourlyRate: sections.payroll?.hourlyRate ?? (dailyRate && rule ? dailyRate / (sections.attendance?.hoursPerDay || rule.hourlyDivisor) : null) }, documents,
     editable: Object.keys(profileSchemas).filter(s => canWriteSection(actor, s)), readable: Object.keys(profileSchemas).filter(s => canReadSection(actor, s)),
     balances: state.leaveTypes.map(t => ({ typeId: t.id, name: t.name, eligible: employee.leaveEligibility.includes(t.id) && !employee.draft && !!employee.startDate && monthsBetween(employee.startDate, localToday()) >= t.minServiceMonths, ...leaveBalance(state, employee, t, localToday()) })),

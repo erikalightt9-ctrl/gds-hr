@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
-import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK } from './engine.mjs';
+import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK, monthlyDailyRate } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 
 const HR = ['admin', 'hr'];
@@ -51,7 +51,7 @@ function nightEstimate(state, employee, filing) {
   if (!rule || !employee?.coveredNSD || !filing.nightHours) return { nightHours: filing.nightHours || 0, approvedNightHours: 0, nightPay: 0 };
   const pay = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'payroll');
   const sched = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'attendance');
-  const daily = pay?.dailyRate ?? (employee.monthlySalary || 0) / rule.dailyDivisor, hourly = pay?.hourlyRate ?? daily / (sched?.hoursPerDay || rule.hourlyDivisor);   // 12-hour drivers: ÷ 12
+  const daily = pay?.dailyRate ?? monthlyDailyRate(employee, filing.date), hourly = pay?.hourlyRate ?? daily / (sched?.hoursPerDay || rule.hourlyDivisor);   // 12-hour drivers: ÷ 12
   // Overtime minutes are counted from the end of the schedule, so a partial approval drops the latest (night) minutes first.
   const approvedNightHours = filing.status === 'approved' ? Math.max(0, round(filing.nightHours - Math.max(0, filing.hours - filing.approvedHours))) : 0;
   const hours = filing.status === 'approved' ? approvedNightHours : filing.nightHours;

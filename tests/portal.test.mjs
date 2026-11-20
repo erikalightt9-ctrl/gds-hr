@@ -39,6 +39,7 @@ test('HR corrections preserve original clock events and record their approver an
     assert.throws(() => correctClock(store, worker, {}));
     const corrected = correctClock(store, admin, { employeeId: worker.employeeId, date: original.workDate, timeOut: '17:00', endNextDay: false, reason: 'Employee forgot to clock out; schedule verified.' });
     assert.equal(corrected.timeIn, original.time);
+    assert.equal(corrected.approved, true, 'a time out HR enters itself is HR-approved: payroll uses the corrected day as recorded');
     assert.equal(employeeDashboard(store, worker, new Date('2026-09-18T10:00:00Z')).today.open, false);
     assert.equal(store.db.prepare('SELECT data FROM clock_events WHERE id=?').get(original.id).data, JSON.stringify(original));
     assert.equal(employeeDashboard(store, worker, now).corrections[0].approver, admin.username);

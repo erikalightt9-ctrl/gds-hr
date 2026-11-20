@@ -148,7 +148,7 @@ export function createFiles(ctx) {
 
   // ---------- Profile ----------
   async function openProfile(id, startTab = 'overview') {
-    profileId = id; tab = startTab; ctx.setPage('employee201');
+    profileId = id; tab = startTab; ctx.setPage('employee201'); otCache = null;   // fresh overtime decisions on every opening
     await drawProfile();
   }
   async function drawProfile() {
@@ -226,6 +226,19 @@ export function createFiles(ctx) {
     const stampOf = iso => new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
     return `<h3>Off-site work time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
   }
+  // Overtime applications of this employee for the month (filed hours, decision, hours payroll can pay); decided on the
+  // Attendance → Overtime applications page. Loaded once per open profile (the whole list, filtered here).
+  let otCache = null;
+  function overtimeHtml(id, month) {
+    if (otCache === null) {
+      otCache = 'loading';
+      ctx.api('/overtime-requests').then(list => { otCache = list; const box = document.querySelector('[data-att-box]'); if (box) box.innerHTML = attendanceHtml(id); }).catch(() => { otCache = []; });
+    }
+    if (otCache === 'loading') return '<p class="muted">Loading overtime applications…</p>';
+    const STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
+    const rows = otCache.filter(o => o.employeeId === id && o.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
+    return '<h3>Overtime applications</h3>' + table(['Date', 'Period', 'Hours filed', 'Status', 'Approved', 'Payable (worked)', 'Work / reason', 'Notes'], rows.map(o => [esc(o.date), o.startTime ? `${esc(o.startTime)}–${esc(o.endTime)}${o.breakMinutes ? ` (less ${o.breakMinutes} min break)` : ''}` : '—', esc(o.hours), esc(STATUS[o.status] || o.status), o.status === 'approved' ? esc(o.approvedHours) : '—', o.status === 'approved' ? `${esc(o.payableHours)} h` : '—', `<span class="wrap">${esc(o.reason || o.work || '')}</span>`, `<span class="wrap">${esc([o.remarks, ...(o.flags || [])].filter(Boolean).join(' · '))}</span>`]), 'No overtime applications this month.') + '<p class="legend">Approve or reject them in Attendance → Overtime applications.</p>';
+  }
   function attendanceHtml(id) {
     const state = ctx.getState(), month = attMonth || ctx.today().slice(0, 7);
     const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
@@ -248,7 +261,7 @@ export function createFiles(ctx) {
     const count = s => list.filter(r => r.status.startsWith(s)).length;
     return block('🕒', 'Attendance history', `<div class="att-tools"><label class="field">Month<select data-att-month>${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${label(m)}</option>`).join('')}</select></label><span class="legend">${count('Present')} present · ${count('Late')} late · ${count('Absent')} absent · ${count('On leave')} on leave</span></div>`
       + table(['Date', 'Status', 'Time in', 'Time out', 'Late (min)', 'Remarks'], list.map(r => [day(r.date), esc(r.status), esc(r.timeIn || '—'), esc(r.timeOut || '—'), r.late || '—', `<span class="wrap">${esc(r.note || '')}</span>`]), 'No attendance recorded for this month.')
-      + (ctx.context?.()?.can?.approve ? clockEventsHtml(id, month) : ''));
+      + (ctx.context?.()?.can?.approve ? clockEventsHtml(id, month) + overtimeHtml(id, month) : ''));
   }
   function safeBody(...args) {
     try { return tabBody(...args); } catch (error) { return `<div class="notice">This tab could not be shown: ${esc(error.message)}. Reload the page (Ctrl+F5) and try again.</div>`; }

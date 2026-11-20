@@ -32,7 +32,7 @@ test('early arrival is paid by default but not when paid time starts at the sche
   assert.equal(row.earnings.regularOT, 0, 'no overtime for leaving at the scheduled end');
   assert.equal(row.undertimeAmount, 0);
   fromSchedule.attendance = [day(MONDAY, { timeOut: '20:00' })];
-  assert.equal(run(fromSchedule).earnings.regularOT, round(2 * 22000 / 22 / 8 * 1.25), 'overtime only after 6 PM');
+  assert.equal(run(fromSchedule).earnings.regularOT, round(2 * 22000 / 26 / 8 * 1.25), 'overtime only after 6 PM (daily = 22,000 ÷ 26 working days in September)');
 });
 
 test('a rest-day swap is paid like a normal day without an absence deduction', () => {

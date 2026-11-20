@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
-import { ruleOn, leaveBalance, dates, isRest, priorBasicFor, fullyPostedMonths } from './engine.mjs';
+import { ruleOn, leaveBalance, dates, isRest, priorBasicFor, fullyPostedMonths, monthlyDailyRate } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 import { payDateFor } from './paydays.mjs';
 
@@ -115,7 +115,7 @@ export function computeFinalPay(store, actor, input) {
   if (!e.startDate || v.separationDate < e.startDate) throw new AppError('The separation date is before the employee\'s start date.');
   const rule = ruleOn(state, v.separationDate) || state.rules[0];
   if (!rule) throw new AppError('Configure and approve Rules & rates first.');
-  const pay = profileOf(store, e.id, 'payroll'), daily = r2(pay.dailyRate ?? (e.monthlySalary || 0) / rule.dailyDivisor), monthly = e.monthlySalary || r2(daily * rule.dailyDivisor);
+  const pay = profileOf(store, e.id, 'payroll'), daily = r2(pay.dailyRate ?? monthlyDailyRate(e, v.separationDate)), monthly = e.monthlySalary || r2(daily * rule.dailyDivisor);
   const year = v.separationDate.slice(0, 4), items = [], add = (side, label, amount, basis) => { if (amount) items.push({ side, label, amount: r2(amount), basis }); };
 
   // 1. Salary for days worked after the last posted payroll (or the last encoded month).
@@ -125,13 +125,15 @@ export function computeFinalPay(store, actor, input) {
   const paidThrough = [lastPosted, lastPriorEnd].sort().at(-1) || '';
   const from = paidThrough ? new Date(Date.parse(paidThrough) + 86400000).toISOString().slice(0, 10) : e.startDate;
   const workdays = from <= v.separationDate ? dates(from, v.separationDate).filter(d => !isRest(e, d)).length : 0;
-  const days = v.unpaidDays ?? workdays, unpaidSalary = r2(days * daily);
+  // Monthly salary: each unpaid day at its own month's rate (salary ÷ that month's working days); typed days at the last month's.
+  const unpaidDates = from <= v.separationDate ? dates(from, v.separationDate).filter(d => !isRest(e, d)) : [];
+  const days = v.unpaidDays ?? workdays, unpaidSalary = r2(v.unpaidDays === null && !pay.dailyRate && e.monthlySalary ? unpaidDates.reduce((s, d) => s + monthlyDailyRate(e, d), 0) : days * daily);
   // Finalized payroll whose salary day falls after the last day was not received before leaving: it is paid with the final pay (net, as on the payslip).
   for (const r of state.runs.filter(r => r.status === 'posted' && payDateFor(r.start, r.end) > v.separationDate).sort((a, b) => a.start.localeCompare(b.start))) {
     const row = r.rows.find(x => x.employeeId === e.id);
     if (row) add('earnings', `Unpaid salary ${r.start} to ${r.end}`, row.net, `Finalized payroll (net pay on the payslip), salary day ${payDateFor(r.start, r.end)} is after the last day; pay it with the final pay, not separately`);
   }
-  add('earnings', 'Unpaid salary', unpaidSalary, `${days} day${days === 1 ? '' : 's'} × ${daily} daily rate (${from} to ${v.separationDate}${v.unpaidDays !== null ? ', days entered by HR' : `, ${workdays} scheduled workdays`}; paid through ${paidThrough || 'none recorded'})`);
+  add('earnings', 'Unpaid salary', unpaidSalary, `${days} day${days === 1 ? '' : 's'} × ${new Set(unpaidDates.map(d => d.slice(0, 7))).size > 1 && v.unpaidDays === null && !pay.dailyRate ? 'each month’s daily rate (salary ÷ that month’s working days)' : `${daily} daily rate`} (${from} to ${v.separationDate}${v.unpaidDays !== null ? ', days entered by HR' : `, ${workdays} scheduled workdays`}; paid through ${paidThrough || 'none recorded'})`);
 
   // 2. Pro-rated 13th month: basic earned this year (payroll + encoded months + unpaid salary) ÷ 12, less paid.
   const ledger = thirteenthLedger(store, { role: 'admin' }, year).find(x => x.employeeId === e.id);

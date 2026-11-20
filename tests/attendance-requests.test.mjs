@@ -19,7 +19,7 @@ test('submit: reference number, Pending HR approval, notices; nothing in attenda
     assert.equal(dayRecord(store, '2026-09-02'), undefined, 'never automatically approved');
     assert.equal(submitAttendanceRequest(store, worker, forgotIn({ date: '2026-09-01' }), NOW).reference, 'AR-2026-0002');
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn(), NOW), /already have an open request/);
-    assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ date: '2026-08-30' }), NOW), /within 3 days/);
+    assert.equal(submitAttendanceRequest(store, worker, forgotIn({ date: '2026-08-20' }), NOW).status, 'pending', 'any earlier date of an unposted payroll can be corrected (no 3-day window since Nov 20, 2026)');
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ date: '2026-09-04' }), NOW), /today or earlier/);
     assert.throws(() => submitAttendanceRequest(store, worker, forgotIn({ location: '' }), NOW), /exact place/);
     assert.throws(() => submitAttendanceRequest(store, worker, { category: 'failed', date: '2026-09-02', timeIn: '09:00', reason: 'Wi-Fi was down all morning' }, NOW), /Describe the problem/);
@@ -28,7 +28,7 @@ test('submit: reference number, Pending HR approval, notices; nothing in attenda
     const system = submitAttendanceRequest(store, worker, { category: 'system', transaction: 'in', date: '2026-09-02', timeIn: '09:00', problem: 'The time in button showed a server error', reason: 'System error' }, NOW);
     assert.equal(system.category, 'system');
     assert.ok(store.db.prepare('SELECT message FROM notifications').all().some(n => /System error \(app, website or server problem\)/.test(n.message)));
-    assert.equal(ownAttendanceRequests(store, worker).length, 3);
+    assert.equal(ownAttendanceRequests(store, worker).length, 4);
     const notices = store.db.prepare('SELECT message FROM notifications').all().map(n => n.message);
     assert.ok(notices.some(m => /AR-2026-0001.*submitted/.test(m)) && notices.some(m => /new attendance request AR-2026-0001/.test(m)));
   } finally { store.close(); }

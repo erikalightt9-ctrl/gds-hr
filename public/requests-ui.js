@@ -9,7 +9,6 @@ export const STATUS = { pending: ['Pending HR approval', 'pending'], review: ['U
 const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const stamp = iso => (iso ? new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '');
 const manilaToday = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
-const daysAgo = n => new Date(Date.now() + 8 * 3600000 - n * 86400000).toISOString().slice(0, 10);
 const times = r => `${r.timeIn || '—'} – ${r.timeOut || '—'}${r.endNextDay ? ' (next day)' : ''}`;
 const ACTIONS = { submitted: 'Submitted', review: 'HR started the review', info: 'HR asked for more information', replied: 'Employee answered', remark: 'HR remark', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled by the employee' };
 const historyHtml = (r, esc) => `<ol class="ar-history">${(r.history || []).map(h => `<li><strong>${esc(ACTIONS[h.action] || h.action)}</strong> · ${esc(stamp(h.at))} · ${esc(h.by)}${h.note ? `<br><span class="wrap">${esc(h.note)}</span>` : ''}</li>`).join('')}</ol>`;
@@ -59,7 +58,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
   function openForm(category = '', done = () => {}) {
     openDialog('New attendance request', `<form class="dialog-body form-grid" id="ar-form">
       <label class="field full">Request<select name="category" required><option value="">Choose…</option>${Object.entries(CATEGORIES).map(([k, v]) => `<option value="${k}" ${k === category ? 'selected' : ''}>${esc(v)}</option>`).join('')}<option value="leave">Leave application</option></select></label>
-      <label class="field">Date (within 3 days)<input type="date" name="date" required min="${daysAgo(3)}" max="${manilaToday()}" value="${manilaToday()}"></label>
+      <label class="field">Date to correct<input type="date" name="date" required max="${manilaToday()}" value="${manilaToday()}"></label>
       <label class="field" data-show="failed system other">Transaction<select name="transaction"><option value="in">Time in</option><option value="out">Time out</option><option value="both">Time in and time out</option></select></label>
       <label class="field" data-show="forgot-in failed system other offsite">Requested time in<input type="time" name="timeIn"></label>
       <label class="field" data-show="forgot-out failed system other offsite forgot-in">Requested time out<input type="time" name="timeOut"></label>
