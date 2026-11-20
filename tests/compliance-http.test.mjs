@@ -1,4 +1,5 @@
 import test from 'node:test';
+process.env.HR_REQUIRE_MFA = 'off';   // two-factor enforcement is tested in tests/mfa-required.test.mjs
 import assert from 'node:assert/strict';
 import { createApp } from '../src/server.mjs';
 import { Store } from '../src/store.mjs';

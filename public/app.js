@@ -91,7 +91,7 @@ function toast(text) {
 async function refresh() {
   messagesSignedIn();
   try { setStaffNames(await api('/staff-names')); } catch { /* names are a convenience; usernames still show */ }
-  const user = auth?.user; if (!user || user.mustChangePassword) return;   // nothing loads until a default password is replaced
+  const user = auth?.user; if (!user || user.mustChangePassword || user.mfaRequired) return;   // nothing loads until a default password is replaced
   if (user.role === 'employee') { api('/branding').then(b => applyTheme(b.theme)).catch(() => {}); const data = await api('/me/dashboard'); if (auth?.user?.id === user.id) employeeData = data; return; }
   hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme);
   if (!LEGACY.includes(user.role)) { state = { employees: [], runs: [], leaves: [], loans: [], attendance: [], rules: [], leaveTypes: [], holidays: [], adjustments: [], deductions: [] }; return; }
@@ -153,7 +153,7 @@ function navGroups() {
     ['', [['dashboard', 'Dashboard']]],
     ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ...(['admin', 'hr', 'viewer'].includes(role) ? [['discipline', 'Due Process & Discipline']] : []), ['trainings', 'Trainings']]],
     ...(payItems.length ? [['', payItems, PAY_GROUP]] : []),   // hidden entirely when the role may open none of them
-    ['Administration', [['reports', 'Reports'], ...(legacy || role === 'maker' ? [['audit', 'Audit trail']] : []), ...(role === 'admin' ? [['settings', 'Settings']] : [])]],
+    ['Administration', [['reports', 'Reports'], ...(legacy || role === 'maker' ? [['audit', 'Audit trail']] : []), ...(['admin', 'hr', 'viewer', 'payroll'].includes(role) ? [['approvals', 'Approval matrix']] : []), ...(role === 'admin' ? [['users', 'Users & roles'], ['settings', 'Settings']] : [])]],
   ];
 }
 const groupOf = id => navGroups().find(g => g[2] && g[1].some(([key]) => key === ({ deductions: 'loans', annual: 'payroll' }[id] || id)))?.[2] || null;
@@ -715,6 +715,21 @@ async function auditPage() {
   shell(heading('Audit trail', 'Who changed what, when, and why. Payroll snapshots preserve their original records.') + `<section class="panel"><div class="panel-head"><h2>Recent activity</h2>${downloads('audit')}<span class="legend">Latest 1,000 events</span></div>${table(['Time', 'Actor', 'Action', 'Record', ''], entries.map((e, i) => [esc(new Date(e.at).toLocaleString()), esc(who(e.actor)), badge(e.action, 'neutral'), `${esc(e.kind)}<br><small>${esc(e.recordId)}</small>`, `<button class="small" data-audit-index="${i}">Inspect change</button>`]))}</section>`);
   document.querySelectorAll('[data-audit-index]').forEach(b => b.onclick = () => showObject('Audit event', entries[Number(b.dataset.auditIndex)]));
 }
+// Two-factor sign-in is required for HR, HR Staff, Payroll and Management accounts (server enforced).
+function renderForcedMfa() {
+  app.innerHTML = `<main class="login-shell forced-password"><section class="panel login-card"><div class="panel-body"><h1>Set up two-factor sign-in</h1><p class="sub">Signed in as ${esc(auth.user.username)}. HR, Payroll and Management accounts must use an authenticator app (Google Authenticator, Microsoft Authenticator…) before continuing.</p>
+    <form id="forced-mfa" class="form-grid one"><input type="hidden" name="action" value="begin"><label class="field">Your password<input type="password" name="password" required autocomplete="current-password"></label><div data-mfa-step></div>
+    <div class="actions"><button class="primary">Get setup key</button><button type="button" data-signout>Sign out</button></div></form></div></section></main>`;
+  const form = app.querySelector('#forced-mfa');
+  form.onsubmit = async event => {
+    event.preventDefault();
+    try {
+      const result = await api('/mfa', Object.fromEntries(new FormData(form)));
+      if (result.secret) { form.querySelector('[data-mfa-step]').innerHTML = `<p>Add this key in your authenticator app (account: ${esc(auth.user.username)}, 6 digits, 30 seconds):</p><code class="mfa-key">${esc(result.secret)}</code><label class="field">Current 6-digit code<input name="code" inputmode="numeric" required maxlength="6" autocomplete="one-time-code"></label>`; form.elements.action.value = 'confirm'; form.querySelector('.primary').textContent = 'Confirm and finish'; return; }
+      auth = { user: null }; renderLogin(); toast('Two-factor sign-in is set up. Sign in again with your password and the code from the app.');
+    } catch (error) { toast(error.message); }
+  };
+}
 function renderForcedPassword() {
   app.innerHTML = `<main class="login-shell forced-password"><section class="panel login-card"><div class="panel-body"><h1>Choose your own password</h1><p class="sub">Signed in as ${esc(auth.user.username)}. Your account was created with a default password; set your own before continuing.</p>
     <form id="forced-password" class="form-grid one"><label class="field">Default / current password<input type="password" name="currentPassword" required autocomplete="current-password"></label>
@@ -731,18 +746,20 @@ function renderForcedPassword() {
 function render() {
   if (!auth?.user) { renderLogin(); return; }
   if (auth.user.mustChangePassword) { renderForcedPassword(); return; }
+  if (auth.user.mfaRequired) { renderForcedMfa(); return; }
   offerInstall();
   startLive();
   if (auth.user.role === 'employee') { portal.draw(employeeData, auth); return; }
   if (page === 'overview') page = 'dashboard';
   if (page === 'employees') page = 'files';
-  if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : [])].includes(page)) page = 'dashboard';
+  if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : []), 'approvals'].includes(page)) page = 'dashboard';
   const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), bir1601c: async () => (await loadBir()).render(), discipline: async () => { const ui = await loadDiscipline(); const o = renderOptions; renderOptions = {}; return ui.render(o.caseId || null, o.employeeId !== undefined ? { employeeId: o.employeeId } : {}); }, loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') page = 'attendance';   // Live attendance is part of the Attendance page
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
   const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, holidays: holidaysPage, rules: rulesPage };
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
+  if (page === 'approvals' || page === 'users') { import('./access-ui.js').then(m => m[page === 'users' ? 'usersPage' : 'approvalsPage']({ api, esc, shell, heading, table, badge, account: () => account() })).catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   shell(views[page]());
   // Dropdowns with a search box inside (Payroll → Employee). Loaded on demand: if the file cannot be loaded (e.g. the
