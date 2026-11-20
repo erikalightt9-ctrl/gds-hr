@@ -3,6 +3,7 @@ import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 import { assertNamedActor, getPolicy } from './actors.mjs';
+import { rulesSnapshot } from './payroll-stages.mjs';
 
 export { AppError } from './errors.mjs';
 import { AppError } from './errors.mjs';
@@ -238,7 +239,11 @@ export function reviewLeave(store, actor, id, input) {
 }
 // Live payroll: days after today (Manila) are not credited until they arrive (engine state.asOf).
 export const manilaToday = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
-export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll({ ...store.read(), asOf: manilaToday() }, start, end, pay13th, employeeIds);
+export const preview = (store, start, end, pay13th = false, employeeIds = null) => {
+  const state = { ...store.read(), asOf: manilaToday() };
+  const computed = calculatePayroll(state, start, end, pay13th, employeeIds);
+  return { ...computed, rulesVersion: rulesSnapshot(state, computed.ruleId) };
+};
 export function postPayroll(store, actor, request) {
   permit(actor, ['admin', 'payroll']);
   return store.transaction(() => {
@@ -248,7 +253,7 @@ export function postPayroll(store, actor, request) {
     const computed = calculatePayroll({ ...state, asOf: manilaToday() }, request.start, request.end, request.pay13th, request.employeeIds);
     if (computed.fingerprint !== request.fingerprint) throw new AppError('Records changed after preview. Recalculate and review payroll.', 409);
     if (computed.blockers.length) throw new AppError(`Resolve payroll blockers before posting: ${computed.blockers.slice(0, 5).join(' ')}`);
-    const run = { ...computed, id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };
+    const run = { ...computed, rulesVersion: rulesSnapshot(state, computed.ruleId), id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };
     for (const row of run.rows) for (const deduction of row.loanDeductions) {
       const loan = state.loans.find(l => l.id === deduction.loanId), before = structuredClone(loan);
       loan.balance = deduction.remainingBalance; loan.remainingTerms = deduction.remainingTerms;

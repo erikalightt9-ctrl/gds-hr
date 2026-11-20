@@ -18,6 +18,7 @@ import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule, lo
 import { renderLoanApplicationPdf } from './loan-pdf.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { approveSalaryChange, listSalary, requestSalaryChange } from './salary-changes.mjs';
+import { payrollCutoffs, savePayrollDraft, setPayrollStage } from './payroll-stages.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
 import { renderThirteenthPdf } from './thirteenth-pdf.mjs';
 import { thirteenthStatement, finalizeThirteenthPayslip, voidThirteenthPayslip, thirteenthPayslip, thirteenthPayslips, addThirteenthAdjustment, reviewThirteenthAdjustment, thirteenthAdjustments } from './thirteenth-payslip.mjs';
@@ -67,7 +68,8 @@ function constantEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b
 // A service token is not a person and is not a System Administrator. Only the actions management put on the account are reachable.
 function serviceCallAllowed(user, method, pathname) {
   const overtime = user.permissions?.includes('overtime') && ((method === 'GET' && pathname === '/api/overtime-requests') || (method === 'POST' && /^\/api\/overtime-requests\/[a-f0-9-]+\/decision$/.test(pathname)));
-  return overtime || (method === 'GET' && pathname === '/api/approval-policy');
+  const payrollStage = method === 'POST' && /^\/api\/runs\/[^/]+\/stage$/.test(pathname);
+  return overtime || payrollStage || (method === 'GET' && (pathname === '/api/approval-policy' || pathname === '/api/payroll/cutoffs'));
 }
 // What an employee sees in their notification bell after each of their own submissions.
 const days = (a, b) => (b && b !== a ? `${a} to ${b}` : a);
@@ -494,6 +496,10 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/salary-changes' && req.method === 'POST') { send(201, requestSalaryChange(store, auth.user, await readBody(req))); return; }
       const salaryDecision = pathname.match(/^\/api\/salary-changes\/([a-f0-9-]+)\/approve$/);
       if (salaryDecision && req.method === 'POST') { send(200, approveSalaryChange(store, auth.user, salaryDecision[1])); return; }
+      if (pathname === '/api/payroll/cutoffs' && req.method === 'GET') { send(200, payrollCutoffs(url.searchParams.get('year') || new Date().getFullYear())); return; }
+      if (pathname === '/api/payroll/draft' && req.method === 'POST') { send(201, savePayrollDraft(store, auth.user, previewSchema.parse(await readBody(req)))); return; }
+      const payrollStage = pathname.match(/^\/api\/runs\/([^/]+)\/stage$/);
+      if (payrollStage && req.method === 'POST') { const body = z.object({ stage: z.enum(['approved', 'included', 'paid']) }).strict().parse(await readBody(req)); send(200, setPayrollStage(store, auth.user, payrollStage[1], body.stage)); return; }
       if (pathname === '/api/payroll/preview' && req.method === 'POST') {
         const p = previewSchema.parse(await readBody(req)); send(200, preview(store, p.start, p.end, p.pay13th, p.employeeIds)); return;
       }
