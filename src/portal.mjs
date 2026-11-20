@@ -44,6 +44,14 @@ const local = now => new Date(now.getTime() + 8 * 3600000).toISOString();
 const hhmm = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
 const fromMinutes = minutes => `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const rows = (store, table, id) => store.db.prepare(`SELECT data FROM ${table} WHERE employee_id=? ORDER BY rowid DESC`).all(id).map(r => JSON.parse(r.data));
+// The open time in (newest first history): the latest time in that no time out closed. A time out HR enters later for an
+// earlier day (a reconciliation event linked by clockInId) does not hide today's open time in (Nov 20, 2026 fix).
+export function openTimeIn(history) {
+  const i = history.findIndex(e => e.kind === 'in');
+  if (i < 0) return null;
+  const event = history[i], closed = history.some((e, j) => e.kind === 'out' && (e.clockInId ? e.clockInId === event.id : j < i));
+  return closed ? null : event;
+}
 // Where a time in / out was made: the office address on the office Wi-Fi or inside the office area, else the street
 // address looked up for that exact GPS point (when already known).
 function distanceMeters(lat1, lon1, lat2, lon2) { const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(a)); }
@@ -100,7 +108,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
     if (retry) { if (retry.employee_id !== employee.id || JSON.parse(retry.data).kind !== value.kind) throw new AppError('Clock request does not belong to this employee.', 403); return JSON.parse(retry.data); }
     // Off-site work leaves time to read and confirm the address (5 minutes); office time in / out 2 minutes.
     if (Math.abs(now.getTime() - Date.parse(value.capturedAt)) > (value.mode === 'outside' ? 300000 : 120000)) throw new AppError('Location reading is stale. Capture your current location again.');
-    const state = store.read(), history = rows(store, 'clock_events', employee.id), latest = history[0], day = local(now).slice(0, 10);
+    const state = store.read(), history = rows(store, 'clock_events', employee.id), latest = openTimeIn(history), day = local(now).slice(0, 10);
     ready(employee, day);
     const workplace = profileOf(state, employee.id, 'attendance'), employment = profileOf(state, employee.id, 'employment');
     if (['Suspended', 'Resigned', 'Terminated', 'Inactive'].includes(employment.employeeStatus)) throw new AppError('Your employment status requires HR review before attendance can be recorded.');
@@ -171,7 +179,7 @@ const STALE_OPEN_MS = 16 * 3600000;
 export const staleOpen = (event, day, now = new Date()) => event?.kind === 'in' && event.workDate < day && now.getTime() - Date.parse(event.recordedAt) > STALE_OPEN_MS;
 export function todayAttendance(store, employee, now = new Date()) {
   const state = store.read(), day = local(now).slice(0, 10), allEvents = rows(store, 'clock_events', employee.id);
-  const open = allEvents[0]?.kind === 'in' && !staleOpen(allEvents[0], day, now) ? allEvents[0] : null;
+  const openEvent = openTimeIn(allEvents), open = openEvent && !staleOpen(openEvent, day, now) ? openEvent : null;
   const workDate = open?.workDate || day, events = allEvents.filter(e => e.workDate === workDate), clockIn = events.find(e => e.kind === 'in'), clockOut = events.find(e => e.kind === 'out');
   const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
   const schedule = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));

@@ -1934,3 +1934,5 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .bell-pending { position: absolute; bottom: -7px; right: -7px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: #d99a1e; color: #1d1300; font-size: 11px; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff; }
 .memo-bar-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--brand); text-decoration: none; cursor: pointer; }
 .memo-bar-link:hover { background: #fff3f3; }
+/* Attendance request form: only the fields of the chosen request type (field display rules otherwise override [hidden]). */
+#ar-form [data-show][hidden] { display: none !important; }

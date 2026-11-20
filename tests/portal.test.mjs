@@ -221,3 +221,13 @@ test('a forgotten time out from an earlier day does not block the next day time 
     assert.equal(today.workDate, '2026-10-12', 'time in for today works');
   } finally { store.close(); }
 });
+
+test('open time in: a time out HR records later for an earlier day does not hide today\'s open time in', async () => {
+  const { openTimeIn } = await import('../src/portal.mjs');
+  const today = { id: 'in-today', kind: 'in', workDate: '2026-11-20' };
+  // Newest first: HR's reconciliation out for Nov 19 was added after today's time in.
+  assert.equal(openTimeIn([{ id: 'hr-out', kind: 'out', workDate: '2026-11-19', clockInId: 'in-19' }, today, { id: 'in-19', kind: 'in', workDate: '2026-11-19' }]), today);
+  assert.equal(openTimeIn([{ id: 'out', kind: 'out', workDate: '2026-11-20' }, today]), null, 'a normal time out closes it');
+  assert.equal(openTimeIn([{ id: 'hr-out', kind: 'out', workDate: '2026-11-20', clockInId: 'in-today' }, today]), null, 'HR closing this time in closes it');
+  assert.equal(openTimeIn([]), null);
+});

@@ -94,7 +94,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
       const f = new FormData(form), submit = form.querySelector('[type=submit]'), c = String(f.get('category'));
       const tx = PROBLEM_CATEGORIES.includes(c) ? String(f.get('transaction')) : '';
       const body = { category: c, date: String(f.get('date')), timeIn: tx === 'out' || c === 'forgot-out' ? '' : String(f.get('timeIn') || ''), timeOut: tx === 'in' ? '' : String(f.get('timeOut') || ''), endNextDay: !!f.get('endNextDay'),
-        attendanceType: c === 'offsite' ? 'offsite' : String(f.get('attendanceType') || 'office'), transaction: tx, location: String(f.get('location') || ''), purpose: String(f.get('purpose') || ''), reason: String(f.get('reason') || ''), reasonType: ['forgot-in', 'forgot-out'].includes(c) ? String(f.get('reasonType') || '') : '', problem: String(f.get('problem') || ''), evidence: [] };
+        attendanceType: c === 'offsite' ? 'offsite' : String(f.get('attendanceType') || 'office'), transaction: tx, location: String(f.get('location') || ''), purpose: String(f.get('purpose') || ''), reason: String(f.get('reason') || ''), ...(['forgot-in', 'forgot-out'].includes(c) && f.get('reasonType') ? { reasonType: String(f.get('reasonType')) } : {}), problem: String(f.get('problem') || ''), evidence: [] };
       submit.disabled = true; submit.textContent = 'Submitting…';
       try {
         const doc = await upload(api, form.elements.file.files[0]); if (doc) body.evidence = [doc];
