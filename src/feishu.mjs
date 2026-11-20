@@ -68,6 +68,43 @@ async function post(store, text, fetchImpl) {
   return error ? { ok: false, error } : { ok: true };
 }
 
+// Resolve person identifiers for outgoing alerts only; stored HR notices remain unchanged.
+export function nameFeishuAlert(store, line) {
+  const text = String(line);
+  try {
+    const stateRow = store.db.prepare('SELECT data FROM state WHERE id=1').get();
+    const employees = JSON.parse(stateRow?.data || '{}').employees || [];
+    for (const employee of [...employees].sort((a, b) => String(b.id).length - String(a.id).length)) {
+      const id = String(employee.id || '');
+      if (!id || !text.startsWith(id)) continue;
+      const rest = text.slice(id.length);
+      if (!/^(?:\s|:)/.test(rest)) continue;
+      const name = typeof employee.name === 'string' && employee.name.trim() ? employee.name.trim().replace(/[\r\n]+/g, ' ') : 'Unknown employee';
+      if (rest.startsWith(':')) return name + rest;
+      const detail = rest.trimStart();
+      if (detail.startsWith(name + ':')) return detail;
+      return name + ' ' + detail;
+    }
+    // Device alerts may identify a user account rather than an employee.
+    const colon = text.indexOf(':');
+    if (colon > 0 && /sign-in from a new phone/.test(text)) {
+      const key = text.slice(0, colon);
+      const user = store.db.prepare('SELECT display_name, employee_id FROM users WHERE username=?').get(key);
+      const linked = employees.find(e => e.id === user?.employee_id);
+      const name = linked?.name || user?.display_name;
+      return (typeof name === 'string' && name.trim() ? name.trim().replace(/[\r\n]+/g, ' ') : 'Unknown user') + text.slice(colon);
+    }
+    // Retired/missing employee records must not become guessed names.
+    if (/^(?:\d{4}-\d{3,}|EMP-[A-Za-z0-9-]+)(?=:|\s)/.test(text)) {
+      return text.replace(/^(?:\d{4}-\d{3,}|EMP-[A-Za-z0-9-]+)(?:\s+[^:]+)?(?=:)/, 'Unknown employee');
+    }
+    return text;
+  } catch {
+    // Identity lookup failure must never leak an ID-only person label or block an HR action.
+    return text.replace(/^(?:\d{4}-\d{3,}|EMP-[A-Za-z0-9-]+)(?:\s+[^:]+)?(?=:)/, 'Unknown employee');
+  }
+}
+
 // Hooks HR notices and leave applications on this store. Safe to call again (the latest settings are used).
 export function connectFeishu(store, { fetchImpl = globalThis.fetch, delayMs = 3000, origin = '', title = 'GDS HR' } = {}) {
   const queue = [];
@@ -86,7 +123,7 @@ export function connectFeishu(store, { fetchImpl = globalThis.fetch, delayMs = 3
   const enqueue = line => {
     try {
       if (!config(store).enabled) return;
-      queue.push(String(line).slice(0, 500));
+      queue.push(nameFeishuAlert(store, line).slice(0, 500));
       if (!timer) { timer = setTimeout(flush, delayMs); timer.unref?.(); }
     } catch { /* an alert must never break the HR action that triggered it */ }
   };
