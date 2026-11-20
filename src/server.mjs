@@ -16,7 +16,7 @@ import { contributionReview, submitContributionChange, reviewContributionChange,
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
 import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
 import { renderLoanApplicationPdf } from './loan-pdf.mjs';
-import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
+import { overtimeQueue, decideOvertime, fileOvertime, adjustOvertime } from './overtime.mjs';
 import { approveSalaryChange, listSalary, requestSalaryChange } from './salary-changes.mjs';
 import { payrollCutoffs, savePayrollDraft, setPayrollStage } from './payroll-stages.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
@@ -67,7 +67,7 @@ function interfaceVersion() {
 function constantEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && timingSafeEqual(x, y); }
 // A service token is not a person and is not a System Administrator. Only the actions management put on the account are reachable.
 function serviceCallAllowed(user, method, pathname) {
-  const overtime = user.permissions?.includes('overtime') && ((method === 'GET' && pathname === '/api/overtime-requests') || (method === 'POST' && /^\/api\/overtime-requests\/[a-f0-9-]+\/decision$/.test(pathname)));
+  const overtime = user.permissions?.includes('overtime') && ((method === 'GET' && pathname === '/api/overtime-requests') || (method === 'POST' && /^\/api\/overtime-requests\/[a-f0-9-]+\/(decision|adjustment)$/.test(pathname)));
   const payrollStage = method === 'POST' && /^\/api\/runs\/[^/]+\/stage$/.test(pathname);
   return overtime || payrollStage || (method === 'GET' && (pathname === '/api/approval-policy' || pathname === '/api/payroll/cutoffs'));
 }
@@ -319,6 +319,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/overtime-requests' && req.method === 'POST') { send(201, fileOvertime(store, auth.user, await readBody(req))); return; }
       const otDecision = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/decision$/);
       if (otDecision && req.method === 'POST') { send(200, decideOvertime(store, auth.user, otDecision[1], await readBody(req))); return; }
+      const otAdjust = pathname.match(/^\/api\/overtime-requests\/([a-f0-9-]+)\/adjustment$/);
+      if (otAdjust && req.method === 'POST') { send(201, adjustOvertime(store, auth.user, otAdjust[1], await readBody(req))); return; }
       if (pathname === '/api/contributions/month-edit' && req.method === 'POST') { send(200, saveMonthEdit(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions/employees' && req.method === 'POST') { send(200, addContributionEmployee(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions' && req.method === 'GET') { send(200, contributionOverview(store, auth.user, url.searchParams.get('month') || '', readSettings(store).company.egovFee ?? 15)); return; }

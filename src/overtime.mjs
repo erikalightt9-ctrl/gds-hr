@@ -144,7 +144,8 @@ export function cancelOvertime(store, actor, id) {
     return after;
   });
 }
-const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default(''), overrideReason: z.string().trim().max(500).default('') }).strict();
+const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default(''), overrideReason: z.string().trim().max(500).default(''), reason: z.string().trim().max(500).default('') }).strict();
+const included = (state, employeeId, day) => state.runs.some(r => r.status !== 'reversed' && r.stages?.included && r.start <= day && r.end >= day && r.rows.some(row => row.employeeId === employeeId));
 export function decideOvertime(store, actor, id, input) {
   permit(actor, HR);
   assertNamedActor(actor, getPolicy(store), 'overtime');
@@ -154,20 +155,49 @@ export function decideOvertime(store, actor, id, input) {
     const o = rowsOf(store, 'WHERE id=?', id)[0];
     if (!o) throw new AppError('Overtime filing not found.', 404);
     if (!['pending', 'approved', 'rejected'].includes(o.status)) throw new AppError('This filing was cancelled.');
-    if (posted(store.read(), o.employeeId, o.date)) throw new AppError('Payroll for that date is posted; the decision is locked. Reverse the payroll to correct it.');
+    const stateNow = store.read();
+    if (posted(stateNow, o.employeeId, o.date) || included(stateNow, o.employeeId, o.date)) throw new AppError('This overtime is included in payroll. The decision is locked. Record a separate adjustment.');
     const hours = v.decision === 'approve' ? round(v.hours ?? o.hours) : 0;
     if (hours > o.hours) throw new AppError(`Approved hours cannot exceed the ${o.hours} h filed.`);
     // Approving other hours than filed is an adjustment and needs its own reason.
     const adjusted = v.decision === 'approve' && hours !== o.hours;
     if (adjusted && v.adjustReason.length < 3) throw new AppError(`Give the reason for approving ${hours} h instead of the ${o.hours} h filed.`);
+    const nextStatus = v.decision === 'approve' ? 'approved' : 'rejected';
+    const decisionReason = (v.reason || (v.decision === 'reject' ? v.remarks : '') || (adjusted ? v.adjustReason : '')).trim();
+    const changing = o.status !== nextStatus || (nextStatus === 'approved' && hours !== o.approvedHours);
+    if (!changing) throw new AppError('That is already the decision.');
+    if (decisionReason.length < 3) throw new AppError('Give a reason for changing the overtime decision.');
     const state = store.read(), employee = state.employees.find(e => e.id === o.employeeId);
     const blocks = v.decision === 'approve' ? approvalBlocks(state, employee, o, hours) : [];
     if (blocks.length && v.overrideReason.trim().length < 3) throw new AppError(`${blocks[0]} An override needs a written reason.`);
-    const note = v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${blocks.length ? ` · override: ${v.overrideReason.trim()}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks;
-    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(blocks.length ? { overrideReason: v.overrideReason.trim(), overrideBy: actor.username, overrideByName: actor.displayName || actor.username, overrideAt: new Date().toISOString() } : {}), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
+    const note = `${decisionReason}${v.decision === 'approve' ? ` · ${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${blocks.length ? ` · override: ${v.overrideReason.trim()}` : ''}` : ''}`;
+    const after = { ...o, status: nextStatus, approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', decisionReason, remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(blocks.length ? { overrideReason: v.overrideReason.trim(), overrideBy: actor.username, overrideByName: actor.displayName || actor.username, overrideAt: new Date().toISOString() } : {}), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
     put(store, after); store.log(actor, v.decision, 'overtime', o.employeeId, o, after);
     store.notify(o.employeeId, `Your overtime for ${o.date} was ${v.decision === 'approve' ? `approved (${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''})` : 'not approved'}${v.remarks ? `: ${v.remarks}` : ''}.`);
     return after;
+  });
+}
+// A correction after the overtime is included in payroll. The original decision row is not modified.
+export function adjustOvertime(store, actor, id, input) {
+  permit(actor, HR);
+  assertNamedActor(actor, getPolicy(store), 'overtime');
+  const reason = String(input?.reason || '').trim();
+  const hours = Number(input?.hours);
+  if (reason.length < 3) throw new AppError('Give a reason for the adjustment.');
+  if (!(hours >= 0.25) || hours > 16) throw new AppError('Enter the adjusted hours.');
+  return store.transaction(() => {
+    const o = rowsOf(store, 'WHERE id=?', id)[0];
+    if (!o) throw new AppError('Overtime filing not found.', 404);
+    const state = store.read();
+    if (!posted(state, o.employeeId, o.date) && !included(state, o.employeeId, o.date)) throw new AppError('This decision is not locked. Change it directly, with a reason.');
+    const before = JSON.stringify(o);
+    const value = { id: randomUUID(), employeeId: o.employeeId, date: o.date, startTime: o.startTime || '', endTime: o.endTime || '', breakMinutes: o.breakMinutes || 0, nightHours: o.nightHours || 0, hours, reason, documentId: '', filedBy: actor.username, filedAt: new Date().toISOString(), status: 'pending', approvedHours: 0, adjustsId: o.id, decidedBy: '', decidedAt: '', remarks: '', decisionReason: '', history: [historyEntry(actor, 'adjustment opened', `Corrects ${o.id}. ${reason}`)] };
+    put(store, value);
+    const still = JSON.stringify(rowsOf(store, 'WHERE id=?', o.id)[0]);
+    if (still !== before) throw new AppError('The original overtime decision must stay unchanged.');
+    store.log(actor, 'adjust', 'overtime', o.employeeId, o, { originalId: o.id, adjustmentId: value.id, reason, hours });
+    store.notify(o.employeeId, `HR opened an overtime adjustment for ${o.date} (${hours} h): ${reason}. The original decision is unchanged.`);
+    return value;
   });
 }
 export function myOvertime(store, actor) {
@@ -211,6 +241,6 @@ export function overtimeQueue(store, actor) {
   const state = store.read(), people = new Map(state.employees.map(e => [e.id, e]));
   return rowsOf(store).slice(0, 500).map(o => {
     const e = people.get(o.employeeId), record = state.attendance.find(a => a.employeeId === o.employeeId && a.date === o.date);
-    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceId: record?.id || null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) };
+    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceId: record?.id || null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) || included(state, o.employeeId, o.date) };
   }).sort((a, b) => (a.status === 'pending') === (b.status === 'pending') ? b.date.localeCompare(a.date) : a.status === 'pending' ? -1 : 1);
 }

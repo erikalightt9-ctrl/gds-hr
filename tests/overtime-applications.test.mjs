@@ -54,7 +54,7 @@ test('payroll pays only time worked inside the approved period, in 30-minute blo
   const store = fixture(leaveAt('19:00'));
   try {
     const o = fileOvertime(store, worker, { date: day, startTime: '17:00', endTime: '19:00', reason: 'Closing (demo)' });
-    decideOvertime(store, hr, o.id, { decision: 'approve' });
+    decideOvertime(store, hr, o.id, { decision: 'approve', reason: 'Authorised (demo)' });
     const row = run(store).rows[0];
     assert.equal(otHours(row), 2, '17:00-19:00 is paid; 16:00-17:00 is outside the approved period');
     assert.ok(row.trace.some(x => /outside the approved overtime period/.test(x.formula)));
@@ -67,7 +67,7 @@ test('approved overtime the attendance does not support is flagged before postin
   const store = fixture(s => { leaveAt('19:00')(s); s.attendance = s.attendance.filter(a => a.date !== '2026-09-02'); });
   try {
     const short = fileOvertime(store, worker, { date: day, startTime: '18:00', endTime: '21:00', reason: 'Event (demo)' });
-    decideOvertime(store, hr, short.id, { decision: 'approve', overrideReason: 'Only one hour is on the attendance record (demo)' });
+    decideOvertime(store, hr, short.id, { decision: 'approve', reason: 'Authorised (demo)', overrideReason: 'Only one hour is on the attendance record (demo)' });
     const missing = fileOvertime(store, hr, { employeeId: 'EMP-001', date: '2026-09-02', startTime: '17:00', endTime: '19:00', reason: 'Recorded by HR (demo)', overrideReason: 'No attendance recorded yet (demo)' });
     assert.equal(missing.status, 'approved');
     const computed = run(store);
@@ -84,7 +84,7 @@ test('overtime past midnight is paid within the approved period, with night diff
   const store = fixture(s => { const a = s.attendance.find(x => x.date === day); a.timeOut = '01:00'; a.endNextDay = true; });
   try {
     const o = fileOvertime(store, worker, { date: day, startTime: '22:00', endTime: '01:00', breakMinutes: 30, reason: 'Deployment (demo)' });
-    decideOvertime(store, hr, o.id, { decision: 'approve' });
+    decideOvertime(store, hr, o.id, { decision: 'approve', reason: 'Authorised (demo)' });
     const row = run(store).rows[0];
     assert.equal(otHours(row), 2.5, '2.5 approved hours inside 22:00-01:00');
     assert.ok(row.earnings.nsd > 0, 'night differential applies');
@@ -95,7 +95,7 @@ test('HR can waive the unsupported-overtime check for a cutoff: only the support
   const store = fixture(leaveAt('19:00'));
   try {
     const short = fileOvertime(store, worker, { date: day, startTime: '18:00', endTime: '21:00', reason: 'Event (demo)' });
-    decideOvertime(store, hr, short.id, { decision: 'approve', overrideReason: 'Only one hour is on the attendance record (demo)' });
+    decideOvertime(store, hr, short.id, { decision: 'approve', reason: 'Authorised (demo)', overrideReason: 'Only one hour is on the attendance record (demo)' });
     store.db.prepare('INSERT INTO payroll_inputs(employee_id,start,end,data) VALUES(?,?,?,?)').run('EMP-001', '2026-09-01', '2026-09-15', JSON.stringify({ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveOvertimeCheck: true, updatedBy: 'hr1' }));
     const computed = run(store);
     assert.ok(!computed.blockers.some(b => /approved overtime on 2026-09-01/.test(b)), 'waived');
