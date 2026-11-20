@@ -1,8 +1,9 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
 import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS, idTypeSelect } from './hr-common.js';
 import { describeTotal } from './overtime-ui.js';
+import { openMyMemo, statusChip } from './memo-viewer.js';
 
-export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message) }) {
+export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message), openDialog, dialog }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
   const SHEET = { new: 'Not started', draft: 'Draft (only you can see it)', submitted: 'Submitted to HR', 'under-review': 'HR is reviewing', returned: 'Returned for correction', approved: 'Approved', rejected: 'Rejected' };
 
@@ -167,16 +168,18 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     };
   }
   function memos(box, list) {
-    const pending = list.filter(m => m.ackRequired && !m.acknowledgedAt);
-    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${pending.length ? `${pending.length} waiting for your acknowledgement` : 'All caught up'}</span></div><div class="panel-body memo-cards">
-      ${list.map(m => `<article class="memo-card ${m.ackRequired && !m.acknowledgedAt ? 'unread' : ''}"><header><strong>${esc(m.title)}</strong><small>${esc(m.reference)} · ${fmtDate(m.issueDate)} · version ${m.version}${m.latest ? '' : ' (replaced by a newer version)'}</small></header>
-        ${m.changeNote ? `<p class="legend">What changed: ${esc(m.changeNote)}</p>` : ''}<p><a href="/api/hr/me/memos/${m.memoId}/${m.version}.pdf" target="_blank" rel="noopener">📄 Open memo (PDF)</a></p><details ${m.ackRequired && !m.acknowledgedAt ? 'open' : ''}><summary>Read memo</summary><div class="memo-body">${esc(m.body)}</div>${m.attachments.map(a => `<a href="/api/hr/me/memo-attachments/${a.id}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`).join(' ')}</details>
-        <footer>${m.acknowledgedAt ? badge(`Receipt acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? `${m.overdue ? badge('Overdue', 'rejected') : m.ackDeadline ? badge(`Please acknowledge by ${fmtDate(m.ackDeadline)}`, 'pending') : ''}<button class="primary small" data-ack="${m.memoId}" data-version="${m.version}">I have received and read this memo</button>` : badge('No acknowledgement needed', 'neutral')}</footer></article>`).join('') || '<p class="muted">No memos addressed to you yet.</p>'}
-      <p class="legend">Acknowledging confirms that you received and read the memo. It does not mean you agree with it.</p></div></section>`;
-    box.onclick = async event => {
-      const b = event.target.closest('[data-ack]'); if (!b) return;
-      b.disabled = true;
-      try { await api(`/hr/me/memos/${b.dataset.ack}/${b.dataset.version}/acknowledge`, {}); confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); await fill('memos', box); memoNotice(document, false).catch(() => {}); } catch (error) { toast(error.message); b.disabled = false; }
+    const open = list.filter(m => m.ackRequired && !m.acknowledgedAt && m.latest && !m.archived);
+    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${open.length ? `${open.length} waiting for your action` : 'All caught up'}</span></div><div class="panel-body memo-cards">
+      ${list.map((m, i) => `<article class="memo-card ${m.ackRequired && !m.acknowledgedAt && m.latest ? 'unread' : ''}"><header><strong>${esc(m.title)}</strong><small>${esc(m.reference)} · ${esc(m.category || '')} · ${fmtDate(m.issueDate)} · version ${m.version}${m.latest ? '' : ' (replaced by a newer version)'}</small></header>
+        ${m.changeNote ? `<p class="legend">What changed: ${esc(m.changeNote)}</p>` : ''}
+        <p>${statusChip(esc, m.status, m.statusLabel)}${m.ackRequired && !m.acknowledgedAt && m.latest ? ` <span class="legend">Acknowledge by ${fmtDate(m.ackDeadline)}</span>` : ''}${m.acknowledgedAt ? ` <span class="legend">${fmtDateTime(m.acknowledgedAt)}</span>` : ''}</p>
+        <footer class="memo-card-actions"><button class="${m.ackRequired && !m.acknowledgedAt && m.latest ? 'primary' : ''} small" data-memo-open="${i}">📄 Open memo</button></footer></article>`).join('') || '<p class="muted">No memos addressed to you yet.</p>'}
+      <p class="legend">Open a memo to read the official PDF, then acknowledge it (received, read and understood) or ask HR for clarification. Opening, downloading or printing does not acknowledge it. Acknowledging is not an admission of wrongdoing and does not waive your rights.</p></div></section>`;
+    box.onclick = event => {
+      const b = event.target.closest('[data-memo-open]'); if (!b) return;
+      const refresh = async () => { await fill('memos', box); memoNotice(document, false).catch(() => {}); };
+      if (openDialog) openMyMemo({ api, esc, toast, openDialog, dialog }, list[Number(b.dataset.memoOpen)], refresh);
+      else window.open(`/api/hr/me/memos/${list[Number(b.dataset.memoOpen)].memoId}/${list[Number(b.dataset.memoOpen)].version}.pdf`, '_blank', 'noopener');
     };
   }
 
@@ -219,15 +222,26 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   const STATUS_TEXT = { Missing: 'Not complied — upload required', Rejected: 'Rejected — upload again', Expired: 'Expired — upload a renewed copy', Submitted: 'Submitted — waiting for HR review', 'Under Review': 'Under HR review', Verified: 'Complied', 'Not Applicable': 'Not applicable' };
   // Memos waiting for acknowledgement: a count on the Memos menu item and a red notice on the dashboard that stay
   // until the employee acknowledges each memo (the bell notice alone can be cleared by opening the bell).
+  // Outstanding actions: memos to acknowledge (pending / overdue / clarification) and due process notices (receipt and
+  // explanation tracked separately). A count on the Memos menu item, the bell and a red notice on the dashboard stay
+  // until each action is done; opening the bell or a reminder never lifts them.
   async function memoNotice(app, onDashboard) {
-    const pending = (await api('/hr/me/memos')).filter(m => m.ackRequired && !m.acknowledgedAt && m.latest !== false && !m.archived);
-    const tabButton = app.querySelector('[data-portal-tab="memos"]');
-    tabButton?.querySelector('.nav-flag')?.remove();
-    if (tabButton && pending.length) tabButton.insertAdjacentHTML('beforeend', `<span class="nav-flag" aria-label="${pending.length} memo${pending.length === 1 ? '' : 's'} to acknowledge">${pending.length}</span>`);
+    const [memoList, cases] = await Promise.all([api('/hr/me/memos'), api('/hr/me/cases').catch(() => [])]);
+    const pending = memoList.filter(m => m.ackRequired && !m.acknowledgedAt && m.latest !== false && !m.archived);
+    const dp = cases.flatMap(c => [...c.notices.filter(n => !n.receivedAt).map(n => ({ text: `${n.title} ${n.reference || c.reference}`, label: '🔔 Pending Acknowledgment' })), ...(c.canExplain && !c.explanation ? [{ text: `Notice to Explain ${c.reference} — due ${fmtDate(c.deadline)}`, label: '📝 Explanation Required' }] : [])]);
+    const total = pending.length + dp.length;
+    const flag = (selector, count, label) => { const el = app.querySelector(selector); el?.querySelector('.nav-flag')?.remove(); if (el && count) el.insertAdjacentHTML('beforeend', `<span class="nav-flag" aria-label="${count} ${label}">${count}</span>`); };
+    flag('[data-portal-tab="memos"]', pending.length, `memo${pending.length === 1 ? '' : 's'} to acknowledge`);
+    flag('[data-portal-tab="cases"]', dp.length, `due process action${dp.length === 1 ? '' : 's'}`);
+    const bell = app.querySelector('[data-portal-bell]');
+    bell?.querySelector('.bell-pending')?.remove();
+    if (bell && total) bell.insertAdjacentHTML('beforeend', `<span class="bell-pending" title="${total} action${total === 1 ? '' : 's'} waiting for you" aria-label="${total} actions waiting">${total}</span>`);
     const main = app.querySelector('.employee-main');
-    if (!onDashboard || !pending.length || !main || main.querySelector('.memo-ack-alert')) return;
+    main?.querySelector('.memo-ack-alert')?.remove();
+    if (!onDashboard || !total || !main) return;
     const box = document.createElement('section'); box.className = 'compliance-alert memo-ack-alert'; box.setAttribute('role', 'alert');
-    box.innerHTML = `<div><strong>📝 ${pending.length} memo${pending.length === 1 ? '' : 's'} waiting for your acknowledgement</strong><ol class="comply-list">${pending.map(m => `<li>${esc(m.reference || '')} ${esc(m.title)}${m.overdue ? ' <small>(overdue)</small>' : m.ackDeadline ? ` <small>(by ${fmtDate(m.ackDeadline)})</small>` : ''}</li>`).join('')}</ol><p class="legend">Read and acknowledge receipt in Memos. This notice stays until every memo is acknowledged.</p></div><button class="primary" data-portal-tab="memos">Open memos</button>`;
+    const items = [...pending.map(m => `<li>${m.status === 'overdue' ? '⚠️ Overdue Acknowledgment' : m.status === 'clarification' ? '❓ Clarification Requested' : '🔔 Pending Acknowledgment'}: ${esc(m.reference || '')} ${esc(m.title)} <small>(by ${fmtDate(m.ackDeadline)})</small></li>`), ...dp.map(d => `<li>${d.label}: ${esc(d.text)}</li>`)];
+    box.innerHTML = `<div><strong>${total} item${total === 1 ? '' : 's'} waiting for your action</strong><ol class="comply-list">${items.join('')}</ol><p class="legend">This notice stays until each item is done. It does not stop you from timing in, viewing your pay or submitting an explanation.</p></div><div class="row-actions">${pending.length ? '<button class="primary" data-portal-tab="memos">Open memos</button>' : ''}${dp.length ? '<button data-portal-tab="cases">Notices &amp; due process</button>' : ''}</div>`;
     const anchor = main.querySelector('.compliance-alert') || main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
     if (anchor) anchor.after(box); else main.prepend(box);
   }

@@ -125,7 +125,7 @@ export function issueNte(store, actor, id) {
     if (c.nte.issuedAt) throw new AppError('The Notice to Explain was already issued.');
     const day = localToday(), deadline = addDays(day, c.nte.responseDays);
     const body = fillTemplate(c.nte.body, { deadline: longDate(deadline), nteDate: longDate(day), today: longDate(day) });
-    return { ...c, status: 'awaiting', nte: { ...c.nte, body, reference: `${c.reference}-NTE`, issuedAt: day, issuedBy: actor.username, deadline, receivedAt: null } };
+    return { ...c, status: 'awaiting', nte: { ...c.nte, body, reference: `${c.reference}-NTE`, issuedAt: day, issuedBy: actor.username, deadline, deadlineBasis: 'issue date (provisional until receipt is documented)', deadlineHistory: [], receivedAt: null } };
   });
   store.notify(updated.employeeId, `Notice to Explain ${updated.reference}: please read it and submit your written explanation by ${longDate(updated.nte.deadline)} (menu: Notices & due process).`);
   return updated;
@@ -137,6 +137,8 @@ export function toEvaluation(store, actor, id, input) {
   return change(store, actor, id, 'no-explanation', c => {
     if (c.status !== 'awaiting') throw new AppError('Only a case awaiting the explanation can move to evaluation this way.');
     if (v.waived && v.note.length < 5) throw new AppError('Describe the employee\'s written waiver (date and how it was given).');
+    if (!v.waived && !c.nte.service?.receivedOn && !c.nte.receivedAt) throw new AppError('First verify service: record how and when the employee received the Notice to Explain (Record service / receipt). A portal upload alone is not proof of receipt.');
+    if (!v.waived && (c.nte.extensionRequests || []).some(r => r.status === 'pending')) throw new AppError('The employee asked for more time. Grant or decline the request first.');
     if (!v.waived && localToday() <= c.nte.deadline) throw new AppError(`The employee has until ${longDate(c.nte.deadline)} to explain. Wait for the deadline to pass.`);
     return { ...c, status: 'evaluation', explanation: { none: true, waived: v.waived, note: v.note, recordedAt: new Date().toISOString(), recordedBy: actor.username } };
   }, v.waived ? 'Employee waived the explanation' : 'No explanation received by the deadline');
@@ -240,12 +242,13 @@ export function closeCase(store, actor, id, input) {
     const c = readCase(store, id);
     if (c.status === 'closed') throw new AppError('This case is already closed.');
     if (c.nte?.issuedAt && !c.decision?.issuedAt) throw new AppError('Issue the decision before closing (it may be "No disciplinary action").');
+    if (c.review?.requestedAt && !c.review.issuedAt) throw new AppError('The employee asked for a review of the decision. Issue the Review / Appeal Outcome before closing.');
     if (!c.nte?.issuedAt && remarks.length < 10) throw new AppError('No notice was issued. Explain why the case is closed without action (at least 10 characters).');
-    const outcome = c.decision?.issuedAt ? c.decision.sanction : 'Closed without action';
+    const sanction = c.review?.issuedAt ? c.review.sanction : c.decision?.sanction, outcome = c.decision?.issuedAt ? sanction : 'Closed without action';
     let actionId = null;
-    if (c.decision?.issuedAt && c.decision.sanction !== 'No disciplinary action') {
+    if (c.decision?.issuedAt && sanction !== 'No disciplinary action') {
       actionId = randomUUID();
-      const record = { id: actionId, employeeId: c.employeeId, type: c.decision.sanction, date: c.decision.issuedAt, caseId: c.id, reference: c.reference, offense: c.incident.offense, suspensionDays: c.decision.suspensionDays || 0, effectiveFrom: c.decision.effectiveFrom || '', effectiveTo: c.decision.effectiveTo || '', source: 'case', remarks, by: actor.username, at: new Date().toISOString() };
+      const record = { id: actionId, employeeId: c.employeeId, type: sanction, date: c.review?.issuedAt || c.decision.issuedAt, caseId: c.id, reference: c.reference, offense: c.incident.offense, suspensionDays: c.decision.suspensionDays || 0, effectiveFrom: c.decision.effectiveFrom || '', effectiveTo: c.decision.effectiveTo || '', source: 'case', remarks, by: actor.username, at: new Date().toISOString() };
       store.db.prepare('INSERT INTO dp_actions VALUES(?,?,?)').run(actionId, c.employeeId, JSON.stringify(record));
     }
     const now = new Date().toISOString(), after = { ...c, status: 'closed', closure: { outcome, remarks, actionId, closedAt: now, closedBy: actor.username }, updatedAt: now, history: [...c.history, { at: now, by: actor.username, action: 'close', detail: outcome }] };

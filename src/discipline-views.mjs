@@ -5,6 +5,7 @@ import { AppError, permit } from './service.mjs';
 import { localToday } from './profiles.mjs';
 import { readDpSettings, fillTemplate, SANCTIONS, TEMPLATE_TITLES } from './discipline-settings.mjs';
 import { VIEW, MANAGE, STATUS, ensure, readCase, allCases, storeFile, templateVars, longDate } from './discipline.mjs';
+import { NTE_ACK_WORDING, NOTICE_ACK_WORDING, withReceiptDeadline, markViewed, reviewDeadline, dpRequestBell, finalSanction } from './discipline-service.mjs';
 
 const summary = c => ({ id: c.id, reference: c.reference, employeeId: c.employeeId, employeeName: c.employee.name, employeeNumber: c.employee.number, department: c.employee.department, position: c.employee.position, incidentDate: c.incident.date, offense: c.incident.offense, severity: c.incident.severity, status: c.status, statusLabel: STATUS[c.status], deadline: c.nte?.deadline || '', decisionStatus: c.decision?.status || '', sanction: c.decision?.sanction || '', outcome: c.closure?.outcome || '', issuingOfficer: c.incident.issuingOfficer, createdAt: c.createdAt, updatedAt: c.updatedAt });
 export function listCases(store, actor, filters = {}) {
@@ -66,28 +67,35 @@ export function dpOptions(store, actor) {
 const EMPLOYEE_STATUS = { awaiting: 'Waiting for your explanation', evaluation: 'Under evaluation', resolved: 'Decision issued', closed: 'Closed' };
 function notices(c) {
   const out = [];
-  if (c.nte?.issuedAt) out.push({ kind: 'nte', title: 'Notice to Explain', reference: c.nte.reference, issuedAt: c.nte.issuedAt, body: c.nte.body, receivedAt: c.nte.receivedAt, deadline: c.nte.deadline });
-  if (c.hearing?.noticeIssuedAt) out.push({ kind: 'hearing', title: 'Notice of Administrative Hearing', reference: c.reference, issuedAt: c.hearing.noticeIssuedAt, body: c.hearing.body, receivedAt: c.hearing.receivedAt, scheduledAt: c.hearing.scheduledAt, place: c.hearing.place });
-  if (c.decision?.issuedAt) out.push({ kind: 'decision', title: 'Notice of Decision', reference: c.decision.reference, issuedAt: c.decision.issuedAt, body: c.decision.body, receivedAt: c.decision.receivedAt, sanction: c.decision.sanction });
+  if (c.nte?.issuedAt) out.push({ kind: 'nte', title: 'Notice to Explain', reference: c.nte.reference, issuedAt: c.nte.issuedAt, body: c.nte.body, receivedAt: c.nte.receivedAt, deadline: c.nte.deadline, deadlineBasis: c.nte.deadlineBasis || '', viewedAt: c.nte.viewedAt || '', serviceReceivedOn: c.nte.service?.receivedOn || '', ackWording: NTE_ACK_WORDING });
+  if (c.hearing?.noticeIssuedAt) out.push({ kind: 'hearing', title: 'Notice of Administrative Hearing', reference: c.reference, issuedAt: c.hearing.noticeIssuedAt, body: c.hearing.body, receivedAt: c.hearing.receivedAt, scheduledAt: c.hearing.scheduledAt, place: c.hearing.place, viewedAt: c.hearing.viewedAt || '', ackWording: NOTICE_ACK_WORDING });
+  if (c.decision?.issuedAt) out.push({ kind: 'decision', title: 'Notice of Decision', reference: c.decision.reference, issuedAt: c.decision.issuedAt, body: c.decision.body, receivedAt: c.decision.receivedAt, sanction: c.decision.sanction, viewedAt: c.decision.viewedAt || '', ackWording: NOTICE_ACK_WORDING, reviewDeadline: c.decision.sanction !== 'No disciplinary action' ? reviewDeadline(c.decision) : '' });
+  if (c.review?.issuedAt) out.push({ kind: 'review', title: 'Review / Appeal Outcome', reference: c.review.reference, issuedAt: c.review.issuedAt, body: c.review.body, receivedAt: c.review.receivedAt, outcome: c.review.outcome, sanction: c.review.sanction, viewedAt: c.review.viewedAt || '', ackWording: NOTICE_ACK_WORDING });
   return out;
 }
 const own = (store, actor, id) => { permit(actor, ['employee']); const c = readCase(store, id); if (c.employeeId !== actor.employeeId || !c.nte?.issuedAt) throw new AppError('Case not found.', 404); return c; };
 export function myCases(store, actor) {
   permit(actor, ['employee']);
+  markViewed(store, actor.employeeId);
   const template = readDpSettings(store).templates.explanation;
   return allCases(store).filter(c => c.employeeId === actor.employeeId && c.nte?.issuedAt).map(c => ({
     id: c.id, reference: c.reference, incidentDate: c.incident.date, offense: c.incident.offense, status: EMPLOYEE_STATUS[c.status] || STATUS[c.status], notices: notices(c),
     explanation: c.explanation && !c.explanation.none ? { text: c.explanation.text, submittedAt: c.explanation.submittedAt, late: c.explanation.late, hearingRequested: c.explanation.hearingRequested, files: c.files.filter(f => f.byEmployee).map(f => ({ id: f.id, name: f.name })) } : null,
     canExplain: (!c.explanation || c.explanation.none) && !c.decision && c.status !== 'closed', deadline: c.nte.deadline, explanationTemplate: fillTemplate(template, templateVars(c)),
+    extensionRequests: (c.nte.extensionRequests || []).map(r => ({ until: r.until, reason: r.reason, at: r.at, status: r.status, decisionReason: r.decisionReason || '' })), canAskExtension: c.status === 'awaiting' && !c.explanation && !(c.nte.extensionRequests || []).some(r => r.status === 'pending'),
+    review: c.review ? { requestedAt: c.review.requestedAt, grounds: c.review.grounds, outcome: c.review.outcome || '', issuedAt: c.review.issuedAt || '' } : null, finalSanction: c.decision?.issuedAt ? finalSanction(c) : '',
+    canAskReview: !!c.decision?.issuedAt && c.decision.sanction !== 'No disciplinary action' && !c.review && c.status !== 'closed' && localToday() <= reviewDeadline(c.decision), reviewDeadline: c.decision?.issuedAt ? reviewDeadline(c.decision) : '',
   }));
 }
 export function acknowledgeNotice(store, actor, id, kind) {
   const c = own(store, actor, id), at = new Date().toISOString();
-  const key = { nte: 'nte', hearing: 'hearing', decision: 'decision' }[kind];
+  const key = { nte: 'nte', hearing: 'hearing', decision: 'decision', review: 'review' }[kind];
   if (!key || !(key === 'hearing' ? c.hearing?.noticeIssuedAt : c[key]?.issuedAt)) throw new AppError('Notice not found.', 404);
   if (c[key].receivedAt) return { receivedAt: c[key].receivedAt };
   return store.transaction(() => {
-    const after = { ...c, [key]: { ...c[key], receivedAt: at }, history: [...c.history, { at, by: actor.username, action: 'acknowledge-receipt', detail: kind }] };
+    const acknowledged = { ...c, [key]: { ...c[key], receivedAt: at, receiptWording: key === 'nte' ? NTE_ACK_WORDING : NOTICE_ACK_WORDING } };
+    // The explanation period runs from the documented receipt; acknowledging never shortens it.
+    const after = { ...(key === 'nte' ? withReceiptDeadline(acknowledged, actor.username, at) : acknowledged), history: [...c.history, { at, by: actor.username, action: 'acknowledge-receipt', detail: kind }] };
     store.db.prepare('UPDATE dp_cases SET data=? WHERE id=?').run(JSON.stringify(after), id);
     store.log(actor, 'acknowledge-receipt', 'discipline', id, null, { reference: c.reference, notice: kind, employeeId: c.employeeId });
     return { receivedAt: at };
@@ -122,7 +130,7 @@ export function caseFile(store, actor, fileId) {
 // Bell items for HR and the decision approvers.
 export function disciplineBell(store, actor) {
   if (!VIEW.includes(actor.role)) return [];
-  const settings = readDpSettings(store), today = localToday(), items = [], cases = allCases(store);
+  const settings = readDpSettings(store), today = localToday(), items = [...dpRequestBell(store, actor)], cases = allCases(store);
   if (MANAGE.includes(actor.role)) {
     for (const c of cases.filter(x => x.status === 'evaluation' && x.explanation && !x.explanation.none && !x.evaluation)) items.push({ text: `${c.employee.name}: written explanation received for ${c.reference}${c.explanation.hearingRequested ? ' (hearing requested)' : ''}`, nav: 'discipline', id: c.id, date: c.explanation.submittedAt.slice(0, 10) });
     for (const c of cases.filter(x => x.status === 'awaiting' && today > x.nte.deadline)) items.push({ text: `${c.employee.name}: no explanation by ${longDate(c.nte.deadline)} for ${c.reference}`, nav: 'discipline', id: c.id, date: c.nte.deadline });

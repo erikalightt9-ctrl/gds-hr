@@ -1911,3 +1911,26 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .att-chip-leave { background: #e6f5ea; color: #1d6b35; border-color: #9cd3ac; }
 .att-chip-wfh { background: #e3f4f4; color: #12635f; border-color: #92cfcb; }
 .att-overdue { color: #b31f2b; }
+
+/* Memo viewer (Company Communications policy, Nov 20, 2026): official PDF inside TimeHub, status chips, acknowledgment box. */
+.memo-viewer { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 12px 0; background: #fafafa; }
+.memo-viewer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: #fff; }
+.memo-viewer-bar .legend { margin-left: auto; }
+.memo-frame { display: block; width: 100%; height: min(70vh, 900px); border: 0; background: #fff; }
+.memo-viewer > p { padding: 12px 14px; margin: 0; }
+.memo-status { white-space: nowrap; }
+.memo-ack-box { border: 1px solid #e3c67a; border-left: 5px solid #b51f2b; background: #fffaf0; border-radius: 10px; padding: 12px 16px; margin-top: 14px; }
+.memo-ack-box p { margin: 4px 0; }
+.memo-q { border-left: 3px solid var(--line); padding: 2px 12px; margin: 8px 0; }
+.memo-q-form { margin-top: 10px; display: grid; gap: 8px; }
+.memo-q-cell { white-space: normal; min-width: 220px; margin-bottom: 6px; }
+.memo-filter { margin: 10px 0; }
+.badge-button { border: 0; background: none; padding: 0; box-shadow: none; cursor: pointer; }
+.badge-button:hover { background: none; }
+.memo-card .memo-card-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dp-ack-wording { font-size: 12px; background: #fffaf0; border: 1px solid #e3c67a; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+/* Outstanding actions on the employee bell (memos to acknowledge, due process notices): stays until done. */
+.employee-bell [data-portal-bell] { position: relative; }
+.bell-pending { position: absolute; bottom: -7px; right: -7px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: #d99a1e; color: #1d1300; font-size: 11px; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff; }
+.memo-bar-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--brand); text-decoration: none; cursor: pointer; }
+.memo-bar-link:hover { background: #fff3f3; }

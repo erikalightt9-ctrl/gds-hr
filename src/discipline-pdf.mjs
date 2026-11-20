@@ -21,8 +21,8 @@ function wrap(text, size, width) {
   }
   return lines;
 }
-export function letterPdf({ title, fields, body, signature = [], receipt = false, draft = false }) {
-  const image = jpegFile(LETTERHEAD), pages = [];
+export function letterPdf({ title, fields, body, signature = [], receipt = false, draft = false, letterhead = LETTERHEAD, company = '' }) {
+  const image = jpegFile(letterhead), pages = [];
   let p, y;
   const newPage = () => {
     p = new Page(); pages.push(p); y = H - 40;
@@ -32,6 +32,7 @@ export function letterPdf({ title, fields, body, signature = [], receipt = false
   };
   const room = need => { if (y - need < BOTTOM) newPage(); };
   newPage();
+  if (company) { p.text(company, MARGIN, y, { size: 11, bold: true }); y -= 18; }
   p.text(title.toUpperCase(), MARGIN, y, { size: 14, bold: true, color: COLOR.red }); y -= 20;
   for (const [label, value] of fields) { room(15); p.text(`${label}:`, MARGIN, y, { size: 10, bold: true }); for (const [i, line] of wrap(value || '-', 10, WIDTH - 80).entries()) { if (i) { y -= 13; room(13); } p.text(line, MARGIN + 80, y, { size: 10, bold: label === 'Subject' }); } y -= 15; }
   y -= 2; p.line(MARGIN, y, RIGHT, y, COLOR.gold, 1); y -= 18;
@@ -67,7 +68,7 @@ function assemble(pages, image) {
 export function casePdf(store, actor, id, kind) {
   const c = readCase(store, id);
   if (actor.role === 'employee') {
-    const issued = { nte: c.nte?.issuedAt, hearing: c.hearing?.noticeIssuedAt, decision: c.decision?.issuedAt, explanation: c.explanation?.submittedAt }[kind];
+    const issued = { nte: c.nte?.issuedAt, hearing: c.hearing?.noticeIssuedAt, decision: c.decision?.issuedAt, review: c.review?.issuedAt, explanation: c.explanation?.submittedAt }[kind];
     if (c.employeeId !== actor.employeeId || !issued) throw new AppError('Document not found.', 404);
   } else permit(actor, VIEW);
   const to = `${c.employee.name} (${c.employee.number})${c.employee.position ? `, ${c.employee.position}` : ''}${c.employee.department ? `, ${c.employee.department}` : ''}`;
@@ -77,6 +78,7 @@ export function casePdf(store, actor, id, kind) {
   else if (kind === 'nte' && c.nte) doc = { title: TEMPLATE_TITLES.nte, fields: [['Ref. no.', c.nte.reference || `${c.reference}-NTE`], ['Date', longDate(c.nte.issuedAt || localToday())], ['To', to], ['From', from], ['Subject', `Notice to Explain: ${c.incident.offense}`]], body: c.nte.body, signature: sign, receipt: true, draft: !c.nte.issuedAt };
   else if (kind === 'hearing' && c.hearing?.body) doc = { title: TEMPLATE_TITLES.hearing, fields: [['Ref. no.', c.reference], ['Date', longDate(c.hearing.noticeIssuedAt)], ['To', to], ['From', from], ['Subject', `Administrative hearing on ${longDate(c.hearing.scheduledAt)} at ${c.hearing.scheduledAt.slice(11, 16)}`]], body: c.hearing.body, signature: sign, receipt: true };
   else if (kind === 'decision' && c.decision) doc = { title: TEMPLATE_TITLES.decision, fields: [['Ref. no.', c.decision.reference || `${c.reference}-NOD`], ['Date', longDate(c.decision.issuedAt || localToday())], ['To', to], ['From', from], ['Subject', `Decision: ${c.decision.sanction}`]], body: c.decision.body, signature: sign, receipt: true, draft: !c.decision.issuedAt };
+  else if (kind === 'review' && c.review?.issuedAt) doc = { title: 'Review / Appeal Outcome', fields: [['Ref. no.', c.review.reference], ['Date', longDate(c.review.issuedAt)], ['To', to], ['From', from], ['Subject', `Review of the decision ${c.decision.reference}: ${c.review.outcome}${c.review.outcome === 'Modified' ? ` (${c.review.sanction})` : ''}`]], body: c.review.body, signature: sign, receipt: true };
   else if (kind === 'explanation' && c.explanation?.text) doc = { title: TEMPLATE_TITLES.explanation, fields: [['Ref. no.', c.reference], ['Date', longDate(c.explanation.submittedAt)], ['From', to], ['To', 'Human Resources'], ['Subject', `Reply to the Notice to Explain dated ${longDate(c.nte.issuedAt)}`]], body: `${c.explanation.text}${c.explanation.hearingRequested ? '\n\nI request an administrative hearing / conference.' : ''}`, signature: [c.employee.name, `Submitted through the HR system on ${new Date(c.explanation.submittedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}`] };
   if (!doc) throw new AppError('This document has not been prepared yet.', 404);
   store.log(actor, 'download-document', 'discipline', id, null, { reference: c.reference, document: kind });

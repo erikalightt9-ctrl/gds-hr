@@ -6,6 +6,7 @@ import { listLibrary, uploadReport, uploadVersion, updateReportInfo, downloadRep
 import { createCase, updateIncident, addFile, addNote, saveNte, issueNte, toEvaluation, scheduleHearing, recordHearing, saveEvaluation, draftDecision, submitDecision, reviewDecision, issueDecision, closeCase } from './discipline.mjs';
 import { listCases, caseDetail, dpOptions, listRecords, recordPriorAction, myCases, acknowledgeNotice, submitExplanation, caseFile } from './discipline-views.mjs';
 import { readDpSettings, saveDpSettings } from './discipline-settings.mjs';
+import { recordService, requestExtension, decideExtension, requestReview, recordReviewOutcome } from './discipline-service.mjs';
 import { casePdf } from './discipline-pdf.mjs';
 import { permit } from './service.mjs';
 
@@ -13,7 +14,7 @@ const BIG = 28_500_000;
 const attachment = (name, type, inline = false) => ({ 'Content-Type': type, 'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="download"; filename*=UTF-8''${encodeURIComponent(name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
 const CASE_ACTIONS = {
   incident: updateIncident, files: addFile, notes: addNote, nte: saveNte, 'issue-nte': (s, a, id) => issueNte(s, a, id), 'no-explanation': toEvaluation, hearing: scheduleHearing, 'hearing-record': recordHearing,
-  evaluation: saveEvaluation, decision: draftDecision, 'submit-decision': (s, a, id) => submitDecision(s, a, id), 'review-decision': reviewDecision, 'issue-decision': (s, a, id) => issueDecision(s, a, id), close: closeCase,
+  evaluation: saveEvaluation, decision: draftDecision, 'submit-decision': (s, a, id) => submitDecision(s, a, id), 'review-decision': reviewDecision, 'issue-decision': (s, a, id) => issueDecision(s, a, id), close: closeCase, service: recordService, extension: decideExtension, 'review-outcome': recordReviewOutcome,
 };
 
 export async function handleComplianceRoutes({ req, res, pathname, url, auth, store, send, readBody }) {
@@ -22,9 +23,11 @@ export async function handleComplianceRoutes({ req, res, pathname, url, auth, st
   // ---------- Employee: own due process notices ----------
   if (pathname.startsWith('/api/hr/me/cases')) {
     if (pathname === '/api/hr/me/cases' && method === 'GET') { send(200, myCases(store, actor)); return true; }
-    if ((p = pathname.match(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/acknowledge\/(nte|hearing|decision)$/)) && method === 'POST') { send(200, acknowledgeNotice(store, actor, p[1], p[2])); return true; }
+    if ((p = pathname.match(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/acknowledge\/(nte|hearing|decision|review)$/)) && method === 'POST') { send(200, acknowledgeNotice(store, actor, p[1], p[2])); return true; }
+    if ((p = pathname.match(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/extension$/)) && method === 'POST') { send(200, requestExtension(store, actor, p[1], await readBody(req))); return true; }
+    if ((p = pathname.match(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/review$/)) && method === 'POST') { send(200, requestReview(store, actor, p[1], await readBody(req))); return true; }
     if ((p = pathname.match(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/explanation$/)) && method === 'POST') { send(201, submitExplanation(store, actor, p[1], await readBody(req, BIG))); return true; }
-    if ((p = pathname.match(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/(nte|hearing|decision|explanation)\.pdf$/)) && method === 'GET') { permit(actor, ['employee']); const f = casePdf(store, actor, p[1], p[2]); res.writeHead(200, attachment(f.filename, 'application/pdf', !!q('view'))); res.end(f.body); return true; }
+    if ((p = pathname.match(/^\/api\/hr\/me\/cases\/([a-f0-9-]+)\/(nte|hearing|decision|review|explanation)\.pdf$/)) && method === 'GET') { permit(actor, ['employee']); const f = casePdf(store, actor, p[1], p[2]); res.writeHead(200, attachment(f.filename, 'application/pdf', !!q('view'))); res.end(f.body); return true; }
     if ((p = pathname.match(/^\/api\/hr\/me\/cases\/files\/([a-f0-9-]+)$/)) && method === 'GET') { const row = caseFile(store, actor, p[1]); res.writeHead(200, attachment(row.name, row.mime, true)); res.end(row.content); return true; }
     throw new AppError('Not found.', 404);
   }
@@ -57,7 +60,7 @@ export async function handleComplianceRoutes({ req, res, pathname, url, auth, st
   if (pathname === '/api/discipline/records' && method === 'POST') { send(201, recordPriorAction(store, actor, await readBody(req))); return true; }
   if ((p = pathname.match(/^\/api\/discipline\/cases\/([a-f0-9-]+)$/)) && method === 'GET') { send(200, caseDetail(store, actor, p[1])); return true; }
   if ((p = pathname.match(/^\/api\/discipline\/cases\/([a-f0-9-]+)\/([a-z-]+)$/)) && method === 'POST' && CASE_ACTIONS[p[2]]) { CASE_ACTIONS[p[2]](store, actor, p[1], await readBody(req, p[2] === 'files' ? BIG : 256000)); send(200, caseDetail(store, actor, p[1])); return true; }
-  if ((p = pathname.match(/^\/api\/discipline\/cases\/([a-f0-9-]+)\/(incident|nte|hearing|decision|explanation)\.pdf$/)) && method === 'GET') { const f = casePdf(store, actor, p[1], p[2]); res.writeHead(200, attachment(f.filename, 'application/pdf', !!q('view'))); res.end(f.body); return true; }
+  if ((p = pathname.match(/^\/api\/discipline\/cases\/([a-f0-9-]+)\/(incident|nte|hearing|decision|review|explanation)\.pdf$/)) && method === 'GET') { const f = casePdf(store, actor, p[1], p[2]); res.writeHead(200, attachment(f.filename, 'application/pdf', !!q('view'))); res.end(f.body); return true; }
   if ((p = pathname.match(/^\/api\/discipline\/files\/([a-f0-9-]+)$/)) && method === 'GET') { const row = caseFile(store, actor, p[1]); res.writeHead(200, attachment(row.name, row.mime, true)); res.end(row.content); return true; }
   throw new AppError('Not found.', 404);
 }

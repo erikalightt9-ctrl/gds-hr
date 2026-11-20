@@ -41,7 +41,7 @@ test('due process: the seven steps in order, management approval before issue, r
     assert.equal(issued.status, 'awaiting'); assert.equal(issued.nte.deadline, addDays(localToday(), 5));
     assert.match(issued.nte.body, /calendar days/); assert.doesNotMatch(issued.nte.body, /\{\{deadline\}\}/, 'deadline filled in on issue');
     assert.throws(() => updateIncident(store, hr, c.id, incident), /already issued/);
-    assert.throws(() => toEvaluation(store, hr, c.id, {}), /Wait for the deadline/);
+    assert.throws(() => toEvaluation(store, hr, c.id, {}), /verify service/, 'no non-response finding before receipt is documented');
     // Employee: sees only their notice, acknowledges it, explains and asks for a hearing.
     assert.equal(myCases(store, other).length, 0);
     const mine = myCases(store, worker)[0];
@@ -109,6 +109,9 @@ test('due process: no explanation by the deadline, dismissal needs a hearing (se
     const row = readCase(store, c.id);
     store.db.prepare('UPDATE dp_cases SET data=? WHERE id=?').run(JSON.stringify({ ...row, nte: { ...row.nte, deadline: addDays(localToday(), -1) } }), c.id);
     assert.ok(disciplineBell(store, hr).some(i => /no explanation by/.test(i.text)));
+    assert.throws(() => toEvaluation(store, hr, c.id, {}), /verify service/);
+    const served = readCase(store, c.id);
+    store.db.prepare('UPDATE dp_cases SET data=? WHERE id=?').run(JSON.stringify({ ...served, nte: { ...served.nte, service: { method: 'Personal service (hand delivery)', receivedOn: addDays(localToday(), -6) } } }), c.id);
     toEvaluation(store, hr, c.id, {});
     assert.equal(myCases(store, worker)[0].canExplain, true, 'a late explanation is still accepted until a decision is drafted');
     saveEvaluation(store, hr, c.id, { findings: 'No explanation was received; records show the refusal.', recommendation: 'Dismissal' });

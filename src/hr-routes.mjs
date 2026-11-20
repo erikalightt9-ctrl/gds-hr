@@ -5,7 +5,8 @@ import { CATEGORIES as REQUEST_CATEGORIES, ensure as ensureAttendanceRequests } 
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
-import { memoPdf } from './memo-letter.mjs';
+import { memoPdf, officialPdf } from './memo-letter.mjs';
+import { recordView, requestClarification, answerClarification, recordPaperAck, ackEvidence } from './memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
 import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
@@ -18,6 +19,8 @@ import { saveSchedule } from './work-schedule.mjs';
 import { disciplineBell } from './discipline-views.mjs';
 
 const BIG = 28_500_000;
+// The official memo PDF may be shown inside the app's own viewer (same site only).
+const pdfHeaders = (name, download) => ({ 'Content-Type': 'application/pdf', 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="memo.pdf"; filename*=UTF-8''${encodeURIComponent(name)}`, 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'self'", 'X-Frame-Options': 'SAMEORIGIN' });
 const fileHeaders = (meta, download) => ({ 'Content-Type': meta.mime, 'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="document"; filename*=UTF-8''${encodeURIComponent(meta.name)}`, 'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" });
 
 // Activity for one employee, without values (so sensitive identifiers never show in the general log).
@@ -60,7 +63,9 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if ((p = m(/^\/api\/hr\/me\/loans\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelLoanApplication(store, actor, p[1])); return true; }
     if (pathname === '/api/hr/me/profile' && method === 'GET') { send(200, employeeForm(store, actor, actor.employeeId)); return true; }
     if (pathname === '/api/hr/me/memos' && method === 'GET') { send(200, myMemos(store, actor)); return true; }
-    if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)(?:\/(\d+))?\.pdf$/)) && method === 'GET') { const out = memoPdf(store, actor, p[1], p[2] ? Number(p[2]) : null); res.writeHead(200, fileHeaders({ mime: 'application/pdf', name: out.filename }, url.searchParams.has('download'))); res.end(out.body); return true; }
+    if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)(?:\/(\d+))?\.pdf$/)) && method === 'GET') { const out = memoPdf(store, actor, p[1], p[2] ? Number(p[2]) : null); res.writeHead(200, pdfHeaders(out.filename, url.searchParams.has('download'))); res.end(out.body); return true; }
+    if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/view$/)) && method === 'POST') { send(200, recordView(store, actor, p[1], Number(p[2]))); return true; }
+    if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/clarification$/)) && method === 'POST') { send(200, requestClarification(store, actor, p[1], Number(p[2]), await readBody(req))); return true; }
     if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/acknowledge$/)) && method === 'POST') { send(200, acknowledgeMemo(store, actor, p[1], Number(p[2]))); return true; }
     if (pathname === '/api/hr/me/trainings' && method === 'GET') { send(200, myTrainings(store, actor)); return true; }
     if ((p = m(/^\/api\/hr\/me\/trainings\/([a-f0-9-]+)\/registration$/)) && method === 'POST') { const b = await readBody(req); send(200, updateParticipant(store, actor, p[1], actor.employeeId, { registration: b.registration })); return true; }
@@ -132,6 +137,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     items.push(...disciplineBell(store, actor));
     const memos = memoSummary(store, actor);
     if (memos.overdue) items.push({ text: `${memos.overdue} overdue memo acknowledgement${memos.overdue === 1 ? '' : 's'}`, nav: 'memos' });
+    if (memos.clarifications) items.push({ text: `${memos.clarifications} memo clarification request${memos.clarifications === 1 ? '' : 's'} waiting for an answer`, nav: 'memos' });
     send(200, { count: items.length, items }); return true;
   }
 
@@ -187,7 +193,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
 
   // ---------- Memos ----------
   if (pathname === '/api/hr/memos' && method === 'GET') { send(200, listMemos(store, actor)); return true; }
-  if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)(?:\/(\d+))?\.pdf$/)) && method === 'GET') { const out = memoPdf(store, actor, p[1], p[2] ? Number(p[2]) : null); res.writeHead(200, fileHeaders({ mime: 'application/pdf', name: out.filename }, url.searchParams.has('download'))); res.end(out.body); return true; }
+  if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)(?:\/(\d+))?\.pdf$/)) && method === 'GET') { const out = memoPdf(store, actor, p[1], p[2] ? Number(p[2]) : null); res.writeHead(200, pdfHeaders(out.filename, url.searchParams.has('download'))); res.end(out.body); return true; }
   if (pathname === '/api/hr/memos' && method === 'POST') { send(201, saveMemoDraft(store, actor, null, await readBody(req))); return true; }
   if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)$/))) {
     if (method === 'GET') { send(200, memoDetail(store, actor, p[1])); return true; }
@@ -196,9 +202,13 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   }
   if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)\/(publish|revise|revision|archive|attachments)$/)) && method === 'POST') {
     const action = p[2], body = action === 'attachments' ? await readBody(req, 14_500_000) : ['publish', 'revision'].includes(action) ? await readBody(req) : null;
+    if (action === 'publish') { const issued = publishMemo(store, actor, p[1], body); officialPdf(store, issued, issued.versions.at(-1)); send(200, issued); return true; }
     send(200, action === 'publish' ? publishMemo(store, actor, p[1], body) : action === 'revise' ? startRevision(store, actor, p[1]) : action === 'revision' ? saveRevision(store, actor, p[1], body) : action === 'archive' ? archiveMemo(store, actor, p[1]) : addMemoAttachment(store, actor, p[1], body));
     return true;
   }
+  if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)\/clarifications\/([a-f0-9-]+)\/answer$/)) && method === 'POST') { send(200, answerClarification(store, actor, p[1], p[2], await readBody(req))); return true; }
+  if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)\/(\d+)\/paper-ack\/([A-Za-z0-9_-]+)$/)) && method === 'POST') { send(200, recordPaperAck(store, actor, p[1], Number(p[2]), p[3], await readBody(req, 14_500_000))); return true; }
+  if ((p = m(/^\/api\/hr\/memo-evidence\/([a-f0-9-]+)$/)) && method === 'GET') { const row = ackEvidence(store, actor, p[1]); res.writeHead(200, fileHeaders(row, url.searchParams.has('download'))); res.end(row.content); return true; }
   if ((p = m(/^\/api\/hr\/memo-attachments\/([a-f0-9-]+)$/)) && method === 'GET') { const row = memoAttachment(store, actor, p[1]); res.writeHead(200, fileHeaders(row, url.searchParams.has('download'))); res.end(row.content); return true; }
 
   // ---------- Trainings ----------
