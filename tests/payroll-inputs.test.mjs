@@ -30,10 +30,10 @@ test('manual hours are added on top of attendance and priced with the approved m
 test('replace mode pays from typed figures without attendance and clears missing-attendance blockers', () => {
   const store = fixture({ attendance: false });
   try {
-    assert.ok(run(store).blockers.some(b => /Missing attendance/.test(b)));
+    assert.ok(run(store).reviewItems.some(i => i.issue === 'missing-punch'));
     savePayrollInput(store, hr, 'EMP-001', { start: '2026-09-01', end: '2026-09-15', mode: 'replace', absenceDays: 1, lateMinutes: 30, undertimeMinutes: 60, hours: H({ regularOT: 2 }), reason: 'Biometric offline; manual timesheet' });
     const result = run(store), row = result.rows[0], daily = row.dailyRate, hourly = row.hourlyRate;
-    assert.ok(!result.blockers.some(b => /EMP-001.*Missing attendance/.test(b)));
+    assert.ok(!result.reviewItems.some(i => i.employeeId === 'EMP-001'));
     near(row.absenceAmount, daily, 'row.absenceAmount');
     near(row.undertimeAmount, hourly, 'row.undertimeAmount');
     near(row.lateReduction, 0.5 * hourly, 'row.lateReduction');
@@ -42,7 +42,7 @@ test('replace mode pays from typed figures without attendance and clears missing
     assert.throws(() => savePayrollInput(store, viewer, 'EMP-001', { start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: H(), reason: 'x x x' }), /permission/i);
     assert.doesNotThrow(() => savePayrollInput(store, hr, 'EMP-001', { start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: H() }), 'no reason is needed');
     deletePayrollInput(store, hr, 'EMP-001', '2026-09-01', '2026-09-15');
-    assert.ok(run(store).blockers.some(b => /Missing attendance/.test(b)));
+    assert.ok(run(store).reviewItems.some(i => i.issue === 'missing-punch'));
   } finally { store.close(); }
 });
 

@@ -62,8 +62,8 @@ test('payroll: unresolved days need HR documented treatment; credit pays the day
   try {
     refreshCases(store, NOW);
     const before = run(store, '2026-11-01', '2026-11-15');
-    assert.ok(before.blockers.some(b => /Missing attendance \/ approved leave on 2026-11-04/.test(b)));
-    assert.ok(before.blockers.some(b => /2026-11-05 with no time out/.test(b)));
+    assert.ok(before.reviewItems.some(i => i.date === '2026-11-04' && i.issue === 'missing-punch'));
+    assert.ok(before.reviewItems.some(i => i.date === '2026-11-05' && /no time out/.test(i.detail)));
     assert.throws(() => setTreatment(store, admin, caseOf(store, '2026-11-04').id, { mode: 'credit', note: '' }), /reason/);
     setTreatment(store, admin, caseOf(store, '2026-11-04').id, { mode: 'credit', note: 'Supervisor confirms he worked; awaiting his request' });
     setTreatment(store, admin, caseOf(store, '2026-11-05').id, { mode: 'hold', note: 'No proof of the hours worked yet' });

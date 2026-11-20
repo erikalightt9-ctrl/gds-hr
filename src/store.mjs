@@ -1,4 +1,5 @@
 import { loanChangeText } from './loan-notice.mjs';
+import { validationInputs } from './validation-inputs.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { initialState } from './defaults.mjs';
@@ -73,10 +74,12 @@ export class Store {
     state.overtimeRequests = this.db.prepare("SELECT data FROM overtime_requests WHERE status IN ('pending','approved')").all().map(r => JSON.parse(r.data));
     // Incomplete-attendance cases (src/attendance-cases.mjs): HR's documented pay treatment and correction adjustments.
     state.attendanceCases = this.db.prepare('SELECT data FROM attendance_cases').all().map(r => JSON.parse(r.data));
+    // Payroll attendance validation (src/attendance-validation.mjs): punches vs records, corrections, HR decisions.
+    state.validation = validationInputs(this.db, state.attendance);
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
     return state;
   }
-  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.overtimeRequests; delete copy.attendanceCases; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
+  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.validation; delete copy.overtimeRequests; delete copy.attendanceCases; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
   transaction(fn) {
     if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');

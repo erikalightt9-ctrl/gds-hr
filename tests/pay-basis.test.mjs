@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculatePayroll, dates, isRest } from '../src/engine.mjs';
 import { defaultRules, initialState } from '../src/defaults.mjs';
+import { decide } from './helpers.mjs';
 
 // October 2026: 31 days; with Sunday as the only rest day there are 27 scheduled workdays (Mon-Sat).
 const OCTOBER = dates('2026-10-01', '2026-10-31');
@@ -45,7 +46,7 @@ test('daily-paid (Ma. Rita, Debralyn): 27 payable days are paid as 27 days, not 
 
 test('daily-paid: a day not attended is not paid', () => {
   const s = state({ basis: 'daily', dailyRate: 755, saturdayHours: 4 });
-  s.attendance = s.attendance.filter(a => a.date !== '2026-10-20');
+  s.attendance = s.attendance.filter(a => a.date !== '2026-10-20'); decide(s, 'E1', ['2026-10-20']);
   const [a, b] = month(s);
   assert.equal(Math.round((a.earnings.basic + b.earnings.basic) * 100) / 100, 26 * 755);
 });
@@ -55,7 +56,7 @@ test('monthly-paid (Nov 20, 2026 rule): basic = monthly ÷ the month’s working
   assert.deepEqual(full.map(r => r.workingDays), [13, 14], 'Oct 1-15 has 13 workdays, Oct 16-31 has 14');
   assert.deepEqual(full.map(r => r.earnings.basic), [13000, 14000], 'complete attendance: each cutoff pays its own working days');
   assert.deepEqual(full.map(r => r.adjustmentDivisor), [27, 27], 'October: 27 working days with Sunday rest');
-  const s = state({ monthly: 27000 }); s.attendance = s.attendance.filter(a => a.date !== '2026-10-20');   // one unpaid absence in the 14-day cutoff
+  const s = state({ monthly: 27000 }); s.attendance = s.attendance.filter(a => a.date !== '2026-10-20'); decide(s, 'E1', ['2026-10-20']);   // one unpaid absence in the 14-day cutoff
   const [a, b] = month(s);
   assert.equal(a.earnings.basic, 13000);
   assert.equal(b.creditedDays, 13, '14 days less the absent day');
@@ -74,7 +75,7 @@ test('monthly-paid: late time over the threshold lowers basic at the month’s d
 test('monthly-paid: basic always equals the shown days credited (2 decimals) × the daily rate', () => {
   const s = state({ monthly: 21600 });   // 800.00 a day in a 27-workday October
   for (const [d, t] of [['2026-10-19', '09:17'], ['2026-10-21', '09:23'], ['2026-10-27', '09:40']]) Object.assign(s.attendance.find(a => a.date === d), { timeIn: t });
-  s.attendance = s.attendance.filter(a => a.date !== '2026-10-30');
+  s.attendance = s.attendance.filter(a => a.date !== '2026-10-30'); decide(s, 'E1', ['2026-10-30']);
   const [, b] = month(s);
   assert.equal(Math.round(b.creditedDays * 100) / 100, b.creditedDays, 'days credited have at most 2 decimals');
   assert.equal(b.earnings.basic, Math.round(b.creditedDays * 800 * 100) / 100, 'basic = days credited × 800 exactly');
@@ -83,14 +84,14 @@ test('monthly-paid: basic always equals the shown days credited (2 decimals) × 
 
 test('monthly-paid: September 2026 (26 working days with Sunday rest) prices attendance adjustments at ÷ 26', () => {
   const s = state({ monthly: 26000 }), sept = dates('2026-09-01', '2026-09-30').filter(d => !isRest(s.employees[0], d));
-  s.attendance = sept.filter(d => d !== '2026-09-21').map(d => ({ id: d, employeeId: 'E1', date: d, status: 'present', scheduledIn: '09:00', timeIn: '09:00', timeOut: '18:00', endNextDay: false, breaks: [{ start: `${d}T12:00`, end: `${d}T13:00` }], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true }));
+  decide(s, 'E1', ['2026-09-21']); s.attendance = sept.filter(d => d !== '2026-09-21').map(d => ({ id: d, employeeId: 'E1', date: d, status: 'present', scheduledIn: '09:00', timeIn: '09:00', timeOut: '18:00', endNextDay: false, breaks: [{ start: `${d}T12:00`, end: `${d}T13:00` }], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true }));
   const row = calculatePayroll(s, '2026-09-16', '2026-09-30').rows[0];
   assert.equal(row.adjustmentDivisor, 26);
   assert.equal(row.earnings.basic, 12000, '13,000 - 26,000 / 26');
 });
 
 test('daily-paid: the 27 / 26 divisor does not apply', () => {
-  const s = state({ basis: 'daily', dailyRate: 755 }); s.attendance = s.attendance.filter(a => a.date !== '2026-10-20');
+  const s = state({ basis: 'daily', dailyRate: 755 }); s.attendance = s.attendance.filter(a => a.date !== '2026-10-20'); decide(s, 'E1', ['2026-10-20']);
   const [, b] = month(s);
   assert.equal(b.adjustmentDivisor, null);
   assert.equal(b.earnings.basic, 13 * 755);

@@ -1936,3 +1936,11 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .memo-bar-link:hover { background: #fff3f3; }
 /* Attendance request form: only the fields of the chosen request type (field display rules otherwise override [hidden]). */
 #ar-form [data-show][hidden] { display: none !important; }
+
+/* Payroll attendance validation (Nov 20, 2026). */
+.pr-held { color: #a31927; font-weight: 600; }
+.pr-valid { color: #2f6b3a; }
+.pr-decide { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 360px; }
+.pr-decide select, .pr-decide input { font-size: 12px; padding: 6px 8px; }
+.pr-decide input { flex: 1; min-width: 160px; }
+.pr-review .wrap { white-space: normal; min-width: 200px; }
