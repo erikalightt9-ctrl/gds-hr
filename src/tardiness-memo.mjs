@@ -1,8 +1,9 @@
 // Monthly tardiness reminder: on (or after) the 5th of each month, Philippine Time, the previous calendar month is
 // reviewed. Every employee with 3 or more workdays on which they timed in 15 minutes or more after that day's scheduled
 // start receives a memo (on the GDS letterhead, acknowledgement required), with a bell notice; HR and admins are told
-// and the memo stays in the employee's 201 file. Occurrences covered by an approved offset still count: the offset only
-// protects pay. The memo imposes no deduction or penalty. One memo per employee per month; everything is audited.
+// and the memo stays in the employee's 201 file. Occurrences still count when an offset is approved. From 15 minutes
+// that offset does not reduce the payroll deduction. The memo itself imposes no deduction or penalty. One memo per
+// employee per month; everything is audited.
 import { scheduleOn, isRest, ruleOn } from './engine.mjs';
 import { issueSystemMemo } from './memos.mjs';
 import { remittanceOnlyIds } from './remittance-only.mjs';
@@ -52,7 +53,7 @@ export function tardinessMemo(store, employee, month, occurrences, issueDate) {
   const period = `${MONTHS[m - 1]} 1–${last}, ${y}`;
   const intro = `Our attendance records show that you reported for work ${TARDY_MINUTES} minutes or more after your scheduled start time on ${n} occasions during ${label}. The relevant dates and attendance details are listed below.`;
   const after = [
-    `Under our attendance policy, three or more qualifying tardiness occurrences within a calendar month trigger this reminder. These occurrences remain part of your attendance record even when the time lost is covered by an approved offset.`,
+    `Under our attendance policy, three or more qualifying tardiness occurrences within a calendar month trigger this reminder. These occurrences remain part of your attendance record. An approved offset does not remove a late of ${TARDY_MINUTES} minutes or more, and that late is still deducted from pay.`,
     `Please observe your assigned schedule and take the necessary steps to improve punctuality. If any listed attendance entry is incorrect, contact HR for review.`,
     `Please acknowledge receipt through your employee account. Acknowledgment confirms receipt of this memo and does not prevent you from requesting a correction.`,
     `This memo is an attendance reminder. It does not by itself impose a salary deduction or a disciplinary penalty.`,

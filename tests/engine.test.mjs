@@ -34,13 +34,17 @@ test('ordinary OT and lateness are independently traced; staying after the shift
   assert.equal(row.late[0].lateMinutes, 15); assert.equal(row.late[0].workedAfter, 15, 'shown to HR'); assert.equal(row.late[0].deductibleMinutes, 15);
   assert.equal(row.late[0].sourceId, '2026-09-01');
 });
-test('approved exception and offset protect covered late time', () => {
-  for (const extra of [{ exception: true }, { offsetMinutes: 15 }]) {
-    const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:15', ...extra })]; withOtherDays(s);
-    const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-    assert.equal(row.earnings.basic, 15000, 'covered late time does not reduce pay');
-    assert.equal(row.creditedDays, 11, 'all 11 days fully credited');
-  }
+test('an approved exception clears a 15-minute late; an approved offset does not', () => {
+  const run = extra => { const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:15', timeOut: '16:15', ...extra })]; withOtherDays(s); return calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0]; };
+  const excused = run({ exception: true, explanation: 'Authorized' });
+  assert.equal(excused.earnings.basic, 15000, 'an approved exception does not reduce pay');
+  assert.equal(excused.creditedDays, 11, 'all 11 days fully credited');
+  assert.equal(excused.late[0].deductibleMinutes, 0);
+  const plain = run({});
+  const offset = run({ offsetMinutes: 15, explanation: 'Approved offset' });
+  assert.equal(offset.late[0].deductibleMinutes, 15, '15 minutes late plus a 15-minute offset still deducts 15');
+  assert.equal(offset.earnings.basic, plain.earnings.basic);
+  assert.equal(offset.creditedDays, plain.creditedDays);
 });
 test('rest-day night work adds only differential, with no double-counting', () => {
   const s = fixture(); s.attendance = [attend('2026-09-05', { timeIn: '22:00', timeOut: '02:00', endNextDay: true })];
@@ -190,6 +194,14 @@ test('late time not made up reduces credited days, not a deduction line', () => 
   assert.equal(row.late[0].deductibleMinutes, 15);
 });
 
+test('calculating a later cutoff does not rewrite a posted run', () => {
+  const s = fixture();
+  const posted = { id: 'posted-aug', status: 'posted', start: '2026-08-16', end: '2026-08-31', rows: [{ employeeId: 'EMP-001', late: [{ date: '2026-08-17', lateMinutes: 20, approvedOffset: 20, deductibleMinutes: 0 }], earnings: { basic: 15000 }, net: 12000 }] };
+  s.runs = [posted];
+  const before = JSON.stringify(posted);
+  calculatePayroll(s, '2026-09-01', '2026-09-15');
+  assert.equal(JSON.stringify(s.runs[0]), before, 'the stored late deduction on the posted run is left as it was');
+});
 test('a cutoff waiver removes late and undertime deductions; the minutes stay on record', () => {
   const s = fixture(); s.attendance = [attend('2026-09-01', { timeIn: '08:30', timeOut: '15:00' })]; withOtherDays(s);
   const before = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];

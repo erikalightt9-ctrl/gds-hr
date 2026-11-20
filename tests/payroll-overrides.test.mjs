@@ -118,17 +118,23 @@ test('employee contribution shares can be overridden for one cutoff without chan
   } finally { store.close(); }
 });
 
-test('lateness under 15 minutes is not deducted; from 15 minutes the whole late time counts less the approved offset', () => {
+test('lateness under 15 minutes is not deducted; from 15 minutes the whole late time is deducted and an approved offset does not reduce it', () => {
   const pad = n => String(n).padStart(2, '0');
-  const late = (minutes, offset = 0, stay = 0) => fixture(s => { s.rules[0].graceMinutes = 15; const out = s.attendance[0].timeOut.split(':').map(Number), end = out[0] * 60 + out[1] + stay; s.attendance[0].timeIn = `${pad(8 + Math.floor(minutes / 60))}:${pad(minutes % 60)}`; s.attendance[0].timeOut = `${pad(Math.floor(end / 60))}:${pad(end % 60)}`; s.attendance[0].offsetMinutes = offset; if (offset) s.attendance[0].explanation = 'Approved offset (demo)'; });
+  const late = (minutes, offset = 0, stay = 0, record = {}) => fixture(s => { s.rules[0].graceMinutes = 15; const out = s.attendance[0].timeOut.split(':').map(Number), end = out[0] * 60 + out[1] + stay; s.attendance[0].timeIn = `${pad(8 + Math.floor(minutes / 60))}:${pad(minutes % 60)}`; s.attendance[0].timeOut = `${pad(Math.floor(end / 60))}:${pad(end % 60)}`; s.attendance[0].offsetMinutes = offset; if (offset) s.attendance[0].explanation = 'Approved offset (demo)'; Object.assign(s.attendance[0], record); });
   const lost = store => { try { return run(store).rows[0].late.find(l => l.lateMinutes > 0)?.deductibleMinutes ?? 0; } finally { store.close(); } };
   assert.equal(lost(late(4)), 0, '4 minutes late: under 15, nothing lost');
+  assert.equal(lost(late(10)), 0, '10 minutes late: under 15, nothing lost');
   assert.equal(lost(late(14)), 0, '14 minutes late: under 15, nothing lost');
   assert.equal(lost(late(15)), 15, '15 minutes late: the whole 15 counts');
+  assert.equal(lost(late(20, 20)), 20, '20 minutes late with a 20-minute approved offset: the full 20 is deducted');
   assert.equal(lost(late(30)), 30, '30 minutes late, no offset: 30 minutes lost');
-  assert.equal(lost(late(30, 20)), 10, '30 minutes late with a 20-minute approved offset: 10 minutes lost');
-  assert.equal(lost(late(30, 30)), 0, 'a full approved offset restores the time');
+  assert.equal(lost(late(30, 20)), 30, '30 minutes late with a 20-minute approved offset: the offset does not reduce it');
+  assert.equal(lost(late(30, 30)), 30, 'a full approved offset does not restore the time');
   assert.equal(lost(late(20, 0, 20)), 20, 'staying after the end is not an offset unless approved');
+  assert.equal(lost(late(20, 20, 0, { exception: true, explanation: 'Authorized' })), 0, 'an approved exception still clears the late');
+  const waived = late(20, 20);
+  savePayrollInput(waived, payroll, 'EMP-001', { ...cutoff, mode: 'add', hours: {}, overrides: [], waiveLate: true, reason: 'Waived' });
+  assert.equal(lost(waived), 0, 'waiveLate for the cutoff still clears the late');
 });
 
 test('SSS loan, Pag-IBIG loan and salary deduction typed for a cutoff reduce net pay and reach the contributions report', async () => {

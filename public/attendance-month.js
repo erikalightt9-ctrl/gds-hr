@@ -1,11 +1,11 @@
 // Monthly attendance sheet (Attendance → Monthly): every employee across every day of the month, like the HR
 // attendance workbook. Each day shows Present, Late, Absent, Leave or a shaded rest day / holiday; the top row gives
 // the share of scheduled people present that day, and each person's present / absent / leave totals with a bar.
+import { isGraceLate, lateMinutes } from './late-mark.js';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAY = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MARK = { present: ['✓', 'Present'], late: ['✓', 'Late'], absent: ['✕', 'Absent'], leave: ['●', 'On leave'], open: ['✓', 'Timed in, no time out'], half: ['◐', 'Half day: worked half, half-day leave approved'], wfh: ['✓', 'Present · work from home (no time in / out needed)'], offset: ['↺', 'Offset: hours worked on another day'], 'half-pending': ['◐', 'Half day: worked half, half-day leave not yet approved'] };
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
-const minutes = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
 
 // Status of one employee on one date, or a reason the day is not scheduled.
 function dayStatus(state, e, date, today, since) {
@@ -16,8 +16,8 @@ function dayStatus(state, e, date, today, since) {
     // Worked part of the day beside a half-day leave: half present, half leave (or half absent until approved).
     const halfLeave = state.leaves.find(l => l.employeeId === e.id && ['approved', 'pending'].includes(l.status) && (l.partialDates || []).includes(date));
     if (halfLeave) return halfLeave.status === 'approved' ? 'half' : 'half-pending';
-    const raw = minutes(a.timeIn) !== null && minutes(a.scheduledIn) !== null ? minutes(a.timeIn) - minutes(a.scheduledIn) : 0, grace = (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
-    const late = raw >= Math.max(1, grace) && raw > (a.offsetMinutes || 0);
+    const raw = lateMinutes(a.timeIn, a.scheduledIn), grace = (state?.rules || []).filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 0;
+    const late = isGraceLate(raw, grace);
     return late ? 'late' : 'present';
   }
   if ((state.openClockIns || []).some(c => c.employeeId === e.id && c.workDate === date)) return 'open';

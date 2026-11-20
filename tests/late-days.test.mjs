@@ -23,15 +23,19 @@ test('unoffset late time reduces credited days in proportion to the time lost', 
   assert.equal(row.earnings.basic, 12940, '12.94 days × 1,000');
   assert.equal(row.deductions.late, undefined);
   assert.equal(row.undertimeAmount, 0, 'late minutes are not counted again as undertime');
-  assert.match(row.trace.find(t => t.component === 'basic' && t.amount < 0).formula, /30 min not offset/);
+  assert.match(row.trace.find(t => t.component === 'basic' && t.amount < 0).formula, /Late 30 min ÷/);
 });
 
-test('an approved offset covers late time fully or partly', () => {
-  assert.equal(run(lateOn(state(), '2026-09-21', '09:30', { offsetMinutes: 30 })).earnings.basic, 13000);
-  const partly = run(lateOn(state(), '2026-09-21', '09:30', { offsetMinutes: 20 }));     // 10 min left
-  assert.equal(partly.creditedDays, 12.98, '13 - 10/480 = 12.9792 → 12.98');
-  assert.equal(partly.earnings.basic, 12980);
-  assert.equal(run(lateOn(state(), '2026-09-21', '09:30', { exception: true })).earnings.basic, 13000, 'approved exception');
+test('an approved offset does not reduce a late at or above the grace period; an exception still does', () => {
+  const none = run(lateOn(state(), '2026-09-21', '09:30'));
+  const full = run(lateOn(state(), '2026-09-21', '09:30', { offsetMinutes: 30, explanation: 'Approved offset' }));
+  assert.equal(full.earnings.basic, none.earnings.basic, '30 min late + 30 min offset still loses the 30');
+  assert.equal(full.late.find(l => l.lateMinutes).deductibleMinutes, 30);
+  assert.match(full.trace.find(t => t.component === 'basic' && t.amount < 0).formula, /approved offset 30 min does not reduce it/);
+  const partly = run(lateOn(state(), '2026-09-21', '09:30', { offsetMinutes: 20, explanation: 'Approved offset' }));
+  assert.equal(partly.earnings.basic, none.earnings.basic);
+  assert.equal(partly.creditedDays, none.creditedDays);
+  assert.equal(run(lateOn(state(), '2026-09-21', '09:30', { exception: true, explanation: 'Authorized' })).earnings.basic, 13000, 'approved exception');
 });
 
 test('daily-paid pay follows credited days; a 12-hour day loses less per minute', () => {
@@ -79,13 +83,24 @@ test('an undertime override (e.g. waived to 0) keeps credited time in step with 
   assert.equal(row.creditedHours, 104); assert.equal(row.creditedDays, 13);
 });
 
-test('the example: 30 minutes late = 7.5 credited hours (0.9375 day); a full approved 30-minute offset restores 8 hours', () => {
+test('the example: 30 minutes late = 7.5 credited hours (0.9375 day); a 30-minute approved offset does not restore them', () => {
   const none = run(lateOn(state(), '2026-09-21', '09:30', { timeOut: '18:00' }));
   assert.equal(none.creditedHours, 13 * 8 - 0.5); assert.equal(none.earnings.basic, 12940, '12.94 days × 1,000');
   const offset = run(lateOn(state(), '2026-09-21', '09:30', { timeOut: '18:00', offsetMinutes: 30, explanation: 'Approved offset' }));
-  assert.equal(offset.creditedHours, 13 * 8); assert.equal(offset.creditedDays, 13); assert.equal(offset.earnings.basic, 13000);
+  assert.equal(offset.creditedHours, none.creditedHours); assert.equal(offset.creditedDays, none.creditedDays); assert.equal(offset.earnings.basic, none.earnings.basic);
   const late = offset.late.find(l => l.lateMinutes);
-  assert.deepEqual([late.lateMinutes, late.approvedOffset, late.deductibleMinutes], [30, 30, 0], 'late, offset and remaining minutes visible to HR');
+  assert.deepEqual([late.lateMinutes, late.approvedOffset, late.deductibleMinutes], [30, 30, 30], 'late, offset and deductible minutes visible to HR');
+});
+
+test('a deductible late does not use up the offset, so the offset still covers undertime; a late under 15 still uses it first', () => {
+  // 09:20 is 20 min late; 17:00 is 60 min early on a 09:00-18:00 day. A 60-minute offset covers the early leave.
+  const charged = run(lateOn(state(), '2026-09-21', '09:20', { timeOut: '17:00', offsetMinutes: 60, explanation: 'Approved offset' }));
+  assert.equal(charged.late.find(l => l.date === '2026-09-21').deductibleMinutes, 20);
+  assert.equal(charged.undertimeMinutes, 0, 'the offset was not spent on the late, so it covers the 60 min early');
+  // 09:10 is under the grace period. The 10-minute offset is still applied to that late before undertime.
+  const grace = run(lateOn(state(), '2026-09-21', '09:10', { timeOut: '17:00', offsetMinutes: 10, explanation: 'Approved offset' }));
+  assert.equal(grace.late.find(l => l.date === '2026-09-21').deductibleMinutes, 0);
+  assert.equal(grace.undertimeMinutes, 60, 'under 15 minutes the offset is still used on the late first');
 });
 
 test('a basic-pay override moves the credited days with it (e.g. days present typed from the HR attendance sheet)', () => {

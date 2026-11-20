@@ -26,6 +26,13 @@ const minutesBetween = (a, b) => { const [h1, m1] = a.split(':').map(Number), [h
 
 export function createTimecard(ctx) {
   const { api, esc, money, badge, table, getState, canEdit, editButton, cutoffDefaults } = ctx;
+  // A late with no peso effect is under the grace period, an approved exception, or waived for the cutoff.
+  // An approved offset never produces "no pay change" once the late has reached the grace period.
+  const lateNote = late => {
+    if (late.deduction) return `<small>−${late.dayFraction} day · −${money(late.deduction)}</small>`;
+    const why = late.withinGrace ? 'Under 15 min, no pay change' : late.validExplanation ? 'Approved exception, no pay change' : late.waived ? 'Waived for this cutoff, no pay change' : 'No pay change';
+    return `<small>${why}</small>`;
+  };
   const view = { employeeId: '', start: '', end: '' };
 
   function setEmployee(id) { view.employeeId = id; }
@@ -77,7 +84,7 @@ export function createTimecard(ctx) {
           record?.status === 'present' ? `${esc(record.timeIn)} → ${esc(record.timeOut)}${record.endNextDay ? ' (+1)' : ''}<small>Scheduled ${esc(record.scheduledIn)}</small>${record.location ? `<small>${esc(record.location)}</small>` : ''}` : '—',
           breaks ? `${breaks} min` : '—',
           work.length ? `${round(work.filter(w => !w.overtime).reduce((s, w) => s + w.hours, 0))} h` : '—',
-          late?.lateMinutes ? `${late.lateMinutes} min${late.approvedOffset ? ` · ${late.approvedOffset} offset` : ''}${late.deduction ? `<small>−${late.dayFraction} day · −${money(late.deduction)}</small>` : `<small>${late.withinGrace ? 'Under 15 min, no pay change' : 'Covered by approved offset, no pay change'}</small>`}${late.deductibleMinutes && record && canEdit('attendance') ? `<button class="small" data-timecard-offset="${esc(record.id)}" data-minutes="${late.deductibleMinutes}">Apply offset</button>` : ''}` : '—',
+          late?.lateMinutes ? `${late.lateMinutes} min${late.approvedOffset ? ` · ${late.approvedOffset} offset` : ''}${lateNote(late)}` : '—',
           undertime ? `${undertime.formula.split(' ')[0]} min<small>−${money(undertime.amount)}</small>` : '—',
           work.some(w => w.overtime) ? `${round(work.filter(w => w.overtime).reduce((s, w) => s + w.hours, 0))} h${work.some(w => w.night) ? '<small>incl. night</small>' : ''}` : '—',
           deducted || earned ? `${earned ? `<span class="pay-plus">+${money(earned)}</span>` : ''}${deducted ? `<span class="pay-minus">−${money(deducted)}</span>` : ''}` : '<span class="legend">No change</span>',
@@ -96,7 +103,7 @@ export function createTimecard(ctx) {
     return `<div class="tc-cards">
       ${card('cal', 'Days credited', row?.creditedDays ?? row?.daysPresent ?? 0, `${row?.daysPresent ?? 0} present of ${row?.workingDays ?? 0} scheduled${row?.lateDaysLost ? `<br>${row.lateDaysLost} day late` : ''}`)}
       ${card('alert', 'Missing records', missing, missing ? 'Add them before posting payroll.' : 'Every scheduled day is accounted for.', missing > 0)}
-      ${card('clock', 'Late not offset', `${row?.lateMinutesUnoffset ?? 0} min`, `Lowers days credited – ${money(row?.lateReduction ?? 0)} basic<br>Undertime ${money(sum('undertime', 'deductions'))} · Absence ${money(sum('absence', 'deductions'))}`)}
+      ${card('clock', 'Deductible late', `${row?.lateMinutesUnoffset ?? 0} min`, `Lowers days credited – ${money(row?.lateReduction ?? 0)} basic<br>Undertime ${money(sum('undertime', 'deductions'))} · Absence ${money(sum('absence', 'deductions'))}`)}
       ${card('clock', 'Overtime', `${otHours} h`, `+${money((row?.earnings.regularOT || 0) + (row?.earnings.restOT || 0) + (row?.earnings.specialOT || 0) + (row?.earnings.regularHolidayOT || 0) + (row?.earnings.otherOT || 0) + (row?.earnings.nsd || 0))} incl. night differential`)}
     </div>
     <div class="tc-totals">${row ? `<span>Basic <b>${money(row.earnings.basic)}</b> · Gross <b>${money(row.gross)}</b></span><span class="tc-sep"></span><span>Deductions <b>${money(row.totalDeductions)}</b></span><span class="tc-sep"></span><span class="tc-net">Net pay <strong>${money(row.net)}</strong></span>` : '<span>Not included in payroll for this period.</span>'}
@@ -119,14 +126,13 @@ export function createTimecard(ctx) {
     } catch (error) { body.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
-  function bind(onAdd, onPayroll, onOffset) {
+  function bind(onAdd, onPayroll) {
     const form = document.querySelector('#timecard-form');
     if (form) form.onsubmit = event => { event.preventDefault(); Object.assign(view, { employeeId: form.elements.employeeId.value, start: form.elements.start.value, end: form.elements.end.value }); fill(); };
     const body = document.querySelector('#timecard-body');
     if (body) body.onclick = event => {
       const add = event.target.closest('[data-timecard-add]'); if (add) onAdd(view.employeeId, add.dataset.timecardAdd);
       if (event.target.closest('[data-timecard-payroll]')) onPayroll(view.employeeId, view.start, view.end);
-      const offset = event.target.closest('[data-timecard-offset]'); if (offset) onOffset(offset.dataset.timecardOffset, Number(offset.dataset.minutes));
     };
   }
 
