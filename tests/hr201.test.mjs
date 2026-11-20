@@ -287,3 +287,22 @@ test('memo PDF: letterhead letter for HR (draft band before issue) and for the e
     assert.throws(() => memoPdf(store, { role: 'employee', username: 'ben', employeeId: b }, memo.id), /not addressed to you/);
   } finally { store.close(); }
 });
+
+test('201 checklist: due dates never before tracking began, waived requirements are complied with a reason, inactive staff not counted', async () => {
+  const { checklistFor, TRACKING_FROM } = await import('../src/documents201.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const e = store.read().employees.find(x => x.id === a);
+    const list = checklistFor(store, hr, e, readSettings(store), '2026-11-20');
+    const due = list.items.find(i => i.due)?.due;
+    assert.ok(!due || due >= TRACKING_FROM, `due ${due} not before tracking began`);
+    const missing = list.items.find(i => i.requirement.required && i.status === 'Missing');
+    assert.throws(() => setNotApplicable(store, hr, a, missing.requirement.id, { notApplicable: true, reason: 'x', waive: true }), /waiving/);
+    setNotApplicable(store, hr, a, missing.requirement.id, { notApplicable: true, reason: 'Waived by HR manager until Dec 31', waive: true });
+    assert.equal(checklistFor(store, hr, store.read().employees.find(x => x.id === a), readSettings(store), '2026-11-20').items.find(i => i.requirement.id === missing.requirement.id).status, 'Waived');
+    const before = documentSummary(store, hr).employeesMissing;
+    archiveEmployee(store, hr, a, { reason: 'Separated (demo)', endDate: '2026-11-19' });
+    assert.ok(documentSummary(store, hr).employeesMissing <= before, 'inactive staff are not counted');
+  } finally { store.close(); }
+});

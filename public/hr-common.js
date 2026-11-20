@@ -1,5 +1,5 @@
 // Shared pieces for the HR 201 screens: badges, progress bars, file reading and the Add / Edit Employee form.
-export const DOC_BADGE = { Missing: 'rejected', Rejected: 'rejected', Expired: 'rejected', Submitted: 'pending', 'Under Review': 'pending', Verified: '', 'Not Applicable': 'neutral', 'Expiring soon': 'pending' };
+export const DOC_BADGE = { Missing: 'rejected', Rejected: 'rejected', Expired: 'rejected', Submitted: 'pending', 'Under Review': 'pending', Verified: '', 'Not Applicable': 'neutral', Waived: 'neutral', 'Expiring soon': 'pending' };
 export const fmtDate = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—');
 export const fmtDateTime = d => (d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
 export function readFile(file) {

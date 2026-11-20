@@ -400,7 +400,7 @@ export function createFiles(ctx) {
           `${i.numberOnly ? badge(i.status === 'Verified' ? 'Number on file' : i.status === 'Missing' ? 'No number yet' : i.status, DOC_BADGE[i.status]) : !i.requirement.required && i.status === 'Missing' ? '<span class="muted">—</span>' : badge(i.status, DOC_BADGE[i.status])}${i.overdue ? ' <small class="danger-text">overdue</small>' : ''}${i.expiringSoon ? ' <small>expiring soon</small>' : ''}${i.notApplicable ? `<small>${esc(i.notApplicable.reason)}</small>` : ''}`,
           c?.expiryDate ? `Expires ${fmtDate(c.expiryDate)}` : i.due && ['Missing', 'Rejected'].includes(i.status) ? `Due ${fmtDate(i.due)}` : '—',
           i.numberOnly ? '<span class="muted">Number only · no file needed</span>' : i.hidden ? '<span class="muted">Restricted</span>' : c ? `<a href="/api/hr/documents/${c.id}/content" target="_blank" rel="noopener">${esc(c.name)}</a>` : '—',
-          `<span class="row-actions">${manage && !i.hidden && !i.numberOnly ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${approve && (!c || i.notApplicable) ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? 'Mark applicable' : 'Not applicable'}</button>` : ''}</span>`];
+          `<span class="row-actions">${manage && !i.hidden && !i.numberOnly ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${approve && (!c || i.notApplicable) ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? (i.notApplicable.waived ? 'Remove waiver' : 'Mark applicable') : 'Not applicable'}</button>${!i.notApplicable && i.requirement.required ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="1" data-waive="1">Waive…</button>` : ''}` : ''}${i.notApplicable?.reason ? `<small>${esc(i.notApplicable.waived ? 'Waived' : 'N/A')}: ${esc(i.notApplicable.reason)}</small>` : ''}</span>`];
       }))}`).join('')}</section>`;
   }
   async function onProfileClick(event, record, checklist, extras) {
@@ -435,9 +435,9 @@ export function createFiles(ctx) {
       if (b.dataset.review) reviewDialog(b.dataset.review, b.dataset.req);
       if (b.dataset.versions) versionsDialog(checklist.items.find(i => i.requirement.id === b.dataset.versions));
       if (b.dataset.na !== undefined) {
-        const on = !!b.dataset.on, reason = on ? window.prompt('Why is this requirement not applicable to this employee?') : '';
+        const on = !!b.dataset.on, waive = !!b.dataset.waive, reason = on ? window.prompt(waive ? 'Reason for waiving this requirement (who approved it, until when):' : 'Why is this requirement not applicable to this employee?') : '';
         if (on && !reason) return;
-        await api(`/hr/employees/${encodeURIComponent(id)}/requirements/${b.dataset.na}`, { notApplicable: on, reason: reason || '' }); toast(on ? 'Marked not applicable.' : 'Requirement applies again.'); await drawProfile();
+        await api(`/hr/employees/${encodeURIComponent(id)}/requirements/${b.dataset.na}`, { notApplicable: on, reason: reason || '', ...(waive ? { waive: true } : {}) }); toast(on ? (waive ? 'Requirement waived.' : 'Marked not applicable.') : 'Requirement applies again.'); await drawProfile();
       }
     } catch (error) { toast(error.message); }
   }
