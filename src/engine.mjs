@@ -423,14 +423,25 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const approvedFilings = filings.filter(o => o.status === 'approved'), gatedOT = separateOT && e.coveredOT;
       const approvedOTMinutes = approvedFilings.reduce((s, o) => s + Math.round(o.approvedHours * 60), 0);
       if (gatedOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime applications before posting.`);
-      let unfiledMinutes = 0, belowBlock = 0, paidOT = 0;
+      let unfiledMinutes = 0, belowBlock = 0, paidOT = 0, regularCounted = 0;
       // A minute after the schedule is approved overtime when it falls inside an approved filing's period (each filing
       // pays at most its approved hours, unpaid breaks already excluded); older filings without times use their hours
       // from the end of the schedule. Without the approval policy every minute after the schedule counts.
       const windows = approvedFilings.filter(o => o.startTime).map(o => ({ range: overtimeWindow(o), budget: Math.round(o.approvedHours * 60) }));
       let untimedBudget = approvedFilings.filter(o => !o.startTime).reduce((s, o) => s + Math.round(o.approvedHours * 60), 0);
+      // Overtime is the time after the SCHEDULED time out (HR decision Nov 20, 2026: "from the scheduled Out to the actual
+      // Out"), also after a late start; late time is handled by the lateness rules above. Minutes that make up late time
+      // under an approved offset are not overtime. A rest day has no scheduled out: overtime there is the time worked
+      // beyond the regular hours, as before.
+      const hm = t => { const [hh, mm] = String(t || '').split(':').map(Number); return hh * 60 + (mm || 0); };
+      const schedStart = hm(record.scheduledIn || daySched.start || '09:00');
+      // Only a schedule with a time out on file has a scheduled out; otherwise overtime follows the hours worked, as before.
+      let schedEnd = daySched.end ? hm(daySched.end) : null;
+      if (schedEnd !== null && schedEnd <= schedStart) schedEnd += 1440;
+      const otFrom = rest || flexible || record.regularHoursOnly || schedEnd === null ? null : stamp(`${d}T00:00`) + (schedEnd + Math.min(record.offsetMinutes || 0, lateMinutes)) * 60000;
+      const isOT = (m, index) => !flexible && (otFrom === null ? index >= normalHours * 60 : m >= otFrom);
       const eligible = minutes.map((m, index) => {
-        if (flexible || index < normalHours * 60) return false;
+        if (!isOT(m, index)) return false;
         if (!gatedOT) return true;
         const w = windows.find(x => x.budget > 0 && m >= x.range[0] && m < x.range[1]);
         if (w) { w.budget--; return true; }
@@ -446,7 +457,11 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const otPayable = Math.floor(eligibleOT / OT_BLOCK) * OT_BLOCK;
       minutes.forEach((m, index) => {
         const date = new Date(m).toISOString().slice(0, 10), c0 = classification(state, e, date), c = perDayWorked && c0 === 'rest' ? 'ordinary' : c0;
-        const ot = !flexible && index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
+        const ot = isOT(m, index), h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
+        // Time beyond the regular hours that is not overtime (arriving before the schedule) earns nothing extra.
+        // (Only on days with a scheduled time out; flexible and rest days count every minute as before.)
+        if (!ot && otFrom !== null && regularCounted >= normalHours * 60) return;
+        if (!ot) regularCounted++;
         if (ot && !eligible[index]) { unfiledMinutes++; return; }
         if (ot && paidOT >= otPayable) { belowBlock++; return; }
         if (ot) paidOT++;
