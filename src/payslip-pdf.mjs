@@ -30,7 +30,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 export const longDate = iso => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${MONTHS[m - 1]} ${d}, ${y}`; };
 const period = (start, end) => start.slice(0, 7) === end.slice(0, 7) ? `${MONTHS[Number(start.slice(5, 7)) - 1]} ${Number(start.slice(8))}-${Number(end.slice(8))}, ${start.slice(0, 4)}` : `${longDate(start)} - ${longDate(end)}`;
 
-function jpegInfo(buffer) {
+export function jpegInfo(buffer) {
   for (let i = 2; i < buffer.length - 9;) {
     if (buffer[i] !== 0xff) return null;
     const marker = buffer[i + 1], length = buffer.readUInt16BE(i + 2);

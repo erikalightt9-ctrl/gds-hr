@@ -32,9 +32,9 @@ test('holiday pay is one day, paid once: regular basic + holiday pay = the cutof
   const daily = holidaySplit(run(state()));
   assert.deepEqual([daily.holidayPay, daily.regularBasic], [755, 11 * 755], 'daily-paid: 11 days worked + Nov 2');
   const row = run(state({ basis: 'monthly' })), monthly = holidaySplit(row);
-  assert.equal(monthly.holidayPay, 755, 'monthly-paid: 19,630 ÷ 26');
-  assert.equal(round2(monthly.regularBasic + monthly.holidayPay), row.earnings.basic, 'reconciled with the fixed half-month');
-  assert.equal(row.earnings.basic, 9815, 'the half-month itself is unchanged');
+  assert.equal(monthly.holidayPay, 785.2, 'monthly-paid: 19,630 ÷ 25 working days in November (Sunday rest)');
+  assert.equal(round2(monthly.regularBasic + monthly.holidayPay), row.earnings.basic, 'reconciled with the cutoff basic');
+  assert.equal(row.earnings.basic, 9422.4, 'the cutoff pays its 12 working days × 785.20');
 });
 
 test('a holiday falling on Sunday moves only when a substitute date is configured', () => {
@@ -87,4 +87,12 @@ test('a holiday that has not arrived yet is not paid in advance', () => {
   const before = run({ ...s, asOf: '2026-11-12' }), after = run({ ...s, asOf: '2026-11-13' });
   assert.equal(before.holidayDays, 1, 'only Nov 2'); assert.equal(after.holidayDays, 2, 'Nov 13 once it arrives');
   assert.equal(round2(after.earnings.basic - before.earnings.basic), 755);
+});
+
+test('an unworked special non-working day with no attendance record is not flagged as missing (rest day or workday); an ordinary workday still is', () => {
+  const s = state({ basis: 'monthly' });
+  const items = calculatePayroll(s, '2026-11-01', '2026-11-15').reviewItems;
+  assert.ok(!items.some(i => /2026-11-0[12]/.test(i.date)), 'Nov 1 (Sunday holiday) and Nov 2 (workday holiday) need no record');
+  const withoutNov3 = { ...s, attendance: s.attendance.filter(a => a.date !== '2026-11-03') };
+  assert.ok(calculatePayroll(withoutNov3, '2026-11-01', '2026-11-15').reviewItems.some(i => i.date === '2026-11-03' && i.issue === 'missing-punch'));
 });

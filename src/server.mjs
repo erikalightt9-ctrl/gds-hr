@@ -8,6 +8,16 @@ import { z } from 'zod';
 import { Store } from './store.mjs';
 import { mailerFromEnv } from './mailer.mjs';
 import { handleHrRoutes } from './hr-routes.mjs';
+import { handleComplianceRoutes } from './compliance-routes.mjs';
+import { dayStatuses } from './attendance-days.mjs';
+import { refreshCases, endOfDayCheck, listCases, myCases, setTreatment, decideOverpayment } from './attendance-cases.mjs';
+import { sendDailyReminders } from './memo-tracking.mjs';
+import { recordPayrollDecision } from './attendance-validation.mjs';
+import { approvalMatrix, usersAndRoles } from './access-matrix.mjs';
+import { requestMovement, decideMovement, clearItem, listMovements, applyDueMovements } from './movements.mjs';
+import { resolveClockFlag, suggestedOfficeAddresses } from './clock-flags.mjs';
+import { requestSalaryChange, decideSalaryChange, salaryHistory, applyDueSalaryChanges } from './salary-changes.mjs';
+import { dpReminderLines } from './discipline-service.mjs';
 import { savePayrollInput, deletePayrollInput } from './payroll-inputs.mjs';
 import { publicBranding, readSettings } from './hr201.mjs';
 import { LEGACY_WORKSPACE } from './roles.mjs';
@@ -29,6 +39,7 @@ import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-ne
 import { addContributionEmployee } from './contribution-encode.mjs';
 import { saveMonthEdit } from './contribution-month.mjs';
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
+import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
 import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
@@ -43,7 +54,6 @@ import { submitAttendanceRequest, ownAttendanceRequests, cancelAttendanceRequest
 import { runReminders } from './reminders.mjs';
 import { startBackupSchedule } from './backup-r2.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
-import { birYear, birReturn, saveBirReturn, refreshFromPayroll, fileBirReturn, reopenBirReturn, birMonthWorkbook, birYearWorkbook } from './bir1601c.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
@@ -85,7 +95,7 @@ export function employeeNotice(pathname, data = {}) {
   const match = rules.find(([re]) => re.test(pathname));
   return match ? match[1]() : null;
 }
-export function createApp({ store, origin, setupToken, demo = false, mailer = null }) {
+export function createApp({ store, origin, setupToken, demo = false, mailer = null, fetchImpl = fetch }) {
   const secure = origin.startsWith('https:');
   // Fingerprint sign-in (WebAuthn) is bound to the site's host name; it needs https (or localhost).
   const webauthn = { origin, rpId: new URL(origin).hostname, rpName: 'GDS HR' };
@@ -97,18 +107,19 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (selfNotice && status < 300) { try { const text = employeeNotice(selfNotice.pathname, data); if (text) store.notify(selfNotice.employeeId, text); } catch { /* a notice never blocks the submission */ } }
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data));
     };
-    res.setHeader('Cache-Control', 'no-store');
+    // no-transform: Cloudflare must not inject scripts (its Web Analytics beacon, which the CSP blocks) or alter pages.
+    res.setHeader('Cache-Control', 'no-store, no-transform');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src https://www.openstreetmap.org; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://www.openstreetmap.org; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
     if (secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/bir-ui.js': ['bir-ui.js', 'text/javascript'], '/discipline-ui.js': ['discipline-ui.js', 'text/javascript'], '/templates-ui.js': ['templates-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/bir-ui.js': ['bir-ui.js', 'text/javascript'], '/discipline-ui.js': ['discipline-ui.js', 'text/javascript'], '/discipline-case.js': ['discipline-case.js', 'text/javascript'], '/report-library-ui.js': ['report-library-ui.js', 'text/javascript'], '/attendance-cases-ui.js': ['attendance-cases-ui.js', 'text/javascript'], '/memo-viewer.js': ['memo-viewer.js', 'text/javascript'], '/payroll-review.js': ['payroll-review.js', 'text/javascript'], '/salary-ui.js': ['salary-ui.js', 'text/javascript'], '/access-ui.js': ['access-ui.js', 'text/javascript'], '/movements-ui.js': ['movements-ui.js', 'text/javascript'], '/portal-cases.js': ['portal-cases.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -169,6 +180,26 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.setHeader('Set-Cookie', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
         send(200, { user: auth.user, csrf: auth.csrf, demo }); return;
       }
+      // Sign in with Feishu (feishu-login.mjs): start sends the browser to Feishu; the callback links or signs in.
+      // The callback page moves on with a same-site refresh so the Strict session cookie is used from the first page.
+      const backTo = (hash, cookie) => { if (cookie) res.setHeader('Set-Cookie', cookie); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(`<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/${hash}"><title>GDS HR</title><p>Continuing… <a href="/${hash}">Open the HR system</a></p>`); };
+      if (pathname === '/api/login/feishu/available' && req.method === 'GET') { send(200, feishuLoginAvailable(store)); return; }
+      if (pathname === '/api/login/feishu/start' && req.method === 'GET') {
+        checkLimit(store, `feishu:${visitorIp}`, 200);
+        try { res.writeHead(302, { Location: startFeishu(store, { kind: 'login' }, { origin }) }); res.end(); } catch (error) { backTo(`#feishu-error=${encodeURIComponent(error.message)}`); }
+        return;
+      }
+      if (pathname === '/api/login/feishu/callback' && req.method === 'GET') {
+        checkLimit(store, `feishu:${visitorIp}`, 200);
+        try {
+          if (url.searchParams.get('error')) throw new AppError('Feishu sign-in was cancelled.', 400);
+          const done = await finishFeishu(store, { code: url.searchParams.get('code'), state: url.searchParams.get('state') }, { origin, fetchImpl });
+          if (done.kind === 'link') { backTo('#feishu-linked'); return; }
+          const auth = issueSession(store, done.user, session(store, req.headers.cookie)?.tokenHash || '');
+          backTo('', `hr_session=${auth.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
+        } catch (error) { backTo(`#feishu-error=${encodeURIComponent(error.message)}`); }
+        return;
+      }
       if (pathname === '/api/recovery/request' && req.method === 'POST') {
         checkLimit(store, `recovery:${visitorIp}`); const body = z.object({ identifier: z.string().trim().min(1).max(80) }).strict().parse(await readBody(req));
         send(200, { message: requestRecovery(store, body.identifier, { mailer, origin }).message }); return;
@@ -180,9 +211,13 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      // The service account (integrations such as the AI assistant) reads only: changes and approvals need a named person.
+      if (auth.user.service && mutation && !['/api/logout', '/api/password'].includes(pathname)) throw new AppError('The service account is read-only. Changes and approvals must be made with a named person\'s account.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
       if (auth.user.mustChangePassword && !['/api/events', '/api/logout', '/api/password', '/api/version'].includes(pathname)) throw new AppError('Choose your own password first.', 403);
+      // Two-factor sign-in is required for HR, HR Staff, Payroll and Management accounts: nothing else until it is set up.
+      if (auth.user.mfaRequired && !['/api/events', '/api/logout', '/api/mfa', '/api/version', '/api/session'].includes(pathname)) throw new AppError('Set up two-factor sign-in first (required for HR, Payroll and Management accounts).', 403);
       if (pathname === '/api/events' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         const valid = () => !!session(store, req.headers.cookie);
@@ -204,6 +239,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         const body = z.object({ currentPassword: z.string().max(200), newPassword: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         await changePassword(store, auth.user, body.currentPassword, body.newPassword); send(200, { ok: true }); return;
       }
+      // Feishu sign-in: settings (admin) and each person's own link.
+      if (pathname === '/api/integrations/feishu-login' && req.method === 'GET') { send(200, feishuLoginStatus(store, auth.user, { origin })); return; }
+      if (pathname === '/api/integrations/feishu-login' && req.method === 'POST') { send(200, saveFeishuLogin(store, auth.user, await readBody(req), { origin })); return; }
+      if (pathname === '/api/me/feishu' && req.method === 'GET') { send(200, myFeishu(store, auth.user)); return; }
+      if (pathname === '/api/me/feishu/link' && req.method === 'POST') { send(200, { url: startFeishu(store, { kind: 'link', user: auth.user }, { origin }) }); return; }
+      if (pathname === '/api/me/feishu/unlink' && req.method === 'POST') { send(200, unlinkFeishu(store, auth.user)); return; }
       // Feishu group alerts (feishu.mjs; admin only).
       if (pathname === '/api/integrations/feishu' && req.method === 'GET') { send(200, feishuStatus(store, auth.user)); return; }
       if (pathname === '/api/integrations/feishu' && req.method === 'POST') { send(200, saveFeishu(store, auth.user, await readBody(req))); return; }
@@ -232,6 +273,23 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       const addressRoute = pathname.match(/^\/api\/location-address\/([a-f0-9-]+)$/);
       if (addressRoute && req.method === 'POST') { checkLimit(store, `geocoding:${auth.user.id}`); send(200, await locationAddress(store, auth.user, addressRoute[1])); return; }
+      // Day-by-day attendance history (every date of the month, gaps highlighted): HR / Admin / Payroll for anyone, an
+      // employee for themself. Incomplete-attendance cases: HR list and actions; the employee's own list.
+      if (pathname === '/api/attendance-days' && req.method === 'GET') {
+        const month = url.searchParams.get('month') || '', id = auth.user.role === 'employee' ? auth.user.employeeId : url.searchParams.get('employeeId') || '';
+        if (auth.user.role !== 'employee') permit(auth.user, ['admin', 'hr', 'payroll']);
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new AppError('Choose a month.');
+        const state = store.read(), employee = state.employees.find(e => e.id === id);
+        if (!employee) throw new AppError('Employee not found.', 404);
+        const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+        const cases = new Map(store.db.prepare('SELECT date, data FROM attendance_cases WHERE employee_id=?').all(id).map(r => [r.date, JSON.parse(r.data)]));
+        send(200, dayStatuses(store, state, employee, `${month}-01`, last).map(d => ({ ...d, case: cases.get(d.date) ? { id: cases.get(d.date).id, status: cases.get(d.date).status, due: cases.get(d.date).due, treatment: cases.get(d.date).treatment, adjustment: cases.get(d.date).adjustment } : null }))); return;
+      }
+      if (pathname === '/api/attendance-cases' && req.method === 'GET') { send(200, listCases(store, auth.user)); return; }
+      if (pathname === '/api/me/attendance-cases' && req.method === 'GET') { send(200, myCases(store, auth.user)); return; }
+      const caseAction = pathname.match(/^\/api\/attendance-cases\/([a-f0-9-]+)\/(treatment|overpayment)$/);
+      if (caseAction && req.method === 'POST') { const body = await readBody(req); send(200, caseAction[2] === 'treatment' ? setTreatment(store, auth.user, caseAction[1], body) : decideOverpayment(store, auth.user, caseAction[1], body)); return; }
+      if (await handleComplianceRoutes({ req, res, pathname, url, auth, store, send, readBody })) return;
       if (await handleHrRoutes({ req, res, pathname, url, auth, store, send, readBody })) return;
       if (pathname.startsWith('/api/me/')) {
         permit(auth.user, ['employee']);
@@ -305,16 +363,6 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/contributions/month-edit' && req.method === 'POST') { send(200, saveMonthEdit(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions/employees' && req.method === 'POST') { send(200, addContributionEmployee(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/contributions' && req.method === 'GET') { send(200, contributionOverview(store, auth.user, url.searchParams.get('month') || '', readSettings(store).company.egovFee ?? 15)); return; }
-      // BIR Form 1601-C (monthly remittance return of taxes withheld on compensation).
-      const xlsxOut = ({ filename, body }) => { res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${filename}"` }); res.end(body); };
-      if (pathname === '/api/bir/1601c' && req.method === 'GET') { send(200, birYear(store, auth.user, url.searchParams.get('year') || '')); return; }
-      const bir = pathname.match(/^\/api\/bir\/1601c\/(\d{4}-\d{2}|year-\d{4})(\.xlsx|\/refresh|\/file|\/reopen)?$/);
-      if (bir && req.method === 'GET' && bir[2] === '.xlsx') { xlsxOut(bir[1].startsWith('year-') ? birYearWorkbook(store, auth.user, bir[1].slice(5)) : birMonthWorkbook(store, auth.user, bir[1])); return; }
-      if (bir && req.method === 'GET' && !bir[2]) { send(200, birReturn(store, auth.user, bir[1])); return; }
-      if (bir && req.method === 'POST' && !bir[2]) { send(200, saveBirReturn(store, auth.user, bir[1], await readBody(req))); return; }
-      if (bir && req.method === 'POST' && bir[2] === '/refresh') { send(200, refreshFromPayroll(store, auth.user, bir[1])); return; }
-      if (bir && req.method === 'POST' && bir[2] === '/file') { send(200, fileBirReturn(store, auth.user, bir[1], await readBody(req))); return; }
-      if (bir && req.method === 'POST' && bir[2] === '/reopen') { send(200, reopenBirReturn(store, auth.user, bir[1], await readBody(req))); return; }
       if (pathname === '/api/thirteenth' && req.method === 'GET') {
         const year = url.searchParams.get('year') || '', overview = thirteenthOverview(store, auth.user, year), staff = ['admin', 'payroll', 'hr'].includes(auth.user.role);
         send(200, { ...overview, payslips: staff ? thirteenthPayslips(store, auth.user, year) : [], adjustments: staff ? thirteenthAdjustments(store, auth.user, year) : [], canPayslip: staff, canFinalize: ['admin', 'payroll'].includes(auth.user.role), canApprove: auth.user.role === 'admin' }); return;
@@ -364,6 +412,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
+      if (pathname === '/api/office-networks/suggestions' && req.method === 'GET') { send(200, suggestedOfficeAddresses(store, auth.user)); return; }
+      { const m = pathname.match(/^\/api\/clock\/([A-Za-z0-9-]+)\/resolve-flag$/); if (m && req.method === 'POST') { send(200, resolveClockFlag(store, auth.user, m[1], await readBody(req))); return; } }
       if (pathname === '/api/office-networks' && req.method === 'GET') { permit(auth.user, ['admin', 'hr']); send(200, { networks: officeNetworks(store), current: visitorIp.replace(/^::ffff:/, '') }); return; }
       if (pathname === '/api/office-networks' && req.method === 'POST') { send(200, changeOfficeNetworks(store, auth.user, await readBody(req), visitorIp)); return; }
       const loanSkips = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/skips$/);
@@ -381,7 +431,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const requestAction = pathname.match(/^\/api\/attendance-requests\/([a-f0-9-]+)\/(review|info|remark|reject|approve)$/);
       if (requestAction && req.method === 'POST') {
         const [, rid, action] = requestAction, body = action === 'review' ? {} : await readBody(req);
-        send(200, { review: () => startReview(store, auth.user, rid), info: () => requestInformation(store, auth.user, rid, body), remark: () => addRemark(store, auth.user, rid, body), reject: () => rejectAttendanceRequest(store, auth.user, rid, body), approve: () => approveAttendanceRequest(store, auth.user, rid, body) }[action]());
+        send(200, { review: () => startReview(store, auth.user, rid), info: () => requestInformation(store, auth.user, rid, body), remark: () => addRemark(store, auth.user, rid, body), reject: () => rejectAttendanceRequest(store, auth.user, rid, body), approve: () => { const done = approveAttendanceRequest(store, auth.user, rid, body); try { refreshCases(store); } catch (error) { console.error('attendance cases:', error.message); } return done; } }[action]());
         return;
       }
       if (pathname === '/api/clock-events' && req.method === 'GET') { send(200, employeeClockEvents(store, auth.user, url.searchParams.get('employeeId') || '', url.searchParams.get('month') || '')); return; }
@@ -478,6 +528,15 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/payroll/preview' && req.method === 'POST') {
         const p = previewSchema.parse(await readBody(req)); send(200, preview(store, p.start, p.end, p.pay13th, p.employeeIds)); return;
       }
+      if (pathname === '/api/salary-changes' && req.method === 'GET') { send(200, salaryHistory(store, auth.user, url.searchParams.get('employeeId') || '')); return; }
+      if (pathname === '/api/salary-changes' && req.method === 'POST') { send(201, requestSalaryChange(store, auth.user, await readBody(req))); return; }
+      { const m = pathname.match(/^\/api\/salary-changes\/([a-f0-9-]+)\/decision$/); if (m && req.method === 'POST') { send(200, decideSalaryChange(store, auth.user, m[1], await readBody(req))); return; } }
+      if (pathname === '/api/movements' && req.method === 'GET') { send(200, listMovements(store, auth.user, url.searchParams.get('employeeId') || '')); return; }
+      if (pathname === '/api/movements' && req.method === 'POST') { send(201, requestMovement(store, auth.user, await readBody(req))); return; }
+      { const m = pathname.match(/^\/api\/movements\/([a-f0-9-]+)\/(decision|clearance)$/); if (m && req.method === 'POST') { const body = await readBody(req); send(200, m[2] === 'decision' ? decideMovement(store, auth.user, m[1], body) : clearItem(store, auth.user, m[1], body)); return; } }
+      if (pathname === '/api/approval-matrix' && req.method === 'GET') { send(200, approvalMatrix(store, auth.user)); return; }
+      if (pathname === '/api/users-roles' && req.method === 'GET') { send(200, usersAndRoles(store, auth.user)); return; }
+      if (pathname === '/api/payroll/decisions' && req.method === 'POST') { send(200, recordPayrollDecision(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/payroll/post' && req.method === 'POST') {
         permit(auth.user, ['admin', 'payroll']); send(200, postPayroll(store, auth.user, postSchema.parse(await readBody(req)))); return;
       }
@@ -528,7 +587,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const tardinessCheck = () => { try { const sent = runTardinessMemos(store); if (sent.length) console.log(`Monthly tardiness memos sent: ${sent.map(s => `${s.employeeId} (${s.occurrences})`).join(', ')}.`); } catch (error) { console.error('tardiness memo check failed:', error.message); } };
   tardinessCheck(); setInterval(tardinessCheck, 3600000).unref();
   // Attendance requests waiting for HR longer than 48 hours: one HR reminder per request per day; checked every hour.
-  const requestCheck = () => { try { remindOverdueRequests(store); } catch (error) { console.error('attendance request reminder failed:', error.message); } };
+  const requestCheck = () => { try { remindOverdueRequests(store); } catch (error) { console.error('attendance request reminder failed:', error.message); } try { refreshCases(store); } catch (error) { console.error('incomplete attendance check failed:', error.message); } try { endOfDayCheck(store); } catch (error) { console.error('end-of-day check failed:', error.message); } try { sendDailyReminders(store, new Date(), id => dpReminderLines(store, id)); } catch (error) { console.error('daily memo / notice reminder failed:', error.message); } try { applyDueSalaryChanges(store); } catch (error) { console.error('salary change apply failed:', error.message); } try { applyDueMovements(store); } catch (error) { console.error('movement apply failed:', error.message); } };
   requestCheck(); setInterval(requestCheck, 3600000).unref();
   // Attendance reminders (5 minutes before the scheduled start / after the scheduled end, Philippine Time), every minute.
   const reminderCheck = () => runReminders(store, new Date(), { subject: origin }).catch(error => console.error('attendance reminder check failed:', error.message));

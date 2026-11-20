@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
+import { markOvertimePaid, unmarkOvertimePaid, carryUnfiledOvertime } from './overtime-carry.mjs';
+import { markCaseAdjustments, unmarkCaseAdjustments } from './attendance-cases.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
@@ -17,6 +19,9 @@ function affectedPeriod(kind, value) {
 }
 function assertUnlocked(state, kind, value) {
   const period = affectedPeriod(kind, value);
+  // A day with an open incomplete-attendance case may be corrected after its payroll is posted: the difference is then
+  // settled by the next payroll (src/attendance-cases.mjs). Every other posted day stays locked.
+  if (kind === 'attendance' && (state.attendanceCases || []).some(c => c.employeeId === value.employeeId && c.date === value.date && c.status === 'open')) return;
   if (period && state.runs.some(r => r.status === 'posted' && overlaps(...period, r.start, r.end) && (!value.employeeId || r.rows.some(row => row.employeeId === value.employeeId)))) throw new AppError('This record affects posted payroll and is locked. Use an approved adjustment in an open cutoff.');
 }
 function validateBrackets(brackets, name) {
@@ -26,7 +31,7 @@ function validateBrackets(brackets, name) {
   });
 }
 // `trusted` is for internal callers (e.g. the 201 form) that have already checked a narrower permission.
-export function saveRecord(store, actor, kind, input, { trusted = false } = {}) {
+export function saveRecord(store, actor, kind, input, { trusted = false, salaryChange = null } = {}) {
   if (!schemas[kind]) throw new AppError('Unknown record type.', 404);
   if (!trusted) permit(actor, entityRoles[kind]);
   const recordInput = { ...input };
@@ -35,6 +40,13 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
   const value = schemas[kind].parse(recordInput);
   return store.transaction(() => {
     const state = store.read(), previous = state[kind].find(x => x.id === value.id);
+    // Salaries change only through an approved salary change (reason, effective date, second approver; salary-changes.mjs).
+    if (kind === 'employees' && previous && previous.monthlySalary != null && value.monthlySalary !== previous.monthlySalary && !salaryChange) throw new AppError('A salary is changed through Compensation → Request salary change (reason, effective date and a second approver), not edited directly.');
+    if (kind === 'employees' && value.monthlySalary != null && (previous?.monthlySalary ?? null) === null) {
+      store.db.exec('CREATE TABLE IF NOT EXISTS salary_changes (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL)');
+      const at = new Date().toISOString();
+      store.db.prepare('INSERT INTO salary_changes(id,employee_id,status,data) VALUES(?,?,?,?)').run(randomUUID(), value.id, 'initial', JSON.stringify({ employeeId: value.id, employeeName: value.name, before: { monthlySalary: null }, after: { monthlySalary: value.monthlySalary }, effectiveDate: value.startDate || at.slice(0, 10), reason: 'Starting salary entered', status: 'initial', requestedBy: actor.username, requestedAt: at, decidedBy: actor.username, decidedAt: at }));
+    }
     if (kind === 'employees' && previous) {
       const personal = store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(value.id);
       if (personal && value.name !== previous.name) throw new AppError('Update the name in Personal Information so all name fields stay synchronized.');
@@ -122,7 +134,16 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
       if (state.rules.some(r => r.id !== value.id && r.approvedBy && r.effectiveDate === value.effectiveDate)) throw new AppError('An approved rules version already uses that effective date.');
       Object.entries(value.contributions).forEach(([name, brackets]) => validateBrackets(brackets, name));
       validateBrackets(value.taxBrackets, 'Tax');
-      value.approvedBy = value.approvedBy ? actor.username : ''; value.updatedAt = new Date().toISOString();
+      // An approved version is locked (only the Admin review checkboxes may change); changes need a new version.
+      if (previous?.approvedBy) {
+        const REVIEW = ['contributionsReviewed', 'calendarReviewedYears', 'updatedAt', 'approvedBy', 'approvedAt'];
+        const parsed = schemas.rules.safeParse(previous), was = parsed.success ? parsed.data : previous;
+        const changed = Object.keys({ ...was, ...value }).filter(k => !REVIEW.includes(k) && JSON.stringify(was[k]) !== JSON.stringify(value[k]));
+        if (changed.length) throw new AppError(`This rules version was approved by ${previous.approvedBy}${previous.approvedAt ? ` on ${previous.approvedAt.slice(0, 10)}` : ''} and is locked. Create a new version with a later effective date to change: ${changed.slice(0, 6).join(', ')}.`);
+        if (!value.approvedBy) throw new AppError('An approved rules version cannot be unapproved. Create a new version instead.');
+        value.approvedBy = previous.approvedBy; value.approvedAt = previous.approvedAt || '';
+      } else { value.approvedBy = value.approvedBy ? actor.username : ''; value.approvedAt = value.approvedBy ? new Date().toISOString() : ''; }
+      value.updatedAt = new Date().toISOString();
     }
     if (kind === 'attendance' && (previous || correctionReason !== undefined) && (typeof correctionReason !== 'string' || correctionReason.trim().length < 3 || correctionReason.length > 2000)) throw new AppError('Enter a reason for the attendance correction or approval (3–2,000 characters).');
     state[kind] = [...state[kind].filter(x => x.id !== value.id), value];
@@ -200,6 +221,8 @@ export function reversePayroll(store, actor, runId, input) {
       store.log(actor, 'payroll-reversal', 'loans', loan.id, before, loan);
     }
     const wasReleased = payslipReleased(run, manilaNow());
+    unmarkOvertimePaid(store, run.id);
+    unmarkCaseAdjustments(store, run.id);
     run.status = 'reversed'; run.reversedBy = actor.username; run.reversedAt = new Date().toISOString(); run.reversalReason = reason;
     state.version++; store.write(state);
     // Employees are told only when the payslip was already visible to them (on or after salary day).
@@ -237,7 +260,17 @@ export function postPayroll(store, actor, request) {
     const computed = calculatePayroll({ ...state, asOf: manilaToday() }, request.start, request.end, request.pay13th, request.employeeIds);
     if (computed.fingerprint !== request.fingerprint) throw new AppError('Records changed after preview. Recalculate and review payroll.', 409);
     if (computed.blockers.length) throw new AppError(`Resolve payroll blockers before posting: ${computed.blockers.slice(0, 5).join(' ')}`);
-    const run = { ...computed, id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };
+    // Employees with attendance items still waiting for HR's payroll decision are held out of this run (listed on it);
+    // everyone else is processed. They are posted later, once each item has a documented decision.
+    // Audit trail on the run: who approved each HR-approved record (the latest approving change in the audit log).
+    const approver = store.db.prepare("SELECT actor, at FROM audit WHERE kind='attendance' AND record_id=? AND after_json LIKE '%\"approved\":true%' ORDER BY at DESC LIMIT 1");
+    const withApprovers = row => ({ ...row, attendanceValidation: (row.attendanceValidation || []).map(x => (x.status === 'hr-approved' && x.recordId && x.source === 'record approved by HR' ? (a => (a ? { ...x, by: a.actor, at: a.at } : x))(approver.get(x.recordId)) : x)) });
+    const postable = computed.rows.filter(row => !row.held).map(withApprovers);
+    if (!postable.length) throw new AppError(`Nothing to post: every employee has attendance items waiting for HR's payroll decision (${computed.reviewItems.length}). Record the decisions in the payroll review list.`);
+    const sum = key => Math.round(postable.reduce((total, row) => total + (row[key] || 0), 0) * 100) / 100;
+    const heldRows = computed.rows.filter(row => row.held).map(row => ({ employeeId: row.employeeId, employeeName: row.employeeName, items: row.reviewItems }));
+    const posting = { ...computed, rows: postable, heldEmployees: heldRows, reviewItems: computed.reviewItems, totals: { ...computed.totals, gross: sum('gross'), deductions: sum('totalDeductions'), net: sum('net'), employer: sum('employerTotal') } };
+    const run = { ...posting, id: randomUUID(), status: 'posted', postedBy: actor.username, postedAt: new Date().toISOString(), sources: { employeeProfiles: state.employeeProfiles || [], employees: state.employees, attendance: state.attendance.filter(a => a.date >= request.start && a.date <= request.end), leaves: state.leaves.filter(l => overlaps(l.startDate, l.endDate, request.start, request.end)), rules: state.rules, holidays: state.holidays, loans: structuredClone(state.loans), adjustments: state.adjustments.filter(a => a.date >= request.start && a.date <= request.end), leaveTypes: state.leaveTypes, overtimeRequests: (state.overtimeRequests || []).filter(o => o.date >= request.start && o.date <= request.end) } };
     for (const row of run.rows) for (const deduction of row.loanDeductions) {
       const loan = state.loans.find(l => l.id === deduction.loanId), before = structuredClone(loan);
       loan.balance = deduction.remainingBalance; loan.remainingTerms = deduction.remainingTerms;
@@ -245,6 +278,11 @@ export function postPayroll(store, actor, request) {
       store.log(actor, 'payroll-deduction', 'loans', loan.id, before, loan);
     }
     state.runs.push(run); state.version++; store.write(state);
+    // Overtime this payroll paid is marked Paid; overtime worked but not filed is carried over as Pending Overtime.
+    markOvertimePaid(store, run);
+    markCaseAdjustments(store, run);
+    const carried = carryUnfiledOvertime(store, run, state);
+    if (carried.length) store.notify(null, `${carried.length} unfiled overtime record${carried.length === 1 ? '' : 's'} from ${run.start} to ${run.end} carried over as Pending Overtime (Attendance → Overtime applications).`);
     const payDate = payDateFor(run.start, run.end);
     for (const row of run.rows) store.notify(row.employeeId, payDate <= new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()) ? `Your payslip for ${run.start} to ${run.end} is available.` : `Payroll for ${run.start} to ${run.end} is final. Your payslip will be available on salary day, ${payDate}.`);
     store.log(actor, 'post', 'runs', run.id, null, { start: run.start, end: run.end, totals: run.totals, fingerprint: run.fingerprint });

@@ -10,5 +10,5 @@ test('a time in after the scheduled end with no time out does not stop the payro
   s.openClockIns = [{ id: 'evening', employeeId: 'EMP-001', workDate: day, time: '18:12' }];
   const run = calculatePayroll(s, '2026-09-01', '2026-09-15', false, ['EMP-001']);
   assert.equal(run.rows.length, 1, 'payroll is computed');
-  assert.ok(run.blockers.some(b => b.includes(`timed in at 18:12 on ${day} with no time out`)), 'and the day is flagged for HR');
+  assert.ok(run.reviewItems.some(i => i.date === day && i.issue === 'missing-punch' && /Time in 18:12 with no time out/.test(i.detail)), 'and the day is flagged for HR');
 });

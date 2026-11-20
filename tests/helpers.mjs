@@ -11,3 +11,10 @@ export function completeState() {
   state.loans = [{ id: 'loan1', employeeId: 'EMP-001', type: 'Salary Loan', reference: 'TEST-001', original: 50000, balance: 1200, monthlyAmortization: 5000, perPayroll: 2500, startDate: '2026-01-01', endDate: '2026-12-31', terms: 20, remainingTerms: 1, authorized: true }];
   return state;
 }
+// HR's documented payroll decision for days with no valid attendance (Nov 20, 2026): a missing day is never an
+// automatic absence. Tests that pay a day as not credited record the decision explicitly.
+export function decide(state, employeeId, dates, mode = 'absent', note = 'Verified absent by HR (test)') {
+  const payrollDecisions = [...(state.validation?.payrollDecisions || []), ...dates.map(date => ({ id: `d-${employeeId}-${date}`, employeeId, date, mode, note, by: 'hr1', at: '2026-09-20T00:00:00.000Z' }))];
+  state.validation = { ...(state.validation || {}), payrollDecisions };
+  return state;
+}

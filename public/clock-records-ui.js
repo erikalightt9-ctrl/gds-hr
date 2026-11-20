@@ -18,7 +18,7 @@ export function createClockRecordsUi({ api, esc, badge, openDialog, employees, t
   const rows = () => list.filter(e => (!filters.employee || e.employeeId === filters.employee) && (!filters.type || typeOf(e) === filters.type) && (!filters.flagged || e.flags?.length));
 
   function render(box) {
-    const shown = rows(), count = t => list.filter(e => typeOf(e) === t).length, flagged = list.filter(e => e.flags?.length).length;
+    const shown = rows(), count = t => list.filter(e => typeOf(e) === t).length, flagged = list.filter(e => e.flags?.length && !e.flagResolution).length;
     const people = [...new Set(list.map(e => e.employeeId))].map(id => [id, name(id)]).sort((a, b) => a[1].localeCompare(b[1]));
     box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>Time in / out records</h2><p class="legend">Office attendance needs the authorized office Wi-Fi; off-site work records the confirmed address and GPS reading. Original records cannot be changed; HR corrections are listed separately.</p></div></div>
       <div class="ot-summary"><button data-cr-type="" class="${!filters.type && !filters.flagged ? 'active' : ''}"><strong>${list.length}</strong>All</button><button data-cr-type="office" class="${filters.type === 'office' ? 'active' : ''}"><strong>${count('office')}</strong>Office</button><button data-cr-type="offsite" class="${filters.type === 'offsite' ? 'active' : ''}"><strong>${count('offsite')}</strong>Off-site work</button><button data-cr-flagged class="${filters.flagged ? 'active' : ''}"><strong>${flagged}</strong>Flagged for review</button></div>
@@ -28,7 +28,7 @@ export function createClockRecordsUi({ api, esc, badge, openDialog, employees, t
         <td>${badge(TYPE_LABEL[typeOf(e)], typeOf(e) === 'offsite' ? 'pending' : typeOf(e) === 'correction' ? 'neutral' : '')}${e.reason ? `<small class="wrap">${esc(e.reason)}</small>` : ''}</td>
         <td class="wrap">${esc(e.place || e.address || '')}${e.addressCorrected ? `<small>Detected: ${esc(e.addressDetected)}</small>` : ''}</td>
         <td>${isCorrection(e) ? '<span class="muted">No GPS (HR correction)</span>' : `${esc(Number(e.latitude).toFixed(6))}, ${esc(Number(e.longitude).toFixed(6))}<small>±${esc(Math.round(e.accuracy))} m</small>`}</td>
-        <td>${network(e)}</td><td>${(e.flags || []).map(f => `<small class="ot-flag">⚠ ${esc(f)}</small>`).join('') || '<span class="muted">—</span>'}</td>
+        <td>${network(e)}</td><td>${(e.flags || []).map(f => `<small class="ot-flag">⚠ ${esc(f)}</small>`).join('') || '<span class="muted">—</span>'}${e.flagResolution ? `<small class="cr-resolved">✓ Resolved by ${esc(e.flagResolution.by)}: ${esc(e.flagResolution.note)}</small>` : e.flags?.length ? `<button class="small" data-cr-resolve="${esc(e.id)}">Resolve…</button>` : ''}</td>
         <td>${isCorrection(e) ? '' : `<button class="small" data-cr-map="${esc(e.id)}">Map</button>`}</td></tr>`).join('') || '<tr><td colspan="9" class="empty">Nothing to show yet.</td></tr>'}
       </tbody></table></div></section>`;
   }
@@ -59,6 +59,7 @@ export function createClockRecordsUi({ api, esc, badge, openDialog, employees, t
       if (b.hasAttribute('data-cr-type')) { filters = { ...filters, type: b.dataset.crType, flagged: false }; render(box); }
       if (b.hasAttribute('data-cr-flagged')) { filters = { ...filters, type: '', flagged: true }; render(box); }
       if (b.dataset.crMap) { const e = list.find(x => x.id === b.dataset.crMap); if (e) showMap(e); }
+      if (b.dataset.crResolve) { const note = window.prompt('How was this flag resolved? (e.g. confirmed with the supervisor; the employee was at the client site)'); if (note) api(`/clock/${b.dataset.crResolve}/resolve-flag`, { note }).then(() => load(box)).catch(error => window.alert(error.message)); }
     };
     load(box);
   }

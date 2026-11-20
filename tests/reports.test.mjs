@@ -24,7 +24,7 @@ test('every report downloads as a real Excel workbook and PDF', () => {
     for (const key of Object.keys(REPORTS).filter(k => !k.startsWith('my-'))) {
       const xlsx = buildReport(store, admin, key, 'xlsx'), pdf = buildReport(store, admin, key, 'pdf');
       assert.equal(xlsx.body.subarray(0, 2).toString(), 'PK', `${key} xlsx is a zip`);
-      assert.match(xlsx.filename, key === 'gov-contributions' ? /^gds-hr-government-contributions-\d{4}-\d{2}\.xlsx$/ : new RegExp(`^gds-hr-${key}-\\d{4}-\\d{2}-\\d{2}\\.xlsx$`));
+      assert.match(xlsx.filename, key === 'gov-contributions' ? /^gds-hr-government-contributions-\d{4}-\d{2}\.xlsx$/ : key === 'bir-1601c' ? /^gds-hr-bir-1601c-\d{4}-\d{2}\.xlsx$/ : new RegExp(`^gds-hr-${key}-\\d{4}-\\d{2}-\\d{2}\\.xlsx$`));
       assert.equal(pdf.body.subarray(0, 5).toString(), '%PDF-', `${key} pdf header`);
       assert.match(pdf.body.toString('latin1'), /%%EOF$/);
     }

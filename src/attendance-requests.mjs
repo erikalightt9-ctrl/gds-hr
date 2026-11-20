@@ -10,15 +10,30 @@ import { date } from './schema.mjs';
 import { scheduleOn } from './engine.mjs';
 import { getDocument } from './profiles.mjs';
 
-export const CATEGORIES = { 'forgot-in': 'Forgot to time in', 'forgot-out': 'Forgot to time out', failed: 'Failed or incorrect office time in / out', system: 'System error (app, website or server problem)', offsite: 'Off-site work reconsideration', other: 'Other reason' };
+export const CATEGORIES = { 'forgot-in': 'Missed time in', 'forgot-out': 'Missed time out', failed: 'Failed or incorrect office time in / out', system: 'System error (app, website or server problem)', offsite: 'Off-site work reconsideration', other: 'Other reason' };
 // Like a failed time in / out: transaction, requested times and a description of the problem.
 export const PROBLEM_CATEGORIES = ['failed', 'system', 'other'];
+// Missed time in / out (Nov 20, 2026 policy): a valid reason is required and HR verifies before approving.
+// Forgetfulness alone, without a justifiable explanation, is not accepted.
+export const MISSED_POLICY = 'Time correction requests for missed time-in or time-out entries must include a valid reason and are subject to HR verification and approval. Forgetfulness alone, without a justifiable explanation, will not be accepted as sufficient grounds for approval.';
+export const MISSED_CATEGORIES = ['forgot-in', 'forgot-out'];
+export const VERIFY_CATEGORIES = ['forgot-in', 'forgot-out', 'other'];
+export const MISSED_REASONS = ['Urgent work or meeting on arrival / departure', 'Official business or field work without access to TimeHub', 'Phone problem (no battery, broken, no data or signal)', 'Internet or power outage', 'TimeHub / app problem', 'Emergency (health, family or safety)', 'Instructed by the supervisor to start or leave immediately', 'Other justifiable reason'];
+export const VERIFY_METHODS = ['Supervisor / manager confirmation', 'CCTV or building / guard logbook', 'Work output, system or email logs', 'Client or site confirmation', 'Supporting document from the employee', 'Other (describe)'];
+const FORGET = /^(forgot|forget|forgets|forgotten|forgetting|forgetful|forgetfulness|nakalimutan|nalimutan|nakalimot|nalimot|limot|kalimutan|makalimutan)$/;
+const FILLER = new Set('i me my to the a an and or in out time timein timeout clock clockin clockout log login logout punch did didnt not t was it its that this just simply sorry really so because of on for today yesterday morning afternoon evening po ko mag magtime na ang ng sa yung kasi lang talaga ako ito mo record recorded entry entries again also only'.split(' '));
+// True when the explanation is only that the employee forgot (e.g. 'I forgot to time in', 'nakalimutan ko po mag time out').
+export function forgetfulnessOnly(text) {
+  const words = String(text || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+  return words.some(w => FORGET.test(w)) && words.filter(w => !FORGET.test(w) && !FILLER.has(w)).length < 3;
+}
 // "Ends the next day" with a time out later than the time in would be a shift over 24 hours (e.g. 09:00 – 18:05 next day).
 function assertShiftLength({ timeIn, timeOut, endNextDay }) {
   if (timeIn && timeOut && endNextDay && timeOut > timeIn) throw new AppError(`${timeIn} – ${timeOut} on the next day is more than 24 hours. Untick "Time out on the next day" unless the work ended after midnight.`);
 }
 export const STATUS_LABELS = { pending: 'Pending HR approval', review: 'Under review', info: 'Additional information required', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled by employee' };
-export const FILING_DAYS = 3;   // a correction is valid only within 3 days of the date to correct
+// Filing window: null = any earlier date whose payroll is not posted yet (opened by HR on Nov 20, 2026; was 3 days).
+export const FILING_DAYS = null;
 export const REVIEW_HOURS = 48;
 const OPEN = ['pending', 'review', 'info'];
 const time = z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal('')]).default('');
@@ -40,7 +55,9 @@ const employeeOf = (store, actor) => {
   if (!employee) throw new AppError('Your employee record was not found.', 404);
   return employee;
 };
-const posted = (state, employeeId, day) => state.runs.some(r => r.status === 'posted' && r.start <= day && r.end >= day && r.rows.some(row => row.employeeId === employeeId));
+// A day with an open incomplete-attendance case stays correctable after its payroll is posted (the difference is settled later).
+const openCase = (state, employeeId, day) => (state.attendanceCases || []).some(c => c.employeeId === employeeId && c.date === day && c.status === 'open');
+const posted = (state, employeeId, day) => !openCase(state, employeeId, day) && state.runs.some(r => r.status === 'posted' && r.start <= day && r.end >= day && r.rows.some(row => row.employeeId === employeeId));
 function checkEvidence(store, actor, ids) {
   for (const id of ids) {
     const doc = getDocument(store, actor, id);
@@ -52,17 +69,20 @@ const step = (r, actor, action, note = '', extra = {}) => ({ ...r, ...extra, upd
 const submitSchema = z.object({
   category: z.enum(Object.keys(CATEGORIES)), date, timeIn: time, timeOut: time, endNextDay: z.boolean().default(false),
   attendanceType: z.enum(['office', 'offsite']).default('office'), transaction: z.enum(['', 'in', 'out', 'both']).default(''),
-  location: text(300), purpose: text(300), reason: z.string().trim().min(5, 'Explain the reason (at least 5 characters).').max(2000), problem: text(2000),
+  location: text(300), purpose: text(300), reason: z.string().trim().min(5, 'Explain the reason (at least 5 characters).').max(2000), problem: text(2000), reasonType: z.union([z.literal(''), z.enum(MISSED_REASONS)]).default(''),
   evidence: z.array(z.string().max(80)).max(5).default([]),
 }).strict();
 
 export function submitAttendanceRequest(store, actor, input, now = new Date()) {
   const employee = employeeOf(store, actor), v = submitSchema.parse(input), today = local(now).slice(0, 10);
-  const earliest = local(new Date(now.getTime() - FILING_DAYS * 86400000)).slice(0, 10);
+  const earliest = FILING_DAYS ? local(new Date(now.getTime() - FILING_DAYS * 86400000)).slice(0, 10) : '';
   if (v.date > today) throw new AppError('Attendance requests are for today or earlier days.');
-  if (v.date < earliest) throw new AppError(`Attendance correction requests are valid only within ${FILING_DAYS} days of the date to correct. Contact HR for older dates.`);
+  if (earliest && v.date < earliest) throw new AppError(`Attendance correction requests are valid only within ${FILING_DAYS} days of the date to correct. Contact HR for older dates.`);
   if (v.category === 'forgot-in' && !v.timeIn) throw new AppError('Enter the time you started work.');
   if (v.category === 'forgot-out' && !v.timeOut) throw new AppError('Enter the time you finished work.');
+  if (MISSED_CATEGORIES.includes(v.category) && !v.reasonType) throw new AppError('Choose why the time in / out could not be recorded.');
+  if (MISSED_CATEGORIES.includes(v.category) && v.reason.length < 20) throw new AppError('Explain what prevented you from timing in / out (at least 20 characters).');
+  if (forgetfulnessOnly(v.reason)) throw new AppError('Forgetfulness alone is not accepted as a reason. Explain what prevented you from timing in / out (for example an urgent task on arrival, a phone or connection problem, or field work).');
   if ([...PROBLEM_CATEGORIES, 'offsite'].includes(v.category) && !v.timeIn && !v.timeOut) throw new AppError('Enter the requested time in and / or time out.');
   if (PROBLEM_CATEGORIES.includes(v.category) && !v.problem) throw new AppError('Describe the problem you had when timing in or out.');
   if ((v.category === 'forgot-in' || v.category === 'offsite') && !v.location) throw new AppError('Enter the exact place where you worked.');
@@ -166,9 +186,14 @@ export function rejectAttendanceRequest(store, actor, id, input) {
 // Approve: HR may approve other times than filed (remark required). The day's record is created or corrected as an
 // HR-approved adjustment; a time in alone for today becomes an approved time in so the employee can time out normally.
 export function approveAttendanceRequest(store, actor, id, input, now = new Date()) {
-  const v = z.object({ timeIn: time, timeOut: time, endNextDay: z.boolean().optional(), remarks: text(2000) }).strict().parse(input);
+  const v = z.object({ timeIn: time, timeOut: time, endNextDay: z.boolean().optional(), remarks: text(2000), verifiedBy: z.union([z.literal(''), z.enum(VERIFY_METHODS)]).default(''), verification: text(1000) }).strict().parse(input);
   return hrAction(store, actor, id, r => {
     if (!OPEN.includes(r.status)) throw new AppError('This request is already decided.');
+    if (VERIFY_CATEGORIES.includes(r.category)) {
+      if (!v.verifiedBy) throw new AppError('Record how HR verified the missed time in / out (supervisor confirmation, CCTV or logbook, work logs, …).');
+      if (v.verification.length < 5) throw new AppError('Describe the verification (who confirmed, what record was checked).');
+      if (forgetfulnessOnly(r.reason) && v.remarks.length < 10) throw new AppError('The employee\'s reason is forgetfulness alone. Reject it, ask for information, or state in the HR remarks the justifiable reason that was established.');
+    }
     const approved = { timeIn: v.timeIn || r.timeIn, timeOut: v.timeOut || r.timeOut, endNextDay: v.endNextDay ?? r.endNextDay };
     assertShiftLength(approved);
     const changed = approved.timeIn !== r.timeIn || approved.timeOut !== r.timeOut || approved.endNextDay !== r.endNextDay;
@@ -197,7 +222,7 @@ export function approveAttendanceRequest(store, actor, id, input, now = new Date
       result = { id: `clock-${openIn.id}`, applyAtTimeOut: true };
     } else if (!approved.timeOut) throw new AppError('This day has no time out on record. Enter the approved time out as well.');
     else throw new AppError('This day has no time in on record. Enter the approved time in as well.');
-    const decision = { by: actor.username, at: new Date().toISOString(), remarks: v.remarks, approved, ...(result.applyAtTimeOut ? { applyAtTimeOut: true } : {}), requested: { timeIn: r.timeIn, timeOut: r.timeOut, endNextDay: r.endNextDay }, original: record ? { timeIn: record.timeIn, timeOut: record.timeOut, status: record.status, endNextDay: record.endNextDay } : r.original };
+    const decision = { by: actor.username, at: new Date().toISOString(), remarks: v.remarks, approved, ...(v.verifiedBy ? { verification: { method: v.verifiedBy, note: v.verification } } : {}), ...(result.applyAtTimeOut ? { applyAtTimeOut: true } : {}), requested: { timeIn: r.timeIn, timeOut: r.timeOut, endNextDay: r.endNextDay }, original: record ? { timeIn: record.timeIn, timeOut: record.timeOut, status: record.status, endNextDay: record.endNextDay } : r.original };
     const next = step(r, actor, 'approved', v.remarks, { status: 'approved', decision, attendanceId: result.id }); save(store, next);
     store.log(actor, 'approve', 'attendance-request', id, r, next);
     store.notify(r.employeeId, `Your request ${r.reference} (${r.date}) was approved${changed ? ` with time ${approved.timeIn || '—'} – ${approved.timeOut || '—'}` : ''}.${v.remarks ? ` HR: ${v.remarks}` : ''}`);

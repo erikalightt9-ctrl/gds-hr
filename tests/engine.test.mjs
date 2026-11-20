@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultRules } from '../src/defaults.mjs';
 import { calculatePayroll, dayRate, nightMinutes, leaveBalance, workMinutes } from '../src/engine.mjs';
-import { completeState } from './helpers.mjs';
+import { completeState, decide } from './helpers.mjs';
 
 import { fixture, attend } from './engine-fixture.mjs';
 // Present on every other scheduled weekday of the cutoff (days without attendance are not credited).
@@ -145,16 +145,23 @@ test('invalid shift duration, overlapping breaks and invalid dates are rejected'
 });
 test('unworked holiday on a rest day needs an eligibility record before posting', () => {
   const s = completeState(); s.holidays = [{ id: 'h', date: '2026-09-06', kind: 'regular' }];
-  assert.ok(calculatePayroll(s, '2026-09-01', '2026-09-15').blockers.some(b => b.includes('2026-09-06')));
+  assert.ok(calculatePayroll(s, '2026-09-01', '2026-09-15').reviewItems.some(i => i.date === '2026-09-06' && i.issue === 'missing-punch'), 'held for HR review');
   s.attendance.push(attend('2026-09-06', { status: 'off', timeIn: '', timeOut: '' }));
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday, 1363.64);
 });
 
-test('scheduled workdays with no attendance are not credited: 0 days worked means 0 basic pay, and the payroll stays flagged', () => {
+test('scheduled workdays with no attendance are never an automatic absence: held for HR review until HR documents a decision', () => {
   const s = fixture(); s.attendance = [];
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
-  assert.equal(row.earnings.basic, 0, 'no days worked, no basic pay');
-  assert.ok(p.blockers.some(b => /Missing attendance/.test(b)), 'still flagged for review before finalizing');
+  assert.ok(row.held, 'held out of posting');
+  assert.equal(row.reviewItems.length, 11); assert.ok(row.reviewItems.every(i => i.issue === 'missing-punch'));
+  assert.equal(row.deductions.absence, 0, 'not deducted automatically');
+  const days = row.reviewItems.map(i => i.date);
+  decide(s, 'EMP-001', days);
+  const after = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(after.earnings.basic, 0, 'HR recorded every day absent: no basic pay');
+  assert.equal(after.held, false);
+  assert.ok(after.attendanceValidation.every(v => v.status === 'decided' && v.decision === 'absent'));
 });
 
 test('payroll is real time: unapproved attendance and a time-in without time out are counted, and stay flagged', () => {
@@ -164,7 +171,7 @@ test('payroll is real time: unapproved attendance and a time-in without time out
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
   assert.equal(row.daysPresent, 11, 'the open time-in day and the unapproved day both count');
   assert.equal(row.creditedDays, 10.94, '30 minutes late on the open day: 11 - 30/480 = 10.9375 → 10.94');
-  assert.ok(p.blockers.some(b => /no time out yet/.test(b)) && p.blockers.some(b => /not approved/.test(b)), 'flagged until complete');
+  assert.ok(p.reviewItems.some(i => i.date === '2026-09-01' && i.issue === 'missing-punch' && /no time out/.test(i.detail)) && p.reviewItems.some(i => i.date === '2026-09-02' && i.issue === 'manual-entry'), 'specific issue per day until resolved');
 });
 
 test('half-day leave: the leave half is paid (or deducted when unpaid); the worked half has no undertime', () => {
@@ -246,8 +253,8 @@ test('HR can waive the open time-in check for a cutoff: pay is unchanged, the bl
   const before = calculatePayroll(s, '2026-09-01', '2026-09-15');
   s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveOpenTimeIn: true, updatedBy: 'hr1' }];
   const after = calculatePayroll(s, '2026-09-01', '2026-09-15');
-  assert.ok(before.blockers.some(b => /no time out yet/.test(b)));
-  assert.ok(!after.blockers.some(b => /no time out yet/.test(b)), 'waived');
+  assert.ok(before.reviewItems.some(i => i.issue === 'missing-punch' && i.date === '2026-09-01'));
+  assert.ok(!after.reviewItems.some(i => i.date === '2026-09-01'), 'waived');
   assert.equal(after.rows[0].net, before.rows[0].net, 'pay unchanged');
   assert.ok(after.rows[0].trace.some(t => /Waived by hr1: time in 08:30 on 2026-09-01/.test(t.formula)));
 });

@@ -49,7 +49,7 @@ test('every change is audited with previous and updated values; salary is stripp
   const store = fixture();
   try {
     const e = store.read().employees[0];
-    saveRecord(store, admin, 'employees', { ...e, monthlySalary: 35000, department: 'Finance' });
+    saveRecord(store, admin, 'employees', { ...e, monthlySalary: 35000, department: 'Finance' }, { salaryChange: 'test-change' });
     store.log(admin, 'post', 'runs', 'run-1', null, { net: 12345 });
     const full = visibleAudit(store, admin).find(a => a.kind === 'employees');
     const fields = auditChanges(full).map(c => c.field);
