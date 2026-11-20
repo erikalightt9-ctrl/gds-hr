@@ -6,6 +6,7 @@ import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
 import { memoPdf, officialPdf } from './memo-letter.mjs';
+import { pendingSalaryChanges } from './salary-changes.mjs';
 import { recordView, requestClarification, answerClarification, recordPaperAck, ackEvidence } from './memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
@@ -137,6 +138,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     items.push(...disciplineBell(store, actor));
     const memos = memoSummary(store, actor);
     if (memos.overdue) items.push({ text: `${memos.overdue} overdue memo acknowledgement${memos.overdue === 1 ? '' : 's'}`, nav: 'memos' });
+    for (const c of pendingSalaryChanges(store, actor)) items.push({ text: `Salary change for ${c.employeeName} (effective ${c.effectiveDate}) waiting for your approval`, nav: 'employee201', id: c.employeeId, tab: 'compensation', date: c.requestedAt.slice(0, 10) });
     if (memos.clarifications) items.push({ text: `${memos.clarifications} memo clarification request${memos.clarifications === 1 ? '' : 's'} waiting for an answer`, nav: 'memos' });
     send(200, { count: items.length, items }); return true;
   }

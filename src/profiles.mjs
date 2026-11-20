@@ -65,7 +65,7 @@ export function derivedInformation(e, personal = {}, asOf = localToday()) {
   }
   return { age: personal.birthDate ? Math.floor(monthsBetween(personal.birthDate, asOf) / 12) : null, serviceMonths, serviceYears: serviceMonths === null ? null : Math.floor(serviceMonths / 12), nextAnniversary };
 }
-export function saveProfile(store, actor, id, section, input) {
+export function saveProfile(store, actor, id, section, input, { salaryChange = null } = {}) {
   if (!Object.hasOwn(profileSchemas, section)) throw new AppError('Unknown profile section.', 404);
   if (!canWriteSection(actor, section)) throw new AppError('You cannot edit this profile section.', 403);
   const value = sectionNames(section, profileSchemas[section].parse(input));
@@ -75,6 +75,11 @@ export function saveProfile(store, actor, id, section, input) {
     if (section === 'employment' && value.regularizationDate && employee.startDate && value.regularizationDate < employee.startDate) throw new AppError('Regularization precedes joining date.');
     if (section === 'leave' && value.entitlements.some(e => !state.leaveTypes.some(t => t.id === e.typeId))) throw new AppError('Unknown leave type.');
     const old = store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section);
+    // Pay rates and basis change only through an approved salary change (salary-changes.mjs).
+    if (section === 'payroll' && old && !salaryChange) {
+      const was = JSON.parse(old.data), moved = k => was[k] != null && was[k] !== '' && (value[k] ?? null) !== was[k];
+      if (moved('dailyRate') || moved('hourlyRate') || moved('basis')) throw new AppError('Pay rates and the pay basis are changed through Compensation → Request salary change (reason, effective date and a second approver).');
+    }
     const master = state.employees.find(e => e.id === id), previousMaster = structuredClone(master);
     if (section === 'personal') {
       const given = [value.firstName, value.middleName, value.suffix].filter(Boolean).join(' ');

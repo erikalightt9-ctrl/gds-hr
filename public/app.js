@@ -1101,6 +1101,7 @@ function edit(kind, id, preset = {}) {
   if (kind === 'leaves' && /^[a-f0-9-]{36}$/.test(existing?.documentReference || '')) {
     const attachment = document.createElement('a'); attachment.href = `/api/documents/${existing.documentReference}/content`; attachment.textContent = 'Download supporting document'; attachment.className = 'button'; form.querySelector('.dialog-body').prepend(attachment);
   }
+  if (kind === 'employees' && existing?.monthlySalary != null && form.elements.monthlySalary) { form.elements.monthlySalary.readOnly = true; form.elements.monthlySalary.title = 'Changed through 201 file → Compensation → Request salary change (second approver)'; }
   if (kind === 'employees') {
     const updateDraft = () => {
       const draft = form.elements.draft.checked;

@@ -31,7 +31,7 @@ function validateBrackets(brackets, name) {
   });
 }
 // `trusted` is for internal callers (e.g. the 201 form) that have already checked a narrower permission.
-export function saveRecord(store, actor, kind, input, { trusted = false } = {}) {
+export function saveRecord(store, actor, kind, input, { trusted = false, salaryChange = null } = {}) {
   if (!schemas[kind]) throw new AppError('Unknown record type.', 404);
   if (!trusted) permit(actor, entityRoles[kind]);
   const recordInput = { ...input };
@@ -40,6 +40,13 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
   const value = schemas[kind].parse(recordInput);
   return store.transaction(() => {
     const state = store.read(), previous = state[kind].find(x => x.id === value.id);
+    // Salaries change only through an approved salary change (reason, effective date, second approver; salary-changes.mjs).
+    if (kind === 'employees' && previous && previous.monthlySalary != null && value.monthlySalary !== previous.monthlySalary && !salaryChange) throw new AppError('A salary is changed through Compensation → Request salary change (reason, effective date and a second approver), not edited directly.');
+    if (kind === 'employees' && value.monthlySalary != null && (previous?.monthlySalary ?? null) === null) {
+      store.db.exec('CREATE TABLE IF NOT EXISTS salary_changes (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL)');
+      const at = new Date().toISOString();
+      store.db.prepare('INSERT INTO salary_changes(id,employee_id,status,data) VALUES(?,?,?,?)').run(randomUUID(), value.id, 'initial', JSON.stringify({ employeeId: value.id, employeeName: value.name, before: { monthlySalary: null }, after: { monthlySalary: value.monthlySalary }, effectiveDate: value.startDate || at.slice(0, 10), reason: 'Starting salary entered', status: 'initial', requestedBy: actor.username, requestedAt: at, decidedBy: actor.username, decidedAt: at }));
+    }
     if (kind === 'employees' && previous) {
       const personal = store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(value.id);
       if (personal && value.name !== previous.name) throw new AppError('Update the name in Personal Information so all name fields stay synchronized.');
