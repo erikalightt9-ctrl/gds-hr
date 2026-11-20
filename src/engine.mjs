@@ -349,7 +349,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         continue;
       }
       if (!record) {
-        if ((!rest || kind !== 'rest') && !perDayWorked) blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
+        // Missing: an ordinary workday, or a regular / double holiday (its pay depends on the eligibility record). An
+        // unworked special non-working day needs no record: it stays paid without one (Nov 20, 2026).
+        if (!perDayWorked && ((!rest && kind === 'ordinary') || ['regular', 'double'].includes(kind.replace('-rest', '')))) blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
         // No attendance on a scheduled workday: the day is not credited (no pay) until attendance or a leave is recorded.
         if (!rest && kind === 'ordinary' && !notYet(d)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day with no attendance record (not credited)`, null, d);
         else if (!rest && notYet(d)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);

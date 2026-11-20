@@ -88,3 +88,11 @@ test('a holiday that has not arrived yet is not paid in advance', () => {
   assert.equal(before.holidayDays, 1, 'only Nov 2'); assert.equal(after.holidayDays, 2, 'Nov 13 once it arrives');
   assert.equal(round2(after.earnings.basic - before.earnings.basic), 755);
 });
+
+test('an unworked special non-working day with no attendance record is not flagged as missing (rest day or workday); an ordinary workday still is', () => {
+  const s = state({ basis: 'monthly' });
+  const blockers = calculatePayroll(s, '2026-11-01', '2026-11-15').blockers;
+  assert.ok(!blockers.some(b => /Missing attendance.*2026-11-0[12]/.test(b)), 'Nov 1 (Sunday holiday) and Nov 2 (workday holiday) need no record');
+  const withoutNov3 = { ...s, attendance: s.attendance.filter(a => a.date !== '2026-11-03') };
+  assert.ok(calculatePayroll(withoutNov3, '2026-11-01', '2026-11-15').blockers.some(b => b.includes('Missing attendance / approved leave on 2026-11-03')));
+});

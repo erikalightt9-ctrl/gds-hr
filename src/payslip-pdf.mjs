@@ -106,7 +106,7 @@ export function renderPayslipPdf(slip, { draft = slip.draft, designation = '', n
   y = header('EMPLOYEE INFORMATION', y);
   const daily = slip.payBasis === 'daily';
   const info = [['Employee name', slip.employeeName.toUpperCase()], ['Employee ID', slip.employeeId], ['Designation', designation || '-'],
-    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days (month)', slip.monthWorkingDays ? `${slip.monthWorkingDays} (${slip.workingDays} this cutoff)` : String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.holidayDays ? [['Holiday days', `${days2(slip.holidayDays)}${slip.holidayDates?.length ? ` (${slip.holidayDates.map(d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })).join(', ')})` : ''}`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
+    [daily ? 'Daily rate' : 'Monthly salary', amount(daily ? slip.dailyRate : slip.monthlySalary)], ['Working days', slip.monthWorkingDays ? `${slip.workingDays ?? '-'} (${slip.monthWorkingDays} this month)` : String(slip.workingDays ?? '-')], ['Days credited', days2(slip.daysCredited ?? slip.creditedDays ?? slip.daysPresent)], ...(slip.holidayDays ? [['Holiday days', `${days2(slip.holidayDays)}${slip.holidayDates?.length ? ` (${slip.holidayDates.map(d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })).join(', ')})` : ''}`]] : []), ...(slip.leaves ? [['Paid leave dates', slip.leaves]] : [])];
   const KEY = LEFT + 190;
   for (const [label, value] of info) {
     p.line(LEFT, y - 18, RIGHT, y - 18); p.line(KEY, y, KEY, y - 18);

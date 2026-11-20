@@ -32,3 +32,11 @@ test('Nov 2 (a holiday on a workday) is a scheduled working day and a credited H
   const r = row(state([0]), '2026-11-01', '2026-11-15');
   assert.equal(r.workingDays, 12); assert.equal(r.holidayDays, 1);
 });
+
+test('working days of the payroll period: start and end included, rest days excluded, follows the period and the rest day', () => {
+  assert.equal(row(state([0]), '2026-11-01', '2026-11-15').workingDays, 12, 'Nov 1-15, Sunday rest');
+  assert.equal(row(state([6]), '2026-11-01', '2026-11-15').workingDays, 13, 'Nov 1-15, Saturday rest');
+  assert.equal(row(state([0]), '2026-11-16', '2026-11-30').workingDays, 13, 'Nov 16-30, Sunday rest');
+  assert.equal(row(state([0]), '2028-02-16', '2028-02-29').workingDays, 12, 'Feb 16-29, 2028 (leap year), Sunday rest');
+  assert.equal(row(state([0, 6]), '2028-02-16', '2028-02-29').workingDays, 10, 'two rest days');
+});
