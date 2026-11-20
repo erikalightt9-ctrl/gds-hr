@@ -207,6 +207,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      // The service account (integrations such as the AI assistant) reads only: changes and approvals need a named person.
+      if (auth.user.service && mutation && !['/api/logout', '/api/password'].includes(pathname)) throw new AppError('The service account is read-only. Changes and approvals must be made with a named person\'s account.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
       if (auth.user.mustChangePassword && !['/api/events', '/api/logout', '/api/password', '/api/version'].includes(pathname)) throw new AppError('Choose your own password first.', 403);

@@ -134,7 +134,16 @@ export function saveRecord(store, actor, kind, input, { trusted = false, salaryC
       if (state.rules.some(r => r.id !== value.id && r.approvedBy && r.effectiveDate === value.effectiveDate)) throw new AppError('An approved rules version already uses that effective date.');
       Object.entries(value.contributions).forEach(([name, brackets]) => validateBrackets(brackets, name));
       validateBrackets(value.taxBrackets, 'Tax');
-      value.approvedBy = value.approvedBy ? actor.username : ''; value.updatedAt = new Date().toISOString();
+      // An approved version is locked (only the Admin review checkboxes may change); changes need a new version.
+      if (previous?.approvedBy) {
+        const REVIEW = ['contributionsReviewed', 'calendarReviewedYears', 'updatedAt', 'approvedBy', 'approvedAt'];
+        const parsed = schemas.rules.safeParse(previous), was = parsed.success ? parsed.data : previous;
+        const changed = Object.keys({ ...was, ...value }).filter(k => !REVIEW.includes(k) && JSON.stringify(was[k]) !== JSON.stringify(value[k]));
+        if (changed.length) throw new AppError(`This rules version was approved by ${previous.approvedBy}${previous.approvedAt ? ` on ${previous.approvedAt.slice(0, 10)}` : ''} and is locked. Create a new version with a later effective date to change: ${changed.slice(0, 6).join(', ')}.`);
+        if (!value.approvedBy) throw new AppError('An approved rules version cannot be unapproved. Create a new version instead.');
+        value.approvedBy = previous.approvedBy; value.approvedAt = previous.approvedAt || '';
+      } else { value.approvedBy = value.approvedBy ? actor.username : ''; value.approvedAt = value.approvedBy ? new Date().toISOString() : ''; }
+      value.updatedAt = new Date().toISOString();
     }
     if (kind === 'attendance' && (previous || correctionReason !== undefined) && (typeof correctionReason !== 'string' || correctionReason.trim().length < 3 || correctionReason.length > 2000)) throw new AppError('Enter a reason for the attendance correction or approval (3–2,000 characters).');
     state[kind] = [...state[kind].filter(x => x.id !== value.id), value];
