@@ -10,7 +10,7 @@ import { mailerFromEnv } from './mailer.mjs';
 import { handleHrRoutes } from './hr-routes.mjs';
 import { handleComplianceRoutes } from './compliance-routes.mjs';
 import { dayStatuses } from './attendance-days.mjs';
-import { refreshCases, listCases, myCases, setTreatment, decideOverpayment } from './attendance-cases.mjs';
+import { refreshCases, endOfDayCheck, listCases, myCases, setTreatment, decideOverpayment } from './attendance-cases.mjs';
 import { sendDailyReminders } from './memo-tracking.mjs';
 import { recordPayrollDecision } from './attendance-validation.mjs';
 import { requestSalaryChange, decideSalaryChange, salaryHistory, applyDueSalaryChanges } from './salary-changes.mjs';
@@ -574,7 +574,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const tardinessCheck = () => { try { const sent = runTardinessMemos(store); if (sent.length) console.log(`Monthly tardiness memos sent: ${sent.map(s => `${s.employeeId} (${s.occurrences})`).join(', ')}.`); } catch (error) { console.error('tardiness memo check failed:', error.message); } };
   tardinessCheck(); setInterval(tardinessCheck, 3600000).unref();
   // Attendance requests waiting for HR longer than 48 hours: one HR reminder per request per day; checked every hour.
-  const requestCheck = () => { try { remindOverdueRequests(store); } catch (error) { console.error('attendance request reminder failed:', error.message); } try { refreshCases(store); } catch (error) { console.error('incomplete attendance check failed:', error.message); } try { sendDailyReminders(store, new Date(), id => dpReminderLines(store, id)); } catch (error) { console.error('daily memo / notice reminder failed:', error.message); } try { applyDueSalaryChanges(store); } catch (error) { console.error('salary change apply failed:', error.message); } };
+  const requestCheck = () => { try { remindOverdueRequests(store); } catch (error) { console.error('attendance request reminder failed:', error.message); } try { refreshCases(store); } catch (error) { console.error('incomplete attendance check failed:', error.message); } try { endOfDayCheck(store); } catch (error) { console.error('end-of-day check failed:', error.message); } try { sendDailyReminders(store, new Date(), id => dpReminderLines(store, id)); } catch (error) { console.error('daily memo / notice reminder failed:', error.message); } try { applyDueSalaryChanges(store); } catch (error) { console.error('salary change apply failed:', error.message); } };
   requestCheck(); setInterval(requestCheck, 3600000).unref();
   // Attendance reminders (5 minutes before the scheduled start / after the scheduled end, Philippine Time), every minute.
   const reminderCheck = () => runReminders(store, new Date(), { subject: origin }).catch(error => console.error('attendance reminder check failed:', error.message));

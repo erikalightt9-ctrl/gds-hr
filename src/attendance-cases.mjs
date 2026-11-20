@@ -158,3 +158,27 @@ export function myCases(store, actor) {
   return all(store).filter(c => c.employeeId === actor.employeeId).sort((a, b) => b.date.localeCompare(a.date))
     .map(c => ({ id: c.id, date: c.date, issue: c.issue, issueLabel: ISSUE_LABELS[c.issue], status: c.status, due: c.due, overdue: c.status === 'open' && today > c.due, timeIn: c.timeIn, timeOut: c.timeOut, correction: correctionOf(store, c.employeeId, c.date), payment: paymentLabel(state, c) }));
 }
+
+// End-of-day check (Nov 20, 2026): one hour after the scheduled end of today's shift, an employee with a time in and no
+// time out is reminded once (time out now, or file a Missed time out request) and HR gets one summary. The day becomes
+// an incomplete-attendance case later by the usual rule if it is still open.
+export const EOD_GRACE_MINUTES = 60;
+export function endOfDayCheck(store, now = new Date()) {
+  const state = store.read(), local = new Date(now.getTime() + 8 * 3600000).toISOString(), today = local.slice(0, 10), minutes = Number(local.slice(11, 13)) * 60 + Number(local.slice(14, 16));
+  const flagged = [];
+  for (const open of (state.openClockIns || []).filter(c => c.workDate === today)) {
+    const e = state.employees.find(x => x.id === open.employeeId);
+    if (!e || isRest(e, today)) continue;
+    const profile = (state.employeeProfiles || []).find(p => p.employeeId === e.id && p.section === 'attendance') || {};
+    const end = profile.scheduleEnd || '';
+    const [h, m] = String(end || '').split(':').map(Number);
+    if (!Number.isFinite(h) || minutes < h * 60 + (m || 0) + EOD_GRACE_MINUTES) continue;
+    const key = `eod:${e.id}:${today}`;
+    if (store.db.prepare('SELECT 1 FROM hr_counters WHERE key=?').get(key)) continue;
+    store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run(key);
+    store.notify(e.id, `You timed in at ${open.time} today and have not timed out (your schedule ended at ${end}). Time out now if you are still working; otherwise file Attendance → Requests → Missed time out with the actual time and the reason.`);
+    flagged.push(`${e.name} (in ${open.time})`);
+  }
+  if (flagged.length) store.notify(null, `End of day ${today}: ${flagged.length} employee${flagged.length === 1 ? '' : 's'} still without a time out — ${flagged.join(', ')}.`);
+  return flagged.length;
+}

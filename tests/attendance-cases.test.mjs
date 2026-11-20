@@ -105,3 +105,16 @@ test('corrections after payment: only the difference; underpayment paid next pay
     assert.equal(run(store, '2026-12-01', '2026-12-15').rows[0]?.caseAdjustments?.length ?? 0, 0, 'never paid twice');
   } finally { store.close(); }
 });
+
+test('end-of-day check: an hour after the shift, a time in without a time out reminds the employee once and HR once', async () => {
+  const { endOfDayCheck } = await import('../src/attendance-cases.mjs');
+  const store = fixture();
+  try {
+    assert.equal(endOfDayCheck(store, new Date('2026-11-05T08:30:00Z')), 0, '16:30: still within the hour after 16:00');
+    assert.equal(endOfDayCheck(store, new Date('2026-11-05T09:30:00Z')), 1, '17:30: reminded');
+    assert.equal(endOfDayCheck(store, new Date('2026-11-05T10:30:00Z')), 0, 'only once');
+    const notes = store.db.prepare('SELECT employee_id, message FROM notifications').all();
+    assert.ok(notes.some(n => n.employee_id === 'EMP-001' && /have not timed out/.test(n.message)));
+    assert.ok(notes.some(n => n.employee_id === null && /still without a time out/.test(n.message)));
+  } finally { store.close(); }
+});
