@@ -5,6 +5,7 @@ import { CATEGORIES as REQUEST_CATEGORIES, ensure as ensureAttendanceRequests } 
 import { visibleAudit, auditChanges, uploadDocument } from './profiles.mjs';
 import { profileExtras, saveProfileSection, readSettings, saveSettings, directory, createEmployee, updateEmployee, employeeForm, archiveEmployee, restoreEmployee, dashboard, assertCanView, leaveCredits, saveLeaveCredits } from './hr201.mjs';
 import { checklistFor, employeeChecklist, upload201, reviewDocument, setNotApplicable, document201Content, documentSummary } from './documents201.mjs';
+import { memoPdf } from './memo-letter.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
 import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
@@ -59,6 +60,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if ((p = m(/^\/api\/hr\/me\/loans\/([a-f0-9-]+)\/cancel$/)) && method === 'POST') { send(200, cancelLoanApplication(store, actor, p[1])); return true; }
     if (pathname === '/api/hr/me/profile' && method === 'GET') { send(200, employeeForm(store, actor, actor.employeeId)); return true; }
     if (pathname === '/api/hr/me/memos' && method === 'GET') { send(200, myMemos(store, actor)); return true; }
+    if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)(?:\/(\d+))?\.pdf$/)) && method === 'GET') { const out = memoPdf(store, actor, p[1], p[2] ? Number(p[2]) : null); res.writeHead(200, fileHeaders({ mime: 'application/pdf', name: out.filename }, url.searchParams.has('download'))); res.end(out.body); return true; }
     if ((p = m(/^\/api\/hr\/me\/memos\/([a-f0-9-]+)\/(\d+)\/acknowledge$/)) && method === 'POST') { send(200, acknowledgeMemo(store, actor, p[1], Number(p[2]))); return true; }
     if (pathname === '/api/hr/me/trainings' && method === 'GET') { send(200, myTrainings(store, actor)); return true; }
     if ((p = m(/^\/api\/hr\/me\/trainings\/([a-f0-9-]+)\/registration$/)) && method === 'POST') { const b = await readBody(req); send(200, updateParticipant(store, actor, p[1], actor.employeeId, { registration: b.registration })); return true; }
@@ -185,6 +187,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
 
   // ---------- Memos ----------
   if (pathname === '/api/hr/memos' && method === 'GET') { send(200, listMemos(store, actor)); return true; }
+  if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)(?:\/(\d+))?\.pdf$/)) && method === 'GET') { const out = memoPdf(store, actor, p[1], p[2] ? Number(p[2]) : null); res.writeHead(200, fileHeaders({ mime: 'application/pdf', name: out.filename }, url.searchParams.has('download'))); res.end(out.body); return true; }
   if (pathname === '/api/hr/memos' && method === 'POST') { send(201, saveMemoDraft(store, actor, null, await readBody(req))); return true; }
   if ((p = m(/^\/api\/hr\/memos\/([a-f0-9-]+)$/))) {
     if (method === 'GET') { send(200, memoDetail(store, actor, p[1])); return true; }

@@ -262,3 +262,24 @@ test('remittance-only profiles (e.g. the CEO) receive no memos', async () => {
     assert.equal(myMemos(store, { role: 'employee', username: 'ceo', employeeId: ceo }).length, 0);
   } finally { store.close(); }
 });
+
+test('memo PDF: letterhead letter for HR (draft band before issue) and for the employee it is addressed to only', async () => {
+  const { memoPdf } = await import('../src/memo-letter.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const b = createEmployee(store, hr, form('Ben', 'Other', { employment: { department: 'Finance' } })).created.id;
+    const memo = saveMemoDraft(store, staff, null, { title: 'Demo policy update', issueDate: '2026-10-01', body: 'Fictional memo text.\n'.repeat(120), recipients: { mode: 'departments', departments: ['Operations'] }, ackRequired: true, ackDeadline: '' });
+    const draft = memoPdf(store, hr, memo.id);
+    assert.match(draft.body.subarray(0, 8).toString('latin1'), /^%PDF-/);
+    assert.match(draft.body.toString('latin1'), /DRAFT - NOT ISSUED/);
+    assert.throws(() => memoPdf(store, { role: 'employee', username: 'ana', employeeId: a }, memo.id), /not addressed to you/);
+    publishMemo(store, hr, memo.id);
+    const issued = memoPdf(store, hr, memo.id), text = issued.body.toString('latin1');
+    assert.ok(!/DRAFT - NOT ISSUED/.test(text)); assert.match(text, /MEMORANDUM/); assert.match(text, /Demo policy update/);
+    assert.match(text, /\/Count [2-9]/, 'a long memo runs over several pages');
+    assert.equal(issued.filename, `${listMemos(store, hr)[0].reference}.pdf`);
+    assert.ok(memoPdf(store, { role: 'employee', username: 'ana', employeeId: a }, memo.id).body.length > 1000);
+    assert.throws(() => memoPdf(store, { role: 'employee', username: 'ben', employeeId: b }, memo.id), /not addressed to you/);
+  } finally { store.close(); }
+});

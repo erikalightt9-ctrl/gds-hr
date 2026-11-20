@@ -21,7 +21,7 @@ function wrap(text, size, width) {
   }
   return lines;
 }
-function letterPdf({ title, fields, body, signature = [], receipt = false, draft = false }) {
+export function letterPdf({ title, fields, body, signature = [], receipt = false, draft = false }) {
   const image = jpegFile(LETTERHEAD), pages = [];
   let p, y;
   const newPage = () => {
