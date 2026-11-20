@@ -4,6 +4,7 @@
 // required); the month's return keeps its own Part I / Part II entries (adjustments, penalties, filing details).
 // Marking a month Filed freezes the rows and totals as filed; only an administrator can reopen it (reason, audited).
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { AppError, permit } from './service.mjs';
 import { calculatePayroll } from './engine.mjs';
 import { localToday } from './profiles.mjs';
@@ -29,6 +30,7 @@ const profile = (store, id, section) => JSON.parse(store.db.prepare('SELECT data
 const readReturn = (store, month) => JSON.parse(store.db.prepare('SELECT data FROM bir1601c_returns WHERE month=?').get(month)?.data ?? 'null');
 const writeReturn = (store, month, data) => store.db.prepare('INSERT INTO bir1601c_returns VALUES(?,?) ON CONFLICT(month) DO UPDATE SET data=excluded.data').run(month, JSON.stringify(data));
 
+const DRAFT_CACHE = new Map();
 // Payroll rows of the month: posted cutoffs where they exist, otherwise the draft computation as of today.
 function payrollRows(state, month) {
   const cutoff = state.rules[0]?.cutoff || 'semi-monthly', end = lastDay(month);
@@ -37,8 +39,14 @@ function payrollRows(state, month) {
   const rows = periods.flatMap(([start, stop]) => {
     const posted = state.runs.find(r => r.status === 'posted' && r.start === start && r.end === stop);
     if (posted) return posted.rows;
+    // Nothing recorded for the cutoff (before the system was used, or not reached yet): no draft to compute.
+    if (!state.attendance.some(x => x.date >= start && x.date <= stop) && !state.runs.some(r => r.status === 'posted' && r.start <= stop && r.end >= start)) return [];
     draft = true;
-    try { return calculatePayroll({ ...state, asOf: localToday() }, start, stop).rows; } catch { return []; }
+    // Draft payroll of a cutoff is cached until any record it reads changes (hash of the data) or the day changes (the year view
+    // computes up to 24 cutoffs).
+    const key = `${start}|${stop}|${localToday()}|${createHash('sha1').update(JSON.stringify(state)).digest('hex')}`;
+    if (!DRAFT_CACHE.has(key)) { if (DRAFT_CACHE.size > 60) DRAFT_CACHE.clear(); try { DRAFT_CACHE.set(key, calculatePayroll({ ...state, asOf: localToday() }, start, stop).rows); } catch { DRAFT_CACHE.set(key, []); } }
+    return DRAFT_CACHE.get(key);
   });
   return { rows, draft };
 }

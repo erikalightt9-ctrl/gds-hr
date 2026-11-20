@@ -752,6 +752,7 @@ function render() {
   if (auth.user.role === 'employee') { portal.draw(employeeData, auth); return; }
   if (page === 'overview') page = 'dashboard';
   if (page === 'employees') page = 'files';
+  if (page === 'bir') page = 'bir1601c';   // #/bir is a short link to BIR 1601-C
   if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : []), 'approvals', 'movements'].includes(page)) page = 'dashboard';
   const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), bir1601c: async () => (await loadBir()).render(), discipline: async () => { const ui = await loadDiscipline(); const o = renderOptions; renderOptions = {}; return ui.render(o.caseId || null, o.employeeId !== undefined ? { employeeId: o.employeeId } : {}); }, loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
@@ -762,6 +763,8 @@ function render() {
   if (page === 'movements') { shell(heading('Movements & clearance', 'Promotions, transfers, regularizations, separations and offboarding clearance.') + '<div data-mv-page></div>'); import('./movements-ui.js').then(m => m.mountMovements(document.querySelector('[data-mv-page]'), { api, esc, badge, toast, openDialog, dialog, today })).catch(e => toast(e.message)); return; }
   if (page === 'approvals' || page === 'users') { import('./access-ui.js').then(m => m[page === 'users' ? 'usersPage' : 'approvalsPage']({ api, esc, shell, heading, table, badge, account: () => account() })).catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
+  // An unknown page (old link, mistyped address) opens the dashboard instead of failing with 'views[page] is not a function'.
+  if (typeof views[page] !== 'function') { page = 'dashboard'; history.replaceState(null, '', '#/dashboard'); render(); return; }
   shell(views[page]());
   // Dropdowns with a search box inside (Payroll → Employee). Loaded on demand: if the file cannot be loaded (e.g. the
   // server has not been restarted to serve it), the plain dropdown stays and the page still works.

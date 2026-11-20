@@ -107,7 +107,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (selfNotice && status < 300) { try { const text = employeeNotice(selfNotice.pathname, data); if (text) store.notify(selfNotice.employeeId, text); } catch { /* a notice never blocks the submission */ } }
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data));
     };
-    res.setHeader('Cache-Control', 'no-store');
+    // no-transform: Cloudflare must not inject scripts (its Web Analytics beacon, which the CSP blocks) or alter pages.
+    res.setHeader('Cache-Control', 'no-store, no-transform');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');

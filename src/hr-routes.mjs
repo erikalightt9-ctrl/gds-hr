@@ -47,7 +47,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   // ---------- Today's Celebrations (every signed-in user) ----------
   if (pathname === '/api/hr/celebrations' && method === 'GET') { send(200, celebrationsOn(store)); return true; }
   if (pathname === '/api/hr/celebrations/month' && method === 'GET') { send(200, celebrationsThisMonth(store)); return true; }
-  if ((p = m(/^\/api\/hr\/celebrations\/([^/]+)\/photo$/)) && method === 'GET') { const row = celebrantPhoto(store, decodeURIComponent(p[1])); res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true; }
+  if ((p = m(/^\/api\/hr\/celebrations\/([^/]+)\/photo$/)) && method === 'GET') { let row; try { row = celebrantPhoto(store, decodeURIComponent(p[1])); } catch (error) { if (error.status !== 404) throw error; res.writeHead(204, { 'Cache-Control': 'private, no-store' }); res.end(); return true; } res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true; }
 
   // ---------- Employee self-service ----------
   if (pathname.startsWith('/api/hr/me/')) {
@@ -75,7 +75,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     // The employee's own profile photo (shown in their workspace menu and welcome).
     if (pathname === '/api/hr/me/photo' && method === 'GET') {
       const row = store.db.prepare('SELECT metadata, content FROM employee_documents WHERE employee_id=?').all(actor.employeeId || '').map(r => ({ meta: JSON.parse(r.metadata), content: r.content })).filter(r => r.meta.type === 'Photo' && r.meta.status === 'Active').sort((a, b) => String(b.meta.uploadedAt || '').localeCompare(String(a.meta.uploadedAt || '')))[0];
-      if (!row) throw new AppError('No photo.', 404);
+      if (!row) { res.writeHead(204, { 'Cache-Control': 'private, no-store' }); res.end(); return true; }   // no photo: initials stay
       res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true;
     }
     if (pathname === '/api/hr/me/datasheet' && method === 'GET') { send(200, mySheet(store, actor)); return true; }
@@ -160,7 +160,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
     if (method === 'GET') {
       assertCanView(store, actor, id);
       const row = store.db.prepare('SELECT metadata, content FROM employee_documents WHERE employee_id=?').all(id).map(r => ({ meta: JSON.parse(r.metadata), content: r.content })).filter(r => r.meta.type === 'Photo' && r.meta.status === 'Active').sort((a, b) => b.meta.uploadedAt.localeCompare(a.meta.uploadedAt))[0];
-      if (!row) throw new AppError('No photo.', 404);
+      if (!row) { res.writeHead(204, { 'Cache-Control': 'private, no-store' }); res.end(); return true; }   // no photo: initials stay
       res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true;
     }
     if (method === 'POST') {
