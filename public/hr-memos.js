@@ -1,6 +1,8 @@
 // Memos: drafts, issuing to all / departments / named employees, revisions, archive, and acknowledgement tracking.
 import { fmtDate, fmtDateTime, readFile } from './hr-common.js';
-import { pdfPane, bindPrint, recipientsHtml, bindRecipients } from './memo-viewer.js';
+// Loaded on demand, never at start-up: if the file cannot be loaded the rest of the app keeps working.
+let viewer = null;
+const loadViewer = () => (viewer ? Promise.resolve(viewer) : import('./memo-viewer.js').then(m => (viewer = m)).catch(() => null));
 // Routine memo categories (older memos keep their original category). Notices to Explain and disciplinary documents
 // go through Due Process & Discipline (confidential case workflow), never as memos.
 const MEMO_CATEGORIES = ['General Announcement', 'Policy / Guidelines', 'Advisory / Reminder', 'Office Order / Schedule'];
@@ -71,7 +73,11 @@ export function createMemos(ctx) {
   }
   async function detail(id, filter = 'all') {
     try {
-      const memo = await api(`/hr/memos/${id}`), latest = memo.versions.at(-1), draft = memo.draft;
+      const [memo, v] = await Promise.all([api(`/hr/memos/${id}`), loadViewer()]), latest = memo.versions.at(-1), draft = memo.draft;
+      // Fallbacks while the viewer cannot be loaded: the memo text and a plain recipient list.
+      const pdfPane = v ? v.pdfPane : (escape, url) => `<p><a href="${escape(url)}" target="_blank" rel="noopener">📄 Open the memo PDF</a></p><div class="memo-body">${esc((draft && memo.status === 'draft' ? draft : latest)?.body || '')}</div>`;
+      const recipientsHtml = v ? v.recipientsHtml : (_c, _m, ver) => table(['Employee', 'Acknowledged'], ver.assignments.map(a => [esc(a.name || a.employeeId), a.acknowledgedAt ? fmtDateTime(a.acknowledgedAt) : 'Pending']));
+      const bindPrint = v ? v.bindPrint : () => {}, bindRecipients = v ? v.bindRecipients : () => {};
       const attachments = list => list?.length ? `<p>${list.map(a => `<a href="/api/hr/memo-attachments/${a.id}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`).join(' ')}</p>` : '';
       const body = draft && memo.status === 'draft' ? draft : latest, rctx = { api, esc, table, toast, openDialog, dialog, today: ctx.today };
       openDialog(`${body.title}`, `<div class="dialog-body">

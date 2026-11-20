@@ -1,7 +1,9 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
 import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS, idTypeSelect } from './hr-common.js';
 import { describeTotal } from './overtime-ui.js';
-import { openMyMemo, statusChip } from './memo-viewer.js';
+// Loaded on demand, never at start-up: if the file cannot be loaded the rest of the app keeps working.
+let viewer = null;
+const loadViewer = () => (viewer ? Promise.resolve(viewer) : import('./memo-viewer.js').then(m => (viewer = m)).catch(() => null));
 
 export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message), openDialog, dialog }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
@@ -21,7 +23,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
       if (tab === 'loans201') return loans(box, await api('/hr/me/loans'));
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
-      if (tab === 'memos') return memos(box, await api('/hr/me/memos'));
+      if (tab === 'memos') { const [list] = await Promise.all([api('/hr/me/memos'), loadViewer()]); return memos(box, list); }
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       if (tab === 'files201') return file201(box);
       // Loaded on first use (Notices & due process).
@@ -168,17 +170,20 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     };
   }
   function memos(box, list) {
+    const statusChip = viewer ? viewer.statusChip : (_esc, status, label) => badge(label || (status === 'acknowledged' ? 'Acknowledged' : 'Pending Acknowledgment'), status === 'acknowledged' ? '' : 'pending');
     const open = list.filter(m => m.ackRequired && !m.acknowledgedAt && m.latest && !m.archived);
     box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${open.length ? `${open.length} waiting for your action` : 'All caught up'}</span></div><div class="panel-body memo-cards">
       ${list.map((m, i) => `<article class="memo-card ${m.ackRequired && !m.acknowledgedAt && m.latest ? 'unread' : ''}"><header><strong>${esc(m.title)}</strong><small>${esc(m.reference)} · ${esc(m.category || '')} · ${fmtDate(m.issueDate)} · version ${m.version}${m.latest ? '' : ' (replaced by a newer version)'}</small></header>
         ${m.changeNote ? `<p class="legend">What changed: ${esc(m.changeNote)}</p>` : ''}
         <p>${statusChip(esc, m.status, m.statusLabel)}${m.ackRequired && !m.acknowledgedAt && m.latest ? ` <span class="legend">Acknowledge by ${fmtDate(m.ackDeadline)}</span>` : ''}${m.acknowledgedAt ? ` <span class="legend">${fmtDateTime(m.acknowledgedAt)}</span>` : ''}</p>
-        <footer class="memo-card-actions"><button class="${m.ackRequired && !m.acknowledgedAt && m.latest ? 'primary' : ''} small" data-memo-open="${i}">📄 Open memo</button></footer></article>`).join('') || '<p class="muted">No memos addressed to you yet.</p>'}
+        ${viewer && m.statusLabel ? '' : `<details><summary>Read memo</summary><div class="memo-body">${esc(m.body)}</div></details>`}<footer class="memo-card-actions">${viewer && m.statusLabel ? `<button class="${m.ackRequired && !m.acknowledgedAt && m.latest ? 'primary' : ''} small" data-memo-open="${i}">📄 Open memo</button>` : m.ackRequired && !m.acknowledgedAt ? `<button class="primary small" data-ack="${m.memoId}" data-version="${m.version}">I have received and read this memo</button>` : ''}</footer></article>`).join('') || '<p class="muted">No memos addressed to you yet.</p>'}
       <p class="legend">Open a memo to read the official PDF, then acknowledge it (received, read and understood) or ask HR for clarification. Opening, downloading or printing does not acknowledge it. Acknowledging is not an admission of wrongdoing and does not waive your rights.</p></div></section>`;
     box.onclick = event => {
+      const ack = event.target.closest('[data-ack]');
+      if (ack) { ack.disabled = true; api(`/hr/me/memos/${ack.dataset.ack}/${ack.dataset.version}/acknowledge`, {}).then(() => { confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); return fill('memos', box); }).then(() => memoNotice(document, false)).catch(error => { toast(error.message); ack.disabled = false; }); return; }
       const b = event.target.closest('[data-memo-open]'); if (!b) return;
       const refresh = async () => { await fill('memos', box); memoNotice(document, false).catch(() => {}); };
-      if (openDialog) openMyMemo({ api, esc, toast, openDialog, dialog }, list[Number(b.dataset.memoOpen)], refresh);
+      if (openDialog && viewer && list[Number(b.dataset.memoOpen)].statusLabel) viewer.openMyMemo({ api, esc, toast, openDialog, dialog }, list[Number(b.dataset.memoOpen)], refresh);
       else window.open(`/api/hr/me/memos/${list[Number(b.dataset.memoOpen)].memoId}/${list[Number(b.dataset.memoOpen)].version}.pdf`, '_blank', 'noopener');
     };
   }
