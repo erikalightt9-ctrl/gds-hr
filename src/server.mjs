@@ -30,7 +30,8 @@ import { addContributionEmployee } from './contribution-encode.mjs';
 import { saveMonthEdit } from './contribution-month.mjs';
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
-import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
+import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount, passwordHash } from './auth.mjs';
+import { authenticateService, createServiceAccount, getPolicy, savePolicy, approverChoices } from './actors.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -62,6 +63,11 @@ function interfaceVersion() {
   return readdirSync(dir).filter(f => /\.(js|css|html)$/.test(f)).map(f => `${f}:${Math.round(statSync(path.join(dir, f)).mtimeMs)}`).sort().join('|').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36);
 }
 function constantEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && timingSafeEqual(x, y); }
+// A service token is not a person and is not a System Administrator. Only the actions management put on the account are reachable.
+function serviceCallAllowed(user, method, pathname) {
+  const overtime = user.permissions?.includes('overtime') && ((method === 'GET' && pathname === '/api/overtime-requests') || (method === 'POST' && /^\/api\/overtime-requests\/[a-f0-9-]+\/decision$/.test(pathname)));
+  return overtime || (method === 'GET' && pathname === '/api/approval-policy');
+}
 // What an employee sees in their notification bell after each of their own submissions.
 const days = (a, b) => (b && b !== a ? `${a} to ${b}` : a);
 export function employeeNotice(pathname, data = {}) {
@@ -177,9 +183,13 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         checkLimit(store, `reset:${visitorIp}`); const body = z.object({ token: z.string().max(64), password: z.string().min(9).max(200) }).strict().parse(await readBody(req));
         send(200, await redeemPasswordReset(store, body.token, body.password)); return;
       }
-      const auth = session(store, req.headers.cookie);
+      const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''))?.[1];
+      const serviceUser = bearer ? authenticateService(store, bearer) : null;
+      if (bearer && !serviceUser) throw new AppError('Service token was not recognized.', 401);
+      const auth = serviceUser ? { user: serviceUser, csrf: '', tokenHash: '', service: true } : session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
-      if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      if (auth.user.service && !serviceCallAllowed(auth.user, req.method, pathname)) throw new AppError('This service account is not allowed to call that.', 403);
+      if (mutation && !auth.service && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
       if (auth.user.mustChangePassword && !['/api/events', '/api/logout', '/api/password', '/api/version'].includes(pathname)) throw new AppError('Choose your own password first.', 403);
@@ -205,6 +215,10 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         await changePassword(store, auth.user, body.currentPassword, body.newPassword); send(200, { ok: true }); return;
       }
       // Feishu group alerts (feishu.mjs; admin only).
+      if (pathname === '/api/approval-policy' && req.method === 'GET') { send(200, getPolicy(store)); return; }
+      if (pathname === '/api/approval-policy' && req.method === 'POST') { send(200, savePolicy(store, auth.user, await readBody(req))); return; }
+      if (pathname === '/api/approval-policy/approvers' && req.method === 'GET') { send(200, approverChoices(store, url.searchParams.get('action') || '')); return; }
+      if (pathname === '/api/service-accounts' && req.method === 'POST') { const created = await createServiceAccount(store, auth.user, await readBody(req), passwordHash); send(201, created); return; }
       if (pathname === '/api/integrations/feishu' && req.method === 'GET') { send(200, feishuStatus(store, auth.user)); return; }
       if (pathname === '/api/integrations/feishu' && req.method === 'POST') { send(200, saveFeishu(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/integrations/feishu/test' && req.method === 'POST') { const result = await sendFeishuTest(store, auth.user); send(200, { ...result, status: feishuStatus(store, auth.user) }); return; }

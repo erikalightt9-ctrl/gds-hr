@@ -3,7 +3,8 @@ import { schemas } from './schema.mjs';
 import { calculatePayroll, attendanceMinutes, isRest, leaveBalance, leaveSplit, leaveFraction, ruleOn } from './engine.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
-export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
+export { AppError } from './errors.mjs';
+import { AppError } from './errors.mjs';
 // Leave of this many days or more needs a supporting document (November 2026 policy); shorter leave only when HR asks.
 export const PROOF_FROM_DAYS = 2;   // kept for reference only: supporting documents are optional (Nov 11, 2026)
 export function permit(actor, roles) { if (!actor || !roles.includes(actor.role)) throw new AppError('You do not have permission for this action.', 403); }

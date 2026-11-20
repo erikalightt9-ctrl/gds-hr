@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
+import { assertNamedActor, getPolicy } from './actors.mjs';
 import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 
@@ -85,7 +86,7 @@ const historyEntry = (actor, action, note = '') => ({ at: new Date().toISOString
 // Employees file their own overtime; HR may record it for an employee (approved at once, e.g. no portal account).
 export function fileOvertime(store, actor, input) {
   const self = actor.role === 'employee', v = requested(fileSchema.parse(input));
-  if (!self) permit(actor, HR);
+  if (!self) { permit(actor, HR); assertNamedActor(actor, getPolicy(store), 'overtime'); }
   const employeeId = self ? actor.employeeId : v.employeeId;
   if (!employeeId) throw new AppError('Choose the employee.');
   return store.transaction(() => {
@@ -141,6 +142,7 @@ export function cancelOvertime(store, actor, id) {
 const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default('') }).strict();
 export function decideOvertime(store, actor, id, input) {
   permit(actor, HR);
+  assertNamedActor(actor, getPolicy(store), 'overtime');
   const v = decisionSchema.parse(input);
   if (v.decision === 'reject' && v.remarks.length < 3) throw new AppError('Give a reason for rejecting the overtime.');
   return store.transaction(() => {

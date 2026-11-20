@@ -686,7 +686,7 @@ async function reportsPage() {
 }
 async function auditPage() {
   const entries = await api('/audit');
-  shell(heading('Audit trail', 'Who changed what, when, and why. Payroll snapshots preserve their original records.') + `<section class="panel"><div class="panel-head"><h2>Recent activity</h2>${downloads('audit')}<span class="legend">Latest 1,000 events</span></div>${table(['Time', 'Actor', 'Action', 'Record', ''], entries.map((e, i) => [esc(new Date(e.at).toLocaleString()), esc(who(e.actor)), badge(e.action, 'neutral'), `${esc(e.kind)}<br><small>${esc(e.recordId)}</small>`, `<button class="small" data-audit-index="${i}">Inspect change</button>`]))}</section>`);
+  shell(heading('Audit trail', 'Who changed what, when, and why. Payroll snapshots preserve their original records.') + `<section class="panel"><div class="panel-head"><h2>Recent activity</h2>${downloads('audit')}<span class="legend">Latest 1,000 events</span></div>${table(['Time', 'Actor', 'Action', 'Record', ''], entries.map((e, i) => [esc(new Date(e.at).toLocaleString()), esc(e.actorName ? `${e.actorName}${e.via ? ` (via ${e.via})` : ''}` : who(e.actor)), badge(e.action, 'neutral'), `${esc(e.kind)}<br><small>${esc(e.recordId)}</small>`, `<button class="small" data-audit-index="${i}">Inspect change</button>`]))}</section>`);
   document.querySelectorAll('[data-audit-index]').forEach(b => b.onclick = () => showObject('Audit event', entries[Number(b.dataset.auditIndex)]));
 }
 function renderForcedPassword() {
