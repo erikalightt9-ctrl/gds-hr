@@ -28,7 +28,7 @@ function validateBrackets(brackets, name) {
   });
 }
 // `trusted` is for internal callers (e.g. the 201 form) that have already checked a narrower permission.
-export function saveRecord(store, actor, kind, input, { trusted = false } = {}) {
+export function saveRecord(store, actor, kind, input, { trusted = false, salaryApproval = false } = {}) {
   if (!schemas[kind]) throw new AppError('Unknown record type.', 404);
   if (!trusted) permit(actor, entityRoles[kind]);
   const recordInput = { ...input };
@@ -54,6 +54,7 @@ export function saveRecord(store, actor, kind, input, { trusted = false } = {}) 
     if (value.employeeId && !employee) throw new AppError('Employee ID does not exist.');
     if (employee?.draft) throw new AppError('Complete this draft employee profile before adding attendance, leave, loans or payroll adjustments.');
     if (kind === 'employees' && value.draft && state.runs.some(r => r.rows.some(row => row.employeeId === value.id))) throw new AppError('An employee with posted payroll cannot be changed back to a draft.');
+    if (kind === 'employees' && previous && previous.monthlySalary != null && value.monthlySalary !== previous.monthlySalary && !salaryApproval && !trusted) throw new AppError('A salary change needs a reason, an effective date and a second approver. Use Edit pay.');
     if (kind === 'employees' && value.leaveEligibility.some(id => !state.leaveTypes.some(t => t.id === id))) throw new AppError('Unknown leave eligibility type.');
     if (kind === 'employees' && previous && state.runs.some(r => r.rows.some(row => row.employeeId === value.id)) && (value.startDate !== previous.startDate || (value.endDate && state.runs.some(r => r.end > value.endDate && r.rows.some(row => row.employeeId === value.id)))) ) throw new AppError('Employment dates cannot rewrite posted payroll.');
     if (kind === 'attendance') {

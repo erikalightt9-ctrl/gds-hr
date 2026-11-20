@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { date as dateSchema } from './schema.mjs';
+import { monthlySalaryOn } from './salary-history.mjs';
 
 // Computed amounts an authorized user may override. Loans (balances), contributions (own approval flow) and the
 // 13th month (annual ledger) are not overridable here.
@@ -274,18 +275,25 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // day at the plain daily rate (no rest-day premium); a scheduled day not worked is simply not paid (not a blocker).
     const perDayWorked = payrollProfile?.basis === 'days-worked';
     if (dailyPaid && !payrollProfile.dailyRate) blockers.push(`${prefix}: daily-paid employees need a daily rate in their payroll profile.`);
-    // Hourly rate follows the employee's own scheduled hours (a 12-hour driver: daily ÷ 12), else the rules divisor.
-    const scheduledHours = attendanceProfile?.hoursPerDay || r.hourlyDivisor;
-    const daily = payrollProfile?.dailyRate ?? e.monthlySalary / r.dailyDivisor, hourly = payrollProfile?.hourlyRate ?? daily / scheduledHours;
-    // Attendance adjustments (absences, unpaid leave, lateness, undertime) for monthly-paid staff use the rules divisor
-    // (26) in every month, 31-day months included (Nov 2026: basic = monthly ÷ 26 × days credited; the earlier ÷ 27 for
-    // 31-day months was dropped). Daily-paid and per-day-worked staff keep their own rate.
-    const adjustmentDivisor = dailyPaid || perDayWorked ? null : r.dailyDivisor;
-    const adjDaily = adjustmentDivisor ? e.monthlySalary / adjustmentDivisor : daily, adjHourly = adjDaily / scheduledHours;
     const allScheduled = days.filter(d => !isRest(e, d));
     const employed = days.filter(d => d >= e.startDate && (!e.endDate || d <= e.endDate));
     const scheduled = employed.filter(d => !isRest(e, d));
-    const baseline = dailyPaid || perDayWorked ? round(daily * scheduled.length) : round(e.monthlySalary * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
+    // Salary in effect on each day. With no approved salary history this is the employee's current monthly salary.
+    const rateDays = scheduled.length ? scheduled : [start];
+    const payMonthly = monthlySalaryOn(e, rateDays[0], state.salaryHistory);
+    const samePay = rateDays.every(d => monthlySalaryOn(e, d, state.salaryHistory) === payMonthly);
+    // Hourly rate follows the employee's own scheduled hours (a 12-hour driver: daily ÷ 12), else the rules divisor.
+    const scheduledHours = attendanceProfile?.hoursPerDay || r.hourlyDivisor;
+    let daily = payrollProfile?.dailyRate ?? payMonthly / r.dailyDivisor, hourly = payrollProfile?.hourlyRate ?? daily / scheduledHours;
+    // Attendance adjustments (absences, unpaid leave, lateness, undertime) for monthly-paid staff use the rules divisor
+    // (26) in every month, 31-day months included (Nov 2026: basic = monthly ÷ 26 × days credited; the earlier ÷ 27 for
+    // 31-day months was dropped). Daily-paid and per-day-worked staff keep their own rate.
+    // Late and undertime formulas below are unchanged; only the daily rate they multiply can follow an effective-dated salary.
+    const adjustmentDivisor = dailyPaid || perDayWorked ? null : r.dailyDivisor;
+    let adjDaily = adjustmentDivisor ? payMonthly / adjustmentDivisor : daily, adjHourly = adjDaily / scheduledHours;
+    const baseline = !samePay && !dailyPaid && !perDayWorked
+      ? round(scheduled.reduce((sum, d) => sum + monthlySalaryOn(e, d, state.salaryHistory) * factor / (allScheduled.length || 1), 0))
+      : dailyPaid || perDayWorked ? round(daily * scheduled.length) : round(payMonthly * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
     const earnings = { basic: baseline, leavePay: 0, regularOT: 0, restDay: 0, restOT: 0, nsd: 0, specialHoliday: 0, specialOT: 0, regularHoliday: 0, regularHolidayOT: 0, otherHoliday: 0, otherOT: 0, allowance: 0, additional: 0, thirteenth: 0 };
     const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, sssLoan: 0, pagibigLoan: 0, salaryDeduction: 0, other: 0 };
     const trace = [], late = [], leaveNotes = [], loanDeductions = [], workBreakdown = [];
@@ -301,10 +309,17 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       side[component] = round(side[component] + rounded);
       trace.push({ component, side: side === earnings ? 'earnings' : 'deductions', amount: rounded, formula, sourceId: source?.id || r.id, sourceKind: source?.sourceKind || (source?.timeIn !== undefined ? 'attendance' : source?.typeId ? 'leaves' : source?.kind ? 'adjustments' : 'rules'), date, quantity, multiplier });
     };
-    trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid || perDayWorked ? `${daily} × ${scheduled.length} scheduled workdays (${dailyPaid ? 'daily-paid' : 'paid per day worked; days not worked are taken off below'})` : `${e.monthlySalary} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
+    trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid || perDayWorked ? `${daily} × ${scheduled.length} scheduled workdays (${dailyPaid ? 'daily-paid' : 'paid per day worked; days not worked are taken off below'})` : `${payMonthly} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
     // Manual entry for exactly this cutoff: "replace" skips attendance; "add" pays the typed hours on top of it.
     const manual = (state.payrollInputs || []).find(i => i.employeeId === e.id && i.start === start && i.end === end) || null;
     for (const d of manual?.mode === 'replace' ? [] : employed) {
+      if (!samePay && !dailyPaid && !perDayWorked && adjustmentDivisor) {
+        const daySalary = monthlySalaryOn(e, d, state.salaryHistory);
+        daily = payrollProfile?.dailyRate ?? daySalary / r.dailyDivisor;
+        hourly = payrollProfile?.hourlyRate ?? daily / scheduledHours;
+        adjDaily = daySalary / adjustmentDivisor;
+        adjHourly = adjDaily / scheduledHours;
+      }
       // Real time: a time-in with no time out yet counts as a scheduled workday (lateness from the actual time in);
       // it stays flagged until the time out is recorded.
       const openIn = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === d);
@@ -665,7 +680,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // Days present = actual attendance on regular (non-holiday) workdays, less the late / undertime fraction.
     const workedHolidays = holidays.filter(h => h.worked && h.pay > 0).length;
     const regularDays = typedDays ? creditedDays : Math.round(Math.max(0, daysPresent - workedHolidays - lateDaysLost - (rateForDay ? undertimeAmount / rateForDay : 0)) * 100) / 100;
-    return { employeeId: e.id, employeeName: e.name, monthWorkingDays: monthWorkdays(e, start.slice(0, 7)), holidays, holidayPay, holidayDays, regularDays, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays, creditedHours, hoursPerDay: scheduledHours, quantities, adjustmentDivisor, adjustmentRate: round(adjDaily), undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, paidLeaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    return { employeeId: e.id, employeeName: e.name, monthWorkingDays: monthWorkdays(e, start.slice(0, 7)), holidays, holidayPay, holidayDays, regularDays, monthlySalary: payMonthly, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays, creditedHours, hoursPerDay: scheduledHours, quantities, adjustmentDivisor, adjustmentRate: round(adjDaily), undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, paidLeaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
   const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };

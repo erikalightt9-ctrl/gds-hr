@@ -17,6 +17,7 @@ import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entit
 import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
 import { renderLoanApplicationPdf } from './loan-pdf.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
+import { approveSalaryChange, listSalary, requestSalaryChange } from './salary-changes.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
 import { renderThirteenthPdf } from './thirteenth-pdf.mjs';
 import { thirteenthStatement, finalizeThirteenthPayslip, voidThirteenthPayslip, thirteenthPayslip, thirteenthPayslips, addThirteenthAdjustment, reviewThirteenthAdjustment, thirteenthAdjustments } from './thirteenth-payslip.mjs';
@@ -489,6 +490,10 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="payslip-${slip.employeeId}-${slip.start}-${slip.end}.pdf"` });
         res.end(payslipPdf(slip)); return;
       }
+      if (pathname === '/api/salary-changes' && req.method === 'GET') { permit(auth.user, ['admin', 'hr', 'payroll', 'viewer']); send(200, listSalary(store, url.searchParams.get('employeeId') || '')); return; }
+      if (pathname === '/api/salary-changes' && req.method === 'POST') { send(201, requestSalaryChange(store, auth.user, await readBody(req))); return; }
+      const salaryDecision = pathname.match(/^\/api\/salary-changes\/([a-f0-9-]+)\/approve$/);
+      if (salaryDecision && req.method === 'POST') { send(200, approveSalaryChange(store, auth.user, salaryDecision[1])); return; }
       if (pathname === '/api/payroll/preview' && req.method === 'POST') {
         const p = previewSchema.parse(await readBody(req)); send(200, preview(store, p.start, p.end, p.pay13th, p.employeeIds)); return;
       }

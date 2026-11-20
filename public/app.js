@@ -231,7 +231,7 @@ const hrCtx = {
   setPage: p => { page = p; }, refresh: () => refresh(), daysAgo: n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10),
   go: nav => goTo(nav), quick: kind => (kind === 'employee' ? files.addEmployee() : kind === 'memo' ? memos.create() : trainings.create()),
   openLegacyProfile: async id => { page = 'profile'; await profiles.open(id, 'personal'); },
-  editPay: id => edit('employees', id),
+  editPay: id => openSalaryChange(id),
   reloadContext: async () => { hrContext = await api('/hr/context'); applyTheme(hrContext.company.theme); },
   openAccounts: () => account(),
   getState: () => state,   // attendance records for the dashboard analytics (HR workspace roles)
@@ -1085,6 +1085,27 @@ function formField(f, values, existing) {
   else control = `<input name="${f.key}" id="${id}" type="${type.replace('optional-', '')}" value="${esc(value)}" ${type === 'number' ? 'min="0" step="any"' : ''} ${type.startsWith('optional') ? '' : 'required'} ${existing && f.key === 'id' ? 'readonly' : ''}>`;
   return `<label class="field ${type.includes('textarea') || type === 'multi' ? 'full' : ''}" for="${id}">${f.title}${control}${f.hint ? `<small>${f.hint}</small>` : ''}</label>`;
 }
+async function openSalaryChange(id) {
+  const employee = state.employees.find(e => e.id === id);
+  let approvers = [];
+  try { approvers = await api('/approval-policy/approvers?action=salary'); } catch (error) { toast(error.message); return; }
+  const choices = approvers.filter(a => a.id !== auth.user.id && a.username !== auth.user.username);
+  openDialog(`Edit pay · ${employee?.name || id}`, `<form id="salary-change" class="dialog-body form-grid">
+      <p class="full legend">The current salary stays until a different approver accepts the change. Who may approve is configurable and is still an open management decision.</p>
+      <label class="field">New monthly salary<input name="monthlySalary" type="number" min="0.01" step="0.01" value="${employee?.monthlySalary ?? ''}" required></label>
+      <label class="field">Effective date<input name="effectiveDate" type="date" required value="${today()}"></label>
+      <label class="field full">Reason<textarea name="reason" required minlength="3" maxlength="1000"></textarea></label>
+      <label class="field full">Second approver<select name="approverUserId" required>${choices.map(a => `<option value="${esc(a.id)}">${esc(a.name)} · ${esc(a.role)}</option>`).join('') || '<option value="">No other approver yet</option>'}</select></label></form>`,
+    '<div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary" form="salary-change">Submit for approval</button></div>');
+  dialog.querySelector('#salary-change').onsubmit = async event => {
+    event.preventDefault();
+    const form = event.target;
+    try {
+      await api('/salary-changes', { employeeId: id, effectiveDate: form.elements.effectiveDate.value, reason: form.elements.reason.value.trim(), approverUserId: form.elements.approverUserId.value, monthlySalary: Number(form.elements.monthlySalary.value) });
+      dialog.close(); toast('Submitted. The current salary is unchanged until the second approver accepts it.'); await refresh(); render();
+    } catch (error) { toast(error.message); }
+  };
+}
 function edit(kind, id, preset = {}) {
   const existing = state[kind].find(x => x.id === id), values = structuredClone(existing || { ...defaults(kind), ...preset });
   if (kind === 'rules' && existing?.approvedBy) {
@@ -1096,6 +1117,7 @@ function edit(kind, id, preset = {}) {
   if (kind === 'attendance' && existing) fields.push(field('correctionReason', 'Correction / approval reason', 'textarea', null, 'Required. Original attendance, your changes, reason and approver remain in the audit history.'));
   openDialog(`${existing ? 'Review' : 'New'} ${kind === 'leaveTypes' ? 'leave policy' : kind === 'rules' ? 'payroll rules version' : label(kind).replace(/s$/, '')}`, `<form id="record-form"><div class="dialog-body"><div id="form-error" class="form-error hidden" role="alert"></div>${locked ? '<div class="notice">Approved rules cannot be edited. Close this dialog and create a new rules version.</div>' : ''}<div class="form-grid">${fields.map(f => formField(f, values, !!existing)).join('')}</div></div><div class="dialog-foot">${existing && ['leaves', 'holidays', 'adjustments', 'deductions'].includes(kind) ? '<button type="button" class="danger" id="delete-record">Delete record</button>' : ''}<button type="button" data-close>Cancel</button><button type="submit" class="primary" ${locked ? 'disabled' : ''}>Save ${kind === 'rules' ? 'version' : 'record'}</button></div></form>`);
   const form = dialog.querySelector('form');
+  if (kind === 'employees' && existing?.monthlySalary != null && form.elements.monthlySalary) form.elements.monthlySalary.readOnly = true;
   if (kind === 'leaves' && /^[a-f0-9-]{36}$/.test(existing?.documentReference || '')) {
     const attachment = document.createElement('a'); attachment.href = `/api/documents/${existing.documentReference}/content`; attachment.textContent = 'Download supporting document'; attachment.className = 'button'; form.querySelector('.dialog-body').prepend(attachment);
   }

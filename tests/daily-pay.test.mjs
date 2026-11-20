@@ -47,7 +47,8 @@ test('payroll profiles accept only monthly or daily pay basis', () => {
     state.employees.push({ id: 'D1', name: 'Daily, Worker', draft: true, active: false, startDate: '', endDate: '', monthlySalary: null, department: '', restDays: [0], scheduleStart: '', leaveEligibility: [] });
     store.write(state);
     assert.equal(saveProfile(store, admin, 'D1', 'payroll', { basis: 'daily', dailyRate: DAILY }).basis, 'daily');
-    assert.equal(saveProfile(store, admin, 'D1', 'payroll', {}).basis, '', 'blank means monthly');
+    assert.throws(() => saveProfile(store, admin, 'D1', 'payroll', {}), /second approver/);
+    assert.equal(saveProfile(store, admin, 'D1', 'payroll', {}, { salaryApproval: true }).basis, '', 'blank means monthly');
     assert.throws(() => saveProfile(store, admin, 'D1', 'payroll', { basis: 'weekly' }));
   } finally { store.close(); }
 });
