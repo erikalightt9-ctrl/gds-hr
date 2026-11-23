@@ -1965,3 +1965,11 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* The two sign-in links: no underline, smaller text (Nov 23, 2026). */
 .login-form .login-links .login-link{font-size:12.5px;font-weight:500;text-decoration:none}
 .login-form .login-links .login-link:hover,.login-form .login-links .login-link:focus-visible{text-decoration:underline}
+/* Phones (Nov 23, 2026): the sign-in card fills the screen, content centred; the welcome scene starts below it. */
+@media (max-width: 720px) {
+  .welcome-login .login-form { min-height: 100svh; padding: 12px !important; display: flex; align-items: stretch; justify-content: center; }
+  .welcome-login .login-form form { width: 100%; max-width: none !important; margin: 0 !important; min-height: calc(100svh - 24px); display: flex; flex-direction: column; justify-content: center; }
+  .login-form .login-card-logo { max-height: 110px; margin-bottom: 22px; }
+  .login-form .login-tiles, .login-form .login-links { max-width: none; width: 100%; }
+  .login-form .login-links { padding: 0 4px; }
+}
