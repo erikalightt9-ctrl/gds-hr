@@ -592,7 +592,7 @@ function payrollPage() {
   // Leave days / notes as HR writes them: "SIL - 10/13/26", "Absent 10/2, 10/8".
   const md = (d, year = false) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${year ? `/${d.slice(2, 4)}` : ''}`;
   const leaveCode = name => (/\(([^)]+)\)/.exec(name)?.[1] || name.split(/\s+/).filter(w => /^[A-Z]/.test(w)).map(w => w[0]).join(''));
-  const notes = r => [...(r.leaveNotes || []).map(n => { const [d, ...rest] = n.split(': '), label = rest.join(': '), half = /half day/.test(label); return `${esc(leaveCode(label.replace(/\s*\(half day.*\)$/, '')))} - ${md(d, true)}${half ? ' (½)' : ''}`; }), ...((r.absentDates || []).length ? [`Absent ${r.absentDates.map(d => md(d)).join(',')}`] : [])].map(s => `<span class="pr-note">${s}</span>`).join('') || '';
+  const notes = r => [...(r.leaveNotes || []).map(n => { const [d, ...rest] = n.split(': '), label = rest.join(': '), half = /half day/.test(label); return `${esc(leaveCode(label.replace(/\s*\(half day.*\)$/, '')))} - ${md(d, true)}${half ? ' (½)' : ''}`; }), ...((r.absentDates || []).length ? [`Absent ${r.absentDates.map(d => md(d)).join(',')}`] : []), ...((r.offDates || []).length ? [`Not paid ${r.offDates.map(d => md(d)).join(',')}`] : [])].map(s => `<span class="pr-note">${s}</span>`).join('') || '';
   const headers = ['Employee', 'Salary', 'Working days', 'Days present', 'Holiday days', 'Leave days / notes', 'Basic pay', 'Holiday pay', 'Leave pay', 'Overtime, rest day & night differential', 'Other additions', 'Gross pay', 'Deductions', 'Net pay'];
   const sum = (r, keys) => keys.reduce((s, k) => s + (r.earnings[k] || 0), 0);
   // Holiday breakdown (same as src/holiday-pay.mjs, used by the payslip and exports): each holiday credited on a scheduled

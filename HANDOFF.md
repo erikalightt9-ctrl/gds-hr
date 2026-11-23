@@ -204,3 +204,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Most recent full test run: 385 tests passing (Nov 23, 2026).
 - Payroll table (Nov 23, 2026): the 'N system validated · N HR approved · N by HR decision' line under each employee name is removed; only 'Held · N for HR review' still shows.
 - 201 file → Attendance history (Nov 23, 2026): the Correction column is removed (open cases stay in Attendance → Requests → Incomplete attendance).
+- Payroll notes column (Nov 23, 2026; engine absentDates / offDates, app.js notes): 'Absent' now also lists days with no time in / out and HR 'absent' decisions (was recorded absences only); a record with status 'off' (day not paid in this cutoff) shows 'Not paid <date>' instead of Absent.
