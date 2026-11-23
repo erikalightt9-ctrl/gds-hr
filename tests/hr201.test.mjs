@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Store } from '../src/store.mjs';
 import { createEmployee, updateEmployee, directory, dashboard, employeeForm, archiveEmployee, readSettings, saveSettings, leaveCredits, saveLeaveCredits } from '../src/hr201.mjs';
 import { upload201, reviewDocument, employeeChecklist, documentSummary, document201Content, setNotApplicable } from '../src/documents201.mjs';
+import { recordView } from '../src/memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, myMemos, acknowledgeMemo, memoSummary, startRevision, listMemos } from '../src/memos.mjs';
 import { saveTraining, assignParticipants, updateParticipant, trainingsForEmployee, participationRows } from '../src/trainings.mjs';
 import { saveMySheet, reviewSheet, listSheets } from '../src/datasheets.mjs';
@@ -145,12 +146,15 @@ test('memos reach only their recipients and an acknowledgement clears the pendin
     assert.equal(myMemos(store, ana).length, 1); assert.equal(myMemos(store, ben).length, 0);
     assert.equal(memoSummary(store, hr).pending, 1);
     assert.throws(() => acknowledgeMemo(store, ben, memo.id, 1), /not addressed/);
+    assert.throws(() => acknowledgeMemo(store, ana, memo.id, 1), /viewed/, 'acknowledgment only after viewing');
+    recordView(store, ana, memo.id, 1);
     acknowledgeMemo(store, ana, memo.id, 1);
     assert.equal(memoSummary(store, hr).pending, 0);
     assert.ok(myMemos(store, ana)[0].acknowledgedAt);
     startRevision(store, hr, memo.id);
     assert.throws(() => publishMemo(store, hr, memo.id), /what changed/);
-    publishMemo(store, hr, memo.id, { changeNote: 'Clarified section 2' });
+    assert.throws(() => publishMemo(store, hr, memo.id, { changeNote: 'Clarified section 2' }), /Another HR Manager/, 'the preparer cannot issue');
+    publishMemo(store, { username: 'admin2', role: 'admin' }, memo.id, { changeNote: 'Clarified section 2' });
     assert.equal(memoSummary(store, hr).pending, 1, 'a revision needs its own acknowledgement');
     assert.equal(listMemos(store, hr)[0].version, 2);
   } finally { store.close(); }
@@ -260,5 +264,65 @@ test('remittance-only profiles (e.g. the CEO) receive no memos', async () => {
     publishMemo(store, hr, memo.id);
     assert.equal(myMemos(store, { role: 'employee', username: 'ana', employeeId: a }).length, 1);
     assert.equal(myMemos(store, { role: 'employee', username: 'ceo', employeeId: ceo }).length, 0);
+  } finally { store.close(); }
+});
+
+test('memo PDF: letterhead letter for HR (draft band before issue) and for the employee it is addressed to only', async () => {
+  const { memoPdf } = await import('../src/memo-letter.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const b = createEmployee(store, hr, form('Ben', 'Other', { employment: { department: 'Finance' } })).created.id;
+    const memo = saveMemoDraft(store, staff, null, { title: 'Demo policy update', issueDate: '2026-10-01', body: 'Fictional memo text.\n'.repeat(120), recipients: { mode: 'departments', departments: ['Operations'] }, ackRequired: true, ackDeadline: '' });
+    const draft = memoPdf(store, hr, memo.id);
+    assert.match(draft.body.subarray(0, 8).toString('latin1'), /^%PDF-/);
+    assert.match(draft.body.toString('latin1'), /DRAFT - NOT ISSUED/);
+    assert.throws(() => memoPdf(store, { role: 'employee', username: 'ana', employeeId: a }, memo.id), /not addressed to you/);
+    publishMemo(store, hr, memo.id);
+    const issued = memoPdf(store, hr, memo.id), text = issued.body.toString('latin1');
+    assert.ok(!/DRAFT - NOT ISSUED/.test(text)); assert.match(text, /MEMORANDUM/); assert.match(text, /Demo policy update/);
+    assert.match(text, /\/Count [2-9]/, 'a long memo runs over several pages');
+    assert.equal(issued.filename, `${listMemos(store, hr)[0].reference}.pdf`);
+    assert.ok(memoPdf(store, { role: 'employee', username: 'ana', employeeId: a }, memo.id).body.length > 1000);
+    assert.throws(() => memoPdf(store, { role: 'employee', username: 'ben', employeeId: b }, memo.id), /not addressed to you/);
+  } finally { store.close(); }
+});
+
+test('201 checklist: due dates never before tracking began, waived requirements are complied with a reason, inactive staff not counted', async () => {
+  const { checklistFor, TRACKING_FROM } = await import('../src/documents201.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const e = store.read().employees.find(x => x.id === a);
+    const list = checklistFor(store, hr, e, readSettings(store), '2026-11-20');
+    const due = list.items.find(i => i.due)?.due;
+    assert.ok(!due || due >= TRACKING_FROM, `due ${due} not before tracking began`);
+    const missing = list.items.find(i => i.requirement.required && i.status === 'Missing');
+    assert.throws(() => setNotApplicable(store, hr, a, missing.requirement.id, { notApplicable: true, reason: 'x', waive: true }), /waiving/);
+    setNotApplicable(store, hr, a, missing.requirement.id, { notApplicable: true, reason: 'Waived by HR manager until Dec 31', waive: true });
+    assert.equal(checklistFor(store, hr, store.read().employees.find(x => x.id === a), readSettings(store), '2026-11-20').items.find(i => i.requirement.id === missing.requirement.id).status, 'Waived');
+    const before = documentSummary(store, hr).employeesMissing;
+    archiveEmployee(store, hr, a, { reason: 'Separated (demo)', endDate: '2026-11-19' });
+    assert.ok(documentSummary(store, hr).employeesMissing <= before, 'inactive staff are not counted');
+  } finally { store.close(); }
+});
+
+test('movements: second-person approval, applied on the effective date; separation starts the clearance', async () => {
+  const { requestMovement, decideMovement, clearItem, applyDueMovements } = await import('../src/movements.mjs');
+  const store = fresh();
+  try {
+    const a = createEmployee(store, hr, form('Ana', 'Demo')).created.id;
+    const other = { username: 'admin2', role: 'admin' };
+    const promo = requestMovement(store, hr, { employeeId: a, type: 'promotion', effectiveDate: '2026-01-01', reason: 'Annual review: promoted to team lead', position: 'Team Lead' });
+    assert.throws(() => decideMovement(store, hr, promo.id, { decision: 'approve' }), /second HR Manager/);
+    assert.equal(decideMovement(store, other, promo.id, { decision: 'approve' }).status, 'applied');
+    assert.equal(employeeForm(store, hr, a).form.employment.position, 'Team Lead');
+    const sep = requestMovement(store, hr, { employeeId: a, type: 'separation', effectiveDate: '2099-01-31', reason: 'Resignation letter received and accepted', separationKind: 'Resignation' });
+    assert.equal(decideMovement(store, other, sep.id, { decision: 'approve' }).status, 'approved', 'future: waits for its date');
+    assert.equal(applyDueMovements(store, new Date('2099-02-01T00:00:00Z')), 1);
+    const done = clearItem(store, hr, sep.id, { key: 'assets', status: 'cleared', note: 'ID and laptop returned' });
+    assert.equal(done.clearance.find(i => i.key === 'assets').status, 'cleared');
+    assert.equal(done.clearanceCompleteAt, null, 'other items still pending');
+    assert.equal(store.read().employees.find(x => x.id === a).endDate, '2099-01-31');
   } finally { store.close(); }
 });

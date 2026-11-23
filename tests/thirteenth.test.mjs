@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { preview, postPayroll } from '../src/service.mjs';
 import { savePriorEarnings, saveThirteenthOverrides, thirteenthLedger, computeFinalPay, finalPayOverview, thirteenthOverview } from '../src/thirteenth.mjs';
-import { dates, isRest } from '../src/engine.mjs';
+import { dates, isRest, monthWorkdays } from '../src/engine.mjs';
 import { completeState, admin } from './helpers.mjs';
 
 const payroll = { username: 'pay1', role: 'payroll' };
@@ -63,7 +63,7 @@ test('final pay: unpaid salary, pro-rated 13th month, leave conversion, separati
     const emp = s.employees[0], workdays = dates('2026-09-16', '2026-09-30').filter(d => !isRest(emp, d)).length;
     const r = computeFinalPay(store, payroll, { employeeId: 'EMP-001', separationDate: '2026-09-30', separationCause: 'redundancy', convertLeave: ['sil'] });
     const item = label => r.items.find(i => i.label.startsWith(label));
-    assert.equal(item('Unpaid salary').amount, Math.round(workdays * r.dailyRate * 100) / 100);
+    assert.equal(item('Unpaid salary').amount, Math.round(workdays * emp.monthlySalary / monthWorkdays(emp, '2026-09') * 100) / 100, 'each day at salary ÷ the month’s working days (unrounded rate)');
     assert.match(item('Unpaid salary').basis, /paid through 2026-09-15/);
     const ledger = thirteenthLedger(store, payroll, '2026')[0];
     assert.equal(item('Pro-rated 13th month').amount, Math.round((ledger.totalBasic + item('Unpaid salary').amount) / 12 * 100) / 100);

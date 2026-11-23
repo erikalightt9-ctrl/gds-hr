@@ -1861,33 +1861,137 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* Login: sign in with fingerprint (employees) */
 .login-form .fingerprint-login{display:flex;align-items:center;justify-content:center;gap:8px;border-color:#d9b85c;background:#fffaf0;color:#7a1720}
 .login-form .fingerprint-login:hover{background:#fff3d6}
+.login-form .feishu-login{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:7px;padding:10px 15px;border:1px solid #c9d7f2;border-radius:7px;background:#f3f7ff;color:#1f3f8f;font-weight:600;text-decoration:none}
+.login-form .feishu-login:hover{background:#e7efff}
+.login-form .feishu-login[hidden]{display:none}
 
-/* Due process: case steps, detail lists, files */
-.dp-steps{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px;padding:0;counter-reset:none}
-.dp-steps li{display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border:1px solid #eadfc4;border-radius:999px;background:#fffdf7;color:#6b6257;font-size:13px}
-.dp-steps li span{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#f1ece2;color:#6b6257;font-weight:700;font-size:12px}
-.dp-steps li small{color:#9a8f80;font-size:11px;margin-left:2px}
-.dp-steps li.done span{background:#b51f2b;color:#fff}
-.dp-steps li.current{border-color:#d9b85c;background:#fff4dd;color:#1d1d1d;font-weight:600}
-.dp-steps li.current span{background:#d9b85c;color:#1d1d1d}
-.dp-kv{display:grid;grid-template-columns:minmax(140px,max-content) 1fr;gap:6px 18px;margin:0 0 12px}
-.dp-kv dt{color:#6b6257;font-size:13px}
-.dp-kv dd{margin:0;font-weight:500}
-.dp-files{margin:0;padding-left:18px}.dp-files li{margin:4px 0}
-.dp-files small{color:#6b6257}
-.dp-search{display:flex;gap:8px;flex:1;max-width:560px}.dp-search input{flex:1}
-.dp-actions .actions{flex-wrap:wrap}
-[data-case-explain]{margin-top:10px}[data-case-explain] .full{grid-column:1/-1}
-.memo-details{border:1px solid #eadfc4;border-radius:10px;padding:10px 14px}
-.memo-details-line{font-size:13px;color:#4a443c}
-/* Excel templates on the Reports page */
-.tpl-cat{margin:18px 24px 6px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#8a6d1d}
-[data-tpl]{display:flex;align-items:center;gap:16px}
-[data-tpl]>span:first-child{flex:1;min-width:0}
-[data-tpl]>span:first-child small{display:block;margin-top:3px;color:#6b6257;font-weight:400;line-height:1.4}
-.tpl-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.tpl-actions input{width:180px}.tpl-actions .tpl-year{width:80px}
-/* BIR 1601-C lines */
-.bir-lines input.bir-num{width:110px;text-align:right}.bir-lines input.bir-tin{width:130px}
-.bir-lines td:first-child small{display:block}
-@media (max-width:760px){[data-tpl]{flex-direction:column;align-items:stretch}.tpl-actions{flex-wrap:wrap}.dp-kv{grid-template-columns:1fr}}
+/* BIR Form 1601-C (bir-ui.js) */
+.bir-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.bir-month { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.bir-adjust { display: flex; gap: 6px; }
+.bir-adjust select { flex: 0 0 90px; }
+.bir-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 900px) { .bir-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Due Process & Discipline (discipline-ui.js, discipline-case.js, portal-cases.js) */
+.dp-tabs { flex-wrap: wrap; }
+.dp-steps { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0 0 12px; counter-reset: none; }
+.dp-steps li { display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid #e4dccb; border-radius: 6px; font-size: 12px; background: #fff; color: #6b6150; }
+.dp-steps li span, .dp-num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #f0ece3; font-size: 11px; font-weight: 700; flex: 0 0 20px; }
+.dp-steps li.done { border-color: #d9b85c; color: #1d1a14; }
+.dp-steps li.done span { background: #d9b85c; color: #fff; }
+.dp-steps li.current { border-color: #b31f2b; color: #1d1a14; font-weight: 600; box-shadow: 0 0 0 1px #b31f2b inset; }
+.dp-steps li.current span, .dp-num { background: #b31f2b; color: #fff; }
+.dp-next { margin-bottom: 14px; }
+.dp-text { white-space: normal; line-height: 1.55; padding: 12px 14px; border: 1px solid #ece4d3; border-radius: 6px; background: #fffdf8; margin: 8px 0; overflow-wrap: anywhere; }
+.dp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.dp-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.dp-inline input { flex: 1 1 240px; min-width: 0; }
+.dp-history { margin: 6px 0; padding-left: 18px; font-size: 12px; color: #5a4e34; }
+.dp-files { margin: 6px 0; padding-left: 18px; }
+.dp-step h3, .dp-step h4 { margin: 14px 0 4px; font-size: 13px; }
+.dp-case { margin-bottom: 14px; }
+.dp-case details { margin: 8px 0; border: 1px solid #ece4d3; border-radius: 6px; padding: 8px 10px; }
+.dp-case summary { cursor: pointer; font-weight: 600; }
+.dp-case footer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.report-group { margin: 12px 16px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #8a6d1f; }
+@media (max-width: 900px) { .dp-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.dp-case > header { display: block; }
+.dp-case > header .badge { display: inline-flex; width: auto; margin-left: 6px; vertical-align: middle; }
+
+/* Consolidated Attendance History legend (hr-files.js historyHtml) */
+.att-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.att-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.att-chip-in { background: #fff1e0; color: #a14a00; border-color: #f2b56b; }        /* Missing Time-In */
+.att-chip-out { background: #fde8ec; color: #a1182e; border-color: #ef9aa8; }       /* Missing Time-Out */
+.att-chip-none { background: #b31f2b; color: #fff; }                                 /* No Time-In / Time-Out */
+.att-chip-verify { background: #e8f0fe; color: #1f4fa3; border-color: #9fbbef; }    /* Attendance for Verification */
+.att-chip-rest { background: #eeeeee; color: #555; }
+.att-chip-holiday { background: #fff6d6; color: #7a5a00; border-color: #e3c568; }
+.att-chip-leave { background: #e6f5ea; color: #1d6b35; border-color: #9cd3ac; }
+.att-chip-wfh { background: #e3f4f4; color: #12635f; border-color: #92cfcb; }
+.att-overdue { color: #b31f2b; }
+
+/* Memo viewer (Company Communications policy, Nov 20, 2026): official PDF inside TimeHub, status chips, acknowledgment box. */
+.memo-viewer { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 12px 0; background: #fafafa; }
+.memo-viewer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: #fff; }
+.memo-viewer-bar .legend { margin-left: auto; }
+.memo-frame { display: block; width: 100%; height: min(70vh, 900px); border: 0; background: #fff; }
+.memo-viewer > p { padding: 12px 14px; margin: 0; }
+.memo-status { white-space: nowrap; }
+.memo-ack-box { border: 1px solid #e3c67a; border-left: 5px solid #b51f2b; background: #fffaf0; border-radius: 10px; padding: 12px 16px; margin-top: 14px; }
+.memo-ack-box p { margin: 4px 0; }
+.memo-q { border-left: 3px solid var(--line); padding: 2px 12px; margin: 8px 0; }
+.memo-q-form { margin-top: 10px; display: grid; gap: 8px; }
+.memo-q-cell { white-space: normal; min-width: 220px; margin-bottom: 6px; }
+.memo-filter { margin: 10px 0; }
+.badge-button { border: 0; background: none; padding: 0; box-shadow: none; cursor: pointer; }
+.badge-button:hover { background: none; }
+.memo-card .memo-card-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dp-ack-wording { font-size: 12px; background: #fffaf0; border: 1px solid #e3c67a; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+/* Outstanding actions on the employee bell (memos to acknowledge, due process notices): stays until done. */
+.employee-bell [data-portal-bell] { position: relative; }
+.bell-pending { position: absolute; bottom: -7px; right: -7px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: #d99a1e; color: #1d1300; font-size: 11px; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff; }
+.memo-bar-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--brand); text-decoration: none; cursor: pointer; }
+.memo-bar-link:hover { background: #fff3f3; }
+/* Attendance request form: only the fields of the chosen request type (field display rules otherwise override [hidden]). */
+#ar-form [data-show][hidden] { display: none !important; }
+
+/* Payroll attendance validation (Nov 20, 2026). */
+.pr-held { color: #a31927; font-weight: 600; }
+.pr-valid { color: #2f6b3a; }
+.pr-decide { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 360px; }
+.pr-decide select, .pr-decide input { font-size: 12px; padding: 6px 8px; }
+.pr-decide input { flex: 1; min-width: 160px; }
+.pr-review .wrap { white-space: normal; min-width: 200px; }
+.cr-resolved { display: block; color: #2f6b3a; margin-top: 4px; }
+/* Fingerprint sign-in as a tile (Nov 23, 2026): a large fingerprint line icon above its label, like a phone banking app. */
+.login-form .fingerprint-login{flex-direction:column;gap:8px;width:148px;margin:14px auto 6px;padding:16px 10px 12px;border:1px solid #ead9b0;border-radius:14px;background:#fff;color:#a11d2b;font-size:14px;font-weight:600;box-shadow:0 6px 18px rgb(90 16 24 / .10)}
+.login-form .fingerprint-login .fp-ico{width:46px;height:46px}
+.login-form .fingerprint-login:hover{background:#fff8ec}
+.login-form .fingerprint-login:disabled{opacity:.55}
+
+/* Quick sign-in (Nov 23, 2026): the remembered account and two tiles side by side (Biometrics Login, Password). */
+.login-form .login-who{text-align:center;color:#5a4a3a;font-size:14px;margin:-4px 0 12px}
+.login-form .login-who .link-button{width:auto;margin:0;padding:0;display:inline;font-size:14px}
+.login-form .login-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));max-width:320px;margin:10px auto 8px;border:1px solid #ead9b0;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 6px 18px rgb(90 16 24 / .10)}
+.login-form .login-tiles .fingerprint-login{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;padding:18px 8px 14px}
+.login-form .login-tiles .fingerprint-login + .fingerprint-login{border-left:1px solid #ead9b0}
+
+/* Plain clickable words under the sign-in tiles (Nov 23, 2026): no box. */
+.login-form .login-links{display:flex;justify-content:space-between;gap:12px;max-width:320px;margin:10px auto 0;padding:0 6px}
+.login-form .login-links .login-link{width:auto;margin:0;padding:4px 0;border:0;background:none;box-shadow:none;color:#a11d2b;font-size:14px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.login-form .login-links .login-link:hover{background:none;color:#7a1720}
+/* The two sign-in links: no underline, smaller text (Nov 23, 2026). */
+.login-form .login-links .login-link{font-size:12.5px;font-weight:500;text-decoration:none}
+.login-form .login-links .login-link:hover,.login-form .login-links .login-link:focus-visible{text-decoration:underline}
+/* Phones (Nov 23, 2026): the sign-in card fills the screen, content centred; the welcome scene starts below it. */
+@media (max-width: 720px) {
+  .welcome-login .login-form { min-height: 100svh; padding: 12px !important; display: flex; align-items: stretch; justify-content: center; }
+  .welcome-login .login-form form { width: 100%; max-width: none !important; margin: 0 !important; min-height: calc(100svh - 24px); display: flex; flex-direction: column; justify-content: flex-start; padding-top: 34px !important; padding-bottom: 26px !important; }
+  /* Logo at the top, TimeHub right under it, the two links at the bottom; the username and tiles in the middle. */
+  #login-form .login-card-logo { margin: 0 auto 10px; }
+  #login-form > h2 { margin: 0 0 auto; padding-bottom: 18px; }
+  #login-form .login-links { margin-top: auto; padding-top: 18px; }
+  .login-form .login-card-logo { max-height: 110px; }
+  .login-form .login-tiles, .login-form .login-links { max-width: none; width: 100%; }
+  .login-form .login-links { padding: 0 4px; }
+}
+/* Sign-in: only the user ID, centred and larger (Nov 23, 2026). */
+.login-form .login-user input{text-align:center;font-size:20px;font-weight:600;letter-spacing:.3px;padding:14px 12px;color:#3b2a1e}
+.login-form .login-user input::placeholder{font-size:15px;font-weight:400;color:#9a8a78}
+/* Phones: handshake mascots and motto inside the sign-in card (Nov 23, 2026); the page scene below is not repeated. */
+.login-form .login-mascot{display:none}
+@media (max-width: 720px) {
+  .login-form .login-mascot{display:block;margin:auto 0 0;padding-top:16px;text-align:center}
+  .login-form .login-mascot img{display:block;width:78%;max-width:300px;height:auto;margin:0 auto}
+  .login-form .login-mascot figcaption{margin-top:6px;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;font-size:15px;color:#9a6a12}
+  #login-form .login-mascot + .login-links{margin-top:10px}
+  .welcome-login .welcome-scene, .welcome-login .welcome-motto{display:none}
+}
+
+.acc-actions{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+
+/* Final pay release status (Nov 23, 2026). */
+.fp-release{width:auto;min-width:130px;padding:4px 8px;font-size:13px;border-color:#e0c9c9;color:#a11d2b;background:#fff}
+.fp-release.is-released{color:#1f6b3a;border-color:#b9dcc4;background:#f1faf3}

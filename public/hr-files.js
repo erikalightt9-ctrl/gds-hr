@@ -3,7 +3,7 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who, idTypeSelect } from './hr-common.js';
 
 const PAGE_SIZE = 10;
-const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['attendance', 'Attendance', '🕒'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['discipline', 'Disciplinary', '⚖️'], ['trainings', 'Trainings', '🏅']];
+const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['attendance', 'Attendance', '🕒'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
 function serviceLength(start, today) {
@@ -84,7 +84,7 @@ export function createFiles(ctx) {
     const from = list.length ? (pageNo - 1) * size + 1 : 0, to = Math.min(pageNo * size, list.length);
     return `<div class="ml-header"><div><h1>Employee Masterlist</h1><p>Manage employee profiles and employment records</p></div><div class="ml-header-tools"><a class="ml-btn" href="/api/reports/employees.xlsx" download>${svg('export')}Export</a>${can().manage ? `<button class="ml-btn primary" data-hr-add-employee>${svg('plus')}Add employee</button>` : ''}</div></div>
       <div class="ml-layout"><section class="ml-main">
-        <div class="ml-cards">${card('', 'all', current.length, 'Total employees')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}</div>
+        <div class="ml-cards">${card('', 'all', current.length, 'Employee records')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}</div>
         <div class="ml-filters"><label class="ml-search">${svg('search')}<input type="search" data-q value="${esc(query.q)}" placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
           <select data-f="department" aria-label="Subsidiary">${options(people.map(p => p.department), query.department, 'Subsidiary')}</select>
           <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
@@ -148,7 +148,7 @@ export function createFiles(ctx) {
 
   // ---------- Profile ----------
   async function openProfile(id, startTab = 'overview') {
-    profileId = id; tab = startTab; ctx.setPage('employee201');
+    profileId = id; tab = startTab; ctx.setPage('employee201'); otCache = null; dayCache.clear();   // fresh overtime decisions on every opening
     await drawProfile();
   }
   async function drawProfile() {
@@ -161,7 +161,7 @@ export function createFiles(ctx) {
     extras.loans = await api('/loans/dashboard').then(d => ({ loans: d.loans.filter(l => l.employeeId === id), applications: d.applications.filter(a => a.employeeId === id) })).catch(() => null);
     if (profileId !== id) return;
     const f = record.form, today = ctx.today();
-    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (key !== 'attendance' || ctx.getState?.()?.attendance) && (!['family', 'education', 'history'].includes(key) || extras.family) && (key !== 'discipline' || ['admin', 'hr', 'viewer'].includes(ctx.role?.())));
+    const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (key !== 'attendance' || ctx.getState?.()?.attendance) && (!['family', 'education', 'history'].includes(key) || extras.family));
     if (!tabs.some(([key]) => key === tab)) tab = 'overview';
     const header = `<section class="panel hr-profile-head"><div class="hr-profile-id"><span class="hr-avatar large"><img src="/api/hr/employees/${enc}/photo" alt="" data-photo>${esc(initials(record.name))}</span><div><h1>${esc(record.name)}</h1><p class="sub">${esc(record.number)} · ${esc(f.employment.position || 'No position')} · ${esc(f.employment.department || 'No department')}</p><p>${statusBadge(record.archived ? 'Archived' : record.activity)} ${f.employment.classification ? badge(f.employment.classification, 'neutral') : ''} ${record.draft ? badge('Pay setup incomplete', 'pending') : ''}</p></div></div>
       <div class="actions"><button class="small" data-back>← All employees</button>${can().approve ? (record.archived ? `<button class="small" data-restore="${esc(id)}">Restore</button>` : `<button class="small ghost-danger" data-archive="${esc(id)}">Archive</button>`) : ''}</div></section>`;
@@ -209,40 +209,55 @@ export function createFiles(ctx) {
   function personalRows(f) { return [['First name', f.personal.firstName], ['Middle name', f.personal.middleName], ['Last name', f.personal.lastName], ['Suffix', f.personal.suffix], ['Preferred name', f.personal.preferredName], ['Sex', f.personal.sex], ['Date of birth', f.personal.birthDate && fmtDate(f.personal.birthDate)], ['Place of birth', f.personal.birthPlace], ['Civil status', f.personal.civilStatus], ['Nationality', f.personal.nationality], ...(f.personal.bloodType ? [['Blood type', f.personal.bloodType]] : []), ['Mobile', f.contact.mobile], ['Work email', f.contact.workEmail], ['Personal email', f.contact.personalEmail], ['Current address', f.contact.currentAddress], ['Permanent address', f.contact.permanentAddress]]; }
   function employmentRows(record) { const f = record.form; return [['Employee number', record.number], ['Subsidiary', f.employment.department], ['Position', f.employment.position], ['Job level', f.employment.jobLevel], ['Employment type', f.employment.employmentType], ['Classification', f.employment.classification], ['Status', f.employment.status], ['Immediate supervisor', f.employment.supervisor], ['Work location', f.employment.workLocation], ['Date hired', fmtDate(f.employment.dateHired)], ['Contract start', f.employment.contractStart && fmtDate(f.employment.contractStart)], ['Contract end', f.employment.contractEnd && fmtDate(f.employment.contractEnd)], ['Probation end', f.employment.probationEnd && fmtDate(f.employment.probationEnd)], ['Performance review', f.employment.reviewDate && fmtDate(f.employment.reviewDate)]]; }
   // Attendance history for one month: recorded attendance and approved leave, newest first.
-  // Disciplinary record (approved decisions) and due process cases of one employee; loaded when the tab opens.
-  const disciplineCache = new Map();
-  function disciplineHtml(id) {
-    if (!disciplineCache.has(id)) {
-      disciplineCache.set(id, null);
-      Promise.all([ctx.api(`/hr/discipline/records/${encodeURIComponent(id)}`), ctx.api(`/hr/discipline/cases?employeeId=${encodeURIComponent(id)}`)]).then(([records, cases]) => { disciplineCache.set(id, { records, cases }); const box = document.querySelector('[data-discipline-box]'); if (box) box.innerHTML = disciplineHtml(id); }).catch(error => { disciplineCache.set(id, { error: error.message }); });
-      return '<p class="muted">Loading…</p>';
-    }
-    const d = disciplineCache.get(id);
-    if (!d) return '<p class="muted">Loading…</p>';
-    if (d.error) return `<div class="notice">${esc(d.error)}</div>`;
-    const decided = d.records.filter(r => r.label);
-    return block('⚖️', 'Disciplinary record', table(['Decision', 'Case', 'Offense', 'Incident', 'Decision date', 'Notice', 'Approved by'], decided.map(r => [esc(r.label), esc(r.reference), esc(r.offense), fmtDate(r.incidentDate), fmtDate(r.decisionDate), esc(r.memoReference), esc(r.approvedBy)]), 'No disciplinary action on record.'))
-      + block('📂', 'Due process cases', table(['Case', 'Offense', 'Incident', 'Status', ''], d.cases.map(c => [esc(c.reference), esc(c.offense), fmtDate(c.incidentDate), esc(c.status), `<button class="small" data-nav-case="${esc(c.id)}">Open case</button>`]), 'No cases.'));
-  }
   let attMonth = '';
-  // Time in / out records (off-site work: reason, time recorded, location), loaded per employee and month.
-  const clockCache = new Map();
-  function clockEventsHtml(id, month) {
+  // Consolidated Attendance History (Nov 20, 2026): every date of the month in order, from the server (attendance-days):
+  // kind of day, time in / out, late, gaps (Missing Time-In, Missing Time-Out, No Time-In / Time-Out), days recorded but
+  // not yet approved (Attendance for Verification), the correction case, remarks and off-site reasons / places.
+  const dayCache = new Map();
+  const CHIP = { 'missing-in': ['Missing Time-In', 'att-chip-in'], 'missing-out': ['Missing Time-Out', 'att-chip-out'], 'no-record': ['Absent', 'att-chip-none'], verify: ['Attendance for Verification', 'att-chip-verify'], rest: ['Rest day', 'att-chip-rest'], holiday: ['Holiday', 'att-chip-holiday'], leave: ['Approved leave', 'att-chip-leave'], wfh: ['Work from home', 'att-chip-wfh'] };
+  const chip = (key, text) => `<span class="att-chip ${CHIP[key][1]}">${esc(text || CHIP[key][0])}</span>`;
+  function historyHtml(id, month) {
     const key = `${id}|${month}`;
-    if (!clockCache.has(key)) {
-      clockCache.set(key, null);
-      ctx.api(`/clock-events?employeeId=${encodeURIComponent(id)}&month=${month}`).then(list => { clockCache.set(key, list); const box = document.querySelector('[data-att-box]'); if (box && (attMonth || ctx.today().slice(0, 7)) === month) box.innerHTML = attendanceHtml(id); }).catch(() => clockCache.set(key, []));
-      return '<p class="muted">Loading time records…</p>';
+    if (!dayCache.has(key)) {
+      dayCache.set(key, null);
+      ctx.api(`/attendance-days?employeeId=${encodeURIComponent(id)}&month=${month}`).then(list => { dayCache.set(key, list); const box = document.querySelector('[data-att-box]'); if (box && (attMonth || ctx.today().slice(0, 7)) === month) box.innerHTML = attendanceHtml(id); }).catch(error => dayCache.set(key, { error: error.message }));
     }
-    const list = clockCache.get(key);
-    if (list === null) return '<p class="muted">Loading time records…</p>';
-    const away = list.filter(e => e.outOfOffice);
-    const where = e => (e.latitude === null || e.latitude === undefined ? 'No GPS reading' : `<a href="https://www.google.com/maps/search/?api=1&query=${e.latitude},${e.longitude}" target="_blank" rel="noopener noreferrer">${esc(e.place || `${e.latitude}, ${e.longitude}`)}</a><small> ±${esc(e.accuracy)} m</small>`);
-    const stampOf = iso => new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
-    return `<h3>Off-site work time in / out</h3>` + table(['Date', 'Time', 'Recorded', 'Reason', 'Location'], away.map(e => [esc(e.workDate), `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)}`, esc(stampOf(e.recordedAt)), `<span class="wrap">${esc(e.reason || '')}</span>${e.earlierDecision ? `<small> · ${esc(e.earlierDecision.approval)} by ${esc(e.earlierDecision.reviewedBy)}</small>` : ''}`, where(e)]), 'No out-of-office time records this month.');
+    const list = dayCache.get(key);
+    if (list === null) return '<p class="muted">Loading attendance…</p>';
+    if (list.error) return `<div class="notice">${list.error === 'Not found.' ? 'The attendance history is available after the HR server restarts.' : esc(list.error)}</div>`;
+    const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const today = ctx.today(), verify = d => !d.issue && d.status === 'present' && !d.approved && d.timeIn && d.timeOut;
+    const where = o => (o.latitude === null || o.latitude === undefined ? esc(o.place || '') : `<a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noopener noreferrer">${esc(o.place || 'Map')}</a>`);
+    const statusCell = d => (d.issue ? chip(d.issue) : verify(d) ? chip('verify') : d.date > today ? '<small class="muted">Not yet</small>' : d.status === 'present' ? (d.late >= 15 ? 'Late' : 'Present') : d.absentByHr ? '<span class="att-chip att-chip-none">Absent</span>' : d.status ? esc(d.status.replace(/-/g, ' ')) : '');
+    const kindCell = d => (CHIP[d.kind] && d.kind !== 'workday' ? chip(d.kind, d.label) : esc(d.label));
+    const remarks = d => [d.explanation ? esc(d.explanation) : '', ...d.offsite.map(o => `Off-site ${o.kind === 'in' ? 'time in' : 'time out'} ${esc(o.time)}${o.reason ? ` — ${esc(o.reason)}` : ''}${o.place || o.latitude !== null ? ` · ${where(o)}` : ''}`)].filter(Boolean).join('<br>');
+    const n = k => list.filter(d => d.issue === k).length;
+    const counts = `${list.filter(d => d.status === 'present').length} present · ${n('missing-in')} missing time-in · ${n('missing-out')} missing time-out · ${n('no-record') + list.filter(d => d.absentByHr).length} absent · ${list.filter(verify).length} for verification`;
+    const legend = `<div class="att-legend">${Object.keys(CHIP).map(k => chip(k)).join('')}</div>`;
+    return `<p class="legend">${counts}</p>${legend}` + table(['Date', 'Day', 'Time in', 'Time out', 'Late (min)', 'Status', 'Remarks'], list.map(d => [day(d.date), kindCell(d), esc(d.timeIn || '—'), esc(d.timeOut ? `${d.timeOut}${d.endNextDay ? ' (+1)' : ''}` : '—'), d.late || '—', statusCell(d), `<span class="wrap">${remarks(d)}</span>`]), 'No days in this month.');
+  }
+  // Overtime applications of this employee for the month (filed hours, decision, hours payroll can pay); decided on the
+  // Attendance → Overtime applications page. Loaded once per open profile (the whole list, filtered here).
+  let otCache = null;
+  function overtimeHtml(id, month) {
+    if (otCache === null) {
+      otCache = 'loading';
+      ctx.api('/overtime-requests').then(list => { otCache = list; const box = document.querySelector('[data-att-box]'); if (box) box.innerHTML = attendanceHtml(id); }).catch(() => { otCache = []; });
+    }
+    if (otCache === 'loading') return '<p class="muted">Loading overtime applications…</p>';
+    const STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
+    const rows = otCache.filter(o => o.employeeId === id && o.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
+    return '<h3>Overtime applications</h3>' + table(['Date', 'Period', 'Hours filed', 'Status', 'Approved', 'Payable (worked)', 'Work / reason', 'Notes'], rows.map(o => [esc(o.date), o.startTime ? `${esc(o.startTime)}–${esc(o.endTime)}${o.breakMinutes ? ` (less ${o.breakMinutes} min break)` : ''}` : '—', esc(o.hours), esc(STATUS[o.status] || o.status), o.status === 'approved' ? esc(o.approvedHours) : '—', o.status === 'approved' ? `${esc(o.payableHours)} h` : '—', `<span class="wrap">${esc(o.reason || o.work || '')}</span>`, `<span class="wrap">${esc([o.remarks, ...(o.flags || [])].filter(Boolean).join(' · '))}</span>`]), 'No overtime applications this month.') + '<p class="legend">Approve or reject them in Attendance → Overtime applications.</p>';
   }
   function attendanceHtml(id) {
-    const state = ctx.getState(), month = attMonth || ctx.today().slice(0, 7);
+    const month = attMonth || ctx.today().slice(0, 7), can = ctx.context?.()?.can || {};
+    // HR / Admin / Payroll: the consolidated day-by-day history; other roles keep the recorded list below.
+    if (can.approve || can.payroll || ctx.context?.()?.roleLabel === 'Payroll') {
+      const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(`${ctx.today().slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - i); return d.toISOString().slice(0, 7); });
+      const label = m => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      return block('🕒', 'Attendance history', `<div class="att-tools"><label class="field">Month<select data-att-month>${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${label(m)}</option>`).join('')}</select></label></div>` + historyHtml(id, month) + (can.approve ? overtimeHtml(id, month) : ''));
+    }
+    const state = ctx.getState();
     const mins = hm => { const [h, m] = String(hm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
     const grace = state.rules.filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0]?.graceMinutes ?? 15;
     const typeName = tid => state.leaveTypes.find(x => x.id === tid)?.name || tid;
@@ -263,7 +278,7 @@ export function createFiles(ctx) {
     const count = s => list.filter(r => r.status.startsWith(s)).length;
     return block('🕒', 'Attendance history', `<div class="att-tools"><label class="field">Month<select data-att-month>${months.map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${label(m)}</option>`).join('')}</select></label><span class="legend">${count('Present')} present · ${count('Late')} late · ${count('Absent')} absent · ${count('On leave')} on leave</span></div>`
       + table(['Date', 'Status', 'Time in', 'Time out', 'Late (min)', 'Remarks'], list.map(r => [day(r.date), esc(r.status), esc(r.timeIn || '—'), esc(r.timeOut || '—'), r.late || '—', `<span class="wrap">${esc(r.note || '')}</span>`]), 'No attendance recorded for this month.')
-      + (ctx.context?.()?.can?.approve ? clockEventsHtml(id, month) : ''));
+      + (ctx.context?.()?.can?.approve ? overtimeHtml(id, month) : ''));
   }
   function safeBody(...args) {
     try { return tabBody(...args); } catch (error) { return `<div class="notice">This tab could not be shown: ${esc(error.message)}. Reload the page (Ctrl+F5) and try again.</div>`; }
@@ -281,7 +296,7 @@ export function createFiles(ctx) {
         ${scheduleCard(record)}
         ${outstanding.length ? block('⚠️', 'Outstanding requirements', `<ul class="plain-list">${outstanding.map(i => `<li>${badge(i.status, DOC_BADGE[i.status])} ${esc(i.requirement.name)}${i.overdue ? ' <strong class="danger-text">overdue</strong>' : ''}</li>`).join('')}</ul>`) : ''}`;
     }
-    if (tab === 'employment' || tab === 'history') return block('💼', 'Employment information', dl([...employmentRows(record), ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]), formBtn('employment', edit)) + (extras.history ? block('🕘', 'Previous employment', table(['Company', 'Position', 'From', 'To', 'Reason for leaving'], extras.history.entries.map(x => [esc(x.company), esc(x.position || '—'), x.from ? fmtDate(x.from) : '—', x.to ? fmtDate(x.to) : '—', esc(x.reason || '—')]), 'No previous employment recorded.'), editBtn('history', edit)) : '');
+    if (tab === 'employment' || tab === 'history') return block('💼', 'Employment information', dl([...employmentRows(record), ['Length of service', serviceLength(f.employment.dateHired, ctx.today())]]), formBtn('employment', edit)) + (ctx.context?.()?.can?.manage ? (setTimeout(() => import('./movements-ui.js').then(m => m.mountMovements(document.querySelector('[data-mv-box]'), { api: ctx.api, esc, badge, toast: ctx.toast, openDialog: ctx.openDialog, dialog: ctx.dialog, today: ctx.today }, record.id)).catch(() => {}), 0), '<div data-mv-box></div>') : '') + (extras.history ? block('🕘', 'Previous employment', table(['Company', 'Position', 'From', 'To', 'Reason for leaving'], extras.history.entries.map(x => [esc(x.company), esc(x.position || '—'), x.from ? fmtDate(x.from) : '—', x.to ? fmtDate(x.to) : '—', esc(x.reason || '—')]), 'No previous employment recorded.'), editBtn('history', edit)) : '');
     const loansHtml = () => {
       const L = extras.loans;
       const rows = L.loans.map(l => [esc(l.type), l.loanDate ? fmtDate(l.loanDate) : '—', ctx.money(l.original), ctx.money(l.perPayroll), ctx.money(l.totalRepaid), `<strong>${ctx.money(l.outstanding)}</strong>`, l.nextDeduction ? fmtDate(l.nextDeduction) : '—', esc(l.status)]);
@@ -295,7 +310,9 @@ export function createFiles(ctx) {
       return block('💰', 'Pay', dl([['Pay basis', daily ? 'Daily-paid' : c.basis === 'days-worked' ? 'Per day worked (monthly ÷ 26 × days worked)' : 'Monthly'], [daily ? 'Daily rate' : 'Monthly salary', ctx.money(daily ? c.dailyRate : c.monthlySalary)], ...(daily ? [['Monthly equivalent', ctx.money(c.monthlySalary)]] : [['Daily rate', c.dailyRate === null ? 'From company divisor' : ctx.money(c.dailyRate)]]), ['Payroll frequency', c.frequency || 'Company default'], ['Payroll status', c.status]]), extras.canEditPay ? ' <button class="small" data-edit-pay>Edit pay</button>' : '')
         + block('✔️', 'Pay coverage', dl([['Overtime', c.coveredOT ? 'Covered' : 'Not covered'], ['Night differential', c.coveredNSD ? 'Covered' : 'Not covered'], ['Holiday pay', c.coveredHoliday ? 'Covered' : 'Not covered'], ['13th month pay', c.covered13th ? 'Covered' : 'Not covered'], ['Withholding tax', c.withholdingTax === 'exempt' ? 'Exempt (no withholding tax)' : 'Withheld per tax table']]), extras.canEditPay ? ' <button class="small" data-edit-pay>Edit coverage</button>' : '')
         + block('➖', 'Company deductions', table(['Deduction', 'Amount', 'When'], c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule)]), 'No company deductions.'), ctx.legacy() ? ' <button class="small" data-go-deductions>Manage deductions</button>' : '')
+        + (extras.canEditPay ? (setTimeout(() => import('./salary-ui.js').then(m => m.mountSalary(document.querySelector('[data-salary-box]'), { api: ctx.api, esc, toast: ctx.toast, openDialog: ctx.openDialog, dialog: ctx.dialog, today: ctx.today }, record.id)).catch(() => {}), 0), '<div data-salary-box></div>') : '')
         + (extras.loans ? loansHtml() : '')
+        + (extras.finalPay?.length ? block('🧾', 'Final pay', table(['Separation', 'Net final pay', 'Release due', 'Status', 'Released on', 'Recorded by'], extras.finalPay.map(r => [fmtDate(r.separationDate), `<a href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF"><strong>${ctx.money(r.net)}</strong></a>`, fmtDate(r.releaseDue), r.release?.released ? '<span class="badge">Released</span>' : '<span class="badge pending">Not released</span>', r.release?.released ? fmtDate(r.release.releasedOn) : '—', r.release ? esc(who(r.release.by)) : '—']), 'No final pay computed.')) : '')
         + (ctx.legacy() ? `<p class="legend">Salary, schedule and contributions are edited under <button class="link-button" data-legacy-profile="${esc(record.id)}">Attendance, leave &amp; pay</button>.</p>` : '');
     }
     const governmentIds = () => block('🪪', 'Government IDs', dl([['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]), formBtn('government', edit && record.sensitiveIds && ctx.context().can.approve)) + `<p class="legend">${record.sensitiveIds ? 'Shown in full to authorised roles only. HR Managers and Administrators can edit them.' : 'Masked for your role.'}</p>`;
@@ -315,8 +332,7 @@ export function createFiles(ctx) {
       return governmentIds() + documentsTab(record, checklist) + (files.length ? block('📁', 'All 201 files', table(['File', 'Requirement', 'Uploaded', 'Review'], files.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(v => [`<a href="/api/hr/documents/${v.id}/content" target="_blank" rel="noopener">${esc(v.name)}</a>`, esc(v.requirementName || ''), fmtDateTime(v.uploadedAt), badge(v.reviewStatus, DOC_BADGE[v.reviewStatus])]), 'No files uploaded yet. Upload them from the Requirements tab.')) : '');
     }
     if (tab === 'attendance') return `<div data-att-box>${attendanceHtml(record.id)}</div>`;
-    if (tab === 'discipline') return `<div data-discipline-box>${disciplineHtml(record.id)}</div>`;
-    if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'), edit ? ' <button class="small" data-go-memos>Send a memo</button>' : '');
+    if (tab === 'memos') return block('📝', 'Memos and acknowledgements', table(['Memo', 'Reference', 'Version', 'Issued', 'Received', 'Acknowledged receipt'], extra.memos.map(m => [esc(m.title), esc(m.reference), `v${m.version}`, fmtDate(m.issueDate), fmtDateTime(m.assignedAt), m.acknowledgedAt ? badge(`Acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? badge('Pending', 'pending') : badge('Not required', 'neutral')]), 'No memos addressed to this employee.'), `${edit ? ' <button class="small" data-go-memos>Send a memo</button>' : ''}${ctx.context().can.approve || ctx.context().roleLabel === 'Management' ? ' <button class="small" data-go-discipline>Disciplinary record</button>' : ''}`);
     if (tab === 'trainings') return block('🏅', 'Training records', table(['Training', 'Date', 'Required', 'Registration', 'Attendance', 'Completion'], extra.trainings.map(x => [esc(x.title), fmtDate(x.date), x.required ? 'Required' : 'Optional', esc(x.registration), esc(x.attendance), x.completion === 'completed' ? badge('Completed') : esc(x.completion)]), 'No trainings assigned.'), edit ? ' <button class="small" data-go-trainings>Assign a training</button>' : '');
     return block('↺', 'Activity history', table(['When', 'Who', 'Action', 'Area', 'Previous → updated'], extra.activity.map(a => [fmtDateTime(a.at), esc(who(a.actor)), esc(a.action), esc(a.area), (a.changes || []).length ? `<span class="wrap">${a.changes.map(c => `<small><strong>${esc(c.field)}</strong>: ${esc(c.before)} → ${esc(c.after)}</small>`).join('')}</span>` : '—']), record.canEdit ? 'No recorded activity yet.' : 'Activity history is available to HR.')) + '<p class="legend">The audit trail is permanent: it cannot be edited or deleted. Values you are not authorized to see (such as salary) are left out.</p>';
   }
@@ -384,7 +400,7 @@ export function createFiles(ctx) {
           `${i.numberOnly ? badge(i.status === 'Verified' ? 'Number on file' : i.status === 'Missing' ? 'No number yet' : i.status, DOC_BADGE[i.status]) : !i.requirement.required && i.status === 'Missing' ? '<span class="muted">—</span>' : badge(i.status, DOC_BADGE[i.status])}${i.overdue ? ' <small class="danger-text">overdue</small>' : ''}${i.expiringSoon ? ' <small>expiring soon</small>' : ''}${i.notApplicable ? `<small>${esc(i.notApplicable.reason)}</small>` : ''}`,
           c?.expiryDate ? `Expires ${fmtDate(c.expiryDate)}` : i.due && ['Missing', 'Rejected'].includes(i.status) ? `Due ${fmtDate(i.due)}` : '—',
           i.numberOnly ? '<span class="muted">Number only · no file needed</span>' : i.hidden ? '<span class="muted">Restricted</span>' : c ? `<a href="/api/hr/documents/${c.id}/content" target="_blank" rel="noopener">${esc(c.name)}</a>` : '—',
-          `<span class="row-actions">${manage && !i.hidden && !i.numberOnly ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${approve && (!c || i.notApplicable) ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? 'Mark applicable' : 'Not applicable'}</button>` : ''}</span>`];
+          `<span class="row-actions">${manage && !i.hidden && !i.numberOnly ? `<button class="small" data-upload="${esc(i.requirement.id)}">${c ? 'Replace' : 'Upload'}</button>` : ''}${manage && c && !i.hidden && ['Submitted', 'Under Review', 'Expired'].includes(i.status) ? `<button class="small primary" data-review="${c.id}" data-req="${esc(i.requirement.name)}">Review</button>` : ''}${approve && (!c || i.notApplicable) ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="${i.notApplicable ? '' : '1'}">${i.notApplicable ? (i.notApplicable.waived ? 'Remove waiver' : 'Mark applicable') : 'Not applicable'}</button>${!i.notApplicable && i.requirement.required ? `<button class="small" data-na="${esc(i.requirement.id)}" data-on="1" data-waive="1">Waive…</button>` : ''}` : ''}${i.notApplicable?.reason ? `<small>${esc(i.notApplicable.waived ? 'Waived' : 'N/A')}: ${esc(i.notApplicable.reason)}</small>` : ''}</span>`];
       }))}`).join('')}</section>`;
   }
   async function onProfileClick(event, record, checklist, extras) {
@@ -407,6 +423,7 @@ export function createFiles(ctx) {
       if (b.hasAttribute('data-edit-pay')) { ctx.editPay(id); return; }
       if (b.hasAttribute('data-go-deductions')) { ctx.go({ page: 'deductions' }); return; }
       if (b.hasAttribute('data-go-memos')) { ctx.go({ page: 'memos' }); return; }
+      if (b.hasAttribute('data-go-discipline')) { ctx.go({ page: 'discipline', employeeId: id }); return; }
       if (b.hasAttribute('data-go-trainings')) { ctx.go({ page: 'trainings' }); return; }
       if (b.hasAttribute('data-go-loans')) { ctx.go({ page: 'loans' }); return; }
       if (b.dataset.leaveDates) {
@@ -418,9 +435,9 @@ export function createFiles(ctx) {
       if (b.dataset.review) reviewDialog(b.dataset.review, b.dataset.req);
       if (b.dataset.versions) versionsDialog(checklist.items.find(i => i.requirement.id === b.dataset.versions));
       if (b.dataset.na !== undefined) {
-        const on = !!b.dataset.on, reason = on ? window.prompt('Why is this requirement not applicable to this employee?') : '';
+        const on = !!b.dataset.on, waive = !!b.dataset.waive, reason = on ? window.prompt(waive ? 'Reason for waiving this requirement (who approved it, until when):' : 'Why is this requirement not applicable to this employee?') : '';
         if (on && !reason) return;
-        await api(`/hr/employees/${encodeURIComponent(id)}/requirements/${b.dataset.na}`, { notApplicable: on, reason: reason || '' }); toast(on ? 'Marked not applicable.' : 'Requirement applies again.'); await drawProfile();
+        await api(`/hr/employees/${encodeURIComponent(id)}/requirements/${b.dataset.na}`, { notApplicable: on, reason: reason || '', ...(waive ? { waive: true } : {}) }); toast(on ? (waive ? 'Requirement waived.' : 'Marked not applicable.') : 'Requirement applies again.'); await drawProfile();
       }
     } catch (error) { toast(error.message); }
   }

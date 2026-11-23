@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { officeClaimFlag, withFlagState } from './clock-flags.mjs';
+import { workforce } from './workforce.mjs';
 import { renderPayslipPdf } from './payslip-pdf.mjs';
 import { holidaySplit } from './holiday-pay.mjs';
 import { z } from 'zod';
@@ -44,6 +46,14 @@ const local = now => new Date(now.getTime() + 8 * 3600000).toISOString();
 const hhmm = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
 const fromMinutes = minutes => `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const rows = (store, table, id) => store.db.prepare(`SELECT data FROM ${table} WHERE employee_id=? ORDER BY rowid DESC`).all(id).map(r => JSON.parse(r.data));
+// The open time in (newest first history): the latest time in that no time out closed. A time out HR enters later for an
+// earlier day (a reconciliation event linked by clockInId) does not hide today's open time in (Nov 20, 2026 fix).
+export function openTimeIn(history) {
+  const i = history.findIndex(e => e.kind === 'in');
+  if (i < 0) return null;
+  const event = history[i], closed = history.some((e, j) => e.kind === 'out' && (e.clockInId ? e.clockInId === event.id : j < i));
+  return closed ? null : event;
+}
 // Where a time in / out was made: the office address on the office Wi-Fi or inside the office area, else the street
 // address looked up for that exact GPS point (when already known).
 function distanceMeters(lat1, lon1, lat2, lon2) { const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(a)); }
@@ -80,6 +90,14 @@ export function geofence(reading, workplace) {
   const status = distance + reading.accuracy <= workplace.radiusMeters ? 'Within' : distance - reading.accuracy > workplace.radiusMeters ? 'Outside' : 'Uncertain';
   return { status, distance: Math.round(distance), radius: workplace.radiusMeters, poorAccuracy: reading.accuracy > Math.min(100, workplace.radiusMeters) };
 }
+// 'Erika Hernando – Time In: 9:00 AM – Location: Office' (first and last name, 12-hour time).
+export function attendanceAlert(store, employee, kind, time, location) {
+  const personal = JSON.parse(store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='personal'").get(employee.id)?.data ?? '{}');
+  const [last, given = ''] = String(employee.name || '').split(',').map(x => x.trim());
+  const name = personal.firstName && personal.lastName ? `${personal.firstName} ${personal.lastName}` : [given.split(' ')[0], last].filter(Boolean).join(' ') || employee.name;
+  const [h, m] = String(time || '').split(':').map(Number), clock = Number.isFinite(h) ? `${h % 12 || 12}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}` : time;
+  return `${name} – Time ${kind === 'in' ? 'In' : 'Out'}: ${clock} – Location: ${location}`;
+}
 export function punch(store, actor, input, now = new Date(), { ip = '', userAgent = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
   if (remittanceOnlyIds(store).has(employee.id)) throw new AppError('This account does not use time in / out.');
@@ -100,7 +118,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
     if (retry) { if (retry.employee_id !== employee.id || JSON.parse(retry.data).kind !== value.kind) throw new AppError('Clock request does not belong to this employee.', 403); return JSON.parse(retry.data); }
     // Off-site work leaves time to read and confirm the address (5 minutes); office time in / out 2 minutes.
     if (Math.abs(now.getTime() - Date.parse(value.capturedAt)) > (value.mode === 'outside' ? 300000 : 120000)) throw new AppError('Location reading is stale. Capture your current location again.');
-    const state = store.read(), history = rows(store, 'clock_events', employee.id), latest = history[0], day = local(now).slice(0, 10);
+    const state = store.read(), history = rows(store, 'clock_events', employee.id), latest = openTimeIn(history), day = local(now).slice(0, 10);
     ready(employee, day);
     const workplace = profileOf(state, employee.id, 'attendance'), employment = profileOf(state, employee.id, 'employment');
     if (['Suspended', 'Resigned', 'Terminated', 'Inactive'].includes(employment.employeeStatus)) throw new AppError('Your employment status requires HR review before attendance can be recorded.');
@@ -133,7 +151,7 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
       addressCorrected: value.mode === 'outside' && !!detected && !!value.address && normal(value.address) !== normal(detected.formatted),
       ...(additional || clockIn?.additionalSession ? { additionalSession: true } : {}),
       ...(value.mode === 'office' && network.configured && !network.office ? { officeBy: 'gps' } : value.mode === 'office' && network.office ? { officeBy: 'wifi' } : {}),
-      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : []), ...(value.mode === 'office' && network.configured && !network.office ? ['Office Wi-Fi not verified: accepted by the office GPS area'] : [])] };
+      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...[officeClaimFlag(value.mode, value.reason)].filter(Boolean), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : []), ...(value.mode === 'office' && network.configured && !network.office ? ['Office Wi-Fi not verified: accepted by the office GPS area'] : [])] };
     if (clockIn?.additionalSession) {
       // Closing an additional session: the day's record now ends at this time out; the gap is an unpaid break.
       const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
@@ -160,7 +178,10 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
         store.notify(null, `${employee.id} ${employee.name}: timed in ${lateMin} minutes late on ${workDate}. Explanation required.`);
       }
     }
-    store.notify(null, value.mode === 'outside' ? `${employee.id}: off-site work time ${value.kind} at ${event.time}. Reason: ${value.reason}` : `${employee.id}: time ${value.kind} recorded at ${event.time}.`);
+    // HR / Feishu attendance alert (Nov 20, 2026): full name, time in / out and the location only. 'Office' only when the
+    // device is on the office Wi-Fi; otherwise the exact address recorded with the punch (the address the employee
+    // confirmed off-site, or the office's own address when the office GPS area accepted it without the Wi-Fi).
+    store.notify(null, attendanceAlert(store, employee, value.kind, event.time, network.office ? 'Office' : event.address || detected?.formatted || (value.mode === 'office' && officeArea ? companyOf(store).officeAddress || 'Office area (not on the office Wi-Fi)' : 'Location unavailable')));
     store.log(actor, `time-${value.kind}`, 'clock', event.id, null, event);
     return event;
   });
@@ -171,7 +192,7 @@ const STALE_OPEN_MS = 16 * 3600000;
 export const staleOpen = (event, day, now = new Date()) => event?.kind === 'in' && event.workDate < day && now.getTime() - Date.parse(event.recordedAt) > STALE_OPEN_MS;
 export function todayAttendance(store, employee, now = new Date()) {
   const state = store.read(), day = local(now).slice(0, 10), allEvents = rows(store, 'clock_events', employee.id);
-  const open = allEvents[0]?.kind === 'in' && !staleOpen(allEvents[0], day, now) ? allEvents[0] : null;
+  const openEvent = openTimeIn(allEvents), open = openEvent && !staleOpen(openEvent, day, now) ? openEvent : null;
   const workDate = open?.workDate || day, events = allEvents.filter(e => e.workDate === workDate), clockIn = events.find(e => e.kind === 'in'), clockOut = events.find(e => e.kind === 'out');
   const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
   const schedule = scheduleOn(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
@@ -195,10 +216,11 @@ export function todayAttendance(store, employee, now = new Date()) {
   else if (record?.status === 'rest-day-swap') status = 'Rest-day swap';
   else if (record?.status === 'offset') status = 'Offset';
   else if (record?.status === 'off') status = 'Off duty';
-  else if (record?.status === 'absent' || (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes)) status = 'Absent';
+  else if (record?.status === 'absent') status = 'Absent';
+  else if (!actualIn && status === 'Awaiting time in' && endMinutes !== null && currentMinutes > endMinutes) status = 'No time in';
   else if (actualIn) status = !actualOut && endMinutes !== null && currentMinutes > endMinutes ? 'Missing time out' : late && !graceLate ? 'Late' : 'Present';
   // Work-from-home day counted present without time in / out.
-  const autoPresent = !record && !actualIn && ['Awaiting time in', 'Absent'].includes(status) && !!autoPresentRecord(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
+  const autoPresent = !record && !actualIn && ['Awaiting time in', 'No time in'].includes(status) && !!autoPresentRecord(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
   if (autoPresent) status = 'Present';
   const exceptions = events.filter(e => ['Outside', 'Uncertain'].includes(e.geofence.status) || e.geofence.poorAccuracy).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'}: ${e.geofence.status}, accuracy ±${e.accuracy} m`);
   return { date: workDate, status, autoPresent, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
@@ -298,7 +320,9 @@ export function submitExplanation(store, actor, input) {
 }
 export function reviewExplanation(store, actor, id, input) {
   permit(actor, ['admin', 'hr']);
-  const value = z.object({ status: z.enum(['approved', 'rejected']), approvedOffset: z.number().int().min(0).max(1440), note }).strict().parse(input);
+  // 'approved' has two outcomes (Nov 20, 2026): Late confirmed (explanation accepted, the late time stands less any
+  // approved offset) or Late excused (no lateness counted that day: the record becomes an exception).
+  const value = z.object({ status: z.enum(['approved', 'rejected']), outcome: z.enum(['confirmed', 'excused']).default('confirmed'), approvedOffset: z.number().int().min(0).max(1440), note }).strict().parse(input);
   return store.transaction(() => {
     const row = store.db.prepare('SELECT data FROM attendance_explanations WHERE id=?').get(id);
     if (!row) throw new AppError('Explanation not found.', 404);
@@ -308,15 +332,16 @@ export function reviewExplanation(store, actor, id, input) {
     // HR may approve any offset (up to a day), also when the employee asked for none.
     const state = store.read(), record = state.attendance.find(a => a.employeeId === before.employeeId && a.date === before.date);
     if (state.runs.some(r => r.start <= before.date && r.end >= before.date && r.rows.some(a => a.employeeId === before.employeeId))) throw new AppError('Attendance belongs to posted payroll; use a later authorized adjustment.');
-    const after = { ...before, ...value, approvedOffset: value.status === 'approved' ? value.approvedOffset : 0, reviewedBy: actor.username, reviewedAt: new Date().toISOString() };
+    const excused = value.status === 'approved' && value.outcome === 'excused';
+    const after = { ...before, ...value, outcome: value.status === 'approved' ? value.outcome : '', approvedOffset: value.status === 'approved' && !excused ? value.approvedOffset : 0, reviewedBy: actor.username, reviewedAt: new Date().toISOString() };
     if (record && after.status === 'approved') {
-      const previous = structuredClone(record); record.offsetMinutes = after.approvedOffset; record.explanation = after.explanation; record.approved = false;
+      const previous = structuredClone(record); record.offsetMinutes = after.approvedOffset; record.explanation = after.explanation; record.approved = false; if (excused) record.exception = true;
       const correction = { reason: value.note, correctedBy: actor.username, approver: actor.username, at: after.reviewedAt, before: previous, after: record };
       store.db.prepare('INSERT INTO attendance_corrections VALUES(?,?,?,?)').run(randomUUID(), before.employeeId, record.id, JSON.stringify(correction));
       state.version++; store.write(state); store.log(actor, 'explanation-offset', 'attendance', record.id, previous, { ...record, correction });
     }
     store.db.prepare('UPDATE attendance_explanations SET data=? WHERE id=?').run(JSON.stringify(after), id);
-    store.notify(before.employeeId, `Your attendance explanation for ${before.date} was ${after.status}.`);
+    store.notify(before.employeeId, `Your attendance explanation for ${before.date}: ${after.status === 'rejected' ? 'not accepted' : excused ? 'Late excused (no lateness counted)' : `Late confirmed${after.approvedOffset ? ` (offset ${after.approvedOffset} min)` : ''}`}.`);
     store.log(actor, 'review', 'explanations', id, before, after); return after;
   });
 }
@@ -383,11 +408,11 @@ export function liveDashboard(store, actor, now = new Date()) {
   // Only people who clock in: not drafts (incomplete or remittance-only profiles such as the CEO), not archived, not separated.
   // Inactive employees (resigned, separated, set inactive) are not listed.
   const day = local(now).slice(0, 10);
-  const remitOnly = remittanceOnlyIds(store);
-  const employees = state.employees.filter(e => !e.draft && !remitOnly.has(e.id) && !e.archived && e.active !== false && (!e.endDate || e.endDate >= day)).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now), reasons: reasonsFor(store, state, e.id, day) })).filter(e => e.status !== 'Inactive');
+  const force = workforce(store, day, state), keep = new Set(force.timekeepingIds);
+  const employees = state.employees.filter(e => keep.has(e.id)).map(e => ({ employeeId: e.id, name: e.name, department: e.department || '', ...todayAttendance(store, e, now), reasons: reasonsFor(store, state, e.id, day) })).filter(e => e.status !== 'Inactive');
   const history = withPlace(store, store.db.prepare('SELECT data FROM clock_events ORDER BY rowid DESC LIMIT 200').all().map(r => JSON.parse(r.data)));
   const companies = (() => { try { return JSON.parse(store.db.prepare('SELECT data FROM hr_settings LIMIT 1').get()?.data || '{}').departments || []; } catch { return []; } })();
-  return { companies, employees, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
+  return { workforce: { active: force.active, timekeeping: force.timekeeping, notTimekeeping: force.notTimekeeping }, companies, employees, history, notifications: store.db.prepare('SELECT id,created_at AS at,message FROM notifications WHERE employee_id IS NULL ORDER BY rowid DESC LIMIT 50').all(), serverTime: now.toISOString() };
 }
 export function correctClock(store, actor, input) {
   permit(actor, ['admin', 'hr']);
@@ -396,7 +421,8 @@ export function correctClock(store, actor, input) {
   const original = rows(store, 'clock_events', value.employeeId).find(e => e.workDate === value.date && e.kind === 'in');
   if (!original) throw new AppError('Original time-in not found.');
   const state = store.read(), employee = state.employees.find(e => e.id === value.employeeId);
-  const record = { id: `clock-${original.id}`, employeeId: employee.id, date: value.date, status: 'present', scheduledIn: scheduleOn(employee, profileOf(state, employee.id, 'attendance'), value.date).start, timeIn: approvedTimeIn(store, employee.id, value.date)?.time || original.time, timeOut: value.timeOut, endNextDay: value.endNextDay, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: value.reason, holidayEligible: false, correctionReason: value.reason };
+  // HR enters this time out itself: the corrected day is HR-approved and payroll uses it as recorded (Nov 20, 2026).
+  const record = { id: `clock-${original.id}`, employeeId: employee.id, date: value.date, status: 'present', scheduledIn: scheduleOn(employee, profileOf(state, employee.id, 'attendance'), value.date).start, timeIn: approvedTimeIn(store, employee.id, value.date)?.time || original.time, timeOut: value.timeOut, endNextDay: value.endNextDay, breaks: [], approved: true, offsetMinutes: 0, exception: false, explanation: value.reason, holidayEligible: false, correctionReason: value.reason };
   const saved = saveRecord(store, actor, 'attendance', record);
   // A separate immutable reconciliation event closes the open shift, preserving both readings.
   if (!rows(store, 'clock_events', employee.id).some(e => e.clockInId === original.id)) {
@@ -526,7 +552,7 @@ export function employeeClockEvents(store, actor, employeeId, month) {
   if (!/^\d{4}-\d{2}$/.test(String(month || ''))) throw new AppError('Choose a month.');
   // One employee, or everyone when no employee is chosen (Attendance -> Time in / out records).
   const events = (employeeId ? store.db.prepare('SELECT data FROM clock_events WHERE employee_id=? AND work_date LIKE ? ORDER BY rowid DESC').all(String(employeeId), `${month}-%`) : store.db.prepare('SELECT data FROM clock_events WHERE work_date LIKE ? ORDER BY rowid DESC LIMIT 5000').all(`${month}-%`)).map(r => JSON.parse(r.data));
-  return withPlace(store, events).map(e => { const review = e.outOfOffice ? outOfOfficeReview(store, e.id) : null; return review ? { ...e, earlierDecision: review } : e; });
+  return withFlagState(store, withPlace(store, events)).map(e => { const review = e.outOfOffice ? outOfOfficeReview(store, e.id) : null; return review ? { ...e, earlierDecision: review } : e; });
 }
 
 // Attendance → Explanations (HR / Admin): late arrivals still waiting for an explanation and every explanation.

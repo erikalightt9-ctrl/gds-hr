@@ -1,4 +1,5 @@
 import test from 'node:test';
+process.env.HR_REQUIRE_MFA = 'off';   // two-factor enforcement is tested in tests/mfa-required.test.mjs
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { saveProfile, getProfile, uploadDocument, getDocument, updateDocument, visibleAudit, derivedInformation } from '../src/profiles.mjs';

@@ -3,7 +3,7 @@
 import { capitalizeExistingNames } from './names.mjs';
 import { explanationsDue, isWaivedDate } from './late-explanations.mjs';
 import { defaultRules } from './defaults.mjs';
-import { DOLE_HOLIDAY_BASIS, DOLE_HOLIDAY_DRAFT_ID, DOLE_HOLIDAY_EFFECTIVE, DOLE_HOLIDAY_RATES } from './holiday-rates.mjs';
+import { COMPANY_SPECIAL_UNWORKED, DOLE_HOLIDAY_BASIS, DOLE_HOLIDAY_DRAFT_ID, DOLE_HOLIDAY_EFFECTIVE, DOLE_HOLIDAY_RATES } from './holiday-rates.mjs';
 
 const once = (store, key, run) => {
   if (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(key)) return 0;
@@ -176,13 +176,13 @@ export function doleHolidayDraft(store) {
       const approved = state.rules.filter(r => r.approvedBy).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
       const base = structuredClone(approved || state.rules[0] || defaultRules);
       const draft = {
-        ...base, ...DOLE_HOLIDAY_RATES,
+        ...base, ...DOLE_HOLIDAY_RATES, specialUnworked: COMPANY_SPECIAL_UNWORKED,
         id: DOLE_HOLIDAY_DRAFT_ID, effectiveDate: DOLE_HOLIDAY_EFFECTIVE, basis: DOLE_HOLIDAY_BASIS,
         approvedBy: '', updatedAt: new Date().toISOString(),
       };
       delete draft.approvedAt; delete draft.approvedByUserId;
       state.rules.push(draft); state.version++; store.write(state);
-      store.log(system, 'create', 'rules', draft.id, null, { id: draft.id, effectiveDate: draft.effectiveDate, approvedBy: '', holidayRates: DOLE_HOLIDAY_RATES });
+      store.log(system, 'create', 'rules', draft.id, null, { id: draft.id, effectiveDate: draft.effectiveDate, approvedBy: '', specialUnworked: COMPANY_SPECIAL_UNWORKED, holidayRates: DOLE_HOLIDAY_RATES });
     }
     store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,1)').run('migration:dole-holiday-draft-2026-11-16');
     return 1;

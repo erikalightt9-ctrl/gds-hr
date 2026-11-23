@@ -2,130 +2,162 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { completeState, admin } from './helpers.mjs';
+import { createCase, updateIncident, saveNte, issueNte, toEvaluation, scheduleHearing, recordHearing, saveEvaluation, draftDecision, submitDecision, reviewDecision, issueDecision, closeCase, addFile, readCase } from '../src/discipline.mjs';
+import { listCases, caseDetail, myCases, acknowledgeNotice, submitExplanation, listRecords, recordPriorAction, disciplineBell, caseFile } from '../src/discipline-views.mjs';
+import { saveDpSettings, readDpSettings } from '../src/discipline-settings.mjs';
+import { casePdf } from '../src/discipline-pdf.mjs';
+import { buildReport } from '../src/reports.mjs';
 import { localToday } from '../src/profiles.mjs';
-import { createCase, updateIncident, startInvestigation, addCaseFile, caseFile, issueNte, submitCaseExplanation, recordNoExplanation, scheduleHearing, recordHearing, evaluateCase, proposeDecision, reviewDecision, closeCase, listCases, caseDetail, disciplinaryRecords, myCases, saveDisciplineSettings, disciplineSettings } from '../src/discipline.mjs';
-import { saveMemoDraft, publishMemo, myMemos } from '../src/memos.mjs';
 
-const hr = { username: 'hr.manager', role: 'hr' }, mgmt = { username: 'mgmt', role: 'viewer' }, staff = { username: 'staff', role: 'hr_staff' };
-const worker = { id: 'worker', username: 'employee1', role: 'employee', employeeId: 'EMP-001' }, other = { id: 'o', username: 'employee2', role: 'employee', employeeId: 'EMP-002' };
-const pdf = Buffer.from('%PDF-1.4\n%test\n').toString('base64');
-const day = n => { const d = new Date(`${localToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const hr = { username: 'hr1', role: 'hr' }, boss = { username: 'boss', role: 'viewer' }, staff = { username: 'staff', role: 'hr_staff' };
+const worker = { username: 'emp', role: 'employee', employeeId: 'EMP-001' }, other = { username: 'other', role: 'employee', employeeId: 'EMP-002' };
+const PDF = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
+const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 function fixture() {
-  const store = new Store(':memory:'), s = completeState();
-  s.employees.push({ ...s.employees[0], id: 'EMP-002', name: 'Other Person' });
-  store.write(s);
-  store.db.prepare("INSERT INTO employee_profiles(employee_id,section,data) VALUES('EMP-001','employment',?)").run(JSON.stringify({ department: 'Operations', position: 'Clerk', status: 'Active' }));
-  return store;
+  const store = new Store(':memory:'), state = completeState();
+  state.employees.push({ ...state.employees[0], id: 'EMP-002', name: 'Other Person' });
+  store.write(state); return store;
 }
-const incident = { employeeId: 'EMP-001', incidentDate: day(-3), incidentTime: '09:30', place: 'Main office', offense: 'Insubordination', description: 'Refused a lawful instruction of the supervisor to file the daily report.', reportedBy: 'Supervisor A', witnesses: 'B, C' };
-const nte = deadline => ({ allegations: 'On the date stated you refused the lawful instruction of your supervisor to file the daily report.', rules: 'Code of Conduct, section 4.2', possibleSanction: 'Written warning up to suspension', responseDeadline: deadline, hearingOffered: true });
+const incident = { employeeId: 'EMP-001', date: localToday(), time: '09:30', place: 'Main office', offenseId: 'insubordination', description: 'Refused a lawful instruction from the supervisor twice.', reportedBy: 'Supervisor', witnesses: '', issuingOfficer: 'HR Manager' };
+const nte = { allegations: 'On the date above you refused to complete the assigned report after two instructions.', rules: 'Code of Conduct section 4.2', possibleSanction: 'Written warning', responseDays: 5 };
+// Moves a fresh case to "For Evaluation" through the employee's own explanation.
+function explained(store, hearingRequested = false) {
+  const c = createCase(store, hr, { ...incident, participants: ['boss'] }); saveNte(store, hr, c.id, nte); issueNte(store, hr, c.id);
+  submitExplanation(store, worker, c.id, { text: 'I was finishing an urgent task for the client and asked for one more hour.', hearingRequested, files: [{ name: 'proof.pdf', mime: 'application/pdf', data: PDF }] });
+  return c.id;
+}
 
-test('incident → NTE (at least 5 days, issued as a memo) → explanation → evaluation → proposal → approval by someone else → decision → closure', () => {
+test('due process: the seven steps in order, management approval before issue, record kept on closure, audited', () => {
   const store = fixture();
   try {
-    assert.throws(() => createCase(store, staff, incident), /permission/);
-    assert.throws(() => createCase(store, hr, { ...incident, description: 'short' }), /20 characters/);
-    const c = createCase(store, hr, incident);
-    assert.equal(c.status, 'Pending'); assert.match(c.reference, /^CASE-\d{4}-001$/);
-    assert.equal(c.employee.position, 'Clerk'); assert.equal(c.employee.department, 'Operations');
-    assert.equal(startInvestigation(store, hr, c.id, { note: 'Collecting statements' }).status, 'Under Investigation');
-    addCaseFile(store, hr, c.id, { name: 'incident-report.pdf', mime: 'application/pdf', data: pdf, kind: 'evidence', description: 'Supervisor report' });
-    assert.throws(() => addCaseFile(store, hr, c.id, { name: 'x.pdf', mime: 'application/pdf', data: Buffer.from('not a pdf').toString('base64') }), /PDF/);
-    assert.equal(updateIncident(store, hr, c.id, { ...incident, employeeId: undefined, place: 'Warehouse' }).incident.place, 'Warehouse');
-    assert.equal(myCases(store, worker).length, 0, 'the employee does not see the case before the NTE');
-    assert.throws(() => issueNte(store, hr, c.id, nte(day(4))), /at least 5 calendar days/);
-    const afterNte = issueNte(store, hr, c.id, nte(day(5)));
-    assert.equal(afterNte.status, 'Awaiting Explanation');
-    assert.throws(() => updateIncident(store, hr, c.id, { ...incident, employeeId: undefined }), /no longer be edited/);
-    const memo = myMemos(store, worker).find(m => m.title.startsWith('Notice to Explain'));
-    assert.ok(memo && memo.ackRequired && memo.attachments.length === 1, 'NTE delivered as a memo with the letterhead PDF');
-    assert.throws(() => recordNoExplanation(store, hr, c.id, {}), /until/);
-    assert.throws(() => evaluateCase(store, hr, c.id, { substantiated: true, findings: 'x'.repeat(30) }), /after the explanation/);
-    // The employee answers from their account; another employee cannot.
-    assert.throws(() => submitCaseExplanation(store, other, c.id, { text: 'Not me at all.' }), /not found/i);
-    const mine = submitCaseExplanation(store, worker, c.id, { text: 'I was attending to a client at the time.', requestsHearing: false, files: [{ name: 'client-log.pdf', mime: 'application/pdf', data: pdf, description: '' }] });
-    assert.equal(mine.status, 'For Evaluation'); assert.equal(mine.explanation.files.length, 1);
-    assert.throws(() => submitCaseExplanation(store, worker, c.id, { text: 'Second answer here.' }), /already received/);
-    const fileId = mine.explanation.files[0].id;
-    assert.equal(caseFile(store, worker, fileId).meta.name, 'client-log.pdf');
-    assert.throws(() => caseFile(store, worker, caseDetail(store, hr, c.id).files.find(f => f.kind === 'evidence').id), /not found/i, 'evidence stays with HR');
-    assert.throws(() => proposeDecision(store, hr, c.id, { action: 'Written warning', rationale: 'x'.repeat(30) }), /Evaluate/);
-    evaluateCase(store, hr, c.id, { substantiated: true, findings: 'The client log shows the meeting ended before the instruction was given.' });
-    assert.throws(() => proposeDecision(store, hr, c.id, { action: 'Suspension', suspensionDays: 0, rationale: 'x'.repeat(30) }), /Suspension must be/);
-    const proposed = proposeDecision(store, hr, c.id, { action: 'Written warning', rationale: 'First offense under section 4.2; written warning is the prescribed penalty.' });
-    assert.equal(proposed.status, 'For Evaluation'); assert.equal(proposed.stage, 'approval');
-    assert.equal(listCases(store, mgmt).find(x => x.id === c.id).awaitingApproval, true);
-    // Nothing is imposed automatically: no decision memo yet, no record yet.
-    assert.equal(disciplinaryRecords(store, mgmt, 'EMP-001')[0].action, undefined);
-    assert.throws(() => reviewDecision(store, hr, c.id, { decision: 'approve' }), /permission|someone other/, 'HR is not an approver by default');
-    assert.throws(() => reviewDecision(store, staff, c.id, { decision: 'approve' }), /permission/);
-    const decided = reviewDecision(store, mgmt, c.id, { decision: 'approve', note: 'Approved.' });
-    assert.equal(decided.status, 'Resolved'); assert.equal(decided.decision.action, 'Written warning'); assert.equal(decided.decision.approvedBy, 'mgmt');
-    assert.ok(myMemos(store, worker).some(m => m.title.startsWith('Notice of Decision')));
-    const record = disciplinaryRecords(store, mgmt, 'EMP-001')[0];
-    assert.equal(record.action, 'Written warning'); assert.equal(record.reference, c.reference);
-    const mineNow = myCases(store, worker)[0];
-    assert.equal(mineNow.decision.label, 'Written warning'); assert.equal(mineNow.evaluation, undefined, 'HR findings are not shown to the employee');
-    assert.throws(() => closeCase(store, hr, c.id, { outcome: 'no' }), /final outcome/);
-    assert.equal(closeCase(store, hr, c.id, { outcome: 'Written warning served and acknowledged.' }).status, 'Closed');
-    const history = caseDetail(store, mgmt, c.id).history.map(h => h.action);
-    for (const a of ['opened', 'investigate', 'attach', 'edit-incident', 'issue-nte', 'explanation', 'evaluate', 'propose', 'approve-decision', 'close']) assert.ok(history.includes(a), a);
-    assert.ok(store.db.prepare("SELECT COUNT(*) n FROM audit WHERE kind='discipline-case'").get().n >= 10);
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] });
+    assert.equal(c.status, 'pending'); assert.match(c.reference, /^DP-\d{4}-0001$/);
+    addFile(store, hr, c.id, { name: 'cctv.pdf', mime: 'application/pdf', data: PDF, kind: 'evidence' });
+    assert.throws(() => issueNte(store, hr, c.id), /Prepare the Notice to Explain/);
+    assert.throws(() => saveNte(store, hr, c.id, { ...nte, responseDays: 3 }), /at least 5 calendar days/);
+    saveNte(store, hr, c.id, nte);
+    assert.equal(readCase(store, c.id).status, 'investigation');
+    const issued = issueNte(store, hr, c.id);
+    assert.equal(issued.status, 'awaiting'); assert.equal(issued.nte.deadline, addDays(localToday(), 5));
+    assert.match(issued.nte.body, /calendar days/); assert.doesNotMatch(issued.nte.body, /\{\{deadline\}\}/, 'deadline filled in on issue');
+    assert.throws(() => updateIncident(store, hr, c.id, incident), /already issued/);
+    assert.throws(() => toEvaluation(store, hr, c.id, {}), /verify service/, 'no non-response finding before receipt is documented');
+    // Employee: sees only their notice, acknowledges it, explains and asks for a hearing.
+    assert.equal(myCases(store, other).length, 0);
+    const mine = myCases(store, worker)[0];
+    assert.equal(mine.notices[0].kind, 'nte'); assert.ok(mine.canExplain); assert.equal('evaluation' in mine, false); assert.equal('notes' in mine, false);
+    acknowledgeNotice(store, worker, c.id, 'nte');
+    submitExplanation(store, worker, c.id, { text: 'I was finishing an urgent task for the client and asked for one more hour.', hearingRequested: true, files: [] });
+    assert.throws(() => submitExplanation(store, worker, c.id, { text: 'A second explanation that should be refused.', files: [] }), /can no longer be submitted/);
+    assert.equal(readCase(store, c.id).status, 'evaluation');
+    assert.ok(disciplineBell(store, hr).some(i => /written explanation received/.test(i.text)));
+    // A requested hearing must be held (or waived) before the evaluation.
+    assert.throws(() => saveEvaluation(store, hr, c.id, { findings: 'The refusal is admitted.', recommendation: 'Written warning' }), /asked for a hearing/);
+    scheduleHearing(store, hr, c.id, { scheduledAt: `${addDays(localToday(), 2)}T10:00`, place: 'Conference room' });
+    assert.equal(myCases(store, worker)[0].notices.length, 2, 'hearing notice reaches the employee');
+    recordHearing(store, hr, c.id, { outcome: 'held', heldOn: localToday(), employeeAttended: true, statements: 'The employee admitted the refusal and apologised.', attendees: 'HR, supervisor, employee' });
+    saveEvaluation(store, hr, c.id, { findings: 'The refusal is admitted; urgent client work partly explains it.', recommendation: 'Written warning' });
+    // Decision: prepared by HR, approved by management (not the preparer), then issued.
+    assert.throws(() => draftDecision(store, hr, c.id, { sanction: 'Suspension', findings: 'Refusal admitted.' }), /suspension days/);
+    draftDecision(store, hr, c.id, { sanction: 'Written warning', findings: 'Refusal admitted; first offense.' });
+    assert.doesNotMatch(readCase(store, c.id).decision.body, /\{\{/, 'every placeholder of the decision is filled in');
+    assert.doesNotMatch(readCase(store, c.id).nte.body, /\{\{/, 'every placeholder of the issued notice is filled in');
+    assert.throws(() => issueDecision(store, hr, c.id), /approved by authorized management/);
+    submitDecision(store, hr, c.id);
+    assert.throws(() => reviewDecision(store, hr, c.id, { action: 'approve' }), /permission/, 'HR is not an approver by default');
+    assert.throws(() => reviewDecision(store, { username: 'hr1', role: 'admin' }, c.id, { action: 'approve' }), /someone other than/);
+    assert.throws(() => reviewDecision(store, boss, c.id, { action: 'return' }), /Say what must change/);
+    assert.ok(disciplineBell(store, boss).some(i => /waiting for your approval/.test(i.text)));
+    reviewDecision(store, boss, c.id, { action: 'approve', note: 'Proportionate.' });
+    const resolved = issueDecision(store, hr, c.id);
+    assert.equal(resolved.status, 'resolved'); assert.equal(resolved.decision.reference, `${c.reference}-NOD`);
+    acknowledgeNotice(store, worker, c.id, 'decision');
+    const closed = closeCase(store, hr, c.id, {});
+    assert.equal(closed.status, 'closed'); assert.equal(closed.closure.outcome, 'Written warning');
+    assert.deepEqual(listRecords(store, hr, 'EMP-001').map(r => [r.type, r.reference, r.source]), [['Written warning', c.reference, 'case']]);
+    const actions = store.audit().filter(a => a.kind === 'discipline').map(a => a.action);
+    for (const a of ['create', 'add-file', 'save-nte', 'issue-nte', 'acknowledge-receipt', 'submit-explanation', 'schedule-hearing', 'record-hearing', 'save-evaluation', 'draft-decision', 'submit-decision', 'approve-decision', 'issue-decision', 'close']) assert.ok(actions.includes(a), a);
+    assert.ok(!JSON.stringify(store.audit().filter(a => a.kind === 'discipline')).includes('Refused a lawful instruction'), 'case text is not copied into the audit trail');
+    assert.ok(readCase(store, c.id).history.length >= 14, 'timestamped case history');
   } finally { store.close(); }
 });
 
-test('a requested hearing must be held and recorded first; termination needs a hearing; a returned proposal goes back to evaluation', () => {
+test('due process: access is limited to HR managers and management; employees reach only their own notices and files', () => {
   const store = fixture();
   try {
-    const c = createCase(store, hr, { ...incident, offense: 'Fraud or breach of trust' });
-    issueNte(store, hr, c.id, nte(day(7)));
-    submitCaseExplanation(store, worker, c.id, { text: 'I deny the charge and ask to be heard.', requestsHearing: true });
-    assert.throws(() => evaluateCase(store, hr, c.id, { substantiated: true, findings: 'x'.repeat(30) }), /requested a hearing/);
-    assert.throws(() => recordHearing(store, hr, c.id, { held: true, attendees: 'HR', minutes: 'x'.repeat(20) }), /Schedule/);
-    const scheduled = scheduleHearing(store, hr, c.id, { date: day(2), time: '10:00', place: 'Conference room', sendNotice: true });
-    assert.ok(scheduled.hearing.memoReference);
-    assert.ok(myMemos(store, worker).some(m => m.title.startsWith('Notice of Hearing')));
-    recordHearing(store, hr, c.id, { held: true, employeeAttended: true, attendees: 'HR manager, employee, supervisor', statements: 'Employee denied.', minutes: 'The employee presented documents and denied the charge.' });
-    evaluateCase(store, hr, c.id, { substantiated: false, findings: 'The documents presented contradict the supervisor report.' });
-    assert.throws(() => proposeDecision(store, hr, c.id, { action: 'Termination', rationale: 'x'.repeat(30) }), /not substantiated/);
-    proposeDecision(store, hr, c.id, { action: 'No disciplinary action', rationale: 'The charge was not substantiated by the evidence presented.' });
-    const returned = reviewDecision(store, admin, c.id, { decision: 'return', note: 'Interview the second witness first.' });
-    assert.equal(returned.stage, 'evaluation'); assert.equal(returned.proposal, null); assert.equal(returned.evaluation, null); assert.equal(returned.returned.length, 1);
-    // Termination without a hearing is refused when policy requires one.
-    const c2 = createCase(store, hr, { ...incident, offense: 'Dishonesty' });
-    issueNte(store, hr, c2.id, nte(day(5)));
-    submitCaseExplanation(store, worker, c2.id, { text: 'I admit and apologise.' });
-    evaluateCase(store, hr, c2.id, { substantiated: true, findings: 'Admitted in the written explanation dated today.' });
-    assert.throws(() => proposeDecision(store, hr, c2.id, { action: 'Termination', rationale: 'Serious misconduct under the Code.' }), /requires a hearing/);
-  } finally { store.close(); }
-});
-
-test('no explanation after the deadline; dropped cases; written warning memos only for approved cases; settings', () => {
-  const store = fixture();
-  try {
-    const c = createCase(store, hr, incident);
-    issueNte(store, hr, c.id, nte(day(5)));
-    // Move the deadline into the past to simulate time passing.
-    const row = JSON.parse(store.db.prepare('SELECT data FROM discipline_cases WHERE id=?').get(c.id).data); row.nte.responseDeadline = day(-1);
-    store.db.prepare('UPDATE discipline_cases SET data=? WHERE id=?').run(JSON.stringify(row), c.id);
-    assert.equal(listCases(store, hr).find(x => x.id === c.id).overdueExplanation, true);
-    assert.equal(recordNoExplanation(store, hr, c.id, { note: 'Nothing received' }).status, 'For Evaluation');
-    const dropped = createCase(store, hr, { ...incident, offense: 'Neglect of duty' });
-    assert.equal(closeCase(store, hr, dropped.id, { outcome: 'Dropped: the report was withdrawn.' }).closure.dropped, true);
-    assert.equal(listCases(store, hr, { q: 'neglect' }).length, 1); assert.equal(listCases(store, hr, { status: 'Closed' }).length, 1);
-    const warning = { title: 'Written warning', category: 'Written Warning', issueDate: localToday(), body: 'Written warning text', recipients: { mode: 'employees', departments: [], employees: ['EMP-001'] }, ackRequired: true, details: { template: 'written-warning', employeeId: 'EMP-001', issuingOfficer: 'HR Manager', caseId: c.id } };
-    const draft = saveMemoDraft(store, hr, null, warning);
-    assert.throws(() => publishMemo(store, hr, draft.id), /approved decision is a warning/);
-    assert.throws(() => saveDisciplineSettings(store, admin, { ...disciplineSettings(store), minResponseDays: 3 }), /five/);
-    assert.throws(() => saveDisciplineSettings(store, hr, disciplineSettings(store)), /permission/);
-    assert.equal(saveDisciplineSettings(store, admin, { ...disciplineSettings(store), minResponseDays: 7, approverRoles: ['admin'] }).minResponseDays, 7);
-    const c3 = createCase(store, hr, incident);
-    assert.throws(() => issueNte(store, hr, c3.id, nte(day(6))), /7 calendar days/);
-    // An administrator who proposes cannot approve their own proposal.
-    evaluateCase(store, admin, c.id, { substantiated: true, findings: 'No explanation; the supervisor report stands.' });
-    proposeDecision(store, admin, c.id, { action: 'Verbal warning', rationale: 'First offense; verbal warning under the Code.' });
-    assert.throws(() => reviewDecision(store, admin, c.id, { decision: 'approve' }), /someone other/);
+    const id = explained(store);
     assert.throws(() => listCases(store, staff), /permission/);
-    assert.throws(() => listCases(store, worker), /permission/);
+    assert.throws(() => createCase(store, boss, incident), /permission/, 'management reads and approves, HR runs the case');
+    assert.equal(listCases(store, boss).length, 1);
+    assert.throws(() => caseDetail(store, worker, id), /permission/);
+    const fileId = readCase(store, id).files[0].id;
+    assert.equal(caseFile(store, worker, fileId).name, 'proof.pdf');
+    assert.throws(() => caseFile(store, other, fileId), /not found/i);
+    assert.throws(() => casePdf(store, other, id, 'nte'), /not found/i);
+    assert.throws(() => casePdf(store, worker, id, 'decision'), /not found/i, 'no decision issued yet');
+    assert.equal(casePdf(store, worker, id, 'nte').body.subarray(0, 5).toString(), '%PDF-');
+    assert.throws(() => buildReport(store, staff, 'discipline-cases', 'xlsx'), /cannot download/);
+    assert.equal(buildReport(store, hr, 'discipline-cases', 'xlsx').body.subarray(0, 2).toString(), 'PK');
+  } finally { store.close(); }
+});
+
+test('due process: no explanation by the deadline, dismissal needs a hearing (setting), closing without a notice needs a reason', () => {
+  const store = fixture();
+  try {
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] }); saveNte(store, hr, c.id, { ...nte, possibleSanction: 'Dismissal' }); issueNte(store, hr, c.id);
+    // Pretend the deadline passed.
+    const row = readCase(store, c.id);
+    store.db.prepare('UPDATE dp_cases SET data=? WHERE id=?').run(JSON.stringify({ ...row, nte: { ...row.nte, deadline: addDays(localToday(), -1) } }), c.id);
+    assert.ok(disciplineBell(store, hr).some(i => /no explanation by/.test(i.text)));
+    assert.throws(() => toEvaluation(store, hr, c.id, {}), /verify service/);
+    const served = readCase(store, c.id);
+    store.db.prepare('UPDATE dp_cases SET data=? WHERE id=?').run(JSON.stringify({ ...served, nte: { ...served.nte, service: { method: 'Personal service (hand delivery)', receivedOn: addDays(localToday(), -6) } } }), c.id);
+    toEvaluation(store, hr, c.id, {});
+    assert.equal(myCases(store, worker)[0].canExplain, true, 'a late explanation is still accepted until a decision is drafted');
+    saveEvaluation(store, hr, c.id, { findings: 'No explanation was received; records show the refusal.', recommendation: 'Dismissal' });
+    assert.throws(() => draftDecision(store, hr, c.id, { sanction: 'Dismissal', effectiveFrom: localToday(), findings: 'Serious misconduct proven.' }), /needs a hearing/);
+    recordHearing(store, hr, c.id, { outcome: 'waived', minutes: 'Employee waived the hearing in writing on the NTE copy.' });
+    draftDecision(store, hr, c.id, { sanction: 'Dismissal', effectiveFrom: localToday(), findings: 'Serious misconduct proven.' });
+    assert.equal(myCases(store, worker)[0].canExplain, false);
+    const fresh = createCase(store, hr, { ...incident, participants: ['boss'] });
+    assert.throws(() => closeCase(store, hr, fresh.id, {}), /Explain why/);
+    assert.equal(closeCase(store, hr, fresh.id, { remarks: 'Report withdrawn by the supervisor after review.' }).closure.outcome, 'Closed without action');
+    assert.equal(listRecords(store, hr).length, 0, 'no disciplinary record without a decision');
+    assert.throws(() => closeCase(store, hr, c.id, {}), /Issue the decision before closing/);
+  } finally { store.close(); }
+});
+
+test('due process settings: minimum five days, approver roles configurable (admin only); prior paper records encoded', () => {
+  const store = fixture();
+  try {
+    const s = readDpSettings(store);
+    assert.throws(() => saveDpSettings(store, hr, s), /permission/);
+    assert.throws(() => saveDpSettings(store, admin, { ...s, minResponseDays: 3 }), /five \(5\) calendar days/);
+    saveDpSettings(store, admin, { ...s, approverRoles: ['hr'], separateApprover: false, minResponseDays: 7 });
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] });
+    assert.throws(() => saveNte(store, hr, c.id, nte), /at least 7/);
+    saveNte(store, hr, c.id, { ...nte, responseDays: 7 }); issueNte(store, hr, c.id);
+    submitExplanation(store, worker, c.id, { text: 'I accept the finding and will follow the instruction next time.', files: [] });
+    saveEvaluation(store, hr, c.id, { findings: 'Admitted, first offense.', recommendation: 'Verbal warning' });
+    draftDecision(store, hr, c.id, { sanction: 'Verbal warning', findings: 'Admitted, first offense.' }); submitDecision(store, hr, c.id);
+    reviewDecision(store, hr, c.id, { action: 'approve' });
+    assert.equal(readCase(store, c.id).decision.status, 'approved');
+    assert.throws(() => recordPriorAction(store, hr, { employeeId: 'EMP-001', type: 'Written warning', date: '2099-01-01', offense: 'Tardiness', remarks: 'Paper memo on file' }), /future/);
+    recordPriorAction(store, hr, { employeeId: 'EMP-001', type: 'Written warning', date: '2025-03-01', offense: 'Habitual tardiness', reference: 'MEMO-2025-014', remarks: 'Paper memo in the 201 folder' });
+    assert.equal(caseDetail(store, hr, c.id).prior.length, 1);
+    assert.equal(buildReport(store, hr, 'discipline-records', 'xlsx').body.subarray(0, 2).toString(), 'PK');
+  } finally { store.close(); }
+});
+
+test('due process: each case is limited to its named participants (Admin always)', () => {
+  const store = fixture();
+  try {
+    const c = createCase(store, hr, { ...incident, participants: ['boss'] });
+    const otherHr = { username: 'hr2', role: 'hr' };
+    assert.ok(listCases(store, hr).some(x => x.id === c.id) && listCases(store, boss).some(x => x.id === c.id));
+    assert.ok(!listCases(store, otherHr).some(x => x.id === c.id), 'not named: not listed');
+    assert.throws(() => caseDetail(store, otherHr, c.id), /not found/);
+    assert.throws(() => saveNte(store, otherHr, c.id, nte), /not found/);
+    assert.ok(caseDetail(store, admin, c.id), 'Admin always');
   } finally { store.close(); }
 });

@@ -1,5 +1,5 @@
 // Shared pieces for the HR 201 screens: badges, progress bars, file reading and the Add / Edit Employee form.
-export const DOC_BADGE = { Missing: 'rejected', Rejected: 'rejected', Expired: 'rejected', Submitted: 'pending', 'Under Review': 'pending', Verified: '', 'Not Applicable': 'neutral', 'Expiring soon': 'pending' };
+export const DOC_BADGE = { Missing: 'rejected', Rejected: 'rejected', Expired: 'rejected', Submitted: 'pending', 'Under Review': 'pending', Verified: '', 'Not Applicable': 'neutral', Waived: 'neutral', 'Expiring soon': 'pending' };
 export const fmtDate = d => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—');
 export const fmtDateTime = d => (d ? new Date(d).toLocaleString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
 export function readFile(file) {
@@ -195,4 +195,29 @@ export async function passkeyGet(o) {
   const credential = await navigator.credentials.get({ publicKey: { ...o, challenge: toBytes(o.challenge), allowCredentials: (o.allowCredentials || []).map(c => ({ ...c, id: toBytes(c.id) })) } });
   const r = credential.response;
   return { id: credential.id, rawId: toB64u(credential.rawId), type: credential.type, response: { clientDataJSON: toB64u(r.clientDataJSON), authenticatorData: toB64u(r.authenticatorData), signature: toB64u(r.signature), ...(r.userHandle ? { userHandle: toB64u(r.userHandle) } : {}) } };
+}
+
+// ---------- Feishu sign-in link (server: src/feishu-login.mjs) ----------
+// Fills a box with the person's Feishu link state: Link (goes to Feishu and back) or Unlink. onVisible(false) hides the
+// surrounding section when HR has not set Feishu sign-in up and nothing is linked.
+export async function mountFeishuLink(box, { api, esc, toast, onVisible = () => {} }) {
+  if (!box) return;
+  const day = v => (v ? new Date(v).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
+  const draw = async () => {
+    try {
+      const d = await api('/me/feishu');
+      onVisible(d.allowed && (d.available || d.linked));
+      box.innerHTML = d.linked
+        ? `<p>Linked to <strong>${esc(d.name || 'your Feishu account')}</strong> since ${esc(day(d.linkedAt))}${d.lastUsed ? ` · last used ${esc(day(d.lastUsed))}` : ''}.</p><p class="legend">On the sign-in page, tap “Sign in with Feishu”.</p><button type="button" class="small danger" data-feishu-unlink>Unlink Feishu</button>`
+        : `<p class="legend">Link your Feishu account once; after that you can sign in with Feishu instead of your username and password. Feishu opens, you approve, and you come back here.</p><button type="button" class="primary small" data-feishu-link-start>Link my Feishu account</button>`;
+    } catch { onVisible(false); }
+  };
+  box.onclick = async event => {
+    const b = event.target.closest('button'); if (!b) return;
+    try {
+      if (b.hasAttribute('data-feishu-link-start')) { b.disabled = true; location.href = (await api('/me/feishu/link', {})).url; return; }
+      if (b.hasAttribute('data-feishu-unlink') && window.confirm('Unlink your Feishu account? You will sign in with your username and password again.')) { await api('/me/feishu/unlink', {}); toast('Feishu unlinked.'); await draw(); }
+    } catch (error) { b.disabled = false; toast(error.message); }
+  };
+  await draw();
 }

@@ -138,7 +138,7 @@ Holiday premiums follow the DOLE Handbook on Workers' Statutory Monetary Benefit
 - **Days Present**, **Holiday Days** and **Holiday Pay** are separate. Each holiday is paid once: for monthly-paid staff the 100% day is part of the half-month, and only the extra premium is added.
 - Overtime starts after the employee's scheduled hours (8 by default) and is 30% of the hourly rate on that day, which is the day's rate × 1.30.
 - An unworked **regular** or **double regular** holiday is paid only when the employee is covered and was present or on paid leave on the workday immediately before it. Rest days in between are skipped. On two regular holidays in a row, the second is paid when the first was worked or itself payable. An attendance record with holiday eligibility turned off withholds the day.
-- An unworked **special non-working** day is not paid unless Rules & rates sets that unworked rate above 0 (company policy).
+- An unworked **special non-working** day with no attendance record stays paid. That is the company decision of 20 November 2026, and it applies before the DOLE floor. The handbook allows a more favorable practice. The statutory floor (no pay) is used when the day is recorded off and Rules & rates sets that unworked rate to 0. The rules version for this company sets it to 1.
 - A calendar day marked **double** is a double regular holiday (two regular holidays on one date). The engine prices it. Two special days on one date are not a separate kind.
 - Night differential stays 10% of the hourly rate already used for that hour (including holiday and overtime) and is added on top. It is not replaced by the holiday rate.
 
@@ -146,8 +146,8 @@ Holiday premiums follow the DOLE Handbook on Workers' Statutory Monetary Benefit
 | --- | --- | --- | --- |
 | Ordinary working day | — | 100% | 125% |
 | Rest day | — | 130% | 169% |
-| Special non-working day | No pay (0%) | 130% | 169% |
-| Special non-working day on a rest day | No pay (0%) | 150% | 195% |
+| Special non-working day | Paid (company policy; statutory floor is no pay) | 130% | 169% |
+| Special non-working day on a rest day | No extra day (it is already a rest day) | 150% | 195% |
 | Regular holiday | 100% if qualified | 200% | 260% |
 | Regular holiday on a rest day | 100% if qualified | 260% | 338% |
 | Double regular holiday | 200% if qualified | 300% | 390% |

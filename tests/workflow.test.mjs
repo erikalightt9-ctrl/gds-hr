@@ -110,3 +110,15 @@ test('calendar-day leave crosses years and consumes annual balances by actual da
   saveRecord(db, admin, 'leaves', leave);
   assert.equal(db.read().leaves[0].days, 5); db.close();
 });
+
+test('one workforce rule: records, active headcount and the timekeeping subset with reasons', async () => {
+  const { workforce } = await import('../src/workforce.mjs');
+  const db = new Store(':memory:'), s = completeState();
+  s.employees.push({ ...s.employees[0], id: 'GONE', name: 'Gone, Person', endDate: '2026-01-31', active: false }, { ...s.employees[0], id: 'DRAFT', name: 'Draft, Person', draft: true, active: false, monthlySalary: null });
+  db.write(s);
+  try {
+    const w = workforce(db, '2026-11-20');
+    assert.deepEqual([w.records, w.active, w.inactive, w.timekeeping], [3, 2, 1, 1]);
+    assert.deepEqual(w.notTimekeeping.map(n => n.id), ['DRAFT']);
+  } finally { db.close(); }
+});

@@ -92,14 +92,14 @@ export function issueSession(store, user, currentTokenHash = '') {
   if (currentTokenHash) store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(currentTokenHash);   // same device signing in again
   const token = randomBytes(32).toString('hex'), csrf = randomBytes(32).toString('hex');
   store.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token), user.id, csrf, Date.now() + SESSION_MS);
-  return { token, csrf, user: { id: user.id, username: user.username, role: user.role, employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret, mustChangePassword: !!user.must_change_password } };
+  return { token, csrf, user: { id: user.id, username: user.username, role: user.role === 'service' ? 'viewer' : user.role, ...(user.role === 'service' ? { service: true } : {}), employeeId: user.employee_id, mfaEnabled: !!user.mfa_secret, mfaRequired: process.env.HR_REQUIRE_MFA !== 'off' && ['hr', 'hr_staff', 'payroll', 'viewer'].includes(user.role) && !user.mfa_secret, mustChangePassword: !!user.must_change_password } };
 }
 export function session(store, cookie = '') {
   const token = cookie.split(';').map(v => v.trim()).find(v => v.startsWith('hr_session='))?.slice(11);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
   if (!row || row.disabled || row.expires < Date.now()) return null;
-  return { user: { id: row.id, username: row.username, role: row.role, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
+  return { user: { id: row.id, username: row.username, role: row.role === 'service' ? 'viewer' : row.role, ...(row.role === 'service' ? { service: true } : {}), employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mfaRequired: process.env.HR_REQUIRE_MFA !== 'off' && ['hr', 'hr_staff', 'payroll', 'viewer'].includes(row.role) && !row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
 }
 export async function changePassword(store, user, currentPassword, newPassword) {
   const row = store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id);
@@ -226,7 +226,9 @@ export async function redeemPasswordReset(store, token, password) {
 export function setDisabled(store, actor, id, disabled) {
   permit(actor, ['admin']);
   if (id === actor.id) throw new AppError('You cannot disable your own account.');
-  if (!store.db.prepare('SELECT id FROM users WHERE id=?').get(id)) throw new AppError('User not found.', 404);
+  const user = store.db.prepare('SELECT id, role FROM users WHERE id=?').get(id);
+  if (!user) throw new AppError('User not found.', 404);
+  if (disabled && user.role === 'admin' && store.db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) AND id<>?").get(id).n === 0) throw new AppError('This is the last active System Administrator account and cannot be disabled.');
   store.transaction(() => {
     store.db.prepare('UPDATE users SET disabled=? WHERE id=?').run(disabled ? 1 : 0, id);
     store.db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);

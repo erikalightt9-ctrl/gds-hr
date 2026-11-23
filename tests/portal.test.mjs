@@ -39,6 +39,7 @@ test('HR corrections preserve original clock events and record their approver an
     assert.throws(() => correctClock(store, worker, {}));
     const corrected = correctClock(store, admin, { employeeId: worker.employeeId, date: original.workDate, timeOut: '17:00', endNextDay: false, reason: 'Employee forgot to clock out; schedule verified.' });
     assert.equal(corrected.timeIn, original.time);
+    assert.equal(corrected.approved, true, 'a time out HR enters itself is HR-approved: payroll uses the corrected day as recorded');
     assert.equal(employeeDashboard(store, worker, new Date('2026-09-18T10:00:00Z')).today.open, false);
     assert.equal(store.db.prepare('SELECT data FROM clock_events WHERE id=?').get(original.id).data, JSON.stringify(original));
     assert.equal(employeeDashboard(store, worker, now).corrections[0].approver, admin.username);
@@ -218,5 +219,27 @@ test('a forgotten time out from an earlier day does not block the next day time 
     assert.throws(() => punch(store, worker, reading('out', '44444444-4444-4444-8444-444444444444', monday), monday), /has no time out/);
     const today = punch(store, worker, reading('in', '55555555-5555-4555-8555-555555555555', monday), monday);
     assert.equal(today.workDate, '2026-10-12', 'time in for today works');
+  } finally { store.close(); }
+});
+
+test('open time in: a time out HR records later for an earlier day does not hide today\'s open time in', async () => {
+  const { openTimeIn } = await import('../src/portal.mjs');
+  const today = { id: 'in-today', kind: 'in', workDate: '2026-11-20' };
+  // Newest first: HR's reconciliation out for Nov 19 was added after today's time in.
+  assert.equal(openTimeIn([{ id: 'hr-out', kind: 'out', workDate: '2026-11-19', clockInId: 'in-19' }, today, { id: 'in-19', kind: 'in', workDate: '2026-11-19' }]), today);
+  assert.equal(openTimeIn([{ id: 'out', kind: 'out', workDate: '2026-11-20' }, today]), null, 'a normal time out closes it');
+  assert.equal(openTimeIn([{ id: 'hr-out', kind: 'out', workDate: '2026-11-20', clockInId: 'in-today' }, today]), null, 'HR closing this time in closes it');
+  assert.equal(openTimeIn([]), null);
+});
+
+test('attendance alert: full name, 12-hour time and Office or the exact address only', async () => {
+  const { attendanceAlert } = await import('../src/portal.mjs');
+  const { Store } = await import('../src/store.mjs');
+  const store = new Store(':memory:');
+  try {
+    const e = { id: 'E9', name: 'Hernando, Erika Lima' };
+    assert.equal(attendanceAlert(store, e, 'in', '09:00', 'Office'), 'Erika Hernando – Time In: 9:00 AM – Location: Office');
+    store.db.prepare('INSERT INTO employee_profiles VALUES(?,?,?)').run('E9', 'personal', JSON.stringify({ firstName: 'Ma. Rita', lastName: 'Dormiendo' }));
+    assert.equal(attendanceAlert(store, e, 'out', '18:05', '12 Sample St., Brgy. Example, Makati City'), 'Ma. Rita Dormiendo – Time Out: 6:05 PM – Location: 12 Sample St., Brgy. Example, Makati City');
   } finally { store.close(); }
 });

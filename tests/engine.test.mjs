@@ -147,18 +147,19 @@ test('an unworked regular holiday on a rest day is paid when the preceding workd
   const s = completeState(); s.holidays = [{ id: 'h', date: '2026-09-06', kind: 'regular' }];
   const first = calculatePayroll(s, '2026-09-01', '2026-09-15');
   assert.equal(first.rows[0].earnings.regularHoliday, 1363.64, 'Friday Sep 4 was worked; Saturday is a rest day');
-  assert.ok(!first.blockers.some(b => b.includes('2026-09-06')));
+  assert.ok(!first.rows[0].reviewItems.some(i => i.date === '2026-09-06'), 'the preceding-workday rule prices it; no eligibility record');
   s.attendance.push(attend('2026-09-06', { status: 'off', timeIn: '', timeOut: '', holidayEligible: false }));
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday || 0, 0, 'HR withheld it');
   s.attendance = s.attendance.filter(a => a.date !== '2026-09-06' && a.date !== '2026-09-04');
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday || 0, 0, 'absent the preceding workday');
 });
 
-test('scheduled workdays with no attendance are not credited: 0 days worked means 0 basic pay, and the payroll stays flagged', () => {
+test('scheduled workdays with no time in and no time out are absent (HR rule, Nov 23, 2026): not credited, nothing held', () => {
   const s = fixture(); s.attendance = [];
-  const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
-  assert.equal(row.earnings.basic, 0, 'no days worked, no basic pay');
-  assert.ok(p.blockers.some(b => /Missing attendance/.test(b)), 'still flagged for review before finalizing');
+  const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(row.held, false); assert.equal(row.reviewItems.length, 0);
+  assert.equal(row.earnings.basic, 0, 'every workday absent: no basic pay');
+  assert.equal(row.trace.filter(t => /absent: no time in \/ time out/.test(t.formula)).length, 11);
 });
 
 test('payroll is real time: unapproved attendance and a time-in without time out are counted, and stay flagged', () => {
@@ -168,7 +169,7 @@ test('payroll is real time: unapproved attendance and a time-in without time out
   const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
   assert.equal(row.daysPresent, 11, 'the open time-in day and the unapproved day both count');
   assert.equal(row.creditedDays, 10.94, '30 minutes late on the open day: 11 - 30/480 = 10.9375 → 10.94');
-  assert.ok(p.blockers.some(b => /no time out yet/.test(b)) && p.blockers.some(b => /not approved/.test(b)), 'flagged until complete');
+  assert.ok(p.reviewItems.some(i => i.date === '2026-09-01' && i.issue === 'missing-punch' && /no time out/.test(i.detail)) && p.reviewItems.some(i => i.date === '2026-09-02' && i.issue === 'manual-entry'), 'specific issue per day until resolved');
 });
 
 test('half-day leave: the leave half is paid (or deducted when unpaid); the worked half has no undertime', () => {
@@ -250,8 +251,8 @@ test('HR can waive the open time-in check for a cutoff: pay is unchanged, the bl
   const before = calculatePayroll(s, '2026-09-01', '2026-09-15');
   s.payrollInputs = [{ employeeId: 'EMP-001', start: '2026-09-01', end: '2026-09-15', mode: 'add', hours: {}, overrides: [], waiveOpenTimeIn: true, updatedBy: 'hr1' }];
   const after = calculatePayroll(s, '2026-09-01', '2026-09-15');
-  assert.ok(before.blockers.some(b => /no time out yet/.test(b)));
-  assert.ok(!after.blockers.some(b => /no time out yet/.test(b)), 'waived');
+  assert.ok(before.reviewItems.some(i => i.issue === 'missing-punch' && i.date === '2026-09-01'));
+  assert.ok(!after.reviewItems.some(i => i.date === '2026-09-01'), 'waived');
   assert.equal(after.rows[0].net, before.rows[0].net, 'pay unchanged');
   assert.ok(after.rows[0].trace.some(t => /Waived by hr1: time in 08:30 on 2026-09-01/.test(t.formula)));
 });
