@@ -1219,10 +1219,10 @@ function quickSignIn() {
     form.querySelector('button.primary').after(tiles); placeLinks(); return;
   }
   const pw = document.createElement('button'); pw.type = 'button'; pw.className = 'fingerprint-login'; pw.dataset.passwordLogin = ''; pw.innerHTML = `${DOTS_ICON}<span>Password</span>`; tiles.append(pw);
-  form.elements.username.value = who; labelOf('username').classList.add('hidden');
+  form.elements.username.value = who;   // shown filled in the username box (editable: another person types their own)
   const hide = ['password'].map(labelOf).concat(form.querySelector('button.primary')); hide.forEach(el => el?.classList.add('hidden'));
-  const hello = document.createElement('p'); hello.className = 'login-who'; hello.innerHTML = `Welcome back, <strong>${esc(who)}</strong> · <button type="button" class="link-button" data-switch-account>Not you?</button>`;
-  form.querySelector('h2').after(hello); hello.after(tiles); placeLinks();
+  const hello = document.createElement('p'); hello.className = 'login-who'; hello.innerHTML = '<button type="button" class="link-button" data-switch-account>Not you? Clear the username</button>';
+  labelOf('username').after(hello); hide[0].before(tiles); placeLinks();
   pw.onclick = () => { hide.forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); hide.at(-1).after(links); form.elements.password.focus(); };
   hello.querySelector('[data-switch-account]').onclick = () => { lastUser.set(''); renderLogin(); };
 }
