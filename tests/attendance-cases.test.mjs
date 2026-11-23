@@ -118,3 +118,17 @@ test('end-of-day check: an hour after the shift, a time in without a time out re
     assert.ok(notes.some(n => n.employee_id === null && /still without a time out/.test(n.message)));
   } finally { store.close(); }
 });
+
+test('HR absent decision: the no-record day shows as Absent (verified by HR) and its case closes', async () => {
+  const { recordPayrollDecision } = await import('../src/attendance-validation.mjs');
+  const store = fixture();
+  try {
+    refreshCases(store, NOW);
+    recordPayrollDecision(store, admin, { employeeId: 'EMP-001', date: '2026-11-04', mode: 'absent', note: 'HR: absent, no time in / out.' });
+    const s = store.read(), d4 = dayStatuses(store, s, s.employees[0], '2026-11-04', '2026-11-04', NOW)[0];
+    assert.deepEqual([d4.issue, d4.status, d4.absentByHr], [null, 'absent', true]);
+    assert.deepEqual(refreshCases(store, NOW), { opened: 0, resolved: 1 });
+    assert.deepEqual([caseOf(store, '2026-11-04').status, caseOf(store, '2026-11-04').resolution], ['resolved', 'Absent (verified by HR)']);
+    assert.equal(caseOf(store, '2026-11-05').status, 'open', 'other gaps stay open');
+  } finally { store.close(); }
+});

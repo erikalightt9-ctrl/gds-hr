@@ -74,7 +74,7 @@ export function refreshCases(store, now = new Date()) {
       } else if (d.issue && c?.status === 'open' && c.issue !== d.issue) save(store, step({ ...c, issue: d.issue, timeIn: d.timeIn, timeOut: d.timeOut }, 'system', 'updated', ISSUE_LABELS[d.issue]));
       else if (!d.issue && c?.status === 'open') {
         const corr = correctionOf(store, e.id, d.date), run = postedRun(state, e.id, d.date);
-        let next = step({ ...c, status: 'resolved', resolvedAt: at, resolution: corr.status === 'approved' ? `Correction ${corr.reference} approved` : 'Attendance completed in the records', timeIn: d.timeIn, timeOut: d.timeOut }, 'system', 'resolved', corr.reference || '');
+        let next = step({ ...c, status: 'resolved', resolvedAt: at, resolution: corr.status === 'approved' ? `Correction ${corr.reference} approved` : d.absentByHr ? 'Absent (verified by HR)' : 'Attendance completed in the records', timeIn: d.timeIn, timeOut: d.timeOut }, 'system', 'resolved', corr.reference || '');
         if (run) {
           const diff = correctionDifference(store, state, next, run);
           next = { ...next, adjustment: Math.abs(diff) < 0.01 ? { status: 'none', amount: 0, kind: 'none', paidCutoff: `${run.start} to ${run.end}` } : diff > 0 ? { status: 'pending', amount: diff, kind: 'underpayment', paidCutoff: `${run.start} to ${run.end}` } : { status: 'review', amount: r2(-diff), kind: 'overpayment', paidCutoff: `${run.start} to ${run.end}` } };

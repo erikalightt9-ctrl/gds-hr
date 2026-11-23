@@ -283,7 +283,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         if (!employee) throw new AppError('Employee not found.', 404);
         const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
         const cases = new Map(store.db.prepare('SELECT date, data FROM attendance_cases WHERE employee_id=?').all(id).map(r => [r.date, JSON.parse(r.data)]));
-        send(200, dayStatuses(store, state, employee, `${month}-01`, last).map(d => ({ ...d, case: cases.get(d.date) ? { id: cases.get(d.date).id, status: cases.get(d.date).status, due: cases.get(d.date).due, treatment: cases.get(d.date).treatment, adjustment: cases.get(d.date).adjustment } : null }))); return;
+        send(200, dayStatuses(store, state, employee, `${month}-01`, last).map(d => ({ ...d, case: cases.get(d.date) ? { id: cases.get(d.date).id, status: cases.get(d.date).status, due: cases.get(d.date).due, treatment: cases.get(d.date).treatment, adjustment: cases.get(d.date).adjustment, resolution: cases.get(d.date).resolution || "" } : null }))); return;
       }
       if (pathname === '/api/attendance-cases' && req.method === 'GET') { send(200, listCases(store, auth.user)); return; }
       if (pathname === '/api/me/attendance-cases' && req.method === 'GET') { send(200, myCases(store, auth.user)); return; }

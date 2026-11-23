@@ -38,6 +38,8 @@ export function dayStatuses(store, state, employee, from, to, now = new Date()) 
     const dayEvents = events.filter(e => e.date === date);
     const open = (state.openClockIns || []).find(c => c.employeeId === employee.id && c.workDate === date) || null;
     const rest = isRest(employee, date);
+    // HR's payroll decision 'Absent (verified by HR)' settles a day with no time in / out: shown as Absent, no gap.
+    const absentByHr = !record && !open && (state.validation?.payrollDecisions || []).some(x => x.employeeId === employee.id && x.date === date && x.mode === 'absent');
     const kind = !employed ? 'not-employed' : rest ? 'rest' : holiday ? 'holiday' : leave && !halfLeave ? 'leave' : sched.autoPresent ? 'wfh' : 'workday';
     const label = { 'not-employed': 'Not employed', rest: 'Rest day', holiday: `${holiday?.name || 'Holiday'} (${holiday?.kind === 'regular' || holiday?.kind === 'double' ? 'regular holiday' : 'special day'})`, leave: leaveType, wfh: 'Work from home', workday: 'Workday' }[kind] + (halfLeave ? ` · ${leaveType} (half day)` : '');
     const timeIn = record?.timeIn || open?.time || dayEvents.find(e => e.kind === 'in')?.time || '';
@@ -52,9 +54,9 @@ export function dayStatuses(store, state, employee, from, to, now = new Date()) 
         else if (record.status === 'present' && !record.timeIn && record.timeOut) issue = 'missing-in';
       } else if (open) { if (shiftOver(employee, profile, date, rule, nowLocal)) issue = 'missing-out'; }
       else if (dayEvents.some(e => e.kind === 'out')) issue = 'missing-in';
-      else if (kind === 'workday') issue = 'no-record';   // rest days, holidays, whole-day leave and WFH days need no record
+      else if (kind === 'workday' && !absentByHr) issue = 'no-record';   // rest days, holidays, whole-day leave and WFH days need no record
     }
     const offsite = dayEvents.filter(e => e.outOfOffice || e.attendanceType === 'offsite' || e.mode === 'outside').map(e => ({ kind: e.kind, time: e.time, reason: e.reason || '', place: e.address || e.place || '', latitude: e.latitude ?? null, longitude: e.longitude ?? null }));
-    return { date, kind, label, scheduled: { start: sched.start || '', end: sched.end || '', flexible: !!sched.flexible }, status: record?.status || (open ? 'open' : ''), timeIn, timeOut, endNextDay: !!record?.endNextDay, late, approved: !!record?.approved, explanation: /^Employee clock events:/.test(record?.explanation || '') ? '' : record?.explanation || '', offsite, issue, issueLabel: issue ? ISSUE_LABELS[issue] : '' };
+    return { date, kind, label, scheduled: { start: sched.start || '', end: sched.end || '', flexible: !!sched.flexible }, status: record?.status || (open ? 'open' : absentByHr ? 'absent' : ''), absentByHr, timeIn, timeOut, endNextDay: !!record?.endNextDay, late, approved: !!record?.approved, explanation: /^Employee clock events:/.test(record?.explanation || '') ? '' : record?.explanation || '', offsite, issue, issueLabel: issue ? ISSUE_LABELS[issue] : '' };
   });
 }
