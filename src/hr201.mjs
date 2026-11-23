@@ -243,6 +243,8 @@ export function profileExtras(store, actor, id) {
     education: hrView ? { entries: [], ...profileOf(store, id, 'education') } : null,
     history: hrView ? { entries: [], ...profileOf(store, id, 'history') } : null,
     compensation: PAY_ROLES.includes(actor.role) ? { monthlySalary: e.monthlySalary, basis: pay.basis || 'monthly', dailyRate: pay.dailyRate ?? null, hourlyRate: pay.hourlyRate ?? null, frequency: pay.frequency || '', status: pay.status || 'Active', withholdingTax: pay.withholdingTax === 'exempt' ? 'exempt' : 'withhold', coveredOT: e.coveredOT, coveredNSD: e.coveredNSD, coveredHoliday: e.coveredHoliday, covered13th: e.covered13th, deductions: (store.read().deductions || []).filter(d => d.employeeId === id && d.active).map(d => ({ name: d.name, amount: d.amount, schedule: d.schedule })) } : null,
+    // Final pay computations of this employee with their release status (Payroll & 13th Month → Final pay).
+    finalPay: PAY_ROLES.includes(actor.role) && store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='final_pay'").get() ? store.db.prepare('SELECT data FROM final_pay WHERE employee_id=? ORDER BY rowid DESC').all(id).map(r => JSON.parse(r.data)).map(r => ({ id: r.id, separationDate: r.separationDate, net: r.net, releaseDue: r.releaseDue, computedBy: r.computedBy, computedAt: r.computedAt, release: r.release || null })) : null,
     canEdit: hrView, canEditPay: ['admin', 'hr'].includes(actor.role),
   };
 }

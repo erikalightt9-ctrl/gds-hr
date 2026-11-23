@@ -11,6 +11,7 @@ import { AppError, permit } from './service.mjs';
 import { ruleOn, leaveBalance, dates, isRest, priorBasicFor, fullyPostedMonths, monthlyDailyRate } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 import { payDateFor } from './paydays.mjs';
+import { listMovements, clearItem } from './movements.mjs';
 
 const PAY = ['admin', 'payroll', 'hr'];
 const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
@@ -186,6 +187,11 @@ export function setFinalPayRelease(store, actor, id, input) {
     const after = { ...before, release };
     store.db.prepare('UPDATE final_pay SET data=? WHERE id=?').run(JSON.stringify(after), id);
     store.log(actor, v.released ? 'release-final-pay' : 'unrelease-final-pay', 'final-pay', id, { release: before.release || null }, { employeeId: before.employeeId, release });
+    // The employee's 201 file: the separation clearance item 'Final pay computed and released' follows the status.
+    const sep = listMovements(store, actor, before.employeeId).find(m => m.clearance?.some(i => i.key === 'finalpay'));
+    const item = sep?.clearance.find(i => i.key === 'finalpay');
+    if (v.released && item?.status === 'pending') clearItem(store, actor, sep.id, { key: 'finalpay', status: 'cleared', note: `Final pay ₱${after.net.toLocaleString('en-US', { minimumFractionDigits: 2 })} released on ${release.releasedOn}` });
+    if (!v.released && item?.status === 'cleared' && /^Final pay .* released on /.test(item.note || '')) clearItem(store, actor, sep.id, { key: 'finalpay', status: 'pending', note: '' });
     return after;
   });
 }
