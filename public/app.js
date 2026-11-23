@@ -1346,7 +1346,7 @@ async function account() {
     const input = userForm.elements.password; input.value = chars.join(''); input.type = 'text';
     try { await navigator.clipboard.writeText(input.value); toast('Password generated and copied. Give it to the user privately.'); } catch { toast('Password generated. Copy it and give it to the user privately.'); }
   };
-  if (userForm) userForm.onsubmit = async event => { event.preventDefault(); try { const values = Object.fromEntries(new FormData(userForm)); if (values.role === 'service' || !values.employeeId) delete values.employeeId; await api('/users', values); await account(); toast('User created.'); } catch (e) { toast(e.message); } };
+  if (userForm) userForm.onsubmit = async event => { event.preventDefault(); try { const values = Object.fromEntries(new FormData(userForm)); if (values.role === 'service' || !values.employeeId) delete values.employeeId; let created; try { created = await api('/users', values); } catch (e) { if (!values.email || !/Unrecognized key.*email/i.test(e.message)) throw e; const { email, ...rest } = values; created = await api('/users', rest); await api(`/users/${created.user.id}/email`, { email }); } await account(); toast('User created.'); } catch (e) { toast(e.message); } };
   await portal.accountTools(auth.user, users);
 }
 // Top-bar account menu: closes after a choice or a click elsewhere.
