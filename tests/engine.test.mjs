@@ -48,12 +48,12 @@ test('rest-day night work adds only differential, with no double-counting', () =
   assert.equal(row.earnings.restDay, 886.36);
   assert.equal(row.earnings.nsd, 88.64);
 });
-test('unworked special holiday defaults unpaid; policy can pay it', () => {
+test('unworked special holiday is paid by default (company policy); 0 = no work, no pay', () => {
   const s = fixture(); s.holidays = [{ id: 'h1', date: '2026-09-01', name: 'Test holiday', kind: 'special', basis: 'Test proclamation' }];
   s.attendance = [attend('2026-09-01', { status: 'off', timeIn: '', timeOut: '' })]; withOtherDays(s);
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 1363.64);
-  s.rules[0].specialUnworked = 1;
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 0);
+  s.rules[0].specialUnworked = 0;
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 1363.64);
 });
 test('loan deduction is capped to balance and respects its schedule', () => {
   const s = fixture(); s.loans = [{ id: 'l1', employeeId: 'EMP-001', type: 'Salary Loan', reference: 'L1', original: 50000, balance: 1200, monthlyAmortization: 5000, perPayroll: 2500, startDate: '2026-01-01', endDate: '2026-12-31', terms: 20, remainingTerms: 1, authorized: true }];
