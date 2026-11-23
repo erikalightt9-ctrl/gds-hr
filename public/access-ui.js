@@ -6,11 +6,16 @@ export async function approvalsPage({ api, esc, shell, heading, table }) {
     `<section class="panel">${table(['Area', 'Action', 'Prepared / requested by', 'Approved by', 'Rule'], rows.map(r => [esc(r.area), `<strong>${esc(r.action)}</strong>`, esc(r.prepares), esc(r.approves), `<span class="wrap">${esc(r.rule)}</span>`]))}
     <p class="panel-body legend">Approvals are recorded with the approver's own account. Shared logins cannot be traced to a person: give each approver a named account (Users &amp; roles). The service account (AI assistant) can only read.</p></section>`);
 }
+// Simplified (Nov 23, 2026): roles in use with their accounts; a note only where something needs doing; unused roles in one line.
 export async function usersPage({ api, esc, shell, heading, table, badge, account }) {
-  shell(heading('Users & roles', 'Roles, what each can do, and how many accounts have them.', '<button class="primary" data-open-accounts>Manage accounts</button>') + '<div class="loading">Loading…</div>');
-  const rows = await api('/users-roles');
-  shell(heading('Users & roles', 'Roles, what each can do, and how many accounts have them.', '<button class="primary" data-open-accounts>Manage accounts</button>') +
-    `<section class="panel">${table(['Role', 'Can do', 'Accounts', 'Two-factor sign-in', 'Unnamed approver logins'], rows.map(r => [`<strong>${esc(r.label)}</strong>`, `<span class="wrap">${esc(r.scope)}</span>`, r.accounts, r.accounts ? `${r.withMfa} of ${r.accounts}${r.mfaRequired ? ` ${badge(r.withMfa === r.accounts ? 'Required · complete' : 'Required · set up at next sign-in', r.withMfa === r.accounts ? '' : 'pending')}` : ''}` : '—', r.unnamed ? badge(`${r.unnamed} not linked to a person`, 'rejected') : '—']))}
-    <p class="panel-body legend">Two-factor sign-in is required for HR, HR Staff, Payroll and Management; it is strongly recommended for Administrators. Link each staff account to its person's employee record so approvals are named.</p></section>`);
+  const head = heading('Users & roles', 'Who can sign in and what they can do.', '<button class="primary" data-open-accounts>Manage accounts</button>');
+  shell(head + '<div class="loading">Loading…</div>');
+  const rows = await api('/users-roles'), used = rows.filter(r => r.accounts), unused = rows.filter(r => !r.accounts);
+  const notes = r => [
+    r.mfaRequired && r.withMfa < r.accounts ? badge(`${r.accounts - r.withMfa} must set up two-factor sign-in`, 'pending') : '',
+    r.unnamed ? badge(`${r.unnamed} not linked to a person`, 'rejected') : '',
+  ].filter(Boolean).join(' ') || '—';
+  shell(head + `<section class="panel">${table(['Role', 'What they can do', 'Accounts', 'Needs attention'], used.map(r => [`<strong>${esc(r.label)}</strong>`, `<span class="wrap">${esc(r.scope)}</span>`, r.accounts, notes(r)]), 'No accounts yet.')}
+    ${unused.length ? `<p class="panel-body legend">No accounts yet: ${unused.map(r => esc(r.label)).join(' · ')}</p>` : ''}</section>`);
   document.querySelector('[data-open-accounts]')?.addEventListener('click', () => account());
 }
