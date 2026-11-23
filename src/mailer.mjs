@@ -92,7 +92,7 @@ function open({ host, port, secure, timeoutMs }) {
     const read = () => new Promise((ok, fail) => { if (failure) { fail(failure); return; } waiting = { resolve: ok, reject: fail }; drain(); });
     const check = async codes => {
       const reply = await read(), code = Number(reply.split('\n').at(-1).slice(0, 3));
-      if (![].concat(codes).includes(code)) throw new Error(`Mail server refused the message (${code}).`);
+      if (![].concat(codes).includes(code)) throw new Error(code === 535 ? 'the mail server rejected the mail username or password (535)' : code === 530 ? 'the mail server requires sign-in (530)' : `the mail server refused the message (${code})`);
       return reply;
     };
     const session = {

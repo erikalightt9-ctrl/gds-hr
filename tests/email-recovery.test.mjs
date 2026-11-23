@@ -110,12 +110,12 @@ test('employee self-service: link to the registered email, single use, expires, 
 test('a reset email that cannot be sent goes to HR (alert) and the unsent link is withdrawn', async () => {
   const { store, employee } = await fixture();
   try {
-    const failing = { from: 'hr@example.com', send: async () => { throw new Error('Mail server refused the message (535).'); } };
+    const failing = { from: 'hr@example.com', send: async () => { throw new Error('the mail server rejected the mail username or password (535)'); } };
     store.db.prepare('INSERT INTO employee_profiles VALUES(?,?,?)').run('EMP-001', 'employment', JSON.stringify({ businessEmail: 'alex@gds.example' }));
     assert.equal(await requestRecovery(store, 'EMP-001', { mailer: failing }).delivery, false);
     assert.ok(store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(employee.id), 'HR has the request');
     assert.equal(store.db.prepare('SELECT COUNT(*) n FROM password_resets').get().n, 0, 'no live link left behind');
-    assert.ok(store.db.prepare('SELECT message FROM notifications WHERE employee_id IS NULL').all().some(n => /could not be sent \(Mail server refused/.test(n.message)));
+    assert.ok(store.db.prepare('SELECT message FROM notifications WHERE employee_id IS NULL').all().some(n => /could not be sent: the mail server rejected the mail username or password \(535\)\. Verify/.test(n.message)));
   } finally { store.close(); }
 });
 

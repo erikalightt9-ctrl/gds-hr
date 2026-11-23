@@ -165,7 +165,7 @@ export function requestRecovery(store, identifier, { mailer = null, origin = '' 
         delivery = mailer.send({ to: email, subject: 'GDS HR password reset', text: resetEmail(user.username, `${origin}/#reset=${token}`) })
           .then(() => true, error => {
             console.error('Password reset email failed:', error.message);
-            try { queueHrRecovery(store, user, `the reset email could not be sent (${error.message})`); } catch (e) { console.error('Recovery fallback failed:', e.message); }
+            try { queueHrRecovery(store, user, `the reset email could not be sent: ${error.message.replace(/\.$/, '')}`); } catch (e) { console.error('Recovery fallback failed:', e.message); }
             return false;
           });
       }
@@ -180,7 +180,7 @@ function queueHrRecovery(store, user, reason) {
     if (store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(user.id)) return;
     store.db.prepare('INSERT INTO recovery_requests(id,user_id,created_at) VALUES(?,?,?)').run(randomUUID(), user.id, new Date().toISOString());
     store.log({ username: 'recovery-request' }, 'request-recovery', 'users', user.id, null, reason ? { reason } : null);
-    if (reason) store.notify(null, `Password reset for ${user.username}: ${reason}. Verify the person and issue a reset code in Account & access.`);
+    if (reason) store.notify(null, `Password reset for ${user.username}: ${reason}. Verify the person, then Account & access → Reset password → Copy link and send it to them.`);
   });
 }
 export const maskEmail = email => email.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(Math.min(rest.length, 6))}${domain}`);
