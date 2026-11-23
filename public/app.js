@@ -1224,10 +1224,12 @@ function quickSignIn() {
   const userLabel = labelOf('username'); [...userLabel.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).forEach(n => n.remove());
   userLabel.classList.add('login-user'); form.elements.username.placeholder = 'Employee ID / username'; form.elements.username.setAttribute('aria-label', 'Employee ID / username');
   after.after(tiles); tiles.after(links);
+  // Phones: the handshake mascots and the motto inside the card, above the two links (hidden on larger screens).
+  const mascot = document.createElement('figure'); mascot.className = 'login-mascot'; mascot.innerHTML = '<img src="/welcome-handshake.webp" width="1405" height="991" alt="" decoding="async"><figcaption>“Build on Trust, Backed by Expertise”</figcaption>'; links.before(mascot);
   form.elements.username.addEventListener('keydown', event => { if (event.key === 'Enter' && hide[0]?.classList.contains('hidden')) { event.preventDefault(); pw.click(); } });
   pw.onclick = () => {
     if (!form.elements.username.value.trim()) { form.elements.username.focus(); form.elements.username.reportValidity?.(); return; }
-    [hide[0], hide[2]].forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); hide[2].after(links); form.elements.password.focus();
+    [hide[0], hide[2]].forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); hide[2].after(mascot); mascot.after(links); form.elements.password.focus();
   };
 }
 function renderLogin() {
