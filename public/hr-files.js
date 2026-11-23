@@ -214,7 +214,7 @@ export function createFiles(ctx) {
   // kind of day, time in / out, late, gaps (Missing Time-In, Missing Time-Out, No Time-In / Time-Out), days recorded but
   // not yet approved (Attendance for Verification), the correction case, remarks and off-site reasons / places.
   const dayCache = new Map();
-  const CHIP = { 'missing-in': ['Missing Time-In', 'att-chip-in'], 'missing-out': ['Missing Time-Out', 'att-chip-out'], 'no-record': ['No Time-In / Time-Out', 'att-chip-none'], verify: ['Attendance for Verification', 'att-chip-verify'], rest: ['Rest day', 'att-chip-rest'], holiday: ['Holiday', 'att-chip-holiday'], leave: ['Approved leave', 'att-chip-leave'], wfh: ['Work from home', 'att-chip-wfh'] };
+  const CHIP = { 'missing-in': ['Missing Time-In', 'att-chip-in'], 'missing-out': ['Missing Time-Out', 'att-chip-out'], 'no-record': ['Absent', 'att-chip-none'], verify: ['Attendance for Verification', 'att-chip-verify'], rest: ['Rest day', 'att-chip-rest'], holiday: ['Holiday', 'att-chip-holiday'], leave: ['Approved leave', 'att-chip-leave'], wfh: ['Work from home', 'att-chip-wfh'] };
   const chip = (key, text) => `<span class="att-chip ${CHIP[key][1]}">${esc(text || CHIP[key][0])}</span>`;
   function historyHtml(id, month) {
     const key = `${id}|${month}`;
@@ -228,12 +228,12 @@ export function createFiles(ctx) {
     const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
     const today = ctx.today(), verify = d => !d.issue && d.status === 'present' && !d.approved && d.timeIn && d.timeOut;
     const where = o => (o.latitude === null || o.latitude === undefined ? esc(o.place || '') : `<a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noopener noreferrer">${esc(o.place || 'Map')}</a>`);
-    const statusCell = d => (d.issue ? chip(d.issue) : verify(d) ? chip('verify') : d.date > today ? '<small class="muted">Not yet</small>' : d.status === 'present' ? (d.late >= 15 ? 'Late' : 'Present') : d.absentByHr ? '<span class="att-chip att-chip-none">Absent (verified by HR)</span>' : d.status ? esc(d.status.replace(/-/g, ' ')) : '');
+    const statusCell = d => (d.issue ? chip(d.issue) : verify(d) ? chip('verify') : d.date > today ? '<small class="muted">Not yet</small>' : d.status === 'present' ? (d.late >= 15 ? 'Late' : 'Present') : d.absentByHr ? '<span class="att-chip att-chip-none">Absent</span>' : d.status ? esc(d.status.replace(/-/g, ' ')) : '');
     const kindCell = d => (CHIP[d.kind] && d.kind !== 'workday' ? chip(d.kind, d.label) : esc(d.label));
     const caseCell = d => { const c = d.case; if (!c) return ''; if (c.status === 'resolved') return `<small>${c.resolution === 'Absent (verified by HR)' ? 'Closed: absent' : 'Corrected'}${c.adjustment && c.adjustment.status !== 'none' ? ` · pay adjustment ${esc(c.adjustment.status)}` : ''}</small>`; return `<small>${today > c.due ? '<strong class="att-overdue">Overdue</strong>' : `Correction due ${esc(c.due)}`}${c.treatment ? ` · ${c.treatment.mode === 'credit' ? 'credited pending verification' : 'held until corrected'}` : ''}</small>`; };
     const remarks = d => [d.explanation ? esc(d.explanation) : '', ...d.offsite.map(o => `Off-site ${o.kind === 'in' ? 'time in' : 'time out'} ${esc(o.time)}${o.reason ? ` — ${esc(o.reason)}` : ''}${o.place || o.latitude !== null ? ` · ${where(o)}` : ''}`)].filter(Boolean).join('<br>');
     const n = k => list.filter(d => d.issue === k).length;
-    const counts = `${list.filter(d => d.status === 'present').length} present · ${n('missing-in')} missing time-in · ${n('missing-out')} missing time-out · ${n('no-record')} with no time-in / time-out · ${list.filter(verify).length} for verification`;
+    const counts = `${list.filter(d => d.status === 'present').length} present · ${n('missing-in')} missing time-in · ${n('missing-out')} missing time-out · ${n('no-record') + list.filter(d => d.absentByHr).length} absent · ${list.filter(verify).length} for verification`;
     const legend = `<div class="att-legend">${Object.keys(CHIP).map(k => chip(k)).join('')}</div>`;
     return `<p class="legend">${counts}</p>${legend}` + table(['Date', 'Day', 'Time in', 'Time out', 'Late (min)', 'Status', 'Correction', 'Remarks'], list.map(d => [day(d.date), kindCell(d), esc(d.timeIn || '—'), esc(d.timeOut ? `${d.timeOut}${d.endNextDay ? ' (+1)' : ''}` : '—'), d.late || '—', statusCell(d), caseCell(d), `<span class="wrap">${remarks(d)}</span>`]), 'No days in this month.');
   }

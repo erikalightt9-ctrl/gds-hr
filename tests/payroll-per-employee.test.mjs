@@ -19,7 +19,7 @@ test('payroll can be calculated for one employee', () => {
   try {
     const all = preview(store, '2026-09-01', '2026-09-15');
     assert.equal(all.rows.length, 2);
-    assert.ok(all.held.includes('EMP-002') && !all.held.includes('EMP-001'), 'control: missing attendance holds only that employee for HR review');
+    assert.ok(!all.held.includes('EMP-002') && all.rows.find(r => r.employeeId === 'EMP-002').trace.some(t => /absent: no time in/.test(t.formula)), 'control: missing attendance is absent, not held');
     const one = preview(store, '2026-09-01', '2026-09-15', false, ['EMP-001']);
     assert.deepEqual(one.rows.map(r => r.employeeId), ['EMP-001']);
     assert.deepEqual(one.employeeIds, ['EMP-001']);

@@ -32,7 +32,7 @@ test('day-by-day status: every date in order, rest days / holidays labelled, gap
     const by = Object.fromEntries(days.map(d => [d.date.slice(8), d]));
     assert.equal(by['01'].kind, 'rest'); assert.equal(by['01'].issue, null);
     assert.match(by['02'].label, /All Souls' Day \(special day\)/); assert.equal(by['02'].issue, null, 'an unworked holiday is not a gap');
-    assert.deepEqual([by['04'].issue, by['04'].issueLabel], ['no-record', 'No Time-In / Time-Out']);
+    assert.deepEqual([by['04'].issue, by['04'].issueLabel], ['no-record', 'Absent (No Time-In / Time-Out)']);
     assert.deepEqual([by['05'].issue, by['05'].timeIn], ['missing-out', '08:00']);
     assert.equal(by['13'].issue, null);
     assert.equal(by['16'].issue, null, 'a day not reached yet is not missing anything');
@@ -62,7 +62,8 @@ test('payroll: unresolved days need HR documented treatment; credit pays the day
   try {
     refreshCases(store, NOW);
     const before = run(store, '2026-11-01', '2026-11-15');
-    assert.ok(before.reviewItems.some(i => i.date === '2026-11-04' && i.issue === 'missing-punch'));
+    assert.ok(!before.reviewItems.some(i => i.date === '2026-11-04'), 'no time in / out = absent, not held');
+    assert.ok(before.rows[0].trace.some(t => t.date === '2026-11-04' && /absent: no time in \/ time out/.test(t.formula)));
     assert.ok(before.reviewItems.some(i => i.date === '2026-11-05' && /no time out/.test(i.detail)));
     assert.throws(() => setTreatment(store, admin, caseOf(store, '2026-11-04').id, { mode: 'credit', note: '' }), /reason/);
     setTreatment(store, admin, caseOf(store, '2026-11-04').id, { mode: 'credit', note: 'Supervisor confirms he worked; awaiting his request' });

@@ -247,6 +247,8 @@ export function premiumHours(breakdown = [], earnings = {}, overrides = [], hour
   return out;
 }
 
+// First date on which an approved offset no longer cancels a late of the grace threshold or more (HR, Nov 23, 2026).
+export const LATE_OFFSET_ENDS = '2026-11-23';
 export function calculatePayroll(state, start, end, pay13th = false, employeeIds = null) {
   const days = dates(start, end);
   if (start.slice(0, 7) !== end.slice(0, 7)) throw new Error('Payroll cutoffs must be within one calendar month.');
@@ -390,12 +392,11 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         }
         const needsRecord = !perDayWorked && !notYet(d) && ((!rest && kind === 'ordinary') || ['regular', 'double'].includes(kind.replace('-rest', '')));
         if (dayCase) { noteDecided(); trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `No time-in / time-out on ${d}: ${treatmentNote}`, sourceKind: 'attendance-cases', sourceId: dayCase.id, date: d }); }
-        else if (needsRecord) review(d, 'missing-punch', 'No time in / time out and no approved leave');
-        // No attendance on a scheduled workday: not credited only by HR's documented decision (hold / absent) or for staff
-        // paid per day worked; an undecided day is never an automatic absence (the employee is held for review).
-        if (!rest && kind === 'ordinary' && !notYet(d) && (dayCase || perDayWorked)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day with no attendance record (not credited${dayCase ? `: ${treatmentNote}` : ''})`, null, d);
-        else if (!rest && kind === 'ordinary' && !notYet(d)) trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `No time-in / time-out on ${d}: waiting for HR's payroll decision (not deducted automatically)`, sourceKind: 'attendance', date: d });
-        else if (!rest && notYet(d)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
+        else if (needsRecord && kind !== 'ordinary') review(d, 'missing-punch', 'No time in / time out and no approved leave');
+        // No time in and no time out on a scheduled workday that has passed (no approved leave) = absent (HR, Nov 23, 2026):
+        // not credited. A time correction later approved replaces it; HR's treatment (credit / hold) still applies.
+        if (!rest && kind === 'ordinary' && !notYet(d) && (dayCase || d !== state.asOf)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day ${dayCase ? `with no attendance record (not credited: ${treatmentNote})` : perDayWorked ? 'with no attendance record (not credited)' : `absent: no time in / time out on ${d}`}`, null, d);
+        else if (!rest && (notYet(d) || (d === state.asOf && kind === 'ordinary'))) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
         continue;
       }
       // Unapproved attendance is still counted (real time) but must be approved before the payroll is final.
@@ -447,8 +448,12 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // with a 20 min offset loses 10). Staying after the scheduled end is not an offset unless HR approves it.
       // HR may also waive late time for a whole cutoff (manual entry); the minutes stay on record.
       const withinGrace = lateMinutes > 0 && lateMinutes < graceMinutes;
+      // From Nov 23, 2026 (HR): a late of the threshold (15 min) or more is deducted in full even when an offset is
+      // approved; the offset no longer cancels it nor moves the start of overtime. Approved exceptions and the cutoff's
+      // waive-late switch work as before. Earlier dates keep the offset.
+      const lateOffset = d >= LATE_OFFSET_ENDS && lateMinutes >= graceMinutes ? 0 : (record.offsetMinutes || 0);
       const workedAfter = Math.max(0, Math.min(lateMinutes, minutes.length + lateMinutes + leaveCoverMinutes - normalHours * 60));   // shown to HR only
-      const deductibleMinutes = record.exception || manual?.waiveLate || withinGrace ? 0 : Math.max(0, lateMinutes - (record.offsetMinutes || 0));
+      const deductibleMinutes = record.exception || manual?.waiveLate || withinGrace ? 0 : Math.max(0, lateMinutes - lateOffset);
       // Unoffset late time is converted to a fraction of the scheduled day and taken off the days credited for pay.
       const dayMinutes = normalHours * 60, lostDay = r.deductLate ? deductibleMinutes / dayMinutes : 0, deduction = round(lostDay * adjDaily);
       late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, withinGrace, workedOffset: 0, workedAfter, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
@@ -488,7 +493,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // Only a schedule with a time out on file has a scheduled out; otherwise overtime follows the hours worked, as before.
       let schedEnd = daySched.end ? hm(daySched.end) : null;
       if (schedEnd !== null && schedEnd <= schedStart) schedEnd += 1440;
-      const otFrom = rest || flexible || record.regularHoursOnly || schedEnd === null ? null : stamp(`${d}T00:00`) + (schedEnd + Math.min(record.offsetMinutes || 0, lateMinutes)) * 60000;
+      const otFrom = rest || flexible || record.regularHoursOnly || schedEnd === null ? null : stamp(`${d}T00:00`) + (schedEnd + Math.min(lateOffset, lateMinutes)) * 60000;
       const isOT = (m, index) => !flexible && (otFrom === null ? index >= normalHours * 60 : m >= otFrom);
       const eligible = minutes.map((m, index) => {
         if (!isOT(m, index)) return false;

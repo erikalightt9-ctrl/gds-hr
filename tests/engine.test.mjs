@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultRules } from '../src/defaults.mjs';
 import { calculatePayroll, dayRate, nightMinutes, leaveBalance, workMinutes } from '../src/engine.mjs';
-import { completeState, decide } from './helpers.mjs';
+import { completeState } from './helpers.mjs';
 
 import { fixture, attend } from './engine-fixture.mjs';
 // Present on every other scheduled weekday of the cutoff (days without attendance are not credited).
@@ -150,18 +150,12 @@ test('unworked holiday on a rest day needs an eligibility record before posting'
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday, 1363.64);
 });
 
-test('scheduled workdays with no attendance are never an automatic absence: held for HR review until HR documents a decision', () => {
+test('scheduled workdays with no time in and no time out are absent (HR rule, Nov 23, 2026): not credited, nothing held', () => {
   const s = fixture(); s.attendance = [];
-  const p = calculatePayroll(s, '2026-09-01', '2026-09-15'), row = p.rows[0];
-  assert.ok(row.held, 'held out of posting');
-  assert.equal(row.reviewItems.length, 11); assert.ok(row.reviewItems.every(i => i.issue === 'missing-punch'));
-  assert.equal(row.deductions.absence, 0, 'not deducted automatically');
-  const days = row.reviewItems.map(i => i.date);
-  decide(s, 'EMP-001', days);
-  const after = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-  assert.equal(after.earnings.basic, 0, 'HR recorded every day absent: no basic pay');
-  assert.equal(after.held, false);
-  assert.ok(after.attendanceValidation.every(v => v.status === 'decided' && v.decision === 'absent'));
+  const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
+  assert.equal(row.held, false); assert.equal(row.reviewItems.length, 0);
+  assert.equal(row.earnings.basic, 0, 'every workday absent: no basic pay');
+  assert.equal(row.trace.filter(t => /absent: no time in \/ time out/.test(t.formula)).length, 11);
 });
 
 test('payroll is real time: unapproved attendance and a time-in without time out are counted, and stay flagged', () => {

@@ -19,7 +19,7 @@ const run = store => preview(store, '2026-09-01', '2026-09-15', false, ['EMP-001
 test('a work-from-home Saturday counts as a regular day worked without time in / out', () => {
   const without = fixture(false), withWfh = fixture(true);
   try {
-    assert.ok(run(without).reviewItems.some(i => i.date === saturday && i.issue === 'missing-punch'), 'normally a Saturday without time in is missing');
+    assert.ok(run(without).rows[0].trace.some(t => t.date === saturday && /absent: no time in/.test(t.formula)), 'normally a Saturday without time in is absent');
     const r = run(withWfh), row = r.rows[0];
     assert.ok(!r.blockers.some(b => b.includes(saturday)) && !r.reviewItems.some(i => i.date === saturday), 'nothing to review for the WFH Saturday');
     assert.equal(row.daysPresent, run(without).rows[0].daysPresent + 2, 'both Saturdays of the cutoff are counted present');

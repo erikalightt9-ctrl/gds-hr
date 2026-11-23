@@ -94,5 +94,5 @@ test('an unworked special non-working day with no attendance record is not flagg
   const items = calculatePayroll(s, '2026-11-01', '2026-11-15').reviewItems;
   assert.ok(!items.some(i => /2026-11-0[12]/.test(i.date)), 'Nov 1 (Sunday holiday) and Nov 2 (workday holiday) need no record');
   const withoutNov3 = { ...s, attendance: s.attendance.filter(a => a.date !== '2026-11-03') };
-  assert.ok(calculatePayroll(withoutNov3, '2026-11-01', '2026-11-15').reviewItems.some(i => i.date === '2026-11-03' && i.issue === 'missing-punch'));
+  assert.ok(calculatePayroll(withoutNov3, '2026-11-01', '2026-11-15').rows[0].trace.some(t => t.date === '2026-11-03' && /absent: no time in \/ time out/.test(t.formula)), 'an ordinary workday with no record is absent');
 });

@@ -5,7 +5,7 @@
 // Nothing here assumes an absence or substitutes a scheduled time: it only reports what is recorded.
 import { dates, isRest, scheduleOn, ruleOn } from './engine.mjs';
 
-export const ISSUE_LABELS = { 'missing-in': 'Missing Time-In', 'missing-out': 'Missing Time-Out', 'no-record': 'No Time-In / Time-Out' };
+export const ISSUE_LABELS = { 'missing-in': 'Missing Time-In', 'missing-out': 'Missing Time-Out', 'no-record': 'Absent (No Time-In / Time-Out)' };
 // A day with time records that HR has not approved yet (shown, not a case).
 export const VERIFY_LABEL = 'Attendance for Verification';
 export const GRACE_HOURS = 4;   // a time out is "missing" only this long after the end of the shift
