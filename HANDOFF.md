@@ -203,3 +203,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Late offsets end (Nov 23, 2026, HR; engine LATE_OFFSET_ENDS; tests/late-offset-ends.test.mjs): from 2026-11-23 a late of the grace threshold (15 min) or more is deducted in full even with an approved offset, and the offset no longer moves the start of overtime. Approved exceptions and the cutoff waive-late switch work as before. Earlier dates keep their offsets.
 - Most recent full test run: 385 tests passing (Nov 23, 2026).
 - Payroll table (Nov 23, 2026): the 'N system validated · N HR approved · N by HR decision' line under each employee name is removed; only 'Held · N for HR review' still shows.
+- 201 file → Attendance history (Nov 23, 2026): the Correction column is removed (open cases stay in Attendance → Requests → Incomplete attendance).
