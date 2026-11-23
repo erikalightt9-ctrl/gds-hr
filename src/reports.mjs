@@ -5,9 +5,10 @@ import { REPORTS_201, brandingLine } from './reports201.mjs';
 import { leaveBalance, priorBasicFor } from './engine.mjs';
 import { holidaySplit } from './holiday-pay.mjs';
 import { canReadSection, localToday, visibleAudit, auditChanges } from './profiles.mjs';
-import { tablePdf, workbook } from './export.mjs';
+import { tablePdf, workbook, tableSheet, colName } from './export.mjs';
 import { monthlyContributions, contributionRows, CONTRIBUTION_HEADERS, MONTH_NAME } from './contribution-report.mjs';
 import { readSettings } from './hr201.mjs';
+import { REPORTS_EXTRA } from './reports-extra.mjs';
 
 const STAFF = ['admin', 'hr', 'payroll', 'viewer'];
 const money = n => (n === null || n === undefined || n === '' ? '' : Math.round(Number(n) * 100) / 100);
@@ -77,22 +78,23 @@ export const REPORTS = {
   },
   'leave-balances': {
     title: 'Leave balances', roles: STAFF,
-    headers: ['Employee ID', 'Name', 'Leave type', 'Entitled', 'Carry-over', 'Used / reserved', 'Available'],
-    rows: state => { const today = localToday(); return people(state).flatMap(e => state.leaveTypes.filter(t => e.leaveEligibility.includes(t.id)).map(t => { const b = leaveBalance(state, e, t, today); return [e.id, e.name, t.name, b.entitled, b.carry, b.used, b.available]; })); },
+    headers: ['Employee ID', 'Name', 'Leave type', 'Entitled', 'Carry-over', 'Used / reserved', 'Available', 'Utilization'],
+    formulas: { Utilization: (n, c) => `IF(${c('Entitled')}${n}+${c('Carry-over')}${n}=0,0,ROUND(${c('Used / reserved')}${n}/(${c('Entitled')}${n}+${c('Carry-over')}${n}),4))` },
+    rows: state => { const today = localToday(); return people(state).flatMap(e => state.leaveTypes.filter(t => e.leaveEligibility.includes(t.id)).map(t => { const b = leaveBalance(state, e, t, today); return [e.id, e.name, t.name, b.entitled, b.carry, b.used, b.available, b.entitled + b.carry ? Math.round((b.used / (b.entitled + b.carry)) * 10000) / 10000 : 0]; })); },
   },
   loans: {
     title: 'Employee loans', roles: STAFF,
-    headers: ['Employee ID', 'Name', 'Type', 'Reference', 'Loan date', 'Original', 'Balance', 'Per payroll', 'Start', 'End', 'Terms left', 'Authorized'],
+    headers: ['Employee ID', 'Name', 'Type', 'Reference', 'Loan date', 'Original', 'Balance', 'Per payroll', 'Start', 'End', 'Terms left', 'Authorized'], totals: ['Original', 'Balance', 'Per payroll'],
     rows: state => { const name = nameOf(state); return state.loans.map(l => [l.employeeId, name(l.employeeId), l.type, l.reference, l.loanDate || '', money(l.original), money(l.balance), money(l.perPayroll), l.startDate, l.endDate, `${l.remainingTerms} / ${l.terms}`, yesNo(l.authorized)]); },
   },
   adjustments: {
     title: 'Additional earnings and deductions', roles: STAFF,
-    headers: ['Date', 'Employee ID', 'Name', 'Kind', 'Amount', 'Reason', 'Approved'],
+    headers: ['Date', 'Employee ID', 'Name', 'Kind', 'Amount', 'Reason', 'Approved'], totals: ['Amount'],
     rows: state => { const name = nameOf(state); return state.adjustments.map(a => [a.date, a.employeeId, name(a.employeeId), a.kind, money(a.amount), a.reason, yesNo(a.approved)]); },
   },
   'payroll-runs': {
     title: 'Posted payroll summary', roles: STAFF,
-    headers: ['Cutoff start', 'Cutoff end', 'Employees', 'Gross', 'Deductions', 'Net', 'Posted by', 'Posted at'],
+    headers: ['Cutoff start', 'Cutoff end', 'Employees', 'Gross', 'Deductions', 'Net', 'Posted by', 'Posted at'], totals: ['Gross', 'Deductions', 'Net'],
     rows: state => state.runs.filter(r => r.status === 'posted').sort((a, b) => b.start.localeCompare(a.start)).map(r => [r.start, r.end, r.rows.length, money(r.totals.gross), money(r.totals.deductions), money(r.totals.net), r.postedBy || '', r.postedAt || '']),
   },
   'gov-contributions': {
@@ -112,7 +114,7 @@ export const REPORTS = {
   },
   thirteenth: {
     title: '13th month ledger', roles: STAFF, subtitle: () => `Calendar year ${localToday().slice(0, 4)}`,
-    headers: ['Employee ID', 'Name', 'Covered', 'Applicable basic (posted)', 'Encoded before the system', 'Total basic', 'Accrued (÷12)', 'Paid', 'Balance'],
+    headers: ['Employee ID', 'Name', 'Covered', 'Applicable basic (posted)', 'Encoded before the system', 'Total basic', 'Accrued (÷12)', 'Paid', 'Balance'], totals: ['Applicable basic (posted)', 'Encoded before the system', 'Total basic', 'Accrued (÷12)', 'Paid', 'Balance'],
     rows: state => {
       const year = localToday().slice(0, 4), rows = state.runs.filter(r => r.status === 'posted' && r.start.startsWith(year)).flatMap(r => r.rows);
       return people(state).map(e => {
@@ -124,12 +126,12 @@ export const REPORTS = {
   },
   deductions: {
     title: 'Company deductions', roles: STAFF,
-    headers: ['Employee ID', 'Name', 'Deduction', 'Amount', 'When', 'Start', 'Until', 'Status', 'Notes'],
+    headers: ['Employee ID', 'Name', 'Deduction', 'Amount', 'When', 'Start', 'Until', 'Status', 'Notes'], money: ['Amount'],
     rows: state => { const name = nameOf(state), when = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' }; return (state.deductions || []).map(d => [d.employeeId, name(d.employeeId), d.name, money(d.amount), when[d.schedule], d.startDate, d.endDate, d.active ? 'Active' : 'Paused', d.notes]); },
   },
   contributions: {
     title: 'Government contributions remittance', roles: ['admin', 'hr', 'payroll'], subtitle: () => 'Posted payroll - employee shares deducted, employer shares paid by the company',
-    headers: ['Cutoff', 'Employee ID', 'Name', 'Monthly salary', 'SSS basis', 'PhilHealth basis', 'Pag-IBIG basis', 'SSS EE', 'SSS ER', 'SSS EC', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Total EE', 'Total ER', 'Total remittance'],
+    headers: ['Cutoff', 'Employee ID', 'Name', 'Monthly salary', 'SSS basis', 'PhilHealth basis', 'Pag-IBIG basis', 'SSS EE', 'SSS ER', 'SSS EC', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Total EE', 'Total ER', 'Total remittance'], totals: ['SSS EE', 'SSS ER', 'SSS EC', 'PhilHealth EE', 'PhilHealth ER', 'Pag-IBIG EE', 'Pag-IBIG ER', 'Total EE', 'Total ER', 'Total remittance'],
     rows: state => state.runs.filter(r => r.status === 'posted').sort((a, b) => b.start.localeCompare(a.start)).flatMap(run => run.rows.map(r => {
       const er = r.employer || {}, ee = r.deductions, totalEE = ee.SSS + ee.PhilHealth + ee['Pag-IBIG'], totalER = r.employerTotal || 0;
       const basis = name => money(r.contributionBasis?.[name] ?? r.monthlySalary ?? 0);
@@ -159,12 +161,21 @@ export const REPORTS = {
   },
 };
 
-Object.assign(REPORTS, REPORTS_201);
+Object.assign(REPORTS, REPORTS_201, REPORTS_EXTRA);
 export function availableReports(actor) {
-  return Object.entries(REPORTS).filter(([, r]) => r.roles.includes(actor.role) && (!r.section || canReadSection(actor, r.section))).map(([key, r]) => ({ key, title: r.title, filters: r.filters || [], hr201: key in REPORTS_201 }));
+  return Object.entries(REPORTS).filter(([, r]) => r.roles.includes(actor.role) && (!r.section || canReadSection(actor, r.section))).map(([key, r]) => ({ key, title: r.title, filters: r.filters || [], hr201: key in REPORTS_201, template: !!r.template, category: r.category || '' }));
 }
 
-const FILTER_LABELS = { department: 'Department', status: 'Status', from: 'From', to: 'To', month: 'Month', date: 'Date' };
+// Report columns by heading: totals (SUM row), money (peso format) and formulas ({ heading: (row, col) => formula }).
+function columnsOf(report) {
+  if (report.columns) return report.columns(report.headers);
+  const at = h => report.headers.indexOf(h), totals = (report.totals || []).map(at).filter(i => i >= 0);
+  const money = [...new Set([...totals, ...(report.money || []).map(at).filter(i => i >= 0)])];
+  const formulas = Object.fromEntries(Object.entries(report.formulas || {}).map(([h, f]) => [at(h), n => f(n, h2 => colName(at(h2)))]).filter(([i]) => i >= 0));
+  return { totals, money, formulas };
+}
+const withTotals = (report, rows) => { const { totals } = columnsOf(report); return totals.length && rows.length ? [...rows, report.headers.map((_, j) => (j === 0 ? 'TOTAL' : totals.includes(j) ? money(rows.reduce((s, r) => s + (Number(r[j]) || 0), 0)) : ''))] : rows; };
+const FILTER_LABELS = { caseStatus: 'Case status', department: 'Department', status: 'Status', from: 'From', to: 'To', month: 'Month', date: 'Date' };
 export function buildReport(store, actor, key, format, filters = {}) {
   const report = REPORTS[key];
   if (!report || !['xlsx', 'pdf'].includes(format)) throw new AppError('Report not found.', 404);
@@ -177,8 +188,8 @@ export function buildReport(store, actor, key, format, filters = {}) {
   store.log(actor, 'export', 'report', key, null, { format, rows: rows.length, filters: chosen });
   const filename = `gds-hr-${key}-${localToday()}.${format}`;
   return format === 'xlsx'
-    ? { filename, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: workbook({ [report.title]: [[report.title], [described], [], report.headers, ...rows] }) }
-    : { filename, type: 'application/pdf', body: tablePdf({ title: report.title, subtitle: described, headers: report.headers, rows }) };
+    ? { filename, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: workbook(report.workbook ? report.workbook(state, store, actor, chosen, { rows, described }) : { [report.title]: tableSheet({ title: report.title, description: described, headers: report.headers, rows, ...columnsOf(report) }) }) }
+    : { filename, type: 'application/pdf', body: tablePdf({ title: report.title, subtitle: described, headers: report.headers, rows: withTotals(report, rows) }) };
 }
 
 // One posted payroll run as a PDF register (the Excel version already exists).

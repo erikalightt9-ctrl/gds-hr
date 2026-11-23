@@ -1,8 +1,11 @@
 // Employee portal additions: my memos (acknowledge receipt), my trainings, my data sheet and my 201 documents.
 import { DOC_BADGE, fmtDate, fmtDateTime, readFile, bindCelebrationPhotos, reasonPicker, bindReasonPickers, readReason, OVERTIME_REASONS, idTypeSelect } from './hr-common.js';
 import { describeTotal } from './overtime-ui.js';
+// Loaded on demand, never at start-up: if the file cannot be loaded the rest of the app keeps working.
+let viewer = null;
+const loadViewer = () => (viewer ? Promise.resolve(viewer) : import('./memo-viewer.js').then(m => (viewer = m)).catch(() => null));
 
-export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message) }) {
+export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message), openDialog, dialog }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
   const SHEET = { new: 'Not started', draft: 'Draft (only you can see it)', submitted: 'Submitted to HR', 'under-review': 'HR is reviewing', returned: 'Returned for correction', approved: 'Approved', rejected: 'Rejected' };
 
@@ -20,9 +23,11 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
       if (tab === 'loans201') return loans(box, await api('/hr/me/loans'));
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
-      if (tab === 'memos') return memos(box, await api('/hr/me/memos'), await api('/hr/me/cases').catch(() => []));
+      if (tab === 'memos') { const [list] = await Promise.all([api('/hr/me/memos'), loadViewer()]); return memos(box, list); }
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       if (tab === 'files201') return file201(box);
+      // Loaded on first use (Notices & due process).
+      if (tab === 'cases') return (await import('./portal-cases.js')).createPortalCases({ api, esc, toast, confirm }).fill(box);
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
@@ -87,7 +92,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
         <div class="full ot-form-actions"><button class="primary">${editing ? 'Save changes' : 'Submit for approval'}</button>${editing ? '<button type="button" data-ot-edit-cancel>Discard changes</button>' : ''}</div></form>
       ${nightSummary}</section>
       <section class="panel"><div class="panel-head"><h2>My applications</h2></div><div class="ot-mine">${list.map(o => `<article class="ot-card">
-        <div class="ot-card-head"><strong>${fmtDate(o.date)}</strong>${pill(o.status)}</div>
+        <div class="ot-card-head"><strong>${fmtDate(o.date)}</strong>${o.paidRunId ? `<span class="ot-pill ${(o.paidPayDate || '') <= new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10) && o.paidPayDate ? 'ot-approved' : 'ot-pending'}">${o.paidPayDate && o.paidPayDate <= new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10) ? `Paid · ${esc(o.paidPayDate)}` : `Included · ${esc(o.paidCutoff || '')}${o.paidPayDate ? ` (salary day ${esc(o.paidPayDate)})` : ''}`}</span>` : o.carriedOver ? `<span class="ot-pill ot-pending">${o.status === 'pending' ? 'Pending Overtime · carried over' : 'Approved · paid in the next payroll'}</span>` : pill(o.status)}</div>
         <p class="ot-card-time">${esc(period(o))}${o.breakMinutes ? ` · ${o.breakMinutes} min break` : ''} · <strong>${o.hours} h</strong>${o.status === 'approved' ? ` · approved <strong>${o.approvedHours} h</strong>` : ''}${o.nightHours ? ` · 🌙 ${o.nightHours} h night` : ''}</p>
         <p class="ot-card-reason">${esc(o.reason)}</p>
         ${o.adjustReason ? `<p class="legend">HR approved ${o.approvedHours} of ${o.hours} h: ${esc(o.adjustReason)}</p>` : ''}${o.remarks ? `<p class="legend">HR remarks: ${esc(o.remarks)}</p>` : ''}
@@ -164,38 +169,22 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       try { await api(`/hr/me/loans/${b.dataset.loanCancel}/cancel`, {}); confirm('Loan application cancelled', 'Your loan application was cancelled.'); await fill('loans201', box); } catch (error) { toast(error.message); }
     };
   }
-  // Due process cases addressed to the employee (from the Notice to Explain on), with the written explanation form.
-  function casesHtml(cases) {
-    if (!cases.length) return '';
-    return `<section class="panel"><div class="panel-head"><h2>My cases (due process)</h2><span class="legend">Confidential · only you and HR can see this</span></div><div class="panel-body memo-cards">${cases.map(c => `<article class="memo-card ${c.canExplain ? 'unread' : ''}"><header><strong>${esc(c.reference)} · ${esc(c.offense)}</strong><small>Incident ${fmtDate(c.incidentDate)} · ${esc(c.status)}</small></header>
-      ${c.nte ? `<details ${c.canExplain ? 'open' : ''}><summary>Notice to Explain ${esc(c.nte.memoReference || '')}</summary><div class="memo-body">${esc(c.nte.allegations)}</div><p class="legend">Rule / policy: ${esc(c.nte.rules)} · Possible penalty: ${esc(c.nte.possibleSanction)}</p></details>` : ''}
-      ${c.canExplain ? `<form class="form-grid" data-case-explain="${esc(c.id)}"><p class="full">Please submit your written explanation by <strong>${fmtDate(c.nte.responseDeadline)}</strong>. You may attach supporting documents.</p><label class="field full">Your written explanation<textarea name="text" rows="7" required minlength="10" maxlength="20000"></textarea></label><label class="check full"><input type="checkbox" name="requestsHearing"> I request a hearing or conference to present my side and evidence</label><label class="field full">Supporting documents (optional · up to 5 files, PDF/JPG/PNG, 10 MB each)<input type="file" name="files" multiple accept="application/pdf,image/png,image/jpeg"></label><div class="full"><button class="primary">Submit explanation</button></div></form>` : ''}
-      ${c.explanation ? `<p class="legend">Your explanation was received ${fmtDateTime(c.explanation.submittedAt)}${c.explanation.late ? ' (after the deadline)' : ''}${c.explanation.requestsHearing ? ' · hearing requested' : ''}.</p><details><summary>Your explanation</summary><div class="memo-body">${esc(c.explanation.text)}</div>${c.explanation.files.map(f => `<a href="/api/hr/me/case-files/${f.id}" target="_blank" rel="noopener">📎 ${esc(f.name)}</a>`).join(' ')}</details>` : ''}
-      ${c.hearing ? `<p>Hearing / conference: <strong>${fmtDate(c.hearing.date)} ${esc(c.hearing.time)}</strong> · ${esc(c.hearing.place)}</p>` : ''}
-      ${c.decision ? `<p>Decision: <strong>${esc(c.decision.label)}</strong> · ${fmtDate(c.decision.decisionDate)} · see memo ${esc(c.decision.memoReference)}</p>` : ''}</article>`).join('')}</div></section>`;
-  }
-  function memos(box, list, cases = []) {
-    const pending = list.filter(m => m.ackRequired && !m.acknowledgedAt);
-    box.innerHTML = casesHtml(cases) + `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${pending.length ? `${pending.length} waiting for your acknowledgement` : 'All caught up'}</span></div><div class="panel-body memo-cards">
-      ${list.map(m => `<article class="memo-card ${m.ackRequired && !m.acknowledgedAt ? 'unread' : ''}"><header><strong>${esc(m.title)}</strong><small>${esc(m.reference)} · ${fmtDate(m.issueDate)} · version ${m.version}${m.latest ? '' : ' (replaced by a newer version)'}</small></header>
-        ${m.changeNote ? `<p class="legend">What changed: ${esc(m.changeNote)}</p>` : ''}<details ${m.ackRequired && !m.acknowledgedAt ? 'open' : ''}><summary>Read memo</summary><div class="memo-body">${esc(m.body)}</div>${m.attachments.map(a => `<a href="/api/hr/me/memo-attachments/${a.id}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`).join(' ')}</details>
-        <footer>${m.acknowledgedAt ? badge(`Receipt acknowledged ${fmtDateTime(m.acknowledgedAt)}`) : m.ackRequired ? `${m.overdue ? badge('Overdue', 'rejected') : m.ackDeadline ? badge(`Please acknowledge by ${fmtDate(m.ackDeadline)}`, 'pending') : ''}<button class="primary small" data-ack="${m.memoId}" data-version="${m.version}">I have received and read this memo</button>` : badge('No acknowledgement needed', 'neutral')}</footer></article>`).join('') || '<p class="muted">No memos addressed to you yet.</p>'}
-      <p class="legend">Acknowledging confirms that you received and read the memo. It does not mean you agree with it.</p></div></section>`;
-    for (const form of box.querySelectorAll('[data-case-explain]')) form.onsubmit = async ev => {
-      ev.preventDefault(); const f = new FormData(form), picked = [...form.elements.files.files];
-      if (picked.length > 5 || picked.some(x => x.size > 10 * 1024 * 1024 || !['application/pdf', 'image/png', 'image/jpeg'].includes(x.type))) { toast('Attach up to 5 PDF, JPG or PNG files of 10 MB or less.'); return; }
-      if (!window.confirm('Submit your written explanation now? You cannot change it afterwards.')) return;
-      const button = form.querySelector('button'); button.disabled = true;
-      try {
-        const files = await Promise.all(picked.map(async x => ({ name: x.name, mime: x.type, data: await readFile(x), description: '' })));
-        await api(`/hr/me/cases/${form.dataset.caseExplain}/explanation`, { text: f.get('text'), requestsHearing: f.get('requestsHearing') === 'on', files });
-        confirm('Explanation submitted', 'Your written explanation was sent to HR. You will receive a memo with the decision after the case is evaluated.'); await fill('memos', box);
-      } catch (error) { toast(error.message); button.disabled = false; }
-    };
-    box.onclick = async event => {
-      const b = event.target.closest('[data-ack]'); if (!b) return;
-      b.disabled = true;
-      try { await api(`/hr/me/memos/${b.dataset.ack}/${b.dataset.version}/acknowledge`, {}); confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); await fill('memos', box); } catch (error) { toast(error.message); b.disabled = false; }
+  function memos(box, list) {
+    const statusChip = viewer ? viewer.statusChip : (_esc, status, label) => badge(label || (status === 'acknowledged' ? 'Acknowledged' : 'Pending Acknowledgment'), status === 'acknowledged' ? '' : 'pending');
+    const open = list.filter(m => m.ackRequired && !m.acknowledgedAt && m.latest && !m.archived);
+    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>My memos</h2><span class="legend">${open.length ? `${open.length} waiting for your action` : 'All caught up'}</span></div><div class="panel-body memo-cards">
+      ${list.map((m, i) => `<article class="memo-card ${m.ackRequired && !m.acknowledgedAt && m.latest ? 'unread' : ''}"><header><strong>${esc(m.title)}</strong><small>${esc(m.reference)} · ${esc(m.category || '')} · ${fmtDate(m.issueDate)} · version ${m.version}${m.latest ? '' : ' (replaced by a newer version)'}</small></header>
+        ${m.changeNote ? `<p class="legend">What changed: ${esc(m.changeNote)}</p>` : ''}
+        <p>${statusChip(esc, m.status, m.statusLabel)}${m.ackRequired && !m.acknowledgedAt && m.latest ? ` <span class="legend">Acknowledge by ${fmtDate(m.ackDeadline)}</span>` : ''}${m.acknowledgedAt ? ` <span class="legend">${fmtDateTime(m.acknowledgedAt)}</span>` : ''}</p>
+        ${viewer && m.statusLabel ? '' : `<details><summary>Read memo</summary><div class="memo-body">${esc(m.body)}</div></details>`}<footer class="memo-card-actions">${viewer && m.statusLabel ? `<button class="${m.ackRequired && !m.acknowledgedAt && m.latest ? 'primary' : ''} small" data-memo-open="${i}">📄 Open memo</button>` : m.ackRequired && !m.acknowledgedAt ? `<button class="primary small" data-ack="${m.memoId}" data-version="${m.version}">I have received and read this memo</button>` : ''}</footer></article>`).join('') || '<p class="muted">No memos addressed to you yet.</p>'}
+      <p class="legend">Open a memo to read the official PDF, then acknowledge it (received, read and understood) or ask HR for clarification. Opening, downloading or printing does not acknowledge it. Acknowledging is not an admission of wrongdoing and does not waive your rights.</p></div></section>`;
+    box.onclick = event => {
+      const ack = event.target.closest('[data-ack]');
+      if (ack) { ack.disabled = true; api(`/hr/me/memos/${ack.dataset.ack}/${ack.dataset.version}/acknowledge`, {}).then(() => { confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); return fill('memos', box); }).then(() => memoNotice(document, false)).catch(error => { toast(error.message); ack.disabled = false; }); return; }
+      const b = event.target.closest('[data-memo-open]'); if (!b) return;
+      const refresh = async () => { await fill('memos', box); memoNotice(document, false).catch(() => {}); };
+      if (openDialog && viewer && list[Number(b.dataset.memoOpen)].statusLabel) viewer.openMyMemo({ api, esc, toast, openDialog, dialog }, list[Number(b.dataset.memoOpen)], refresh);
+      else window.open(`/api/hr/me/memos/${list[Number(b.dataset.memoOpen)].memoId}/${list[Number(b.dataset.memoOpen)].version}.pdf`, '_blank', 'noopener');
     };
   }
 
@@ -236,8 +225,34 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   const toComply = list => list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status));
   const statusText = i => (i.numberOnly ? (i.status === 'Verified' ? 'Complied — number on file' : 'Not complied — enter the number in My data sheet') : STATUS_TEXT[i.status] || i.status);
   const STATUS_TEXT = { Missing: 'Not complied — upload required', Rejected: 'Rejected — upload again', Expired: 'Expired — upload a renewed copy', Submitted: 'Submitted — waiting for HR review', 'Under Review': 'Under HR review', Verified: 'Complied', 'Not Applicable': 'Not applicable' };
+  // Memos waiting for acknowledgement: a count on the Memos menu item and a red notice on the dashboard that stay
+  // until the employee acknowledges each memo (the bell notice alone can be cleared by opening the bell).
+  // Outstanding actions: memos to acknowledge (pending / overdue / clarification) and due process notices (receipt and
+  // explanation tracked separately). A count on the Memos menu item, the bell and a red notice on the dashboard stay
+  // until each action is done; opening the bell or a reminder never lifts them.
+  async function memoNotice(app, onDashboard) {
+    const [memoList, cases] = await Promise.all([api('/hr/me/memos'), api('/hr/me/cases').catch(() => [])]);
+    const pending = memoList.filter(m => m.ackRequired && !m.acknowledgedAt && m.latest !== false && !m.archived);
+    const dp = cases.flatMap(c => [...c.notices.filter(n => !n.receivedAt).map(n => ({ text: `${n.title} ${n.reference || c.reference}`, label: '🔔 Pending Acknowledgment' })), ...(c.canExplain && !c.explanation ? [{ text: `Notice to Explain ${c.reference} — due ${fmtDate(c.deadline)}`, label: '📝 Explanation Required' }] : [])]);
+    const total = pending.length + dp.length;
+    const flag = (selector, count, label) => { const el = app.querySelector(selector); el?.querySelector('.nav-flag')?.remove(); if (el && count) el.insertAdjacentHTML('beforeend', `<span class="nav-flag" aria-label="${count} ${label}">${count}</span>`); };
+    flag('[data-portal-tab="memos"]', pending.length, `memo${pending.length === 1 ? '' : 's'} to acknowledge`);
+    flag('[data-portal-tab="cases"]', dp.length, `due process action${dp.length === 1 ? '' : 's'}`);
+    const bell = app.querySelector('[data-portal-bell]');
+    bell?.querySelector('.bell-pending')?.remove();
+    if (bell && total) bell.insertAdjacentHTML('beforeend', `<span class="bell-pending" title="${total} action${total === 1 ? '' : 's'} waiting for you" aria-label="${total} actions waiting">${total}</span>`);
+    const main = app.querySelector('.employee-main');
+    main?.querySelector('.memo-ack-alert')?.remove();
+    if (!onDashboard || !total || !main) return;
+    const box = document.createElement('section'); box.className = 'compliance-alert memo-ack-alert'; box.setAttribute('role', 'alert');
+    const items = [...pending.map(m => `<li>${m.status === 'overdue' ? '⚠️ Overdue Acknowledgment' : m.status === 'clarification' ? '❓ Clarification Requested' : '🔔 Pending Acknowledgment'}: ${esc(m.reference || '')} ${esc(m.title)} <small>(by ${fmtDate(m.ackDeadline)})</small></li>`), ...dp.map(d => `<li>${d.label}: ${esc(d.text)}</li>`)];
+    box.innerHTML = `<div><strong>${total} item${total === 1 ? '' : 's'} waiting for your action</strong><ol class="comply-list">${items.join('')}</ol><p class="legend">This notice stays until each item is done. It does not stop you from timing in, viewing your pay or submitting an explanation.</p></div><div class="row-actions">${pending.length ? '<button class="primary" data-portal-tab="memos">Open memos</button>' : ''}${dp.length ? '<button data-portal-tab="cases">Notices &amp; due process</button>' : ''}</div>`;
+    const anchor = main.querySelector('.compliance-alert') || main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
+    if (anchor) anchor.after(box); else main.prepend(box);
+  }
   async function compliance(app, onDashboard) {
     if (onDashboard) missingNotice(app).catch(() => {});
+    memoNotice(app, onDashboard).catch(() => {});
     try {
       const list = await api('/hr/me/documents'), due = toComply(list);
       const tabButton = app.querySelector('[data-portal-tab="files201"]');
@@ -302,5 +317,5 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['files201', 'My 201 file', '📁']], showDatasheet, showDocuments: () => { fileView = 'documents'; } };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['cases', 'Notices & due process', '⚖️'], ['files201', 'My 201 file', '📁']], showDatasheet, showDocuments: () => { fileView = 'documents'; } };
 }

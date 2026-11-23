@@ -19,16 +19,35 @@ test('scheduled working days per month come from the calendar and the rest day (
   assert.equal(monthWorkdays({ restDays: [0] }, '2026-10'), 27, 'October 2026: 4 Sundays');
 });
 
-test('the month is split between the two cutoffs and shown beside each cutoff count; the divisor stays separate', () => {
+test('the month is split between the two cutoffs and shown beside each cutoff count; the month is also the daily-rate divisor', () => {
   for (const [rest, first, second, month] of [[[0], 12, 13, 25], [[6], 13, 13, 26]]) {
     const s = state(rest), a = row(s, '2026-11-01', '2026-11-15'), b = row(s, '2026-11-16', '2026-11-30');
     assert.deepEqual([a.workingDays, b.workingDays, a.monthWorkingDays, b.monthWorkingDays], [first, second, month, month], `rest ${rest}`);
     assert.equal(a.workingDays + b.workingDays, month);
-    assert.equal(a.adjustmentDivisor, 26, 'attendance adjustments still use the rules divisor');
+    assert.equal(a.adjustmentDivisor, month, 'the daily rate (and attendance adjustments) use the month’s working days');
   }
 });
 
 test('Nov 2 (a holiday on a workday) is a scheduled working day and a credited Holiday Day', () => {
   const r = row(state([0]), '2026-11-01', '2026-11-15');
   assert.equal(r.workingDays, 12); assert.equal(r.holidayDays, 1);
+});
+
+test('working days of the payroll period: start and end included, rest days excluded, follows the period and the rest day', () => {
+  assert.equal(row(state([0]), '2026-11-01', '2026-11-15').workingDays, 12, 'Nov 1-15, Sunday rest');
+  assert.equal(row(state([6]), '2026-11-01', '2026-11-15').workingDays, 13, 'Nov 1-15, Saturday rest');
+  assert.equal(row(state([0]), '2026-11-16', '2026-11-30').workingDays, 13, 'Nov 16-30, Sunday rest');
+  assert.equal(row(state([0]), '2028-02-16', '2028-02-29').workingDays, 12, 'Feb 16-29, 2028 (leap year), Sunday rest');
+  assert.equal(row(state([0, 6]), '2028-02-16', '2028-02-29').workingDays, 10, 'two rest days');
+});
+
+test('monthly salary stays fixed: daily rate = salary ÷ the month’s working days; each cutoff pays its own working days (no fixed 13)', () => {
+  const base = r => r.trace.find(t => t.component === 'basic' && /working days in the month/.test(t.formula)).amount;
+  for (const [rest, rate, first, second] of [[[0], 1000, 12000, 13000], [[6], 961.54, 12500, 12500]]) {
+    const s = state(rest); s.employees[0].monthlySalary = 25000;
+    const a = row(s, '2026-11-01', '2026-11-15'), b = row(s, '2026-11-16', '2026-11-30');
+    assert.equal(a.dailyRate, rate, `rest ${rest}: 25,000 ÷ ${rest[0] === 0 ? 25 : 26}`);
+    assert.deepEqual([base(a), base(b)], [first, second], `rest ${rest}: Nov 1 (Sunday) is not counted for a Sunday rest day`);
+    assert.equal(Math.round((base(a) + base(b)) * 100) / 100, 25000, 'the two cutoffs add up to the monthly salary');
+  }
 });

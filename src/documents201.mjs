@@ -2,6 +2,9 @@
 // HR review (Submitted → Under Review → Verified / Rejected), expiry, Not Applicable overrides and completeness.
 // Files stay in the private database; every preview and download goes through an authorisation check.
 import { randomUUID } from 'node:crypto';
+import { isActive } from './workforce.mjs';
+// The 201 document checklist was first tracked in the system in October 2026.
+export const TRACKING_FROM = '2026-10-01';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
 import { localToday, isSalaryRequirement } from './profiles.mjs';
@@ -36,8 +39,11 @@ export function checklistFor(store, actor, employee, settings = readSettings(sto
     const na = overrides.get(req.id);
     // Government registrations are complied by the number on file (the number itself is never shown here).
     const number = NUMBER_REQUIREMENTS[req.id];
-    const status = na ? 'Not Applicable' : number ? (String(gov[number.field] || '').trim() ? 'Verified' : 'Missing') : statusOf(current, today, req);
-    const due = req.dueDays !== null && req.dueDays !== undefined && employee.startDate ? addDays(employee.startDate, req.dueDays) : '';
+    const status = na ? (na.waived ? 'Waived' : 'Not Applicable') : number ? (String(gov[number.field] || '').trim() ? 'Verified' : 'Missing') : statusOf(current, today, req);
+    // Due date: days after hire, but never earlier than the same days after the requirement began to be tracked
+    // (long-serving staff are not overdue from the day a requirement is added). Nov 20, 2026.
+    const from = [employee.startDate || '', req.trackedFrom || TRACKING_FROM].sort().at(-1);
+    const due = req.dueDays !== null && req.dueDays !== undefined && employee.startDate ? addDays(from, req.dueDays) : '';
     const hidden = !canSee(actor, req);
     return {
       requirement: req, status, due, overdue: status === 'Missing' && req.required && !!due && due < today,
@@ -46,7 +52,7 @@ export function checklistFor(store, actor, employee, settings = readSettings(sto
       current: hidden ? null : current, versions: hidden ? [] : versions,
     };
   });
-  const required = items.filter(i => i.requirement.required && i.status !== 'Not Applicable');
+  const required = items.filter(i => i.requirement.required && !['Not Applicable', 'Waived'].includes(i.status));
   const complete = required.filter(i => i.status === 'Verified');
   return { employeeId: employee.id, items, requiredCount: required.length, completeCount: complete.length, percent: required.length ? Math.round(complete.length / required.length * 100) : 100 };
 }
@@ -133,12 +139,12 @@ export function reviewDocument(store, actor, docId, input) {
 }
 export function setNotApplicable(store, actor, employeeId, requirementId, input) {
   permit(actor, HR_MANAGERS);
-  const { notApplicable, reason } = z.object({ notApplicable: z.boolean(), reason: z.string().trim().max(500).default('') }).strict().parse(input);
-  if (notApplicable && reason.length < 3) throw new AppError('Give a reason for marking the requirement Not Applicable.');
+  const { notApplicable, reason, waive } = z.object({ notApplicable: z.boolean(), reason: z.string().trim().max(500).default(''), waive: z.boolean().default(false) }).strict().parse(input);
+  if (notApplicable && reason.length < (waive ? 5 : 3)) throw new AppError(waive ? 'Give the reason for waiving this requirement (at least 5 characters).' : 'Give a reason for marking the requirement Not Applicable.');
   return store.transaction(() => {
-    if (notApplicable) store.db.prepare('INSERT INTO requirement_overrides(employee_id,requirement_id,data) VALUES(?,?,?) ON CONFLICT(employee_id,requirement_id) DO UPDATE SET data=excluded.data').run(employeeId, requirementId, JSON.stringify({ reason, by: actor.username, at: new Date().toISOString() }));
+    if (notApplicable) store.db.prepare('INSERT INTO requirement_overrides(employee_id,requirement_id,data) VALUES(?,?,?) ON CONFLICT(employee_id,requirement_id) DO UPDATE SET data=excluded.data').run(employeeId, requirementId, JSON.stringify({ reason, ...(waive ? { waived: true } : {}), by: actor.username, at: new Date().toISOString() }));
     else store.db.prepare('DELETE FROM requirement_overrides WHERE employee_id=? AND requirement_id=?').run(employeeId, requirementId);
-    store.log(actor, notApplicable ? 'not-applicable' : 'applicable', `document:${TYPE}`, employeeId, null, { requirementId, reason });
+    store.log(actor, notApplicable ? (waive ? 'waive' : 'not-applicable') : 'applicable', `document:${TYPE}`, employeeId, null, { requirementId, reason });
     return { ok: true };
   });
 }
@@ -156,7 +162,7 @@ export function document201Content(store, actor, docId) {
 }
 
 // ---------- Totals for the dashboard and reports ----------
-export function documentSummary(store, actor, employees = scopeEmployees(store, actor).filter(e => !e.archived)) {
+export function documentSummary(store, actor, employees = (state => scopeEmployees(store, actor).filter(e => isActive(state, e)))(store.read())) {
   const settings = readSettings(store), today = localToday(), rows = [];
   let missingDocuments = 0, employeesMissing = 0, expired = 0, expiringSoon = 0, pendingReview = 0, overdue = 0;
   const toReview = [];   // one entry per employee with uploads waiting for HR review (bell items open that 201 file)
@@ -170,7 +176,7 @@ export function documentSummary(store, actor, employees = scopeEmployees(store, 
     pendingReview += reviewing.length;
     if (reviewing.length) toReview.push({ employeeId: e.id, name: e.name, requirements: reviewing.map(i => i.requirement.name), uploadedAt: reviewing.map(i => i.current?.uploadedAt || '').filter(Boolean).sort() });
     overdue += list.items.filter(i => i.overdue).length;
-    for (const i of list.items) if (i.status !== 'Verified' && i.status !== 'Not Applicable' && (i.requirement.required || i.status !== 'Missing')) rows.push({ employeeId: e.id, name: e.name, number: e.employeeNumber || e.id, department: e.department, requirement: i.requirement.name, category: i.requirement.category, required: i.requirement.required, status: i.status, due: i.due, overdue: i.overdue, expiry: i.current?.expiryDate || '' });
+    for (const i of list.items) if (!['Verified', 'Not Applicable', 'Waived'].includes(i.status) && (i.requirement.required || i.status !== 'Missing')) rows.push({ employeeId: e.id, name: e.name, number: e.employeeNumber || e.id, department: e.department, requirement: i.requirement.name, category: i.requirement.category, required: i.requirement.required, status: i.status, due: i.due, overdue: i.overdue, expiry: i.current?.expiryDate || '' });
     if (list.items.some(i => i.expiringSoon)) for (const i of list.items.filter(x => x.expiringSoon)) rows.push({ employeeId: e.id, name: e.name, number: e.employeeNumber || e.id, department: e.department, requirement: i.requirement.name, category: i.requirement.category, required: i.requirement.required, status: 'Expiring soon', due: '', overdue: false, expiry: i.current?.expiryDate || '' });
   }
   return { missingDocuments, employeesMissing, expired, expiringSoon, pendingReview, overdue, rows, toReview };

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { ISSUE_LABELS, DECISIONS } from './validation-inputs.mjs';
+import { carryableFilings, carriedAmounts } from './overtime-carry.mjs';
 import { date as dateSchema } from './schema.mjs';
 
 // Computed amounts an authorized user may override. Loans (balances), contributions (own approval flow) and the
@@ -24,6 +26,13 @@ export function monthWorkdays(employee, month) {
   let count = 0;
   for (let day = 1; day <= last; day++) if (!employee.restDays.includes(new Date(Date.UTC(y, m - 1, day)).getUTCDay())) count++;
   return count;
+}
+// Monthly-paid daily rate: the monthly salary ÷ the employee's own scheduled working days in that month (rest days
+// excluded, holidays included; Nov 2026: ÷ 25 with Sunday rest, ÷ 26 with Saturday rest). HR decision Nov 20, 2026:
+// replaces the fixed rules divisor (26). Recomputed for every month and whenever the rest days change.
+export function monthlyDailyRate(employee, date) {
+  const days = monthWorkdays(employee, date.slice(0, 7));
+  return employee.monthlySalary && days ? employee.monthlySalary / days : 0;
 }
 // The schedule in force on a date: a weekday override's non-blank fields, else the base profile, else company rules.
 export function scheduleOn(employee, profile = {}, date, rule) {
@@ -238,6 +247,8 @@ export function premiumHours(breakdown = [], earnings = {}, overrides = [], hour
   return out;
 }
 
+// First date on which an approved offset no longer cancels a late of the grace threshold or more (HR, Nov 23, 2026).
+export const LATE_OFFSET_ENDS = '2026-11-23';
 export function calculatePayroll(state, start, end, pay13th = false, employeeIds = null) {
   const days = dates(start, end);
   if (start.slice(0, 7) !== end.slice(0, 7)) throw new Error('Payroll cutoffs must be within one calendar month.');
@@ -256,10 +267,17 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
   // work-from-home "present without time in" day or a holiday is credited only once the date has arrived.
   const notYet = d => !!state.asOf && d > state.asOf;
   const chosen = employeeIds?.length ? new Set(employeeIds) : null;
+  // Attendance validation (src/attendance-validation.mjs): original punches are System Validated, HR-approved records and
+  // corrections are used as approved; anything else is a review item that needs HR's payroll decision (never an
+  // automatic absence). Employees with undecided items are held out of posting; the others are processed.
+  const V = state.validation || {}, sysValid = new Set(V.systemValidated || []), corrValid = new Set(V.correctionValidated || []), pendingCorr = new Set(V.pendingCorrections || []), punchIssues = V.punchIssues || {}, approvedCorr = V.approvedCorrections || {};
   // 'Remittance only' (e.g. the CEO): government contributions are remitted but the employee is not paid through payroll.
   const remittanceOnly = new Set((state.employeeProfiles || []).filter(p => p.section === 'payroll' && p.status === 'Remittance only').map(p => p.employeeId));
   const rows = state.employees.filter(e => (!chosen || chosen.has(e.id)) && !e.draft && !remittanceOnly.has(e.id) && e.startDate && e.startDate <= end && (!e.endDate || e.endDate >= start)).map(e => {
     const prefix = `${e.id} ${e.name}`;
+    const reviewItems = [], validation = [];
+    const decisionOf = d => (V.payrollDecisions || []).find(x => x.employeeId === e.id && x.date === d) || null;
+    const review = (d, issue, detail) => { reviewItems.push({ employeeId: e.id, employeeName: e.name, date: d, issue, issueLabel: ISSUE_LABELS[issue], detail }); validation.push({ date: d, status: 'review', issue, detail }); };
     const payrollProfile = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'payroll');
     const contributionOverride = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'contributions');
     const attendanceProfile = state.employeeProfiles?.find(p => p.employeeId === e.id && p.section === 'attendance');
@@ -270,22 +288,26 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     if (state.runs.some(run => run.status === 'posted' && run.start > end && run.rows.some(row => row.employeeId === e.id))) blockers.push(`${prefix}: payroll must be posted chronologically; a later cutoff has already been posted.`);
     // Daily-paid staff earn their daily rate per scheduled workday; absences then deduct whole days.
     const dailyPaid = payrollProfile?.basis === 'daily';
-    // Paid per day worked: monthly salary ÷ the rules divisor (26) × days actually worked. A rest day worked is one more
+    // Paid per day worked: monthly salary ÷ the month's scheduled working days × days actually worked. A rest day worked is one more
     // day at the plain daily rate (no rest-day premium); a scheduled day not worked is simply not paid (not a blocker).
     const perDayWorked = payrollProfile?.basis === 'days-worked';
     if (dailyPaid && !payrollProfile.dailyRate) blockers.push(`${prefix}: daily-paid employees need a daily rate in their payroll profile.`);
     // Hourly rate follows the employee's own scheduled hours (a 12-hour driver: daily ÷ 12), else the rules divisor.
     const scheduledHours = attendanceProfile?.hoursPerDay || r.hourlyDivisor;
-    const daily = payrollProfile?.dailyRate ?? e.monthlySalary / r.dailyDivisor, hourly = payrollProfile?.hourlyRate ?? daily / scheduledHours;
-    // Attendance adjustments (absences, unpaid leave, lateness, undertime) for monthly-paid staff use the rules divisor
-    // (26) in every month, 31-day months included (Nov 2026: basic = monthly ÷ 26 × days credited; the earlier ÷ 27 for
-    // 31-day months was dropped). Daily-paid and per-day-worked staff keep their own rate.
-    const adjustmentDivisor = dailyPaid || perDayWorked ? null : r.dailyDivisor;
+    // Monthly salary: the daily rate is the salary ÷ this employee's scheduled working days in the cutoff's month (rest
+    // days excluded; Nov 2026: 25 with Sunday rest, 26 with Saturday rest), not a fixed divisor (HR decision Nov 20, 2026).
+    const monthDays = monthWorkdays(e, start.slice(0, 7));
+    const daily = payrollProfile?.dailyRate ?? monthlyDailyRate(e, start), hourly = payrollProfile?.hourlyRate ?? daily / scheduledHours;
+    // Attendance adjustments (absences, unpaid leave, lateness, undertime) for monthly-paid staff use the same rate.
+    // Daily-paid and per-day-worked staff keep their own rate.
+    const adjustmentDivisor = dailyPaid || perDayWorked ? null : monthDays;
     const adjDaily = adjustmentDivisor ? e.monthlySalary / adjustmentDivisor : daily, adjHourly = adjDaily / scheduledHours;
     const allScheduled = days.filter(d => !isRest(e, d));
     const employed = days.filter(d => d >= e.startDate && (!e.endDate || d <= e.endDate));
     const scheduled = employed.filter(d => !isRest(e, d));
-    const baseline = dailyPaid || perDayWorked ? round(daily * scheduled.length) : round(e.monthlySalary * factor * (allScheduled.length ? scheduled.length / allScheduled.length : 0));
+    // Monthly-paid: the cutoff pays its own scheduled working days (Nov 1-15, 2026: 12 with Sunday rest, 13 with Saturday
+    // rest) at the month's daily rate; no fixed half-month of 13 days. A monthly cutoff pays the whole salary.
+    const baseline = dailyPaid || perDayWorked ? round(daily * scheduled.length) : factor === 1 ? round(e.monthlySalary * (allScheduled.length ? scheduled.length / allScheduled.length : 0)) : round(adjDaily * scheduled.length);
     const earnings = { basic: baseline, leavePay: 0, regularOT: 0, restDay: 0, restOT: 0, nsd: 0, specialHoliday: 0, specialOT: 0, regularHoliday: 0, regularHolidayOT: 0, otherHoliday: 0, otherOT: 0, allowance: 0, additional: 0, thirteenth: 0 };
     const deductions = { undertime: 0, absence: 0, SSS: 0, PhilHealth: 0, 'Pag-IBIG': 0, tax: 0, loans: 0, sssLoan: 0, pagibigLoan: 0, salaryDeduction: 0, other: 0 };
     const trace = [], late = [], leaveNotes = [], loanDeductions = [], workBreakdown = [];
@@ -301,7 +323,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       side[component] = round(side[component] + rounded);
       trace.push({ component, side: side === earnings ? 'earnings' : 'deductions', amount: rounded, formula, sourceId: source?.id || r.id, sourceKind: source?.sourceKind || (source?.timeIn !== undefined ? 'attendance' : source?.typeId ? 'leaves' : source?.kind ? 'adjustments' : 'rules'), date, quantity, multiplier });
     };
-    trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid || perDayWorked ? `${daily} × ${scheduled.length} scheduled workdays (${dailyPaid ? 'daily-paid' : 'paid per day worked; days not worked are taken off below'})` : `${e.monthlySalary} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
+    trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid || perDayWorked ? `${daily} × ${scheduled.length} scheduled workdays (${dailyPaid ? 'daily-paid' : 'paid per day worked; days not worked are taken off below'})` : factor === 1 ? `${e.monthlySalary} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed` : `${round(adjDaily)} (${e.monthlySalary} ÷ ${monthDays} working days in the month) × ${scheduled.length} scheduled working days employed in this cutoff`, sourceId: e.id, sourceKind: 'employees', date: start });
     // Manual entry for exactly this cutoff: "replace" skips attendance; "add" pays the typed hours on top of it.
     const manual = (state.payrollInputs || []).find(i => i.employeeId === e.id && i.start === start && i.end === end) || null;
     for (const d of manual?.mode === 'replace' ? [] : employed) {
@@ -309,14 +331,24 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // it stays flagged until the time out is recorded.
       const openIn = (state.openClockIns || []).find(c => c.employeeId === e.id && c.workDate === d);
       let record = state.attendance.find(a => a.employeeId === e.id && a.date === d);
-      if (!record && openIn) {
+      // Incomplete-attendance case of the day with HR's documented treatment (src/attendance-cases.mjs).
+      const decided = decisionOf(d);
+      const dayCase = (state.attendanceCases || []).find(c => c.employeeId === e.id && c.date === d && c.status === 'open' && c.treatment)
+        || (decided ? { id: `decision:${e.id}:${d}`, decision: decided, treatment: { mode: ['credit', 'pay-recorded'].includes(decided.mode) ? 'credit' : 'hold', by: decided.by, note: `${DECISIONS[decided.mode]} — ${decided.note}` } } : null);
+      const treatmentNote = dayCase ? `HR ${dayCase.decision ? 'payroll decision' : 'treatment'} by ${dayCase.treatment.by} (${dayCase.decision ? DECISIONS[dayCase.decision.mode].toLowerCase() : dayCase.treatment.mode === 'credit' ? 'credited pending verification' : 'held until corrected'}): ${dayCase.treatment.note}` : '';
+      const noteDecided = () => { if (dayCase) validation.push({ date: d, status: 'decided', decision: dayCase.decision?.mode || dayCase.treatment.mode, by: dayCase.treatment.by, note: dayCase.treatment.note }); };
+      if (!record && openIn && dayCase?.treatment.mode === 'hold') noteDecided();
+      if (!record && openIn && dayCase?.treatment.mode === 'hold') trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `Time in ${openIn.time} on ${d} with no time out: ${treatmentNote}`, sourceKind: 'attendance-cases', sourceId: dayCase.id, date: d });
+      else if (!record && openIn) {
         const sched = scheduleOn(e, attendanceProfile, d, r), [sh, sm] = (sched.start || openIn.time).split(':').map(Number), [ih, im] = openIn.time.split(':').map(Number);
         // Counted to the scheduled end; a time in at or after that end (e.g. a time out pressed as a time in) still makes a
         // valid, flagged day instead of a shift that ends before it starts.
         const endMin = Math.max(sh * 60 + sm + Math.round(sched.hoursPerDay * 60), ih * 60 + im + 1);
         record = { id: `open-${openIn.id}`, employeeId: e.id, date: d, status: 'present', scheduledIn: sched.start || openIn.time, timeIn: openIn.time, timeOut: `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`, endNextDay: endMin >= 1440, breaks: [], approved: false, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true, regularHoursOnly: true };
-        if (manual?.waiveOpenTimeIn) trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `Waived by ${manual.updatedBy}: time in ${openIn.time} on ${d} with no time out counted as a scheduled day`, sourceKind: 'payroll-inputs', sourceId: `${e.id}:${start}`, date: d });
-        else blockers.push(`${prefix}: timed in at ${openIn.time} on ${d} with no time out yet; counted as a scheduled day until the time out is recorded.`);
+        if (dayCase) trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `Time in ${openIn.time} on ${d} with no time out: credited as attended (time in verified), no undertime or overtime until corrected; ${treatmentNote}`, sourceKind: 'attendance-cases', sourceId: dayCase.id, date: d });
+        else if (manual?.waiveOpenTimeIn) trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `Waived by ${manual.updatedBy}: time in ${openIn.time} on ${d} with no time out counted as a scheduled day`, sourceKind: 'payroll-inputs', sourceId: `${e.id}:${start}`, date: d });
+        else review(d, 'missing-punch', `Time in ${openIn.time} with no time out`);
+        if (dayCase) noteDecided();
       }
       // Work-from-home day set as present without time in / out, unless on approved leave.
       if (!record && !notYet(d) && !state.leaves.some(l => l.employeeId === e.id && l.status === 'approved' && l.startDate <= d && l.endDate >= d)) record = autoPresentRecord(e, attendanceProfile, d, r);
@@ -345,18 +377,49 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         else if (type?.paid) { paidLeaveDays += 1; add(earnings, 'basic', -daily, `${round(daily)} × 1 day moved to leave pay (already in the half-month)`, leave, d); add(earnings, 'leavePay', daily, `Approved ${type.name}: 1 day × ${round(daily)}`, leave, d); }
         else add(earnings, 'basic', 0, `Approved ${type?.name || leave.typeId}; salary already included in cutoff basic`, leave, d);
         if (type?.paid && !type.includedIn13th) excludedLeave += daily;
-        if (record?.status === 'present') blockers.push(`${prefix}: attendance conflicts with leave on ${d}.`);
+        if (record?.status === 'present') { if (dayCase) noteDecided(); else review(d, 'conflict', 'Attendance recorded on a day of approved leave (the leave is used)'); }
         continue;
       }
       if (!record) {
-        if ((!rest || kind !== 'rest') && !perDayWorked) blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
-        // No attendance on a scheduled workday: the day is not credited (no pay) until attendance or a leave is recorded.
-        if (!rest && kind === 'ordinary' && !notYet(d)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day with no attendance record (not credited)`, null, d);
-        else if (!rest && notYet(d)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
+        // Missing: an ordinary workday, or a regular / double holiday (its pay depends on the eligibility record). An
+        // unworked special non-working day needs no record: it stays paid without one (Nov 20, 2026).
+        // HR documented the treatment of this unresolved day: no blocker; 'credit' counts it as attended pending verification.
+        if (dayCase?.treatment.mode === 'credit' && !rest && !notYet(d)) {
+          noteDecided();
+          daysPresent++; presentOrLeave.add(d); creditedMinutes += scheduleOn(e, attendanceProfile, d, r).hoursPerDay * 60;
+          add(earnings, 'basic', 0, `No time-in / time-out on ${d}: ${treatmentNote}; salary already included in cutoff basic`, { id: dayCase.id, sourceKind: 'attendance-cases' }, d);
+          continue;
+        }
+        const needsRecord = !perDayWorked && !notYet(d) && ((!rest && kind === 'ordinary') || ['regular', 'double'].includes(kind.replace('-rest', '')));
+        if (dayCase) { noteDecided(); trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `No time-in / time-out on ${d}: ${treatmentNote}`, sourceKind: 'attendance-cases', sourceId: dayCase.id, date: d }); }
+        else if (needsRecord && kind !== 'ordinary') review(d, 'missing-punch', 'No time in / time out and no approved leave');
+        // No time in and no time out on a scheduled workday that has passed (no approved leave) = absent (HR, Nov 23, 2026):
+        // not credited. A time correction later approved replaces it; HR's treatment (credit / hold) still applies.
+        if (!rest && kind === 'ordinary' && !notYet(d) && (dayCase || d !== state.asOf)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day ${dayCase ? `with no attendance record (not credited: ${treatmentNote})` : perDayWorked ? 'with no attendance record (not credited)' : `absent: no time in / time out on ${d}`}`, null, d);
+        else if (!rest && (notYet(d) || (d === state.asOf && kind === 'ordinary'))) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
         continue;
       }
       // Unapproved attendance is still counted (real time) but must be approved before the payroll is final.
-      if (!record.approved && !String(record.id).startsWith('open-')) blockers.push(`${prefix}: attendance on ${d} is not approved.`);
+      if (!String(record.id).startsWith('open-')) {
+        const key = `${e.id}|${d}`;
+        let issue = null, detail = '';
+        if (pendingCorr.has(key)) { issue = 'pending-correction'; detail = 'A time correction request for this day is waiting for HR'; }
+        else if (record.approved || corrValid.has(record.id)) validation.push({ date: d, status: 'hr-approved', source: approvedCorr[key] ? `time correction ${approvedCorr[key].reference} approved by ${approvedCorr[key].by}` : String(record.id).startsWith('wfh-') ? 'work-from-home schedule set by HR' : 'record approved by HR', recordId: record.id });
+        else if (sysValid.has(record.id)) validation.push({ date: d, status: 'system-validated', source: 'original TimeHub time in and time out', recordId: record.id });
+        else if (record.status === 'present' && (!record.timeIn || !record.timeOut)) { issue = 'missing-punch'; detail = record.timeIn ? `Time in ${record.timeIn} with no time out` : `Time out ${record.timeOut || '—'} with no time in`; }
+        else if (String(record.id).startsWith('clock-')) { issue = 'conflict'; detail = punchIssues[record.id] || 'The record differs from the time in / out punches'; }
+        else { issue = 'manual-entry'; detail = 'Entered or imported without HR approval'; }
+        if (issue && !dayCase) review(d, issue, detail);
+        else if (issue) {
+          noteDecided();
+          if (dayCase.treatment.mode === 'hold') {
+            if (!rest) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not credited — ${ISSUE_LABELS[issue]} on ${d}: ${treatmentNote}`, record, d);
+            else trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `${ISSUE_LABELS[issue]} on ${d} (rest day) not paid: ${treatmentNote}`, sourceKind: 'attendance', date: d });
+            continue;
+          }
+          trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `${ISSUE_LABELS[issue]} on ${d}: ${treatmentNote}`, sourceKind: 'attendance', date: d });
+        }
+      }
       if (record.status !== 'present') {
         if (record.status === 'official-business') { add(earnings, 'basic', 0, 'Approved official business; salary already included in cutoff basic', record, d); continue; }
         if (record.status === 'rest-day-swap') { add(earnings, 'basic', 0, `Rest-day swap (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
@@ -385,8 +448,12 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // with a 20 min offset loses 10). Staying after the scheduled end is not an offset unless HR approves it.
       // HR may also waive late time for a whole cutoff (manual entry); the minutes stay on record.
       const withinGrace = lateMinutes > 0 && lateMinutes < graceMinutes;
+      // From Nov 23, 2026 (HR): a late of the threshold (15 min) or more is deducted in full even when an offset is
+      // approved; the offset no longer cancels it nor moves the start of overtime. Approved exceptions and the cutoff's
+      // waive-late switch work as before. Earlier dates keep the offset.
+      const lateOffset = d >= LATE_OFFSET_ENDS && lateMinutes >= graceMinutes ? 0 : (record.offsetMinutes || 0);
       const workedAfter = Math.max(0, Math.min(lateMinutes, minutes.length + lateMinutes + leaveCoverMinutes - normalHours * 60));   // shown to HR only
-      const deductibleMinutes = record.exception || manual?.waiveLate || withinGrace ? 0 : Math.max(0, lateMinutes - (record.offsetMinutes || 0));
+      const deductibleMinutes = record.exception || manual?.waiveLate || withinGrace ? 0 : Math.max(0, lateMinutes - lateOffset);
       // Unoffset late time is converted to a fraction of the scheduled day and taken off the days credited for pay.
       const dayMinutes = normalHours * 60, lostDay = r.deductLate ? deductibleMinutes / dayMinutes : 0, deduction = round(lostDay * adjDaily);
       late.push({ date: d, scheduledTime: record.scheduledIn, actualTime: record.timeIn, lateMinutes, approvedOffset: record.offsetMinutes, withinGrace, workedOffset: 0, workedAfter, validExplanation: record.exception, explanation: record.explanation, deductibleMinutes: r.deductLate ? deductibleMinutes : 0, dayFraction: Math.round(lostDay * 10000) / 10000, deduction, sourceId: record.id });
@@ -409,15 +476,27 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const separateOT = (r.overtimeApproval || 'separate') === 'separate', filings = (state.overtimeRequests || []).filter(o => o.employeeId === e.id && o.date === d);
       const approvedFilings = filings.filter(o => o.status === 'approved'), gatedOT = separateOT && e.coveredOT;
       const approvedOTMinutes = approvedFilings.reduce((s, o) => s + Math.round(o.approvedHours * 60), 0);
-      if (gatedOT && filings.some(o => o.status === 'pending')) blockers.push(`${prefix}: overtime filed for ${d} is pending approval. Approve or reject it in Attendance → Overtime applications before posting.`);
-      let unfiledMinutes = 0, belowBlock = 0, paidOT = 0;
+      // Pending overtime does not hold the payroll (Nov 20, 2026): it is carried over and paid by the next payroll once approved.
+      if (gatedOT && filings.some(o => o.status === 'pending')) trace.push({ component: 'regularOT', side: 'earnings', amount: 0, formula: `Overtime filed for ${d} is pending HR approval: not paid in this cutoff; carried over to the next payroll once approved`, sourceKind: 'overtime', sourceId: filings.find(o => o.status === 'pending').id, date: d });
+      let unfiledMinutes = 0, belowBlock = 0, paidOT = 0, regularCounted = 0;
       // A minute after the schedule is approved overtime when it falls inside an approved filing's period (each filing
       // pays at most its approved hours, unpaid breaks already excluded); older filings without times use their hours
       // from the end of the schedule. Without the approval policy every minute after the schedule counts.
       const windows = approvedFilings.filter(o => o.startTime).map(o => ({ range: overtimeWindow(o), budget: Math.round(o.approvedHours * 60) }));
       let untimedBudget = approvedFilings.filter(o => !o.startTime).reduce((s, o) => s + Math.round(o.approvedHours * 60), 0);
+      // Overtime is the time after the SCHEDULED time out (HR decision Nov 20, 2026: "from the scheduled Out to the actual
+      // Out"), also after a late start; late time is handled by the lateness rules above. Minutes that make up late time
+      // under an approved offset are not overtime. A rest day has no scheduled out: overtime there is the time worked
+      // beyond the regular hours, as before.
+      const hm = t => { const [hh, mm] = String(t || '').split(':').map(Number); return hh * 60 + (mm || 0); };
+      const schedStart = hm(record.scheduledIn || daySched.start || '09:00');
+      // Only a schedule with a time out on file has a scheduled out; otherwise overtime follows the hours worked, as before.
+      let schedEnd = daySched.end ? hm(daySched.end) : null;
+      if (schedEnd !== null && schedEnd <= schedStart) schedEnd += 1440;
+      const otFrom = rest || flexible || record.regularHoursOnly || schedEnd === null ? null : stamp(`${d}T00:00`) + (schedEnd + Math.min(lateOffset, lateMinutes)) * 60000;
+      const isOT = (m, index) => !flexible && (otFrom === null ? index >= normalHours * 60 : m >= otFrom);
       const eligible = minutes.map((m, index) => {
-        if (flexible || index < normalHours * 60) return false;
+        if (!isOT(m, index)) return false;
         if (!gatedOT) return true;
         const w = windows.find(x => x.budget > 0 && m >= x.range[0] && m < x.range[1]);
         if (w) { w.budget--; return true; }
@@ -433,7 +512,11 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       const otPayable = Math.floor(eligibleOT / OT_BLOCK) * OT_BLOCK;
       minutes.forEach((m, index) => {
         const date = new Date(m).toISOString().slice(0, 10), c0 = classification(state, e, date), c = perDayWorked && c0 === 'rest' ? 'ordinary' : c0;
-        const ot = !flexible && index >= normalHours * 60, h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
+        const ot = isOT(m, index), h = new Date(m).getUTCHours(), night = h >= 22 || h < 6;
+        // Time beyond the regular hours that is not overtime (arriving before the schedule) earns nothing extra.
+        // (Only on days with a scheduled time out; flexible and rest days count every minute as before.)
+        if (!ot && otFrom !== null && regularCounted >= normalHours * 60) return;
+        if (!ot) regularCounted++;
         if (ot && !eligible[index]) { unfiledMinutes++; return; }
         if (ot && paidOT >= otPayable) { belowBlock++; return; }
         if (ot) paidOT++;
@@ -548,6 +631,21 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       }
     };
     override('earnings', earnings, OVERRIDE_EARNINGS.filter(c => c !== 'basic'));
+    // Carried-over overtime: approved after its own cutoff was posted, paid here at the rates of its original date.
+    const carriedOvertime = [];
+    if (!state.noCarry && e.coveredOT) for (const o of carryableFilings(state, e, start)) {
+      const amounts = carriedAmounts(state, e, o, calculatePayroll), total = round(Object.values(amounts).reduce((sum, v) => sum + v, 0));
+      for (const [component, amount] of Object.entries(amounts)) add(earnings, component, amount, `Carried-over overtime ${o.date}${o.startTime ? ` ${o.startTime}-${o.endTime}` : ''} (${o.approvedHours} h approved${o.decidedAt ? ` ${o.decidedAt.slice(0, 10)}` : ''}): ${o.reason || ''}`.slice(0, 300), { id: o.id, sourceKind: 'overtime' }, o.date);
+      carriedOvertime.push({ id: o.id, date: o.date, hours: o.approvedHours, amount: total, components: amounts, reason: o.reason || '' });
+    }
+    // Attendance corrected after its payroll was paid: only the difference (underpayment paid, overpayment recovered if HR decided).
+    const caseAdjustments = [];
+    if (!state.noCaseAdjust) for (const c of (state.attendanceCases || []).filter(x => x.employeeId === e.id && x.date < start && ['pending', 'recover'].includes(x.adjustment?.status))) {
+      const a = c.adjustment;
+      if (a.status === 'pending') add(earnings, 'additional', a.amount, `Attendance correction ${c.date}: underpayment in the ${a.paidCutoff} payroll (corrected entitlement less the amount paid)`, { id: c.id, sourceKind: 'attendance-cases' }, c.date);
+      else add(deductions, 'other', a.amount, `Attendance correction ${c.date}: overpayment in the ${a.paidCutoff} payroll recovered (HR: ${a.note || ''})`, { id: c.id, sourceKind: 'attendance-cases' }, c.date);
+      caseAdjustments.push({ id: c.id, date: c.date, amount: a.amount, kind: a.kind });
+    }
     override('deductions', deductions, ['absence', 'undertime', 'other', 'sssLoan', 'pagibigLoan', 'salaryDeduction']);
     // Hours behind each premium line, for the payslip: from the per-day breakdown, or worked back from the amount
     // (amount / hourly rate / multiplier) when the line was overridden or typed as an amount.
@@ -571,12 +669,12 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // after absences, lateness and undertime, which it already accounts for. It also changes the basic salary earned.
     override('earnings', earnings, ['basic']);
     const basicOverride = overrides.filter(o => o.component === 'basic').reduce((s, o) => s + o.delta, 0), basicOverridden = overrides.some(o => o.component === 'basic');
-    // Monthly-paid half-month: basic = monthly ÷ 26 × days credited rounded to 2 decimals, so the days shown multiply out to
+    // Monthly-paid cutoff: basic = monthly ÷ the month's working days × days credited rounded to 2 decimals, so the days shown multiply out to
     // the basic pay exactly (the per-day amounts taken off above are each rounded; this removes the centavo differences).
     // Days credited are then shown with 2 decimals; when HR typed an amount, the days follow it (4 decimals) as before.
     const dayHours = attendanceProfile?.hoursPerDay || r.normalHours || 8, round4 = n => Math.round(n * 10000) / 10000;
     const monthlyCredit = !dailyPaid && !perDayWorked && factor === 0.5 && adjDaily;
-    const monthlyDays = monthlyCredit ? Math.max(0, r.dailyDivisor / 2 * (allScheduled.length ? scheduled.length / allScheduled.length : 0) - paidLeaveDays - (baseline - earnings.basic - (earnings.leavePay || 0)) / adjDaily) : 0;
+    const monthlyDays = monthlyCredit ? Math.max(0, scheduled.length - paidLeaveDays - (baseline - earnings.basic - (earnings.leavePay || 0)) / adjDaily) : 0;
     let roundingAdjustment = 0;
     // An amount HR typed (basic, absence or undertime override) is kept as typed.
     const typedAmount = overrides.some(o => ['basic', 'absence', 'undertime'].includes(o.component));
@@ -585,16 +683,25 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       // until the peso amount is rounded (12.9375 days × 1,000 = 12,937.50 instead of 12.94 × 1,000 = 12,940.00).
       const shownDays = r.creditRounding === 'exact' ? monthlyDays : round(monthlyDays), exact = round(shownDays * adjDaily);
       roundingAdjustment = round(exact - earnings.basic);
-      if (roundingAdjustment) { earnings.basic = exact; trace.push({ side: 'earnings', component: 'basic', amount: roundingAdjustment, formula: `Basic = ${round(adjDaily)} × ${round4(shownDays)} days credited (monthly ÷ ${r.dailyDivisor}); rounding of the per-day amounts removed`, sourceId: r.id, sourceKind: 'rules', date: end, quantity: shownDays, multiplier: null }); }
+      if (roundingAdjustment) { earnings.basic = exact; trace.push({ side: 'earnings', component: 'basic', amount: roundingAdjustment, formula: `Basic = ${round(adjDaily)} × ${round4(shownDays)} days credited (monthly ÷ ${monthDays} working days in the month); rounding of the per-day amounts removed`, sourceId: r.id, sourceKind: 'rules', date: end, quantity: shownDays, multiplier: null }); }
+    }
+    // Daily-paid: the days credited are rounded to 2 decimals the same way (HR decision Nov 20, 2026), so the days shown ×
+    // the daily rate equal the basic pay (₱755 × 10.87, not × 10.8729). Rules → rounding 'exact' keeps the minutes.
+    const dailyRaw = dailyPaid && daily ? daysPresent - lateDaysLost - undertimeAmount / daily : null;
+    const dailyRounded = dailyRaw !== null && !typedAmount && !basicOverridden && manual?.mode !== 'replace' && r.creditRounding !== 'exact';
+    if (dailyRounded) {
+      roundingAdjustment = round((round(dailyRaw) - dailyRaw) * daily);
+      if (roundingAdjustment) { earnings.basic = round(earnings.basic + roundingAdjustment); trace.push({ side: 'earnings', component: 'basic', amount: roundingAdjustment, formula: `Days credited ${round4(dailyRaw)} rounded to ${round(dailyRaw)} (2 decimals) × ${round(daily)} daily rate`, sourceId: r.id, sourceKind: 'rules', date: end, quantity: round(dailyRaw), multiplier: null }); }
     }
     const applicableBasic = round(Math.max(0, baseline - absenceAmount - lateReduction - undertimeAmount - (r.includeHolidayBaseIn13th ? 0 : holidayBase) - excludedLeave + additionalBasic + basicOverride + roundingAdjustment));
     // Days credited (worked; paid leave days are counted separately). A typed basic: basic / daily rate. Monthly-paid: the
-    // half-month is worth half the divisor's days (13), less paid leave days, less the unpaid basic taken off (absences,
+    // cutoff's scheduled working days (12 or 13; no fixed 13), less paid leave days, less the unpaid basic taken off (absences,
     // lateness, undertime) at the adjustment rate. Others: days present less the late / undertime fraction.
     // A manual "replace" entry with typed days worked and a typed basic: the days credited are the days HR typed.
     const creditedDays = basicOverridden && manual?.mode === 'replace' && manual.daysWorked ? round4(manual.daysWorked)
       : basicOverridden && daily ? round4(earnings.basic / daily)
       : monthlyCredit ? (typedAmount || r.creditRounding === 'exact' ? round4(monthlyDays) : round(monthlyDays))
+      : dailyRounded ? round(dailyRaw)
       : round4(daysPresent - lateDaysLost - (daily ? undertimeAmount / daily : 0));
     // Hours credited stay exact (e.g. 30 minutes late = 7.5 hours), also when the days are shown rounded to 2 decimals.
     const creditedHours = monthlyCredit ? round4(monthlyDays * dayHours) : basicOverridden ? round4(creditedDays * dayHours) : round4((creditedMinutes || Math.max(0, creditedDays) * dayHours * 60) / 60);
@@ -662,12 +769,16 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       });
     const holidayPay = round(Math.min(Math.max(0, earnings.basic), holidays.reduce((sum, h) => sum + h.pay, 0)));
     const holidayDays = holidayPay ? holidays.filter(h => h.pay > 0).length : 0;
-    // Days present = actual attendance on regular (non-holiday) workdays, less the late / undertime fraction.
+    // Days present = actual attendance on regular (non-holiday) scheduled workdays, less the late / undertime fraction.
+    // Work on a rest day is paid in its own column (rest-day pay), so it is not a day present for basic pay (Nov 20,
+    // 2026): monthly ÷ the month's working days × days present = Basic pay on every row. Per-day-worked staff are paid a
+    // plain day for rest-day work, so for them it stays in.
     const workedHolidays = holidays.filter(h => h.worked && h.pay > 0).length;
-    const regularDays = typedDays ? creditedDays : Math.round(Math.max(0, daysPresent - workedHolidays - lateDaysLost - (rateForDay ? undertimeAmount / rateForDay : 0)) * 100) / 100;
-    return { employeeId: e.id, employeeName: e.name, monthWorkingDays: monthWorkdays(e, start.slice(0, 7)), holidays, holidayPay, holidayDays, regularDays, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays, creditedHours, hoursPerDay: scheduledHours, quantities, adjustmentDivisor, adjustmentRate: round(adjDaily), undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, paidLeaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
+    const restWorked = perDayWorked ? 0 : state.attendance.filter(a => a.employeeId === e.id && a.status === 'present' && a.date >= start && a.date <= end && employed.includes(a.date) && isRest(e, a.date) && !holidays.some(h => h.date === a.date)).length;
+    const regularDays = typedDays ? creditedDays : Math.round(Math.max(0, daysPresent - workedHolidays - restWorked - lateDaysLost - (rateForDay ? undertimeAmount / rateForDay : 0)) * 100) / 100;
+    return { reviewItems, attendanceValidation: validation, held: reviewItems.length > 0, carriedOvertime, caseAdjustments, employeeId: e.id, employeeName: e.name, monthWorkingDays: monthWorkdays(e, start.slice(0, 7)), holidays, holidayPay, holidayDays, regularDays, monthlySalary: e.monthlySalary, manualEntry: manual, overrides, absenceAmount, payBasis: payrollProfile?.basis || 'monthly', contributionBasis, contributionChangeId: setting?.id || null, workingDays: scheduled.length, daysPresent, creditedDays, creditedHours, hoursPerDay: scheduledHours, quantities, adjustmentDivisor, adjustmentRate: round(adjDaily), undertimeMinutes: undertimeLost, undertimeAmount, undertime: undertimeLog, daysPresentWithLeave: manual?.mode === 'replace' ? daysPresent : presentOrLeave.size, absentDates: [...new Set([...state.attendance.filter(a => a.employeeId === e.id && a.status === 'absent' && a.date >= start && a.date <= end).map(a => a.date), ...trace.filter(t => t.date && t.date >= start && t.date <= end && (t.component === 'absence' || t.component === 'basic') && t.amount < 0 && /absent/i.test(t.formula) && !/not yet reached/.test(t.formula)).map(t => t.date)])].filter(d => !state.attendance.some(a => a.employeeId === e.id && a.date === d && a.status === 'off')).sort(), offDates: state.attendance.filter(a => a.employeeId === e.id && a.status === 'off' && a.date >= start && a.date <= end).map(a => a.date).sort(), lateDaysLost: Math.round(lateDaysLost * 10000) / 10000, lateMinutesUnoffset, lateReduction: round(lateReduction), leaveDays, paidLeaveDays, leaveNotes, hourlyRate: round(hourly), dailyRate: round(daily), earnings, deductions, gross, totalDeductions, net, applicableBasic, annualBasic, thirteenthAccrued, thirteenthPaid, thirteenthBalance, loanDeductions, loanBalance, late, trace, workBreakdown, employer, employerTotal, contributionFactor };
   });
   if (!rows.length) blockers.push('No employees are eligible for this cutoff.');
-  const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };
+  const result = { start, end, pay13th, ...(chosen ? { employeeIds: [...chosen] } : {}), ruleId: r.id, rows, reviewItems: rows.flatMap(row => row.reviewItems), held: rows.filter(row => row.held).map(row => row.employeeId), blockers: [...new Set(blockers)], totals: { gross: round(rows.reduce((s, row) => s + row.gross, 0)), deductions: round(rows.reduce((s, row) => s + row.totalDeductions, 0)), net: round(rows.reduce((s, row) => s + row.net, 0)), employer: round(rows.reduce((s, row) => s + row.employerTotal, 0)) } };
   return { ...result, fingerprint: createHash('sha256').update(JSON.stringify({ state, result })).digest('hex') };
 }

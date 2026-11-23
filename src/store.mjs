@@ -1,4 +1,5 @@
 import { loanChangeText } from './loan-notice.mjs';
+import { validationInputs } from './validation-inputs.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { initialState } from './defaults.mjs';
@@ -28,6 +29,7 @@ export class Store {
       CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be edited.'); END;
       CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be deleted.'); END;
       CREATE TABLE IF NOT EXISTS overtime_requests (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, date TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS attendance_cases (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, date TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL, UNIQUE(employee_id, date));
       CREATE TABLE IF NOT EXISTS prior_earnings (employee_id TEXT NOT NULL, month TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, month));
       CREATE TABLE IF NOT EXISTS final_pay (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS thirteenth_overrides(employee_id TEXT NOT NULL, year TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, year));
@@ -70,10 +72,14 @@ export class Store {
     const recorded = new Set(state.attendance.map(a => a.id));
     state.openClockIns = this.db.prepare("SELECT id, employee_id, work_date, data FROM clock_events WHERE kind='in'").all().filter(r => !recorded.has(`clock-${r.id}`) && !JSON.parse(r.data).additionalSession).map(r => ({ id: r.id, employeeId: r.employee_id, workDate: r.work_date, time: JSON.parse(r.data).time }));
     state.overtimeRequests = this.db.prepare("SELECT data FROM overtime_requests WHERE status IN ('pending','approved')").all().map(r => JSON.parse(r.data));
+    // Incomplete-attendance cases (src/attendance-cases.mjs): HR's documented pay treatment and correction adjustments.
+    state.attendanceCases = this.db.prepare('SELECT data FROM attendance_cases').all().map(r => JSON.parse(r.data));
+    // Payroll attendance validation (src/attendance-validation.mjs): punches vs records, corrections, HR decisions.
+    state.validation = validationInputs(this.db, state.attendance);
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
     return state;
   }
-  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.overtimeRequests; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
+  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.validation; delete copy.overtimeRequests; delete copy.attendanceCases; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
   transaction(fn) {
     if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');

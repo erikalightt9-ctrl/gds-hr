@@ -1,351 +1,280 @@
-// Memo & due process management: disciplinary cases handled under procedural due process (Labor Code art. 292(b);
-// DOLE Department Order No. 147-15): written notice of the charge, a reasonable opportunity (at least five calendar
-// days, configurable upward) to answer in writing, a hearing or conference when requested, when the evidence is
-// disputed or when company policy requires it, evaluation, and a written notice of decision.
-//
-// The system never decides. HR documents and evaluates; a PROPOSED decision is issued only after an authorised
-// manager (a configurable role, never the person who proposed it) approves it. Notices (NTE, notice of hearing, notice
-// of decision) are issued through the Memos module on the company letterhead, so the employee receives and
-// acknowledges them like any memo. Disciplinary records are the approved decisions (one source, no second copy).
-// Every action is recorded in the case history and in the audit trail. Access: HR managers and administrators
-// manage cases; Management reads them and may approve decisions; employees see only their own case from the NTE on.
+// Due process cases: incident documentation → Notice to Explain → employee's explanation → administrative hearing
+// (when requested or required) → evaluation → decision (approved by authorized management before it is issued) →
+// closure. Nothing is decided by the system: HR records each step, management approves the decision, and every
+// step is validated, timestamped in the case history and written to the audit trail (without the case text).
+// Access: admin / hr manage cases; Management (viewer) can read and approve; the employee sees only notices issued
+// to them and their own explanation.
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
 import { localToday } from './profiles.mjs';
-import { readSettings } from './hr201.mjs';
+import { displayNumber } from './hr201.mjs';
 import { validFile } from './documents201.mjs';
-import { issueSystemMemo } from './memos.mjs';
-import { renderMemoPdf } from './memo-pdf.mjs';
+import { readDpSettings, fillTemplate, SANCTIONS } from './discipline-settings.mjs';
 
-export const DISCIPLINE_MANAGE = ['admin', 'hr'], DISCIPLINE_VIEW = ['admin', 'hr', 'viewer'];
-export const STATUSES = ['Pending', 'Under Investigation', 'Awaiting Explanation', 'For Evaluation', 'Resolved', 'Closed'];
-export const ACTIONS = ['No disciplinary action', 'Verbal warning', 'Written warning', 'Final written warning', 'Suspension', 'Termination', 'Other'];
-const DEFAULT_SETTINGS = {
-  minResponseDays: 5, approverRoles: ['admin', 'viewer'], hearingForTermination: true, maxSuspensionDays: 30,
-  offenses: ['Tardiness / habitual tardiness', 'Absence without official leave (AWOL)', 'Insubordination', 'Neglect of duty', 'Dishonesty', 'Misconduct', 'Violation of company policy', 'Fraud or breach of trust', 'Damage to company property', 'Other'],
-};
-const ensure = store => store.db.exec(`CREATE TABLE IF NOT EXISTS discipline_cases (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS discipline_files (id TEXT PRIMARY KEY, case_id TEXT NOT NULL, data TEXT NOT NULL, content BLOB NOT NULL);
-  CREATE TABLE IF NOT EXISTS discipline_settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);`);
-const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-const text = (min, max, msg) => z.string().trim().min(min, msg).max(max);
-const profileOf = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
-const addDays = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const longDate = d => (d ? `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}` : '');
+export const VIEW = ['admin', 'hr', 'viewer'], MANAGE = ['admin', 'hr'];
+export const STATUS = { pending: 'Pending', investigation: 'Under Investigation', awaiting: 'Awaiting Explanation', evaluation: 'For Evaluation', resolved: 'Resolved', closed: 'Closed' };
+const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date.');
+const text = (min, max, message) => z.string().trim().min(min, message).max(max);
+const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+export const longDate = iso => (iso ? new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '');
 
-// ---------- Settings ----------
-export function disciplineSettings(store) {
-  ensure(store);
-  const saved = JSON.parse(store.db.prepare('SELECT data FROM discipline_settings WHERE id=1').get()?.data ?? '{}');
-  return { ...DEFAULT_SETTINGS, ...saved };
+export function ensure(store) {
+  store.db.exec(`CREATE TABLE IF NOT EXISTS dp_cases (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS dp_files (id TEXT PRIMARY KEY, case_id TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, content BLOB NOT NULL);
+    CREATE TABLE IF NOT EXISTS dp_actions (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL);`);
 }
-export function saveDisciplineSettings(store, actor, input) {
-  permit(actor, ['admin']);
-  const v = z.object({ minResponseDays: z.number().int().min(5, 'DOLE D.O. 147-15 requires at least five (5) calendar days to answer.').max(30), approverRoles: z.array(z.enum(['admin', 'hr', 'viewer'])).min(1, 'Choose who may approve decisions.'), hearingForTermination: z.boolean(), maxSuspensionDays: z.number().int().min(1).max(60), offenses: z.array(text(2, 120)).min(1).max(100) }).strict().parse(input);
-  ensure(store);
+// Each case is limited to its named participants (Nov 20, 2026): the person who opened it and the HR / management
+// people named on it; Administrators always. Cases opened before this keep the role-based access.
+export const canSeeCase = (c, actor) => actor.role === 'admin' || !Array.isArray(c.participants) || c.participants.includes(actor.username);
+export function assertParticipant(c, actor) { if (actor.role !== 'employee' && !canSeeCase(c, actor)) throw new AppError('Case not found.', 404); }
+export function readCase(store, id) { ensure(store); const row = store.db.prepare('SELECT data FROM dp_cases WHERE id=?').get(id); if (!row) throw new AppError('Case not found.', 404); return JSON.parse(row.data); }
+const writeCase = (store, c) => store.db.prepare('INSERT INTO dp_cases VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(c.id, c.employeeId, JSON.stringify(c));
+export const allCases = store => { ensure(store); return store.db.prepare('SELECT data FROM dp_cases ORDER BY rowid DESC').all().map(r => JSON.parse(r.data)); };
+const profileOf = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
+function nextReference(store, prefix = 'DP') {
+  const year = localToday().slice(0, 4), key = `${prefix.toLowerCase()}:${year}`;
+  const n = (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(key)?.value || 0) + 1;
+  store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, n);
+  return `${prefix}-${year}-${String(n).padStart(4, '0')}`;
+}
+// One case change: validated by `fn` (which returns the updated case), history entry, audit entry without the text.
+function change(store, actor, id, action, fn, detail = '') {
   return store.transaction(() => {
-    const before = disciplineSettings(store);
-    store.db.prepare('INSERT INTO discipline_settings(id,data) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(v));
-    store.log(actor, 'update', 'discipline-settings', 'policy', before, v);
-    return disciplineSettings(store);
+    const before = readCase(store, id), now = new Date().toISOString();
+    assertParticipant(before, actor);
+    const updated = fn(before, now);
+    const after = { ...updated, updatedAt: now, history: [...before.history, { at: now, by: actor.username, action, detail }] };
+    writeCase(store, after);
+    store.log(actor, action, 'discipline', id, { reference: before.reference, status: before.status }, { reference: after.reference, status: after.status, employeeId: after.employeeId, ...(detail ? { detail } : {}) });
+    return after;
   });
 }
-
-// ---------- Storage ----------
-const read = (store, id) => { ensure(store); const row = store.db.prepare('SELECT data FROM discipline_cases WHERE id=?').get(id); if (!row) throw new AppError('Case not found.', 404); return JSON.parse(row.data); };
-const write = (store, c) => store.db.prepare('INSERT INTO discipline_cases(id,employee_id,status,data) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, data=excluded.data').run(c.id, c.employeeId, c.status, JSON.stringify(c));
-const nextReference = (store, date) => {
-  const key = `case:${date.slice(0, 4)}`, n = (store.db.prepare('SELECT value FROM hr_counters WHERE key=?').get(key)?.value || 0) + 1;
-  store.db.prepare('INSERT INTO hr_counters(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, n);
-  return `CASE-${date.slice(0, 4)}-${String(n).padStart(3, '0')}`;
-};
-// One step: changes the case, appends to its history, writes the audit trail.
-function step(store, actor, c, action, detail, changes) {
-  const before = { status: c.status, stage: c.stage };
-  const after = { ...c, ...changes, updatedAt: new Date().toISOString(), history: [...c.history, { at: new Date().toISOString(), by: actor.username, action, detail: detail || '' }] };
-  write(store, after);
-  store.log(actor, action, 'discipline-case', c.id, before, { status: after.status, stage: after.stage, reference: c.reference, employeeId: c.employeeId, detail: detail || '' });
-  return after;
+export function templateVars(c, extra = {}) {
+  const ld = iso => (iso ? longDate(iso) : undefined);   // not known yet: the placeholder stays in the text
+  return { employeeName: c.employee.name, employeeNumber: c.employee.number, position: c.employee.position || '—', department: c.employee.department || '—', reference: c.reference, today: longDate(localToday()), incidentDate: longDate(c.incident.date), incidentPlace: c.incident.place || '—', offense: c.incident.offense, description: c.incident.description, reportedBy: c.incident.reportedBy || '—', issuingOfficer: c.incident.issuingOfficer, allegations: c.nte?.allegations, rules: c.nte?.rules, possibleSanction: c.nte?.possibleSanction?.toLowerCase(), responseDays: c.nte?.responseDays, deadline: ld(c.nte?.deadline), nteDate: ld(c.nte?.issuedAt), hearingDate: c.hearing?.scheduledAt ? `${longDate(c.hearing.scheduledAt)} at ${c.hearing.scheduledAt.slice(11, 16)}` : undefined, hearingPlace: c.hearing?.place, ...extra };
 }
-const companyName = store => readSettings(store).company.name || 'GDS CAPITAL INC.';
-const staffName = (store, username) => { const u = store.db.prepare('SELECT employee_id FROM users WHERE username=?').get(username); const e = u?.employee_id && store.read().employees.find(x => x.id === u.employee_id); return e?.name || username; };
-const formalName = n => { const [last, first] = String(n).split(',').map(s => s.trim()); return first ? `${first} ${last}` : n; };
 
-// ---------- Incident documentation ----------
+// ---------- 1. Incident documentation ----------
 const incidentSchema = z.object({
-  employeeId: z.string().trim().min(1).max(80), incidentDate: z.string().regex(dateRe, 'Enter the incident date.'), incidentTime: z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d)?$/).default(''),
-  place: z.string().trim().max(200).default(''), offense: text(2, 120, 'Choose the offense or rule concerned.'), description: text(20, 8000, 'Describe the incident (at least 20 characters): what happened, when, where and who was involved.'),
-  reportedBy: text(2, 200, 'Who reported the incident?'), witnesses: z.string().trim().max(1000).default(''),
+  employeeId: z.string().trim().min(1, 'Choose the employee.').max(80), date: DATE, time: z.union([z.literal(''), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)]).default(''),
+  place: z.string().trim().max(200).default(''), offenseId: z.string().trim().min(1, 'Choose the offense.').max(40), offenseOther: z.string().trim().max(200).default(''),
+  description: text(10, 10000, 'Describe what happened (at least 10 characters).'), reportedBy: z.string().trim().max(200).default(''), witnesses: z.string().trim().max(1000).default(''),
+  issuingOfficer: text(3, 200, 'Name the issuing officer.'),
 }).strict();
+function incidentFrom(store, input) {
+  const v = incidentSchema.parse(input), settings = readDpSettings(store);
+  if (v.date > localToday()) throw new AppError('The incident date cannot be in the future.');
+  const offense = v.offenseId === 'other' ? v.offenseOther : settings.offenses.find(o => o.id === v.offenseId)?.name;
+  if (!offense || offense.length < 3) throw new AppError(v.offenseId === 'other' ? 'Describe the offense.' : 'Choose an offense from the list.');
+  return { ...v, offense, severity: settings.offenses.find(o => o.id === v.offenseId)?.severity || '' };
+}
 export function createCase(store, actor, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = incidentSchema.parse(input), state = store.read(), e = state.employees.find(x => x.id === v.employeeId);
-  if (!e || e.draft) throw new AppError('Choose a registered employee.');
-  if (v.incidentDate > localToday()) throw new AppError('The incident date cannot be in the future.');
+  permit(actor, MANAGE);
+  const { participants: named = [], ...rest } = input || {};
+  const incident = incidentFrom(store, rest);
+  const participants = [...new Set([actor.username, ...(Array.isArray(named) ? named : []).map(String).filter(u => /^[A-Za-z0-9_.@-]{3,80}$/.test(u))])];
   ensure(store);
   return store.transaction(() => {
-    const now = new Date().toISOString(), job = profileOf(store, e.id, 'employment');
-    const c = { id: randomUUID(), reference: nextReference(store, localToday()), employeeId: e.id, employee: { name: e.name, department: job.department || e.department || '', position: job.position || '' }, incident: { ...v }, status: 'Pending', stage: 'incident', files: [], history: [{ at: now, by: actor.username, action: 'opened', detail: `Incident documented: ${v.offense}` }], openedAt: now, openedBy: actor.username, updatedAt: now };
-    write(store, c);
-    store.log(actor, 'create', 'discipline-case', c.id, null, { reference: c.reference, employeeId: e.id, offense: v.offense });
+    const e = store.read().employees.find(x => x.id === incident.employeeId);
+    if (!e) throw new AppError('Employee not found.', 404);
+    const job = profileOf(store, e.id, 'employment'), now = new Date().toISOString();
+    const c = { id: randomUUID(), reference: nextReference(store), participants, employeeId: e.id, employee: { name: e.name, number: displayNumber(e), department: e.department || '', position: job.position || '' }, status: 'pending', incident, nte: null, explanation: null, hearing: null, evaluation: null, decision: null, closure: null, files: [], notes: [], createdAt: now, createdBy: actor.username, updatedAt: now, history: [{ at: now, by: actor.username, action: 'create', detail: 'Incident documented' }] };
+    writeCase(store, c);
+    store.log(actor, 'create', 'discipline', c.id, null, { reference: c.reference, status: c.status, employeeId: e.id });
     return c;
   });
 }
-// The incident can be corrected until the NTE is issued; after that the charge is fixed (notes can still be added).
 export function updateIncident(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const rest = { ...(input || {}) }; delete rest.employeeId;   // the employee of a case never changes
-  const v = incidentSchema.omit({ employeeId: true }).parse(rest);
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (!['Pending', 'Under Investigation'].includes(c.status)) throw new AppError('The incident can no longer be edited: a Notice to Explain was issued. Add a note instead.');
-    return step(store, actor, c, 'edit-incident', 'Incident details corrected', { incident: { ...c.incident, ...v } });
+  permit(actor, MANAGE);
+  const incident = incidentFrom(store, input);
+  return change(store, actor, id, 'update-incident', c => {
+    if (c.nte?.issuedAt) throw new AppError('The Notice to Explain was already issued; add a note or a file instead of changing the incident.');
+    if (incident.employeeId !== c.employeeId) throw new AppError('The employee of a case cannot change. Open a new case instead.');
+    return { ...c, incident };
   });
 }
-export function startInvestigation(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const { note } = z.object({ note: z.string().trim().max(2000).default('') }).strict().parse(input || {});
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (c.status !== 'Pending') throw new AppError('Only a pending case can be placed under investigation.');
-    return step(store, actor, c, 'investigate', note || 'Investigation started', { status: 'Under Investigation', stage: 'investigation' });
-  });
-}
-export function addCaseNote(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const { note } = z.object({ note: text(3, 4000, 'Write the note.') }).strict().parse(input);
-  return store.transaction(() => { const c = read(store, id); if (c.status === 'Closed') throw new AppError('The case is closed.'); return step(store, actor, c, 'note', note, {}); });
-}
-
-// ---------- Files (evidence, explanation documents, hearing minutes) ----------
-const fileSchema = z.object({ name: z.string().trim().min(1).max(180).refine(x => !/[\x00-\x1f\\/]/.test(x), 'Invalid file name.'), mime: z.enum(['application/pdf', 'image/png', 'image/jpeg']), data: z.string().min(1).max(14_000_000).regex(/^[A-Za-z0-9+/]*={0,2}$/), kind: z.enum(['evidence', 'explanation', 'hearing', 'other']).default('evidence'), description: z.string().trim().max(500).default('') }).strict();
-function storeFile(store, actor, c, input, forceKind = null) {
-  const v = fileSchema.parse(input), bytes = Buffer.from(v.data, 'base64');
+const fileSchema = z.object({ name: z.string().trim().min(1).max(180).refine(x => !/[\x00-\x1f\\/]/.test(x), 'Invalid file name.'), mime: z.enum(['application/pdf', 'image/png', 'image/jpeg']), data: z.string().min(1).max(14000000).regex(/^[A-Za-z0-9+/]*={0,2}$/), kind: z.enum(['evidence', 'hearing', 'other']).default('evidence'), note: z.string().trim().max(300).default('') }).strict();
+export function storeFile(store, caseId, v, by, byEmployee = false) {
+  const bytes = Buffer.from(v.data, 'base64');
   if (!bytes.length || bytes.length > 10 * 1024 * 1024 || !validFile(v.mime, bytes)) throw new AppError('Attach a PDF, PNG or JPEG up to 10 MB.');
-  const meta = { id: randomUUID(), name: v.name, mime: v.mime, size: bytes.length, kind: forceKind || v.kind, description: v.description, uploadedBy: actor.username, uploadedAt: new Date().toISOString() };
-  store.db.prepare('INSERT INTO discipline_files(id,case_id,data,content) VALUES(?,?,?,?)').run(meta.id, c.id, JSON.stringify(meta), bytes);
+  const meta = { id: randomUUID(), name: v.name, mime: v.mime, size: bytes.length, kind: byEmployee ? 'explanation' : v.kind, note: v.note || '', by, byEmployee, at: new Date().toISOString() };
+  store.db.prepare('INSERT INTO dp_files VALUES(?,?,?,?,?)').run(meta.id, caseId, v.name, v.mime, bytes);
   return meta;
 }
-export function addCaseFile(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (c.status === 'Closed') throw new AppError('The case is closed.');
-    const meta = storeFile(store, actor, c, input);
-    return step(store, actor, c, 'attach', `${meta.kind}: ${meta.name}`, { files: [...c.files, meta] });
-  });
+export function addFile(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const v = fileSchema.parse(input);
+  return change(store, actor, id, 'add-file', c => { if (c.status === 'closed') throw new AppError('This case is closed.'); return { ...c, files: [...c.files, storeFile(store, id, v, actor.username)] }; }, v.kind);
 }
-export function caseFile(store, actor, fileId) {
-  ensure(store);
-  const row = store.db.prepare('SELECT case_id, data, content FROM discipline_files WHERE id=?').get(fileId);
-  if (!row) throw new AppError('File not found.', 404);
-  const c = read(store, row.case_id), meta = JSON.parse(row.data);
-  if (actor.role === 'employee') { if (c.employeeId !== actor.employeeId || meta.kind !== 'explanation') throw new AppError('File not found.', 404); }
-  else permit(actor, DISCIPLINE_VIEW);
-  store.log(actor, 'download', 'discipline-file', fileId, null, { case: c.reference, name: meta.name });
-  return { meta, content: row.content };
+export function addNote(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const { text: note } = z.object({ text: text(3, 4000, 'Write the note.') }).strict().parse(input);
+  return change(store, actor, id, 'add-note', (c, at) => ({ ...c, notes: [...c.notes, { at, by: actor.username, text: note }] }));
 }
 
-// ---------- Notices (issued as memos on the letterhead) ----------
-function issueNotice(store, actor, c, { title, kind, subject, paragraphs, after = [] }) {
-  const today = localToday(), issuer = staffName(store, actor.username);
-  const pdf = reference => renderMemoPdf({ reference, date: longDate(today), to: `${formalName(c.employee.name)} (${c.employeeId}) · ${c.employee.position || ''} · ${c.employee.department || ''}`, from: `${issuer}, Human Resources`, subject, paragraphs, after, signature: [issuer, 'Human Resources', companyName(store)] });
-  return issueSystemMemo(store, { title, category: 'Notice to Explain / Disciplinary', body: [`Subject: ${subject}`, '', ...paragraphs, '', ...after, '', issuer, 'Human Resources'].join('\n'), employeeIds: [c.employeeId], issueDate: today, pdf, pdfName: `${kind}-${c.reference}-{ref}.pdf`, issuedBy: actor.username, kind: `discipline-${kind}` });
-}
-const nteSchema = z.object({ allegations: text(20, 8000, 'State the specific acts or omissions charged (at least 20 characters).'), rules: text(3, 2000, 'Name the company rule or policy allegedly violated.'), possibleSanction: text(3, 300, 'State the penalty that may be imposed if the charge is proven.'), responseDeadline: z.string().regex(dateRe, 'Choose the date by which the employee must answer.'), hearingOffered: z.boolean().default(true) }).strict();
-export function issueNte(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = nteSchema.parse(input), settings = disciplineSettings(store), today = localToday(), earliest = addDays(today, settings.minResponseDays);
-  if (v.responseDeadline < earliest) throw new AppError(`Give the employee at least ${settings.minResponseDays} calendar days to answer: the earliest deadline is ${earliest}.`);
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (!['Pending', 'Under Investigation'].includes(c.status)) throw new AppError('A Notice to Explain can be issued only once, before the explanation stage.');
-    const name = formalName(c.employee.name);
-    const memo = issueNotice(store, actor, c, { title: `Notice to Explain · ${c.reference}`, kind: 'nte', subject: `NOTICE TO EXPLAIN · ${c.incident.offense}`,
-      paragraphs: [`Dear ${name},`, `This is to notify you of the following charge, based on the incident of ${longDate(c.incident.incidentDate)}${c.incident.place ? ` at ${c.incident.place}` : ''}:`, v.allegations, `Rule / policy concerned: ${v.rules}`, `If proven, this may warrant the following penalty: ${v.possibleSanction}.`],
-      after: [`You are directed to submit a written explanation on or before ${longDate(v.responseDeadline)} (${settings.minResponseDays} or more calendar days from receipt of this notice). You may attach supporting documents, and you may consult a representative of your choice.`, v.hearingOffered ? 'You may request a hearing or conference where you can present your side and evidence. State the request in your explanation.' : 'A hearing or conference will be scheduled if you request one in writing or if the evidence requires it.', 'You may submit your explanation in your employee account (My memos / My cases) or in writing to Human Resources. If no explanation is received by the deadline, the case will be evaluated on the basis of the available evidence.', 'This notice is not a finding of guilt. No penalty is imposed by this notice.'] });
-    const nte = { ...v, issuedAt: new Date().toISOString(), issuedBy: actor.username, memoId: memo.id, memoReference: memo.reference };
-    store.notify(c.employeeId, `Notice to Explain ${c.reference}: please submit your written explanation by ${v.responseDeadline}.`);
-    return step(store, actor, c, 'issue-nte', `NTE ${memo.reference} issued; explanation due ${v.responseDeadline}`, { nte, status: 'Awaiting Explanation', stage: 'explanation' });
+// ---------- 2. Notice to Explain ----------
+export function saveNte(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const settings = readDpSettings(store);
+  const v = z.object({ allegations: text(10, 8000, 'State the specific facts and circumstances (at least 10 characters).'), rules: text(3, 1000, 'Name the company rule or policy concerned.'), possibleSanction: z.enum(SANCTIONS.filter(s => s !== 'No disciplinary action')), responseDays: z.coerce.number().int().min(settings.minResponseDays, `Give the employee at least ${settings.minResponseDays} calendar days to answer.`).max(30), body: z.string().trim().max(12000).default('') }).strict().parse(input);
+  return change(store, actor, id, 'save-nte', c => {
+    if (c.nte?.issuedAt) throw new AppError('The Notice to Explain was already issued and cannot be changed.');
+    const nte = { ...v, issuedAt: null };
+    // {{deadline}} stays a placeholder until the notice is issued (counted from the day of issue).
+    return { ...c, status: 'investigation', nte: { ...nte, body: v.body || fillTemplate(settings.templates.nte, templateVars({ ...c, nte })) } };
   });
+}
+export function issueNte(store, actor, id) {
+  permit(actor, MANAGE);
+  const updated = change(store, actor, id, 'issue-nte', c => {
+    if (!c.nte) throw new AppError('Prepare the Notice to Explain first.');
+    if (c.nte.issuedAt) throw new AppError('The Notice to Explain was already issued.');
+    const day = localToday(), deadline = addDays(day, c.nte.responseDays);
+    const body = fillTemplate(c.nte.body, { deadline: longDate(deadline), nteDate: longDate(day), today: longDate(day) });
+    return { ...c, status: 'awaiting', nte: { ...c.nte, body, reference: `${c.reference}-NTE`, issuedAt: day, issuedBy: actor.username, deadline, deadlineBasis: 'issue date (provisional until receipt is documented)', deadlineHistory: [], receivedAt: null } };
+  });
+  store.notify(updated.employeeId, `Notice to Explain ${updated.reference}: please read it and submit your written explanation by ${longDate(updated.nte.deadline)} (menu: Notices & due process).`);
+  return updated;
+}
+// No explanation by the deadline (or a written waiver): the case moves to evaluation on the available records.
+export function toEvaluation(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const v = z.object({ waived: z.boolean().default(false), note: z.string().trim().max(1000).default('') }).strict().parse(input);
+  return change(store, actor, id, 'no-explanation', c => {
+    if (c.status !== 'awaiting') throw new AppError('Only a case awaiting the explanation can move to evaluation this way.');
+    if (v.waived && v.note.length < 5) throw new AppError('Describe the employee\'s written waiver (date and how it was given).');
+    if (!v.waived && !c.nte.service?.receivedOn && !c.nte.receivedAt) throw new AppError('First verify service: record how and when the employee received the Notice to Explain (Record service / receipt). A portal upload alone is not proof of receipt.');
+    if (!v.waived && (c.nte.extensionRequests || []).some(r => r.status === 'pending')) throw new AppError('The employee asked for more time. Grant or decline the request first.');
+    if (!v.waived && localToday() <= c.nte.deadline) throw new AppError(`The employee has until ${longDate(c.nte.deadline)} to explain. Wait for the deadline to pass.`);
+    return { ...c, status: 'evaluation', explanation: { none: true, waived: v.waived, note: v.note, recordedAt: new Date().toISOString(), recordedBy: actor.username } };
+  }, v.waived ? 'Employee waived the explanation' : 'No explanation received by the deadline');
 }
 
-// ---------- Employee explanation ----------
-const explanationSchema = z.object({ text: text(10, 20000, 'Write your explanation (at least 10 characters).'), requestsHearing: z.boolean().default(false), files: z.array(fileSchema.omit({ kind: true })).max(5).default([]) }).strict();
-function receiveExplanation(store, actor, c, v, by) {
-  if (c.status !== 'Awaiting Explanation') throw new AppError(c.explanation ? 'An explanation was already received for this case.' : 'This case is not waiting for an explanation.');
-  const files = v.files.map(f => storeFile(store, actor, c, { ...f, kind: 'explanation' }, 'explanation'));
-  const explanation = { text: v.text, requestsHearing: v.requestsHearing, submittedAt: new Date().toISOString(), submittedBy: actor.username, by, late: localToday() > c.nte.responseDeadline, fileIds: files.map(f => f.id) };
-  return step(store, actor, c, 'explanation', `${by === 'employee' ? 'Employee submitted' : 'HR recorded'} the written explanation${explanation.late ? ' (after the deadline)' : ''}${v.requestsHearing ? '; hearing requested' : ''}`, { explanation, files: [...c.files, ...files], status: 'For Evaluation', stage: v.requestsHearing ? 'hearing' : 'evaluation' });
-}
-export function submitCaseExplanation(store, actor, id, input) {
-  permit(actor, ['employee']);
-  const v = explanationSchema.parse(input);
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (c.employeeId !== actor.employeeId || !c.nte) throw new AppError('Case not found.', 404);
-    const after = receiveExplanation(store, actor, c, v, 'employee');
-    store.notify(null, `${c.employeeId} ${c.employee.name}: written explanation received for ${c.reference}${v.requestsHearing ? ' (hearing requested)' : ''}.`);
-    return employeeView(after);
-  });
-}
-export function recordExplanation(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = explanationSchema.parse(input);
-  return store.transaction(() => receiveExplanation(store, actor, read(store, id), v, 'hr'));
-}
-// After the deadline without an answer, HR records that none was received; the case is then evaluated on the evidence.
-export function recordNoExplanation(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const { note } = z.object({ note: z.string().trim().max(2000).default('') }).strict().parse(input || {});
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (c.status !== 'Awaiting Explanation') throw new AppError('This case is not waiting for an explanation.');
-    if (localToday() <= c.nte.responseDeadline) throw new AppError(`The employee has until ${c.nte.responseDeadline} to answer. Wait until the deadline has passed.`);
-    return step(store, actor, c, 'no-explanation', note || 'No written explanation received by the deadline', { noExplanation: { recordedAt: new Date().toISOString(), recordedBy: actor.username, note }, status: 'For Evaluation', stage: 'evaluation' });
-  });
-}
-
-// ---------- Administrative hearing / conference ----------
-const hearingSchema = z.object({ date: z.string().regex(dateRe, 'Choose the hearing date.'), time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Choose the time.'), place: text(2, 200, 'Enter the venue or meeting link.'), panel: z.string().trim().max(500).default(''), sendNotice: z.boolean().default(true) }).strict();
+// ---------- 4. Administrative hearing ----------
 export function scheduleHearing(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = hearingSchema.parse(input);
-  if (v.date < localToday()) throw new AppError('The hearing date is in the past.');
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (!['Awaiting Explanation', 'For Evaluation'].includes(c.status) || c.proposal) throw new AppError('A hearing can be scheduled after the Notice to Explain and before a decision is proposed.');
-    let notice = null;
-    if (v.sendNotice) {
-      const memo = issueNotice(store, actor, c, { title: `Notice of Hearing · ${c.reference}`, kind: 'hearing', subject: `NOTICE OF ADMINISTRATIVE HEARING · ${c.reference}`, paragraphs: [`Dear ${formalName(c.employee.name)},`, `In connection with the Notice to Explain ${c.nte?.memoReference || ''} (${c.incident.offense}), you are invited to an administrative hearing / conference on ${longDate(v.date)} at ${v.time}, ${v.place}.`], after: ['You may present your explanation, witnesses and evidence, and you may be assisted by a representative of your choice. If you cannot attend, inform Human Resources in advance so the hearing can be rescheduled.'] });
-      notice = { memoId: memo.id, memoReference: memo.reference };
-      store.notify(c.employeeId, `Administrative hearing for ${c.reference} on ${v.date} at ${v.time}, ${v.place}.`);
-    }
-    const hearing = { ...v, ...notice, scheduledAt: new Date().toISOString(), scheduledBy: actor.username, held: false };
-    return step(store, actor, c, 'schedule-hearing', `Hearing set for ${v.date} ${v.time}, ${v.place}`, { hearing, stage: 'hearing' });
+  permit(actor, MANAGE);
+  const v = z.object({ scheduledAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/, 'Choose the hearing date and time.'), place: text(3, 200, 'Enter the place (or the video-call link).'), body: z.string().trim().max(12000).default('') }).strict().parse(input);
+  if (v.scheduledAt.slice(0, 10) < localToday()) throw new AppError('The hearing date cannot be in the past.');
+  const settings = readDpSettings(store);
+  const updated = change(store, actor, id, 'schedule-hearing', c => {
+    if (!c.nte?.issuedAt) throw new AppError('Issue the Notice to Explain before scheduling a hearing.');
+    if (c.decision?.issuedAt || c.status === 'closed') throw new AppError('The decision was already issued.');
+    if (c.hearing?.record) throw new AppError('The hearing was already recorded.');
+    const previous = c.hearing?.scheduledAt ? [...(c.hearing.previous || []), { scheduledAt: c.hearing.scheduledAt, place: c.hearing.place, noticeIssuedAt: c.hearing.noticeIssuedAt }] : [];
+    const hearing = { scheduledAt: v.scheduledAt, place: v.place, previous };
+    return { ...c, hearing: { ...hearing, body: v.body || fillTemplate(settings.templates.hearing, templateVars({ ...c, hearing })), noticeIssuedAt: localToday(), noticeIssuedBy: actor.username, receivedAt: null } };
   });
+  store.notify(updated.employeeId, `Notice of administrative hearing (${updated.reference}): ${longDate(updated.hearing.scheduledAt)} at ${updated.hearing.scheduledAt.slice(11, 16)}, ${updated.hearing.place}.`);
+  return updated;
 }
-const proceedingsSchema = z.object({ held: z.boolean(), employeeAttended: z.boolean().default(false), attendees: text(2, 1000, 'List who attended.'), statements: z.string().trim().max(20000).default(''), minutes: text(10, 40000, 'Record the proceedings (at least 10 characters).') }).strict();
 export function recordHearing(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = proceedingsSchema.parse(input);
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (!c.hearing) throw new AppError('Schedule the hearing first.');
-    if (c.proposal) throw new AppError('A decision was already proposed.');
-    const hearing = { ...c.hearing, ...v, recordedAt: new Date().toISOString(), recordedBy: actor.username };
-    return step(store, actor, c, 'record-hearing', v.held ? `Hearing held${v.employeeAttended ? '' : ' (employee did not attend)'}` : 'Hearing did not take place', { hearing, stage: c.status === 'For Evaluation' ? 'evaluation' : c.stage });
+  permit(actor, MANAGE);
+  const v = z.object({ outcome: z.enum(['held', 'waived', 'no-show']), heldOn: z.union([z.literal(''), DATE]).default(''), attendees: z.string().trim().max(1000).default(''), employeeAttended: z.boolean().default(false), representative: z.string().trim().max(200).default(''), statements: z.string().trim().max(12000).default(''), minutes: z.string().trim().max(12000).default('') }).strict().parse(input);
+  if (v.outcome === 'held' && (!v.heldOn || v.statements.length < 10)) throw new AppError('Enter the date held and the statements made at the hearing.');
+  if (v.heldOn && v.heldOn > localToday()) throw new AppError('The hearing date cannot be in the future.');
+  if (v.outcome === 'waived' && v.minutes.length < 5) throw new AppError('Describe the employee\'s waiver of the hearing (date and how it was given).');
+  return change(store, actor, id, 'record-hearing', c => {
+    if (!c.nte?.issuedAt) throw new AppError('Issue the Notice to Explain first.');
+    if (v.outcome !== 'waived' && !c.hearing?.scheduledAt) throw new AppError('Schedule the hearing (and issue its notice) first.');
+    if (c.decision?.issuedAt) throw new AppError('The decision was already issued.');
+    return { ...c, hearing: { ...(c.hearing || {}), record: { ...v, recordedAt: new Date().toISOString(), recordedBy: actor.username } } };
+  }, v.outcome);
+}
+
+// ---------- 5. Evaluation ----------
+export function saveEvaluation(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const v = z.object({ findings: text(10, 12000, 'Write the findings (at least 10 characters).'), evidence: z.string().trim().max(4000).default(''), recommendation: z.enum(SANCTIONS) }).strict().parse(input);
+  return change(store, actor, id, 'save-evaluation', c => {
+    if (c.status !== 'evaluation') throw new AppError(c.status === 'awaiting' ? 'Wait for the employee\'s explanation or the deadline first.' : 'This case is not for evaluation.');
+    if (c.explanation?.hearingRequested && !c.hearing?.record) throw new AppError('The employee asked for a hearing. Schedule and record it (held, waived or not attended) before the evaluation.');
+    return { ...c, evaluation: { ...v, by: actor.username, at: new Date().toISOString() } };
   });
 }
 
-// ---------- Evaluation, proposed decision, management approval ----------
-const hearingNeeded = (c, action, settings) => c.explanation?.requestsHearing || (action === 'Termination' && settings.hearingForTermination);
-export function evaluateCase(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = z.object({ substantiated: z.boolean(), findings: text(20, 20000, 'Write the findings: the evidence considered and the employee\'s explanation (at least 20 characters).') }).strict().parse(input);
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (c.status !== 'For Evaluation') throw new AppError('The case can be evaluated after the explanation is received (or the deadline has passed without one).');
-    if (c.explanation?.requestsHearing && !c.hearing?.recordedAt) throw new AppError('The employee requested a hearing. Schedule it and record the proceedings before evaluating.');
-    if (c.proposal) throw new AppError('A decision was already proposed. The approver can return it for re-evaluation.');
-    return step(store, actor, c, 'evaluate', v.substantiated ? 'Charge found substantiated' : 'Charge not substantiated', { evaluation: { ...v, by: actor.username, at: new Date().toISOString() }, stage: 'evaluation' });
+// ---------- 6. Decision (approved by management before it is issued) ----------
+export function draftDecision(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const settings = readDpSettings(store);
+  const v = z.object({ sanction: z.enum(SANCTIONS), suspensionDays: z.coerce.number().int().min(0).max(30).default(0), effectiveFrom: z.union([z.literal(''), DATE]).default(''), findings: text(10, 12000, 'State the findings the decision is based on.'), body: z.string().trim().max(12000).default('') }).strict().parse(input);
+  if (v.sanction === 'Suspension' && (!v.suspensionDays || !v.effectiveFrom)) throw new AppError('Enter the number of suspension days (1-30) and the first day of the suspension.');
+  if (['Suspension', 'Demotion', 'Dismissal'].includes(v.sanction) && !v.effectiveFrom) throw new AppError('Enter the effective date.');
+  return change(store, actor, id, 'draft-decision', c => {
+    if (!c.evaluation) throw new AppError('Complete the evaluation first.');
+    if (c.decision?.issuedAt) throw new AppError('The decision was already issued.');
+    if (v.sanction === 'Dismissal' && settings.hearingForDismissal && !c.hearing?.record) throw new AppError('Company setting: a dismissal needs a hearing or conference on record (held, waived or not attended).');
+    const effectiveTo = v.sanction === 'Suspension' ? addDays(v.effectiveFrom, v.suspensionDays - 1) : '';
+    const detail = v.sanction === 'Suspension' ? ` of ${v.suspensionDays} day${v.suspensionDays === 1 ? '' : 's'} without pay, from ${longDate(v.effectiveFrom)} to ${longDate(effectiveTo)}` : v.effectiveFrom ? `, effective ${longDate(v.effectiveFrom)}` : '';
+    const body = v.body || fillTemplate(settings.templates.decision, templateVars(c, { findings: v.findings, sanction: v.sanction.toUpperCase(), sanctionDetail: detail }));
+    return { ...c, decision: { ...v, effectiveTo, body, status: 'draft', draftedBy: actor.username, draftedAt: new Date().toISOString(), approvals: c.decision?.approvals || [] } };
   });
 }
-const proposalSchema = z.object({ action: z.enum(ACTIONS), otherAction: z.string().trim().max(200).default(''), suspensionDays: z.number().int().min(0).max(60).default(0), effectiveFrom: z.union([z.string().regex(dateRe), z.literal('')]).default(''), effectiveTo: z.union([z.string().regex(dateRe), z.literal('')]).default(''), rationale: text(20, 20000, 'Explain the basis of the proposed decision (at least 20 characters).') }).strict();
-export function proposeDecision(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = proposalSchema.parse(input), settings = disciplineSettings(store);
-  if (v.action === 'Other' && v.otherAction.length < 3) throw new AppError('Describe the other action.');
-  if (v.action === 'Suspension') {
-    if (v.suspensionDays < 1 || v.suspensionDays > settings.maxSuspensionDays) throw new AppError(`Suspension must be 1 to ${settings.maxSuspensionDays} days.`);
-    if (!v.effectiveFrom || !v.effectiveTo || v.effectiveTo < v.effectiveFrom) throw new AppError('Enter the suspension dates.');
-  }
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (c.status !== 'For Evaluation' || !c.evaluation) throw new AppError('Evaluate the case before proposing a decision.');
-    if (c.proposal) throw new AppError('A decision is already waiting for approval.');
-    if (!c.evaluation.substantiated && v.action !== 'No disciplinary action') throw new AppError('The charge was not substantiated: the only possible decision is no disciplinary action.');
-    if (hearingNeeded(c, v.action, settings) && !c.hearing?.recordedAt) throw new AppError(v.action === 'Termination' ? 'Company policy requires a hearing or conference before a termination decision. Schedule it and record the proceedings first.' : 'The employee requested a hearing. Record the proceedings first.');
-    store.notify(null, `${c.reference}: proposed decision (${v.action}) is waiting for management approval.`);
-    return step(store, actor, c, 'propose', `Proposed: ${v.action}${v.action === 'Suspension' ? ` (${v.suspensionDays} days)` : ''}`, { proposal: { ...v, by: actor.username, at: new Date().toISOString() }, stage: 'approval' });
+export function submitDecision(store, actor, id) {
+  permit(actor, MANAGE);
+  const updated = change(store, actor, id, 'submit-decision', c => {
+    if (!c.decision || !['draft', 'returned'].includes(c.decision.status)) throw new AppError('Prepare the decision first.');
+    return { ...c, decision: { ...c.decision, status: 'for-approval', submittedBy: actor.username, submittedAt: new Date().toISOString() } };
   });
+  store.notify(null, `Due process ${updated.reference} (${updated.employee.name}): decision waiting for management approval.`);
+  return updated;
 }
-const actionLabel = p => (p.action === 'Other' ? p.otherAction : p.action === 'Suspension' ? `Suspension of ${p.suspensionDays} day${p.suspensionDays === 1 ? '' : 's'} (${p.effectiveFrom} to ${p.effectiveTo})` : p.action);
 export function reviewDecision(store, actor, id, input) {
-  const settings = disciplineSettings(store);
+  const settings = readDpSettings(store);
   permit(actor, settings.approverRoles);
-  const v = z.object({ decision: z.enum(['approve', 'return']), note: z.string().trim().max(4000).default('') }).strict().parse(input);
-  if (v.decision === 'return' && v.note.length < 5) throw new AppError('Say what should be reconsidered.');
-  return store.transaction(() => {
-    const c = read(store, id);
-    if (!c.proposal) throw new AppError('No decision is waiting for approval.');
-    if (c.proposal.by === actor.username) throw new AppError('The decision must be approved by someone other than the person who proposed it.', 403);
-    if (v.decision === 'return') return step(store, actor, c, 'return-decision', v.note, { proposal: null, evaluation: null, returned: [...(c.returned || []), { ...c.proposal, returnedBy: actor.username, returnedAt: new Date().toISOString(), note: v.note }], stage: 'evaluation' });
-    const p = c.proposal, label = actionLabel(p), name = formalName(c.employee.name);
-    const memo = issueNotice(store, actor, c, { title: `Notice of Decision · ${c.reference}`, kind: 'decision', subject: `NOTICE OF DECISION · ${c.reference}`,
-      paragraphs: [`Dear ${name},`, `This refers to the Notice to Explain ${c.nte?.memoReference || ''} dated ${longDate(c.nte?.issuedAt?.slice(0, 10))} concerning: ${c.incident.offense}.`, c.explanation ? `Your written explanation dated ${longDate(c.explanation.submittedAt.slice(0, 10))} was received and considered.` : 'No written explanation was received by the deadline given; the case was evaluated on the available evidence.', ...(c.hearing?.recordedAt ? [`An administrative hearing / conference was ${c.hearing.held ? `held on ${longDate(c.hearing.date)}` : 'scheduled but did not take place'}.`] : []), `Findings: ${c.evaluation.findings}`, `Basis of the decision: ${p.rationale}`],
-      after: [`DECISION: ${label}.`, p.action === 'No disciplinary action' ? 'The charge is considered closed and no penalty is imposed.' : 'This decision forms part of your employment record. You may seek clarification from Human Resources.'] });
-    const record = { action: p.action, label, suspensionDays: p.action === 'Suspension' ? p.suspensionDays : 0, effectiveFrom: p.effectiveFrom, effectiveTo: p.effectiveTo, decisionDate: localToday(), memoId: memo.id, memoReference: memo.reference, approvedBy: actor.username, approvedAt: new Date().toISOString(), approvalNote: v.note, proposedBy: p.by };
-    store.notify(c.employeeId, `Notice of Decision for ${c.reference} has been issued. Please read and acknowledge receipt.`);
-    return step(store, actor, c, 'approve-decision', `Approved and issued: ${label} (${memo.reference})`, { decision: record, proposal: null, status: 'Resolved', stage: 'decision' });
+  const v = z.object({ action: z.enum(['approve', 'return']), note: z.string().trim().max(2000).default('') }).strict().parse(input);
+  if (v.action === 'return' && v.note.length < 5) throw new AppError('Say what must change before the decision can be approved.');
+  return change(store, actor, id, v.action === 'approve' ? 'approve-decision' : 'return-decision', (c, at) => {
+    if (c.decision?.status !== 'for-approval') throw new AppError('This decision is not waiting for approval.');
+    if (settings.separateApprover && [c.decision.draftedBy, c.decision.submittedBy].includes(actor.username)) throw new AppError('Company setting: the decision must be approved by someone other than the person who prepared it.');
+    const approvals = [...c.decision.approvals, { by: actor.username, role: actor.role, at, action: v.action, note: v.note }];
+    return { ...c, decision: { ...c.decision, approvals, status: v.action === 'approve' ? 'approved' : 'returned', ...(v.action === 'approve' ? { approvedBy: actor.username, approvedAt: at } : {}) } };
   });
 }
-// Closure: after the decision (records the final outcome), or before any NTE when the matter is dropped.
+export function issueDecision(store, actor, id) {
+  permit(actor, MANAGE);
+  const updated = change(store, actor, id, 'issue-decision', c => {
+    if (c.decision?.status !== 'approved') throw new AppError('The decision must be approved by authorized management before it is issued.');
+    return { ...c, status: 'resolved', decision: { ...c.decision, status: 'issued', reference: `${c.reference}-NOD`, issuedAt: localToday(), issuedBy: actor.username, receivedAt: null } };
+  });
+  store.notify(updated.employeeId, `Notice of Decision ${updated.reference} was issued to you. Please read and acknowledge receipt (menu: Notices & due process).`);
+  return updated;
+}
+
+// ---------- 7. Closure ----------
 export function closeCase(store, actor, id, input) {
-  permit(actor, DISCIPLINE_MANAGE);
-  const v = z.object({ outcome: text(5, 4000, 'Record the final outcome.') }).strict().parse(input);
+  permit(actor, MANAGE);
+  const { remarks } = z.object({ remarks: z.string().trim().max(4000).default('') }).strict().parse(input);
   return store.transaction(() => {
-    const c = read(store, id);
-    if (!['Resolved', 'Pending', 'Under Investigation'].includes(c.status)) throw new AppError('A case can be closed after its decision is issued, or before a Notice to Explain if the matter is dropped.');
-    return step(store, actor, c, 'close', v.outcome, { closure: { outcome: v.outcome, dropped: c.status !== 'Resolved', by: actor.username, at: new Date().toISOString() }, status: 'Closed', stage: 'closed' });
+    const c = readCase(store, id);
+    assertParticipant(c, actor);
+    if (c.status === 'closed') throw new AppError('This case is already closed.');
+    if (c.nte?.issuedAt && !c.decision?.issuedAt) throw new AppError('Issue the decision before closing (it may be "No disciplinary action").');
+    if (c.review?.requestedAt && !c.review.issuedAt) throw new AppError('The employee asked for a review of the decision. Issue the Review / Appeal Outcome before closing.');
+    if (!c.nte?.issuedAt && remarks.length < 10) throw new AppError('No notice was issued. Explain why the case is closed without action (at least 10 characters).');
+    const sanction = c.review?.issuedAt ? c.review.sanction : c.decision?.sanction, outcome = c.decision?.issuedAt ? sanction : 'Closed without action';
+    let actionId = null;
+    if (c.decision?.issuedAt && sanction !== 'No disciplinary action') {
+      actionId = randomUUID();
+      const record = { id: actionId, employeeId: c.employeeId, type: sanction, date: c.review?.issuedAt || c.decision.issuedAt, caseId: c.id, reference: c.reference, offense: c.incident.offense, suspensionDays: c.decision.suspensionDays || 0, effectiveFrom: c.decision.effectiveFrom || '', effectiveTo: c.decision.effectiveTo || '', source: 'case', remarks, by: actor.username, at: new Date().toISOString() };
+      store.db.prepare('INSERT INTO dp_actions VALUES(?,?,?)').run(actionId, c.employeeId, JSON.stringify(record));
+    }
+    const now = new Date().toISOString(), after = { ...c, status: 'closed', closure: { outcome, remarks, actionId, closedAt: now, closedBy: actor.username }, updatedAt: now, history: [...c.history, { at: now, by: actor.username, action: 'close', detail: outcome }] };
+    writeCase(store, after);
+    store.log(actor, 'close', 'discipline', id, { reference: c.reference, status: c.status }, { reference: c.reference, status: 'closed', outcome, employeeId: c.employeeId });
+    return after;
   });
 }
 
-// ---------- Views ----------
-const summary = c => ({ id: c.id, reference: c.reference, employeeId: c.employeeId, employeeName: c.employee.name, department: c.employee.department, position: c.employee.position, offense: c.incident.offense, incidentDate: c.incident.incidentDate, status: c.status, stage: c.stage, openedAt: c.openedAt, updatedAt: c.updatedAt, responseDeadline: c.nte?.responseDeadline || '', awaitingApproval: !!c.proposal, action: c.decision?.label || '', overdueExplanation: c.status === 'Awaiting Explanation' && localToday() > (c.nte?.responseDeadline || '9999') });
-export function listCases(store, actor, filters = {}) {
-  permit(actor, DISCIPLINE_VIEW); ensure(store);
-  const q = String(filters.q || '').trim().toLowerCase();
-  return store.db.prepare('SELECT data FROM discipline_cases').all().map(r => summary(JSON.parse(r.data)))
-    .filter(c => (!filters.status || c.status === filters.status) && (!filters.employeeId || c.employeeId === filters.employeeId) && (!q || `${c.reference} ${c.employeeName} ${c.employeeId} ${c.offense} ${c.department}`.toLowerCase().includes(q)))
-    .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
-}
-export function caseDetail(store, actor, id) {
-  permit(actor, DISCIPLINE_VIEW);
-  const c = read(store, id), settings = disciplineSettings(store);
-  store.log(actor, 'view', 'discipline-case', id, null, { reference: c.reference });
-  return { ...c, canManage: DISCIPLINE_MANAGE.includes(actor.role), canApprove: settings.approverRoles.includes(actor.role) && !!c.proposal && c.proposal.by !== actor.username, settings: { minResponseDays: settings.minResponseDays, maxSuspensionDays: settings.maxSuspensionDays, hearingForTermination: settings.hearingForTermination, earliestDeadline: addDays(localToday(), settings.minResponseDays) } };
-}
-// Disciplinary record of one employee: the approved decisions (verbal / written warnings, suspensions, ...).
-export function disciplinaryRecords(store, actor, employeeId) {
-  permit(actor, DISCIPLINE_VIEW); ensure(store);
-  return store.db.prepare('SELECT data FROM discipline_cases WHERE employee_id=?').all(employeeId).map(r => JSON.parse(r.data))
-    .map(c => ({ caseId: c.id, reference: c.reference, offense: c.incident.offense, incidentDate: c.incident.incidentDate, status: c.status, ...(c.decision || {}) }))
-    .sort((a, b) => b.incidentDate.localeCompare(a.incidentDate));
-}
-export function disciplinaryRegister(store, actor) {
-  permit(actor, DISCIPLINE_VIEW); ensure(store);
-  return store.db.prepare('SELECT data FROM discipline_cases').all().map(r => JSON.parse(r.data)).map(c => ({ ...summary(c), nteIssued: c.nte?.issuedAt?.slice(0, 10) || '', explanationReceived: c.explanation?.submittedAt?.slice(0, 10) || (c.noExplanation ? 'None received' : ''), hearingDate: c.hearing?.date || '', decisionDate: c.decision?.decisionDate || '', action: c.decision?.label || '', suspensionDays: c.decision?.suspensionDays || 0, closedAt: c.closure?.at || '' })).sort((a, b) => a.reference.localeCompare(b.reference));
-}
-export function disciplineSummary(store, actor) {
-  if (!DISCIPLINE_VIEW.includes(actor.role)) return null;
-  const list = listCases(store, actor), settings = disciplineSettings(store);
-  return { open: list.filter(c => c.status !== 'Closed').length, awaitingApproval: settings.approverRoles.includes(actor.role) ? list.filter(c => c.awaitingApproval).length : 0, overdueExplanations: list.filter(c => c.overdueExplanation).length };
-}
-// Employee view: only their own cases, from the NTE on, without HR's evaluation notes or the proposal.
-function employeeView(c) {
-  return { id: c.id, reference: c.reference, offense: c.incident.offense, incidentDate: c.incident.incidentDate, status: c.status, nte: c.nte ? { allegations: c.nte.allegations, rules: c.nte.rules, possibleSanction: c.nte.possibleSanction, responseDeadline: c.nte.responseDeadline, issuedAt: c.nte.issuedAt, memoReference: c.nte.memoReference, hearingOffered: c.nte.hearingOffered } : null, explanation: c.explanation ? { text: c.explanation.text, submittedAt: c.explanation.submittedAt, requestsHearing: c.explanation.requestsHearing, late: c.explanation.late, files: c.files.filter(f => c.explanation.fileIds.includes(f.id)).map(f => ({ id: f.id, name: f.name })) } : null, hearing: c.hearing ? { date: c.hearing.date, time: c.hearing.time, place: c.hearing.place } : null, decision: c.decision ? { label: c.decision.label, decisionDate: c.decision.decisionDate, memoReference: c.decision.memoReference } : null, canExplain: c.status === 'Awaiting Explanation' };
-}
-export function myCases(store, actor) {
-  permit(actor, ['employee']); ensure(store);
-  return store.db.prepare('SELECT data FROM discipline_cases WHERE employee_id=?').all(actor.employeeId).map(r => JSON.parse(r.data)).filter(c => c.nte).map(employeeView).sort((a, b) => b.incidentDate.localeCompare(a.incidentDate));
-}
-// Whether a memo may be issued as a written warning: it must refer to a case whose approved decision is a warning.
-export function warningCaseOk(store, caseId, employeeIds) {
-  ensure(store);
-  const row = caseId && store.db.prepare('SELECT data FROM discipline_cases WHERE id=?').get(caseId);
-  const c = row ? JSON.parse(row.data) : null;
-  return !!c?.decision && /warning/i.test(c.decision.action) && employeeIds.length === 1 && employeeIds[0] === c.employeeId;
+// Admin or the person who opened the case names who may work on it (HR handlers, the decision approvers).
+export function setParticipants(store, actor, id, input) {
+  permit(actor, MANAGE);
+  const { participants } = z.object({ participants: z.array(z.string().regex(/^[A-Za-z0-9_.@-]{3,80}$/)).min(1).max(20) }).strict().parse(input);
+  return change(store, actor, id, 'set-participants', c => {
+    if (actor.role !== 'admin' && (c.participants || [])[0] !== actor.username) throw new AppError('Only an Administrator or the person who opened the case can change who may see it.');
+    const known = new Set(store.db.prepare("SELECT username FROM users WHERE role IN ('admin','hr','viewer') AND (disabled IS NULL OR disabled=0)").all().map(r => r.username));
+    const unknown = participants.filter(u => !known.has(u));
+    if (unknown.length) throw new AppError(`Not an HR, Management or Admin account: ${unknown.join(', ')}.`);
+    return { ...c, participants: [...new Set([...(c.participants || []).slice(0, 1), ...participants])] };
+  }, participants.join(', '));
 }

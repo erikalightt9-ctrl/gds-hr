@@ -147,6 +147,12 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       const picked = [...dd.querySelectorAll('input:checked')].map(i => i.dataset.leaveName);
       dd.querySelector('[data-leave-summary]').textContent = picked.join(', ') || 'None';
     });
+    content.addEventListener('change', async e => {
+      const sel = e.target.closest('[data-fp-release]'); if (!sel) return;
+      sel.disabled = true;
+      try { await api(`/final-pay/${sel.dataset.fpRelease}/release`, { released: sel.value === '1' }); toast(sel.value === '1' ? 'Final pay marked as released.' : 'Final pay marked as not released.'); await render(); }
+      catch (error) { toast(error.message); sel.value = sel.value === '1' ? '' : '1'; sel.disabled = false; }
+    });
     content.querySelector('#fp-form')?.addEventListener('submit', onCompute);
     // Final pay → Employee: a dropdown with a search box (same as Payroll → Employee); the plain list stays if it fails to load.
     if (content.querySelector('#fp-form select[data-searchable]')) import('./searchable-select.js').then(m => m.enhanceAll(content)).catch(() => {});
@@ -212,7 +218,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
         <label class="field">Notes<input name="notes" maxlength="2000"></label>
         <div class="full"><button class="primary">Compute final pay</button></div>
       </form><div id="fp-result"></div>
-      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(who(r.computedBy))]), 'No saved final pay computations yet.')}</section>`;
+      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by', 'Status'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(who(r.computedBy)), `<select class="fp-release ${r.release?.released ? 'is-released' : ''}" data-fp-release="${esc(r.id)}" aria-label="Release status of ${esc(r.name)}"><option value="">Not released</option><option value="1" ${r.release?.released ? 'selected' : ''}>Released</option></select>${r.release?.released ? `<br><small class="muted">${fmt(r.release.releasedOn)}</small>` : ''}`]), 'No saved final pay computations yet.')}</section>`;
   }
 
   const resultHtml = r => `<div class="panel-body"><h3>${esc(r.name)} · final pay as of ${fmt(r.separationDate)}</h3><p class="legend">Daily rate ${money(r.dailyRate)} · monthly ${money(r.monthlySalary)} · ${r.yearsOfService} year${r.yearsOfService === 1 ? '' : 's'} of service (counted) · release due ${fmt(r.releaseDue)}</p>

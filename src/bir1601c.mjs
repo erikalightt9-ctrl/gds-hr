@@ -1,212 +1,223 @@
-// BIR Form 1601-C: Monthly Remittance Return of Income Taxes Withheld on Compensation.
-// One return per taxable month (YYYY-MM). Its employee lines are generated from the posted payroll whose cutoff starts
-// in that month (gross compensation, 13th month, employee SSS / PhilHealth / Pag-IBIG shares, tax withheld) and can be
-// encoded or edited by Payroll / HR before filing. The return items follow the form (items 14 to 36):
-//   14 total compensation · 15-20 non-taxable (MWE basic, MWE holiday/OT/NSD/hazard, 13th month & other benefits,
-//   de minimis, employee contributions & union dues, other) · 21 total non-taxable · 22 total taxable · 23 taxable
-//   compensation not subject to withholding · 24 net taxable · 25 total taxes withheld · 26 adjustment from previous
-//   months · 27 taxes withheld for remittance · 28 tax remitted in the return previously filed (amended return) · 29 other
-//   remittances · 30 total remittances · 31 tax still due · 32-34 surcharge, interest, compromise · 35 total penalties ·
-//   36 total amount still due.
-// Due date: the 10th of the following month (the December return: January 15). A filed return is locked; an
-// administrator can reopen it (for an amended return) with a reason. Every change is audited.
+// BIR Form 1601-C: Monthly Remittance Return of Income Taxes Withheld on Compensation (January 2018 ENCS layout).
+// Figures per employee come from payroll for the taxable month (posted cutoffs, else the current draft computation),
+// like the Government Contributions report. HR / Payroll may type any figure of one employee for one month (reason
+// required); the month's return keeps its own Part I / Part II entries (adjustments, penalties, filing details).
+// Marking a month Filed freezes the rows and totals as filed; only an administrator can reopen it (reason, audited).
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { AppError, permit } from './service.mjs';
+import { calculatePayroll } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 import { readSettings } from './hr201.mjs';
-import { formattedWorkbook } from './export.mjs';
 
-export const BIR_EDIT = ['admin', 'hr', 'payroll'], BIR_VIEW = [...BIR_EDIT, 'viewer'];
+export const VIEW_ROLES = ['admin', 'hr', 'payroll', 'viewer'];
+export const EDIT_ROLES = ['admin', 'hr', 'payroll'];
+export const THIRTEENTH_CAP = 90000;   // 13th month pay and other benefits: non-taxable up to ₱90,000 a year (TRAIN law)
+// Per-employee figures (pesos for the month). compensation = item 14; the next six are items 15-20; notSubject = item 23.
+export const ROW_FIELDS = ['compensation', 'mweBasic', 'mwePremiums', 'thirteenth', 'deMinimis', 'contributions', 'otherNonTaxable', 'notSubject', 'taxWithheld'];
+export const ROW_LABELS = { compensation: 'Total compensation', mweBasic: 'Statutory minimum wage (MWE)', mwePremiums: 'Holiday, OT, NSD, hazard pay (MWE)', thirteenth: '13th month pay & other benefits', deMinimis: 'De minimis benefits', contributions: 'SSS / PhilHealth / Pag-IBIG (employee share)', otherNonTaxable: 'Other non-taxable compensation', notSubject: 'Taxable not subject to withholding', taxWithheld: 'Tax withheld' };
 const r2 = v => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-export const monthName = ym => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
-const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Choose the taxable month (YYYY-MM).');
-export const LINE_FIELDS = ['gross', 'mweBasic', 'mweOther', 'thirteenth', 'deMinimis', 'contributions', 'otherNonTaxable', 'notSubject', 'taxWithheld'];
-export const LINE_LABELS = { gross: 'Total compensation', mweBasic: 'Statutory minimum wage (MWE)', mweOther: 'MWE holiday / OT / NSD / hazard pay', thirteenth: '13th month & other benefits', deMinimis: 'De minimis benefits', contributions: 'SSS / PhilHealth / Pag-IBIG (employee share) & union dues', otherNonTaxable: 'Other non-taxable compensation', notSubject: 'Taxable compensation not subject to withholding', taxWithheld: 'Tax withheld' };
-const NON_TAXABLE = ['mweBasic', 'mweOther', 'thirteenth', 'deMinimis', 'contributions', 'otherNonTaxable'];
+const MONTH = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Choose the taxable month.');
+const amount = z.union([z.null(), z.coerce.number().min(0, 'Amounts cannot be negative.').max(1e9)]);
+const lastDay = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+export const monthName = month => new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-const ensure = store => store.db.exec('CREATE TABLE IF NOT EXISTS bir_1601c (month TEXT PRIMARY KEY, status TEXT NOT NULL, data TEXT NOT NULL)');
-const load = (store, month) => { ensure(store); const row = store.db.prepare('SELECT data FROM bir_1601c WHERE month=?').get(month); return row ? JSON.parse(row.data) : null; };
-const save = (store, value) => store.db.prepare('INSERT INTO bir_1601c(month,status,data) VALUES(?,?,?) ON CONFLICT(month) DO UPDATE SET status=excluded.status, data=excluded.data').run(value.month, value.status, JSON.stringify(value));
-export function dueDate(month) {
-  const [y, m] = month.split('-').map(Number), next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-  return `${next}-${m === 12 ? '15' : '10'}`;
+function ensure(store) {
+  store.db.exec(`CREATE TABLE IF NOT EXISTS bir1601c_edits (employee_id TEXT NOT NULL, month TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(employee_id, month));
+    CREATE TABLE IF NOT EXISTS bir1601c_returns (month TEXT PRIMARY KEY, data TEXT NOT NULL);`);
 }
-const profileOf = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
+const profile = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
+const readReturn = (store, month) => JSON.parse(store.db.prepare('SELECT data FROM bir1601c_returns WHERE month=?').get(month)?.data ?? 'null');
+const writeReturn = (store, month, data) => store.db.prepare('INSERT INTO bir1601c_returns VALUES(?,?) ON CONFLICT(month) DO UPDATE SET data=excluded.data').run(month, JSON.stringify(data));
 
-// Lines from the posted payroll of that month (cutoffs that start in the month), one per employee.
-export function payrollLines(store, month, state = store.read()) {
-  const byEmployee = new Map();
-  for (const run of state.runs.filter(r => r.status === 'posted' && r.start.startsWith(month))) for (const row of run.rows) {
-    const line = byEmployee.get(row.employeeId) || { employeeId: row.employeeId, name: row.employeeName, gross: 0, mweBasic: 0, mweOther: 0, thirteenth: 0, deMinimis: 0, contributions: 0, otherNonTaxable: 0, notSubject: 0, taxWithheld: 0, cutoffs: [] };
-    line.gross = r2(line.gross + (row.gross || 0));
-    line.thirteenth = r2(line.thirteenth + (row.earnings?.thirteenth || 0));
-    line.contributions = r2(line.contributions + (row.deductions?.SSS || 0) + (row.deductions?.PhilHealth || 0) + (row.deductions?.['Pag-IBIG'] || 0));
-    line.taxWithheld = r2(line.taxWithheld + (row.deductions?.tax || 0));
-    line.cutoffs.push(`${run.start} to ${run.end}`);
-    byEmployee.set(row.employeeId, line);
+const DRAFT_CACHE = new Map();
+// Payroll rows of the month: posted cutoffs where they exist, otherwise the draft computation as of today.
+function payrollRows(state, month) {
+  const cutoff = state.rules[0]?.cutoff || 'semi-monthly', end = lastDay(month);
+  const periods = cutoff === 'monthly' ? [[`${month}-01`, end]] : [[`${month}-01`, `${month}-15`], [`${month}-16`, end]];
+  let draft = false;
+  const rows = periods.flatMap(([start, stop]) => {
+    const posted = state.runs.find(r => r.status === 'posted' && r.start === start && r.end === stop);
+    if (posted) return posted.rows;
+    // Nothing recorded for the cutoff (before the system was used, or not reached yet): no draft to compute.
+    if (!state.attendance.some(x => x.date >= start && x.date <= stop) && !state.runs.some(r => r.status === 'posted' && r.start <= stop && r.end >= start)) return [];
+    draft = true;
+    // Draft payroll of a cutoff is cached until any record it reads changes (hash of the data) or the day changes (the year view
+    // computes up to 24 cutoffs).
+    const key = `${start}|${stop}|${localToday()}|${createHash('sha1').update(JSON.stringify(state)).digest('hex')}`;
+    if (!DRAFT_CACHE.has(key)) { if (DRAFT_CACHE.size > 60) DRAFT_CACHE.clear(); try { DRAFT_CACHE.set(key, calculatePayroll({ ...state, asOf: localToday() }, start, stop).rows); } catch { DRAFT_CACHE.set(key, []); } }
+    return DRAFT_CACHE.get(key);
+  });
+  return { rows, draft };
+}
+// 13th month and other benefits already treated as non-taxable earlier in the year (posted payroll only).
+function thirteenthEarlier(state, month) {
+  const year = month.slice(0, 4), out = new Map();
+  for (const run of state.runs.filter(r => r.status === 'posted' && r.start.startsWith(year) && r.start.slice(0, 7) < month))
+    for (const row of run.rows) out.set(row.employeeId, (out.get(row.employeeId) || 0) + (row.earnings?.thirteenth || 0));
+  return out;
+}
+const derive = r => {
+  const nonTaxable = r2(r.mweBasic + r.mwePremiums + r.thirteenth + r.deMinimis + r.contributions + r.otherNonTaxable);
+  // Not clamped at zero, so the employee figures always add up to the return (item 22 = 14 less 21); a negative
+  // taxable amount (non-taxable items above the month's pay, e.g. a partial draft month) is flagged for review.
+  const taxable = r2(r.compensation - nonTaxable);
+  return { ...r, nonTaxable, taxable, netTaxable: r2(taxable - r.notSubject), check: nonTaxable > r.compensation };
+};
+// Computed rows (before HR's typed figures) for every employee paid in the month.
+function computedRows(store, month) {
+  const state = store.read(), { rows, draft } = payrollRows(state, month), earlier = thirteenthEarlier(state, month), by = new Map();
+  for (const row of rows) {
+    const t = by.get(row.employeeId) || { employeeId: row.employeeId, name: row.employeeName, gross: 0, thirteenthPaid: 0, contributions: 0, tax: 0 };
+    const d = row.deductions || {};
+    t.gross += (row.gross || 0) - (d.absence || 0) - (d.undertime || 0);
+    t.thirteenthPaid += row.earnings?.thirteenth || 0;
+    t.contributions += (d.SSS || 0) + (d.PhilHealth || 0) + (d['Pag-IBIG'] || 0);
+    t.tax += d.tax || 0;
+    by.set(row.employeeId, t);
   }
-  return [...byEmployee.values()].map(l => ({ ...l, tin: profileOf(store, l.employeeId, 'government').tin || '', source: 'payroll', edited: false })).sort((a, b) => a.name.localeCompare(b.name));
+  const people = [...by.values()].map(t => {
+    const room = Math.max(0, THIRTEENTH_CAP - (earlier.get(t.employeeId) || 0)), thirteenth = r2(Math.min(t.thirteenthPaid, room));
+    const exempt = profile(store, t.employeeId, 'payroll').withholdingTax === 'exempt';
+    const base = { employeeId: t.employeeId, name: t.name, tin: profile(store, t.employeeId, 'government').tin || '', compensation: r2(t.gross), mweBasic: 0, mwePremiums: 0, thirteenth, deMinimis: 0, contributions: r2(t.contributions), otherNonTaxable: 0, notSubject: 0, taxWithheld: r2(t.tax), exempt };
+    const d = derive(base);
+    return exempt ? derive({ ...base, notSubject: d.taxable }) : d;   // exempt from withholding: taxable goes to item 23
+  });
+  return { people, draft, state };
 }
-const lineTaxable = l => Math.max(0, r2(l.gross - NON_TAXABLE.reduce((s, k) => s + (l[k] || 0), 0)));
-// Items 14-36 of the return from its lines and return-level amounts.
-export function computeItems(ret) {
-  const sum = k => r2(ret.lines.reduce((s, l) => s + (l[k] || 0), 0)), a = ret.amounts || {};
-  const i = { 14: sum('gross'), 15: sum('mweBasic'), 16: sum('mweOther'), 17: sum('thirteenth'), 18: sum('deMinimis'), 19: sum('contributions'), 20: sum('otherNonTaxable') };
-  i[21] = r2(i[15] + i[16] + i[17] + i[18] + i[19] + i[20]);
-  i[22] = Math.max(0, r2(i[14] - i[21]));
-  i[23] = sum('notSubject');
-  i[24] = Math.max(0, r2(i[22] - i[23]));
-  i[25] = sum('taxWithheld');
-  i[26] = r2(a.adjustment || 0);
-  i[27] = r2(i[25] + i[26]);
-  i[28] = r2(a.previouslyRemitted || 0);
-  i[29] = r2(a.otherRemittances || 0);
-  i[30] = r2(i[28] + i[29]);
-  i[31] = r2(i[27] - i[30]);
-  i[32] = r2(a.surcharge || 0); i[33] = r2(a.interest || 0); i[34] = r2(a.compromise || 0);
-  i[35] = r2(i[32] + i[33] + i[34]);
-  i[36] = r2(i[31] + i[35]);
+function edits(store, month) {
+  ensure(store);
+  return new Map(store.db.prepare('SELECT employee_id, data FROM bir1601c_edits WHERE month=?').all(month).map(r => [r.employee_id, JSON.parse(r.data)]));
+}
+// The month's rows: computed figures with HR's typed figures applied (typed rows for people not in payroll included).
+export function monthRows(store, month) {
+  const { people, draft, state } = computedRows(store, month), typed = edits(store, month), names = new Map(state.employees.map(e => [e.id, e.name]));
+  const zero = id => ({ employeeId: id, name: names.get(id) || id, tin: profile(store, id, 'government').tin || '', ...Object.fromEntries(ROW_FIELDS.map(k => [k, 0])), exempt: false, nonTaxable: 0, taxable: 0, netTaxable: 0 });
+  const all = new Map(people.map(p => [p.employeeId, p]));
+  for (const id of typed.keys()) if (!all.has(id)) all.set(id, zero(id));
+  const rows = [...all.values()].map(p => {
+    const e = typed.get(p.employeeId); if (!e) return p;
+    const values = Object.fromEntries(ROW_FIELDS.filter(k => e.values?.[k] != null).map(k => [k, r2(e.values[k])]));
+    return { ...derive({ ...p, ...values }), computed: Object.fromEntries(Object.keys(values).map(k => [k, p[k]])), edited: { by: e.by, at: e.at, reason: e.reason } };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  return { rows, draft };
+}
+const sum = (rows, k) => r2(rows.reduce((s, r) => s + (r[k] || 0), 0));
+// Part II items 14-36 from the rows and the return's own entries.
+export function items(rows, ret = {}) {
+  const v = k => r2(ret[k] || 0), i = {};
+  i[14] = sum(rows, 'compensation'); i[15] = sum(rows, 'mweBasic'); i[16] = sum(rows, 'mwePremiums'); i[17] = sum(rows, 'thirteenth'); i[18] = sum(rows, 'deMinimis'); i[19] = sum(rows, 'contributions'); i[20] = sum(rows, 'otherNonTaxable');
+  i[21] = r2(i[15] + i[16] + i[17] + i[18] + i[19] + i[20]); i[22] = r2(i[14] - i[21]); i[23] = sum(rows, 'notSubject'); i[24] = r2(i[22] - i[23]);
+  i[25] = sum(rows, 'taxWithheld'); i[26] = r2((ret.adjustmentSign === 'less' ? -1 : 1) * v('adjustment')); i[27] = r2(i[25] + i[26]);
+  i[28] = v('previouslyRemitted'); i[29] = v('otherRemittances'); i[30] = r2(i[28] + i[29]); i[31] = r2(i[27] - i[30]);
+  i[32] = v('surcharge'); i[33] = v('interest'); i[34] = v('compromise'); i[35] = r2(i[32] + i[33] + i[34]); i[36] = r2(i[31] + i[35]);
   return i;
 }
-export const ITEM_LABELS = { 14: 'Total amount of compensation', 15: 'Statutory minimum wage for minimum wage earners (MWEs)', 16: 'Holiday pay, overtime pay, night shift differential pay, hazard pay (for MWEs only)', 17: '13th month pay and other benefits', 18: 'De minimis benefits', 19: 'SSS, GSIS, PHIC, HDMF mandatory contributions & union dues (employee\'s share only)', 20: 'Other non-taxable compensation', 21: 'Total non-taxable compensation (sum of items 15 to 20)', 22: 'Total taxable compensation (item 14 less item 21)', 23: 'Less: taxable compensation not subject to withholding tax', 24: 'Net taxable compensation (item 22 less item 23)', 25: 'Total taxes withheld', 26: 'Add/(less): adjustment of taxes withheld from previous month/s', 27: 'Taxes withheld for remittance (sum of items 25 and 26)', 28: 'Less: tax remitted in return previously filed, if this is an amended return', 29: 'Other remittances made', 30: 'Total tax remittances made (sum of items 28 and 29)', 31: 'Tax still due / (over-remittance) (item 27 less item 30)', 32: 'Surcharge', 33: 'Interest', 34: 'Compromise', 35: 'Total penalties (sum of items 32 to 34)', 36: 'Total amount still due / (over-remittance) (sum of items 31 and 35)' };
+export const ITEM_LABELS = { 14: 'Total amount of compensation', 15: 'Statutory minimum wage (for minimum wage earners)', 16: 'Holiday pay, overtime pay, night shift differential, hazard pay (MWEs only)', 17: '13th month pay and other benefits', 18: 'De minimis benefits', 19: 'SSS, GSIS, PHIC, HDMF mandatory contributions & union dues (employee share)', 20: 'Other non-taxable compensation', 21: 'Total non-taxable compensation (15 to 20)', 22: 'Total taxable compensation (14 less 21)', 23: 'Less: taxable compensation not subject to withholding tax (₱250,000 & below a year, other than MWEs)', 24: 'Net taxable compensation (22 less 23)', 25: 'Total taxes withheld', 26: 'Add / (less): adjustment of taxes withheld from previous month(s)', 27: 'Taxes withheld for remittance (25 and 26)', 28: 'Less: tax remitted in return previously filed (amended return)', 29: 'Other remittances made', 30: 'Total tax remittances made (28 and 29)', 31: 'Tax still due / (over-remittance) (27 less 30)', 32: 'Surcharge', 33: 'Interest', 34: 'Compromise', 35: 'Total penalties (32 to 34)', 36: 'TOTAL AMOUNT STILL DUE / (over-remittance) (31 and 35)' };
 
-function decorate(store, ret, month) {
-  const payroll = payrollLines(store, month), payrollTax = r2(payroll.reduce((s, l) => s + l.taxWithheld, 0)), payrollGross = r2(payroll.reduce((s, l) => s + l.gross, 0));
-  const items = computeItems(ret), due = dueDate(month), today = localToday();
-  return { ...ret, lines: ret.lines.map(l => ({ ...l, taxable: lineTaxable(l) })), items, dueDate: due, overdue: ret.status !== 'filed' && today > due, reconciliation: { payrollGross, payrollTax, differenceGross: r2(items[14] - payrollGross), differenceTax: r2(items[25] - payrollTax) } };
+// Deadline: manual filing on the 10th of the following month; eFPS groups A-E on the 15th-11th; December by January 15.
+const EFPS_DAY = { A: 15, B: 14, C: 13, D: 12, E: 11 };
+export function dueDate(month, efpsGroup = '') {
+  const [y, m] = month.split('-').map(Number), next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  return `${next}-${String(m === 12 ? 15 : EFPS_DAY[efpsGroup] || 10).padStart(2, '0')}`;
 }
-const header = (store, previous) => ({ agentName: readSettings(store).company.name, tin: previous?.header?.tin || '', rdoCode: previous?.header?.rdoCode || '', category: previous?.header?.category || 'Private', amended: false });
-const previousReturn = (store, month) => { ensure(store); const row = store.db.prepare('SELECT data FROM bir_1601c WHERE month<? ORDER BY month DESC LIMIT 1').get(month); return row ? JSON.parse(row.data) : null; };
+const AGENT_DEFAULTS = { tin: '', rdo: '', name: '', address: '', zip: '', contact: '', email: '', category: 'Private', efpsGroup: '' };
+function agentInfo(store) { const saved = readReturn(store, 'agent') || {}, c = readSettings(store).company; return { ...AGENT_DEFAULTS, name: c.name || '', ...saved }; }
+const defaultReturn = month => ({ month, status: 'draft', amended: false, adjustment: 0, adjustmentSign: 'add', previouslyRemitted: 0, otherRemittances: 0, otherRemittancesNote: '', surcharge: 0, interest: 0, compromise: 0, taxRelief: false, sheets: 0, filedOn: '', confirmationNo: '', paymentDate: '', paymentRef: '', paymentChannel: '', remarks: '', history: [] });
 
-// The return for a month: the saved one, or an unsaved preview from posted payroll.
-export function birReturn(store, actor, monthInput) {
-  permit(actor, BIR_VIEW);
-  const month = monthSchema.parse(String(monthInput || ''));
-  const saved = load(store, month);
-  const ret = saved || { month, status: 'not started', header: header(store, previousReturn(store, month)), lines: payrollLines(store, month), amounts: {}, filing: {}, history: [] };
-  return { ...decorate(store, ret, month), saved: !!saved, canEdit: BIR_EDIT.includes(actor.role) && ret.status !== 'filed', canReopen: actor.role === 'admin' && ret.status === 'filed' };
+export function month1601c(store, actor, monthInput) {
+  permit(actor, VIEW_ROLES);
+  const month = MONTH.parse(monthInput || localToday().slice(0, 7));
+  ensure(store);
+  const ret = { ...defaultReturn(month), ...(readReturn(store, month) || {}) }, agent = agentInfo(store);
+  const live = ret.status === 'filed' && ret.snapshot ? { rows: ret.snapshot.rows, draft: false } : monthRows(store, month);
+  return { month, monthName: monthName(month), dueDate: dueDate(month, agent.efpsGroup), today: localToday(), agent, return: ret, rows: live.rows, draft: live.draft, items: ret.status === 'filed' && ret.snapshot ? ret.snapshot.items : items(live.rows, ret), canEdit: EDIT_ROLES.includes(actor.role) && ret.status !== 'filed', canReopen: actor.role === 'admin' && ret.status === 'filed', fields: ROW_FIELDS, labels: ROW_LABELS, itemLabels: ITEM_LABELS };
 }
-// Twelve months of a year with status, totals and due dates (monitoring).
-export function birYear(store, actor, yearInput) {
-  permit(actor, BIR_VIEW);
-  const year = /^\d{4}$/.test(String(yearInput)) ? String(yearInput) : localToday().slice(0, 4);
+// Monitoring: the 12 months of a year with status, deadline and amounts.
+export function year1601c(store, actor, yearInput) {
+  permit(actor, VIEW_ROLES);
+  const year = /^\d{4}$/.test(String(yearInput || '')) ? String(yearInput) : localToday().slice(0, 4), today = localToday(), agent = agentInfo(store);
+  ensure(store);
   return { year, months: Array.from({ length: 12 }, (_, i) => {
-    const r = birReturn(store, actor, `${year}-${String(i + 1).padStart(2, '0')}`);
-    return { month: r.month, status: r.status, saved: r.saved, employees: r.lines.length, compensation: r.items[14], taxable: r.items[22], taxWithheld: r.items[25], stillDue: r.items[36], dueDate: r.dueDate, overdue: r.overdue && r.lines.length > 0, dateFiled: r.filing?.dateFiled || '', referenceNo: r.filing?.referenceNo || '', payrollTax: r.reconciliation.payrollTax, differenceTax: r.reconciliation.differenceTax };
+    const month = `${year}-${String(i + 1).padStart(2, '0')}`, ret = readReturn(store, month), filed = ret?.status === 'filed', due = dueDate(month, agent.efpsGroup);
+    const future = month > today.slice(0, 7);
+    const figures = filed && ret.snapshot ? ret.snapshot.items : future ? null : items(monthRows(store, month).rows, ret || {});
+    return { month, name: monthName(month), due, status: filed ? 'filed' : future ? 'upcoming' : today > due ? 'overdue' : 'open', filedOn: ret?.filedOn || '', confirmationNo: ret?.confirmationNo || '', employees: filed ? ret.snapshot.rows.length : null, compensation: figures?.[14] ?? null, taxWithheld: figures?.[25] ?? null, amountDue: figures?.[36] ?? null, amended: !!ret?.amended };
   }) };
 }
 
-const money = z.number().min(-100_000_000).max(100_000_000);
-const lineSchema = z.object({ employeeId: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(200), tin: z.string().trim().max(30).default(''), ...Object.fromEntries(LINE_FIELDS.map(k => [k, z.number().min(0).max(100_000_000)])) }).passthrough();
-const saveSchema = z.object({
-  header: z.object({ agentName: z.string().trim().min(1).max(200), tin: z.string().trim().max(30).default(''), rdoCode: z.string().trim().max(10).default(''), category: z.enum(['Private', 'Government']).default('Private'), amended: z.boolean().default(false) }).strict(),
-  lines: z.array(lineSchema).max(2000),
-  amounts: z.object({ adjustment: money.default(0), previouslyRemitted: z.number().min(0).max(100_000_000).default(0), otherRemittances: z.number().min(0).max(100_000_000).default(0), surcharge: z.number().min(0).max(100_000_000).default(0), interest: z.number().min(0).max(100_000_000).default(0), compromise: z.number().min(0).max(100_000_000).default(0) }).strict(),
-  filing: z.object({ dateFiled: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default(''), referenceNo: z.string().trim().max(80).default(''), paymentDate: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default(''), amountPaid: z.number().min(0).max(100_000_000).default(0), bank: z.string().trim().max(120).default(''), notes: z.string().trim().max(2000).default('') }).strict().default({}),
+const rowSchema = z.object({ employeeId: z.string().trim().min(1).max(40), month: MONTH, values: z.object(Object.fromEntries(ROW_FIELDS.map(k => [k, amount.optional()]))).strict().default({}), reason: z.string().trim().max(500).default('') }).strict();
+const assertOpen = (store, month) => { if (readReturn(store, month)?.status === 'filed') throw new AppError('This month is already filed. An administrator must reopen it before figures change.'); };
+// Save (or clear, when every box is blank) one employee's figures for one month.
+export function saveRow(store, actor, input) {
+  permit(actor, EDIT_ROLES);
+  const v = rowSchema.parse(input), values = Object.fromEntries(ROW_FIELDS.filter(k => v.values[k] != null).map(k => [k, r2(v.values[k])]));
+  ensure(store);
+  return store.transaction(() => {
+    assertOpen(store, v.month);
+    if (!store.read().employees.some(e => e.id === v.employeeId)) throw new AppError('Employee not found.', 404);
+    const before = JSON.parse(store.db.prepare('SELECT data FROM bir1601c_edits WHERE employee_id=? AND month=?').get(v.employeeId, v.month)?.data ?? 'null');
+    if (!Object.keys(values).length) {
+      store.db.prepare('DELETE FROM bir1601c_edits WHERE employee_id=? AND month=?').run(v.employeeId, v.month);
+      store.log(actor, 'clear-1601c-row', 'bir1601c', `${v.employeeId}:${v.month}`, before, null);
+      return { cleared: true };
+    }
+    if (v.reason.length < 3) throw new AppError('Give the reason for the typed figures (e.g. de minimis benefits paid outside payroll).');
+    const after = { employeeId: v.employeeId, month: v.month, values, reason: v.reason, by: actor.username, at: new Date().toISOString() };
+    store.db.prepare('INSERT INTO bir1601c_edits VALUES(?,?,?) ON CONFLICT(employee_id, month) DO UPDATE SET data=excluded.data').run(v.employeeId, v.month, JSON.stringify(after));
+    store.log(actor, 'edit-1601c-row', 'bir1601c', `${v.employeeId}:${v.month}`, before, after);
+    return after;
+  });
+}
+const money = z.coerce.number().min(0, 'Amounts cannot be negative.').max(1e9);
+const returnSchema = z.object({
+  month: MONTH, amended: z.boolean().default(false), adjustment: money.default(0), adjustmentSign: z.enum(['add', 'less']).default('add'), previouslyRemitted: money.default(0), otherRemittances: money.default(0),
+  otherRemittancesNote: z.string().trim().max(200).default(''), surcharge: money.default(0), interest: money.default(0), compromise: money.default(0), taxRelief: z.boolean().default(false), sheets: z.coerce.number().int().min(0).max(99).default(0), remarks: z.string().trim().max(1000).default(''),
+  agent: z.object({ tin: z.string().trim().max(20).regex(/^[\d-]*$/, 'TIN: digits and dashes only.'), rdo: z.string().trim().max(5), name: z.string().trim().max(200), address: z.string().trim().max(300), zip: z.string().trim().max(10), contact: z.string().trim().max(40), email: z.union([z.literal(''), z.string().trim().email('Enter a valid email address.').max(120)]), category: z.enum(['Private', 'Government']), efpsGroup: z.enum(['', 'A', 'B', 'C', 'D', 'E']) }).strict().optional(),
 }).strict();
-
-// Encode / edit a draft. Lines must be one per employee; a line that differs from payroll is marked edited.
-export function saveBirReturn(store, actor, monthInput, input) {
-  permit(actor, BIR_EDIT);
-  const month = monthSchema.parse(String(monthInput || '')), v = saveSchema.parse(input);
-  const ids = v.lines.map(l => l.employeeId);
-  if (new Set(ids).size !== ids.length) throw new AppError('Each employee may appear only once in the return.');
-  for (const l of v.lines) if (l.notSubject > lineTaxable(l)) throw new AppError(`${l.name}: taxable compensation not subject to withholding is more than the taxable compensation.`);
+export function saveReturn(store, actor, input) {
+  permit(actor, EDIT_ROLES);
+  const v = returnSchema.parse(input);
+  ensure(store);
   return store.transaction(() => {
-    const before = load(store, month);
-    if (before?.status === 'filed') throw new AppError('This return is filed and locked. An administrator can reopen it for an amended return.', 409);
-    const fromPayroll = new Map(payrollLines(store, month).map(l => [l.employeeId, l]));
-    const lines = v.lines.map(l => { const p = fromPayroll.get(l.employeeId), clean = Object.fromEntries(LINE_FIELDS.map(k => [k, r2(l[k])])); return { employeeId: l.employeeId, name: l.name, tin: l.tin, ...clean, cutoffs: p?.cutoffs || [], source: p ? 'payroll' : 'manual', edited: !p || LINE_FIELDS.some(k => r2(p[k]) !== clean[k]) }; });
-    const now = new Date().toISOString();
-    const value = { month, status: 'draft', header: v.header, lines, amounts: v.amounts, filing: v.filing, createdAt: before?.createdAt || now, createdBy: before?.createdBy || actor.username, updatedAt: now, updatedBy: actor.username, history: [...(before?.history || []), { at: now, by: actor.username, action: before ? 'edited' : 'created' }] };
-    save(store, value);
-    store.log(actor, before ? 'update' : 'create', 'bir-1601c', month, before ? { items: computeItems(before), lines: before.lines.length } : null, { items: computeItems(value), lines: lines.length });
-    return birReturn(store, actor, month);
+    assertOpen(store, v.month);
+    const before = readReturn(store, v.month), base = { ...defaultReturn(v.month), ...(before || {}) };
+    const { agent, ...entries } = v, after = { ...base, ...entries, updatedBy: actor.username, updatedAt: new Date().toISOString() };
+    if (!after.amended && after.previouslyRemitted > 0) throw new AppError('Tax remitted in a previously filed return applies to amended returns only. Tick "Amended return".');
+    writeReturn(store, v.month, after);
+    if (agent) { const old = readReturn(store, 'agent'); writeReturn(store, 'agent', agent); store.log(actor, 'update-1601c-agent', 'bir1601c', 'agent', old, agent); }
+    store.log(actor, 'update-1601c-return', 'bir1601c', v.month, before && { ...before, snapshot: undefined }, { ...after, snapshot: undefined });
+    return after;
   });
 }
-// Replace the lines with a fresh copy of the posted payroll (keeps header, amounts and filing details).
-export function refreshFromPayroll(store, actor, monthInput) {
-  permit(actor, BIR_EDIT);
-  const month = monthSchema.parse(String(monthInput || ''));
-  const current = birReturn(store, actor, month);
-  if (current.status === 'filed') throw new AppError('This return is filed and locked.', 409);
-  const lines = payrollLines(store, month);
-  if (!lines.length) throw new AppError(`There is no posted payroll in ${monthName(month)} to copy.`);
-  return saveBirReturn(store, actor, month, { header: current.header, lines, amounts: current.amounts || {}, filing: current.filing || {} });
-}
-export function fileBirReturn(store, actor, monthInput, input) {
-  permit(actor, BIR_EDIT);
-  const month = monthSchema.parse(String(monthInput || ''));
-  const f = z.object({ dateFiled: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date filed.'), referenceNo: z.string().trim().min(3, 'Enter the eFPS / eBIRForms reference or confirmation number.').max(80), paymentDate: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default(''), amountPaid: z.number().min(0).max(100_000_000).default(0), bank: z.string().trim().max(120).default(''), notes: z.string().trim().max(2000).default('') }).strict().parse(input);
+const fileSchema = z.object({ month: MONTH, filedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date filed.'), confirmationNo: z.string().trim().min(3, 'Enter the filing reference (eFPS / eBIRForms confirmation or TRA number).').max(80), paymentDate: z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).default(''), paymentRef: z.string().trim().max(80).default(''), paymentChannel: z.string().trim().max(80).default('') }).strict();
+// Marks the month filed: the rows and Part II as they stand are kept as the filed return.
+export function fileReturn(store, actor, input) {
+  permit(actor, EDIT_ROLES);
+  const v = fileSchema.parse(input);
+  if (v.filedOn > localToday()) throw new AppError('The filing date cannot be in the future.');
+  ensure(store);
   return store.transaction(() => {
-    const ret = load(store, month);
-    if (!ret) throw new AppError('Save the return first.');
-    if (ret.status === 'filed') throw new AppError('This return is already filed.', 409);
-    if (!ret.header.tin) throw new AppError('Enter the withholding agent TIN before filing.');
-    if (!ret.lines.length) throw new AppError('The return has no employee lines.');
-    const now = new Date().toISOString(), value = { ...ret, status: 'filed', filing: { ...ret.filing, ...f }, filedAt: now, filedBy: actor.username, history: [...(ret.history || []), { at: now, by: actor.username, action: 'filed', detail: f.referenceNo }] };
-    save(store, value);
-    store.log(actor, 'file', 'bir-1601c', month, { status: ret.status }, { status: 'filed', ...f, items: computeItems(value) });
-    return birReturn(store, actor, month);
+    assertOpen(store, v.month);
+    const before = readReturn(store, v.month), base = { ...defaultReturn(v.month), ...(before || {}) }, { rows, draft } = monthRows(store, v.month);
+    if (draft && !rows.length) throw new AppError('There is no payroll or typed figure for this month yet.');
+    const at = new Date().toISOString(), snapshot = { rows, items: items(rows, base), fromDraftPayroll: draft, at };
+    const after = { ...base, ...v, status: 'filed', filedBy: actor.username, filedAt: at, snapshot, history: [...base.history, { at, by: actor.username, action: 'filed', note: v.confirmationNo }] };
+    writeReturn(store, v.month, after);
+    store.log(actor, 'file-1601c', 'bir1601c', v.month, null, { month: v.month, filedOn: v.filedOn, confirmationNo: v.confirmationNo, taxWithheld: snapshot.items[25], amountDue: snapshot.items[36], employees: rows.length });
+    return after;
   });
 }
-export function reopenBirReturn(store, actor, monthInput, input) {
+export function reopenReturn(store, actor, input) {
   permit(actor, ['admin']);
-  const month = monthSchema.parse(String(monthInput || ''));
-  const { reason } = z.object({ reason: z.string().trim().min(5, 'Give the reason for reopening (e.g. amended return).').max(500) }).strict().parse(input);
+  const v = z.object({ month: MONTH, reason: z.string().trim().min(5, 'Give the reason for reopening (e.g. amended return).').max(500) }).strict().parse(input);
+  ensure(store);
   return store.transaction(() => {
-    const ret = load(store, month);
-    if (ret?.status !== 'filed') throw new AppError('Only a filed return can be reopened.');
-    const now = new Date().toISOString(), items = computeItems(ret);
-    // An amended return starts with the tax already remitted under the original return (item 28).
-    const value = { ...ret, status: 'draft', header: { ...ret.header, amended: true }, amounts: { ...ret.amounts, previouslyRemitted: r2(items[27] - (ret.amounts?.otherRemittances || 0)) }, previousFiling: [...(ret.previousFiling || []), ret.filing], filing: {}, history: [...(ret.history || []), { at: now, by: actor.username, action: 'reopened', detail: reason }] };
-    save(store, value);
-    store.log(actor, 'reopen', 'bir-1601c', month, { status: 'filed' }, { status: 'draft', reason });
-    return birReturn(store, actor, month);
+    const before = readReturn(store, v.month);
+    if (before?.status !== 'filed') throw new AppError('This month is not filed.');
+    const at = new Date().toISOString(), after = { ...before, status: 'draft', previousFilings: [...(before.previousFilings || []), { filedOn: before.filedOn, confirmationNo: before.confirmationNo, snapshot: before.snapshot }], snapshot: null, history: [...before.history, { at, by: actor.username, action: 'reopened', note: v.reason }] };
+    writeReturn(store, v.month, after);
+    store.log(actor, 'reopen-1601c', 'bir1601c', v.month, { status: 'filed', confirmationNo: before.confirmationNo }, { status: 'draft', reason: v.reason });
+    return after;
   });
-}
-
-// ---------- Excel ----------
-// Month: employee lines with formulas (non-taxable, taxable, totals) and the return items linked to those totals.
-function monthSheets(ret) {
-  const head = ['#', 'Employee ID', 'Employee name', 'TIN', ...LINE_FIELDS.slice(0, 7).map(k => LINE_LABELS[k]), 'Total non-taxable', 'Taxable compensation', LINE_LABELS.notSubject, 'Net taxable', LINE_LABELS.taxWithheld, 'Source', 'Cutoffs'];
-  const first = 5, last = first + Math.max(ret.lines.length, 1) - 1;   // data rows (1-based)
-  const rows = [[{ v: `BIR Form 1601-C · ${monthName(ret.month)}`, s: 'title' }], [{ v: `${ret.header.agentName} · TIN ${ret.header.tin || '—'} · RDO ${ret.header.rdoCode || '—'} · Status: ${ret.status}${ret.header.amended ? ' (amended)' : ''}`, s: 'note' }], [{ v: `Due ${ret.dueDate}${ret.filing?.dateFiled ? ` · Filed ${ret.filing.dateFiled} · Ref ${ret.filing.referenceNo}` : ''}`, s: 'note' }], head];
-  ret.lines.forEach((l, i) => {
-    const n = first + i;
-    rows.push([i + 1, l.employeeId, l.name, l.tin, l.gross, l.mweBasic, l.mweOther, l.thirteenth, l.deMinimis, l.contributions, l.otherNonTaxable, { f: `SUM(F${n}:K${n})` }, { f: `MAX(0,E${n}-L${n})` }, l.notSubject, { f: `MAX(0,M${n}-N${n})` }, l.taxWithheld, l.source === 'payroll' ? (l.edited ? 'Payroll (edited)' : 'Payroll') : 'Encoded', (l.cutoffs || []).join('; ')]);
-  });
-  if (!ret.lines.length) rows.push(['', '', 'No employee lines', '']);
-  const total = last + 1, sum = c => ({ f: `SUM(${c}${first}:${c}${last})`, s: 'total' });
-  rows.push(['', '', { v: 'TOTAL', s: 'bold' }, '', ...['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'].map(sum), '', '']);
-  const E = `'Employees'!`, a = ret.amounts || {};
-  const itemRows = [[{ v: `BIR Form 1601-C · ${monthName(ret.month)} · Return items`, s: 'title' }], [{ v: 'Items 14-25 come from the Employees sheet totals; change the employee lines there.', s: 'note' }], ['Item', 'Description', 'Amount']];
-  const ref = { 14: `${E}E${total}`, 15: `${E}F${total}`, 16: `${E}G${total}`, 17: `${E}H${total}`, 18: `${E}I${total}`, 19: `${E}J${total}`, 20: `${E}K${total}` };
-  const at = item => `C${item - 14 + 4}`;
-  const formula = { ...ref, 21: `SUM(${at(15)}:${at(20)})`, 22: `MAX(0,${at(14)}-${at(21)})`, 23: `${E}N${total}`, 24: `MAX(0,${at(22)}-${at(23)})`, 25: `${E}P${total}`, 27: `${at(25)}+${at(26)}`, 30: `${at(28)}+${at(29)}`, 31: `${at(27)}-${at(30)}`, 35: `SUM(${at(32)}:${at(34)})`, 36: `${at(31)}+${at(35)}` };
-  const typed = { 26: a.adjustment || 0, 28: a.previouslyRemitted || 0, 29: a.otherRemittances || 0, 32: a.surcharge || 0, 33: a.interest || 0, 34: a.compromise || 0 };
-  for (let item = 14; item <= 36; item++) itemRows.push([item, ITEM_LABELS[item], item in typed ? typed[item] : { f: formula[item], s: [21, 22, 24, 27, 31, 36].includes(item) ? 'total' : undefined }]);
-  return [
-    { name: 'Employees', rows, header: 3, money: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], widths: [5, 14, 30, 16, 14, 14, 14, 14, 12, 16, 14, 14, 14, 14, 14, 14, 16, 34] },
-    { name: 'Return items', rows: itemRows, header: 2, money: [2], widths: [8, 78, 18] },
-  ];
-}
-export function birMonthWorkbook(store, actor, month) {
-  const ret = birReturn(store, actor, month);
-  store.log(actor, 'export', 'bir-1601c', ret.month, null, { format: 'xlsx', status: ret.status });
-  return { filename: `BIR-1601C-${ret.month}.xlsx`, body: formattedWorkbook(monthSheets(ret)) };
-}
-// Year: one summary row per month (with totals) and each month's employee lines on its own sheet.
-export function birYearWorkbook(store, actor, year) {
-  const y = birYear(store, actor, year), rows = [[{ v: `BIR Form 1601-C · ${y.year} monitoring`, s: 'title' }], [{ v: `${readSettings(store).company.name} · Generated ${localToday()}`, s: 'note' }], ['Taxable month', 'Status', 'Employees', 'Total compensation (14)', 'Total taxable (22)', 'Taxes withheld (25)', 'Amount still due (36)', 'Payroll tax withheld', 'Difference vs payroll', 'Due date', 'Date filed', 'Reference no.']];
-  y.months.forEach((m, i) => { const n = i + 4; rows.push([monthName(m.month), m.status, m.employees, m.compensation, m.taxable, m.taxWithheld, m.stillDue, m.payrollTax, { f: `F${n}-H${n}` }, m.dueDate, m.dateFiled, m.referenceNo]); });
-  rows.push([{ v: 'TOTAL', s: 'bold' }, '', { f: 'SUM(C4:C15)', s: 'bold' }, ...['D', 'E', 'F', 'G', 'H', 'I'].map(c => ({ f: `SUM(${c}4:${c}15)`, s: 'total' })), '', '', '']);
-  const sheets = [{ name: `Summary ${y.year}`, rows, header: 2, money: [3, 4, 5, 6, 7, 8], widths: [18, 12, 11, 20, 18, 18, 18, 18, 18, 12, 12, 22] }];
-  for (const m of y.months.filter(x => x.employees)) {
-    const [emp] = monthSheets(birReturn(store, actor, m.month));
-    sheets.push({ ...emp, name: MONTHS[Number(m.month.slice(5)) - 1] });
-  }
-  store.log(actor, 'export', 'bir-1601c', y.year, null, { format: 'xlsx', year: y.year });
-  return { filename: `BIR-1601C-${y.year}.xlsx`, body: formattedWorkbook(sheets) };
 }

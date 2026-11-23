@@ -24,15 +24,17 @@ const withOtherDays = s => {
   return s;
 };
 
-test('early arrival is paid by default but not when paid time starts at the schedule', () => {
+test('overtime runs from the scheduled time out to the actual time out: early arrival is not overtime (Nov 20, 2026)', () => {
   const actual = state(); actual.attendance = [day(MONDAY)];
-  assert.ok(run(actual).earnings.regularOT > 0, 'control: 07:00 start counts two early hours as overtime');
+  assert.equal(run(actual).earnings.regularOT, 0, '07:00 start, out at the scheduled 6 PM: no overtime');
+  const late = state(); late.attendance = [day(MONDAY, { timeIn: '09:30', timeOut: '20:00' })];
+  assert.equal(run(late).earnings.regularOT, round(2 * 22000 / 26 / 8 * 1.25), 'late start, out at 8 PM: the 2 hours after 6 PM are overtime');
   const fromSchedule = state({ paidFrom: 'schedule' }); fromSchedule.attendance = [day(MONDAY)];
   const row = run(fromSchedule);
   assert.equal(row.earnings.regularOT, 0, 'no overtime for leaving at the scheduled end');
   assert.equal(row.undertimeAmount, 0);
   fromSchedule.attendance = [day(MONDAY, { timeOut: '20:00' })];
-  assert.equal(run(fromSchedule).earnings.regularOT, round(2 * 22000 / 22 / 8 * 1.25), 'overtime only after 6 PM');
+  assert.equal(run(fromSchedule).earnings.regularOT, round(2 * 22000 / 26 / 8 * 1.25), 'overtime only after 6 PM (daily = 22,000 ÷ 26 working days in September)');
 });
 
 test('a rest-day swap is paid like a normal day without an absence deduction', () => {
@@ -44,3 +46,10 @@ test('a rest-day swap is paid like a normal day without an absence deduction', (
 });
 
 function round(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
+
+test('arriving before the schedule earns nothing extra on a worked holiday (premium on the regular hours only)', () => {
+  const s = state(); s.holidays = [{ id: 'h', date: MONDAY, kind: 'special', name: 'Test special day', basis: 'Test' }];
+  const early = { ...s, attendance: [day(MONDAY, { timeIn: '07:00' })] }, onTime = { ...s, attendance: [day(MONDAY, { timeIn: '09:00' })] };
+  assert.equal(run(early).earnings.specialHoliday, run(onTime).earnings.specialHoliday, '2 early hours add no holiday premium');
+  assert.equal(run(early).earnings.regularOT, 0);
+});

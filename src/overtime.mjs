@@ -1,11 +1,13 @@
 // Overtime filing. Employees may clock out before or after their schedule; staying late is not overtime by itself.
 // Under the default policy ("separate" in Rules & rates) overtime is paid only when the employee files it and HR
 // approves it, and never for more hours than attendance shows beyond the schedule. Unfiled extra time is not paid.
-// Pending filings block posting so they are decided first. Every step is audited and notified.
+// Pending filings do not block posting: they are carried over (src/overtime-carry.mjs) and paid by the next payroll
+// once approved; paid filings are locked. Every step is audited and notified.
 import { randomUUID } from 'node:crypto';
+import { payDateFor } from './paydays.mjs';
 import { z } from 'zod';
 import { AppError, permit } from './service.mjs';
-import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK } from './engine.mjs';
+import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK, monthlyDailyRate } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 
 const HR = ['admin', 'hr'];
@@ -51,7 +53,7 @@ function nightEstimate(state, employee, filing) {
   if (!rule || !employee?.coveredNSD || !filing.nightHours) return { nightHours: filing.nightHours || 0, approvedNightHours: 0, nightPay: 0 };
   const pay = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'payroll');
   const sched = state.employeeProfiles?.find(p => p.employeeId === employee.id && p.section === 'attendance');
-  const daily = pay?.dailyRate ?? (employee.monthlySalary || 0) / rule.dailyDivisor, hourly = pay?.hourlyRate ?? daily / (sched?.hoursPerDay || rule.hourlyDivisor);   // 12-hour drivers: ÷ 12
+  const daily = pay?.dailyRate ?? monthlyDailyRate(employee, filing.date), hourly = pay?.hourlyRate ?? daily / (sched?.hoursPerDay || rule.hourlyDivisor);   // 12-hour drivers: ÷ 12
   // Overtime minutes are counted from the end of the schedule, so a partial approval drops the latest (night) minutes first.
   const approvedNightHours = filing.status === 'approved' ? Math.max(0, round(filing.nightHours - Math.max(0, filing.hours - filing.approvedHours))) : 0;
   const hours = filing.status === 'approved' ? approvedNightHours : filing.nightHours;
@@ -93,7 +95,7 @@ export function fileOvertime(store, actor, input) {
     if (!employee) throw new AppError('Employee not found.', 404);
     if (!employee.coveredOT) throw new AppError('This employee is not covered for overtime pay (exempt). Use an approved additional-pay entry instead.');
     if (v.date > addDays(localToday(), 31)) throw new AppError('Overtime can be filed at most 31 days in advance.');
-    if (posted(state, employeeId, v.date)) throw new AppError('Payroll for that date is already posted. Contact HR or Payroll.');
+    // A date whose payroll is posted may still be filed: the overtime is carried over to the next payroll once approved.
     if (self) checkAttachment(store, employeeId, v.documentId);
     const now = new Date().toISOString();
     const value = { id: randomUUID(), employeeId, date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', breakMinutes: v.breakMinutes, nightHours: v.startTime ? Math.min(v.hours, nightHoursBetween(v.startTime, v.endTime)) : 0, hours: v.hours, reason: v.reason, documentId: self ? v.documentId : '', filedBy: actor.username, filedAt: now, status: self ? 'pending' : 'approved', approvedHours: self ? 0 : v.hours, adjustReason: '', decidedBy: self ? '' : actor.username, decidedAt: self ? '' : now, remarks: self ? '' : 'Recorded by HR', history: [historyEntry(actor, self ? 'submitted' : 'recorded and approved by HR')] };
@@ -114,7 +116,7 @@ export function editOvertime(store, actor, id, input) {
     if (!o || o.employeeId !== actor.employeeId) throw new AppError('Overtime application not found.', 404);
     if (o.status !== 'pending') throw new AppError('Only pending applications can be edited. Ask HR to change a decided application.');
     if (v.date > addDays(localToday(), 31)) throw new AppError('Overtime can be filed at most 31 days in advance.');
-    if (posted(state, o.employeeId, v.date)) throw new AppError('Payroll for that date is already posted. Contact HR or Payroll.');
+    if (o.paidRunId) throw new AppError(`This overtime was already paid (${o.paidCutoff}). Contact HR or Payroll.`);
     checkAttachment(store, o.employeeId, v.documentId);
     const changed = { date: v.date, startTime: v.startTime || '', endTime: v.endTime || '', breakMinutes: v.breakMinutes, hours: v.hours, nightHours: v.startTime ? Math.min(v.hours, nightHoursBetween(v.startTime, v.endTime)) : 0, reason: v.reason, documentId: v.documentId };
     const note = `was ${describe(o)}, ${o.hours} h`;
@@ -138,7 +140,9 @@ export function cancelOvertime(store, actor, id) {
     return after;
   });
 }
-const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default('') }).strict();
+const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours: z.number().min(0.25).max(16).optional(), remarks: z.string().trim().max(500).default(''), adjustReason: z.string().trim().max(500).default(''), overrideReason: z.string().trim().max(500).default(''), changeReason: z.string().trim().max(500).default('') }).strict();
+// The day's attendance is valid for overtime when HR approved it or it is System Validated (original punches).
+export const attendanceValid = (state, record) => !!record && (record.approved || (state.validation?.systemValidated || []).includes(record.id) || (state.validation?.correctionValidated || []).includes(record.id));
 export function decideOvertime(store, actor, id, input) {
   permit(actor, HR);
   const v = decisionSchema.parse(input);
@@ -147,14 +151,27 @@ export function decideOvertime(store, actor, id, input) {
     const o = rowsOf(store, 'WHERE id=?', id)[0];
     if (!o) throw new AppError('Overtime filing not found.', 404);
     if (!['pending', 'approved', 'rejected'].includes(o.status)) throw new AppError('This filing was cancelled.');
-    if (posted(store.read(), o.employeeId, o.date)) throw new AppError('Payroll for that date is posted; the decision is locked. Reverse the payroll to correct it.');
+    // Only overtime already paid is locked; a decision on a posted date is carried over to the next payroll.
+    if (o.paidRunId) throw new AppError(`This overtime was already paid in the ${o.paidCutoff} payroll; the decision is locked. Reverse that payroll to correct it.`);
+    // Changing a decision already made needs its own reason (the earlier decision stays in the history).
+    if (['approved', 'rejected'].includes(o.status) && v.changeReason.length < 5) throw new AppError(`This overtime was already ${o.status}. Give the reason for changing the decision (at least 5 characters).`);
     const hours = v.decision === 'approve' ? round(v.hours ?? o.hours) : 0;
     if (hours > o.hours) throw new AppError(`Approved hours cannot exceed the ${o.hours} h filed.`);
     // Approving other hours than filed is an adjustment and needs its own reason.
     const adjusted = v.decision === 'approve' && hours !== o.hours;
     if (adjusted && v.adjustReason.length < 3) throw new AppError(`Give the reason for approving ${hours} h instead of the ${o.hours} h filed.`);
-    const note = v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks;
-    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
+    // Approval needs valid attendance and payable hours; otherwise only with a documented override.
+    let override = null;
+    if (v.decision === 'approve') {
+      const state = store.read(), employee = state.employees.find(e => e.id === o.employeeId);
+      const record = state.attendance.find(a => a.employeeId === o.employeeId && a.date === o.date && a.status === 'present');
+      const check = employee ? overtimeCheck(state, employee, { ...o, status: 'approved', approvedHours: hours }) : { payableHours: 0 };
+      const problems = [!record ? 'there is no attendance record for that day' : !attendanceValid(state, record) ? 'the day\'s attendance is not approved or validated yet' : '', check.payableHours <= 0 ? 'the attendance shows 0 payable overtime hours in the filed period' : ''].filter(Boolean);
+      if (problems.length && v.overrideReason.length < 10) throw new AppError(`Overtime cannot be approved because ${problems.join(' and ')}. Approve the attendance first, or give an override reason (at least 10 characters).`);
+      if (problems.length) override = { reason: v.overrideReason, problems, payableHours: check.payableHours, by: actor.username, at: new Date().toISOString() };
+    }
+    const note = `${v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks}${override ? ` · Override: ${v.overrideReason}` : ''}${v.changeReason && ['approved', 'rejected'].includes(o.status) ? ` · Changed from ${o.status}: ${v.changeReason}` : ''}`;
+    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', override, remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
     put(store, after); store.log(actor, v.decision, 'overtime', o.employeeId, o, after);
     store.notify(o.employeeId, `Your overtime for ${o.date} was ${v.decision === 'approve' ? `approved (${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''})` : 'not approved'}${v.remarks ? `: ${v.remarks}` : ''}.`);
     return after;
@@ -163,7 +180,7 @@ export function decideOvertime(store, actor, id, input) {
 export function myOvertime(store, actor) {
   if (actor.role !== 'employee') throw new AppError('Only employees have their own overtime filings.', 403);
   const state = store.read(), employee = state.employees.find(e => e.id === actor.employeeId);
-  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId).map(o => ({ ...o, ...nightEstimate(state, employee, o) }));
+  return rowsOf(store, 'WHERE employee_id=?', actor.employeeId).map(o => ({ ...o, ...(o.paidCutoff && !o.paidPayDate ? { paidPayDate: payDateFor(...o.paidCutoff.split(' to ')) } : {}), ...nightEstimate(state, employee, o), carriedOver: !o.paidRunId && ['pending', 'approved'].includes(o.status) && posted(state, o.employeeId, o.date) }));
 }
 // Attendance against one filing, counted the way payroll counts it: minutes after the scheduled day that fall inside
 // the filed period (unpaid attendance breaks excluded), paid in whole 30-minute blocks up to the approved hours.
@@ -179,9 +196,15 @@ export function overtimeCheck(state, employee, o, today = localToday()) {
   const worked = attendanceMinutes(withScheduledLunch(record, sched, profile, rest));
   const minutes = profile?.paidFrom === 'schedule' && !rest ? worked.filter(m => m >= scheduled) : worked;
   const [s, e] = overtimeWindow(o);
-  const inPeriod = sched.flexible ? 0 : minutes.filter((m, i) => i >= sched.hoursPerDay * 60 && m >= s && m < e).length;
+  // Same rule as payroll: overtime starts at the scheduled time out (rest days: after the regular hours worked).
+  const hm = t => { const [hh, mm] = String(t || '').split(':').map(Number); return hh * 60 + (mm || 0); }, from0 = hm(record.scheduledIn || sched.start || '09:00');
+  let end0 = sched.end ? hm(sched.end) : null;
+  if (end0 !== null && end0 <= from0) end0 += 1440;
+  const lateMin = Math.max(0, (stamp(`${o.date}T${record.timeIn}`) - stamp(`${o.date}T${record.scheduledIn}`)) / 60000);
+  const otFrom = rest || end0 === null ? null : stamp(`${o.date}T00:00`) + (end0 + Math.min(record.offsetMinutes || 0, lateMin)) * 60000;
+  const inPeriod = sched.flexible ? 0 : minutes.filter((m, i) => (otFrom === null ? i >= sched.hoursPerDay * 60 : m >= otFrom) && m >= s && m < e).length;
   const workedInPeriod = round(inPeriod / 60), payableHours = round(Math.floor(Math.min(inPeriod, Math.round(target * 60)) / OT_BLOCK) * OT_BLOCK / 60);
-  if (!record.approved) flags.push('Attendance not approved yet');
+  if (!attendanceValid(state, record)) flags.push('Attendance not approved yet');
   if (['pending', 'approved'].includes(o.status) && target - workedInPeriod >= OT_BLOCK / 60) flags.push(`Worked ${workedInPeriod} h within the period, ${round(target - workedInPeriod)} h less than ${o.status === 'approved' ? 'approved' : 'filed'}`);
   return { workedInPeriod, payableHours, flags };
 }
@@ -191,6 +214,6 @@ export function overtimeQueue(store, actor) {
   const state = store.read(), people = new Map(state.employees.map(e => [e.id, e]));
   return rowsOf(store).slice(0, 500).map(o => {
     const e = people.get(o.employeeId), record = state.attendance.find(a => a.employeeId === o.employeeId && a.date === o.date);
-    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceApproved: !!record?.approved, locked: posted(state, o.employeeId, o.date) };
+    return { ...o, ...nightEstimate(state, e, o), ...(e ? overtimeCheck(state, e, o) : { workedInPeriod: 0, payableHours: 0, flags: [] }), name: e?.name || o.employeeId, worked: e && record ? overtimeHours(state, e, record) : null, attendanceApproved: !!record?.approved, locked: !!o.paidRunId, carriedOver: !o.paidRunId && ['pending', 'approved'].includes(o.status) && posted(state, o.employeeId, o.date) };
   }).sort((a, b) => (a.status === 'pending') === (b.status === 'pending') ? b.date.localeCompare(a.date) : a.status === 'pending' ? -1 : 1);
 }

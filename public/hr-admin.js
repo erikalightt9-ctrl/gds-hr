@@ -55,7 +55,7 @@ export function createAdmin(ctx) {
     const s = settings, preview = `${[s.idFormat.prefix, s.idFormat.includeYear ? ctx.today().slice(0, 4) : ''].filter(Boolean).join('-')}${s.idFormat.prefix || s.idFormat.includeYear ? '-' : ''}${'1'.padStart(s.idFormat.digits, '0')}`;
     const field = (label, name, value, extra = '') => `<label class="field">${label}<input name="${name}" value="${esc(value ?? '')}" ${extra}></label>`;
     shell(heading('Settings', 'Manage company details, attendance access, and employee records.', `<span class="st-admin">${sIcon('lock')}System administrators only</span>`) +
-      `<nav class="st-tabs">${[['st-wifi', 'Office Wi-Fi'], ['st-phones', 'Phone sign-in'], ['st-feishu', 'Feishu alerts'], ['st-company', 'Company details'], ['st-numbers', 'Employee numbers'], ['st-requirements', 'Document requirements']].map(([id, label], i) => `<button type="button" data-st-jump="${id}" class="${i === 0 ? 'active' : ''}">${label}</button>`).join('')}</nav>
+      `<nav class="st-tabs">${[['st-wifi', 'Office Wi-Fi'], ['st-phones', 'Phone sign-in'], ['st-feishu', 'Feishu alerts'], ['st-feishu-login', 'Feishu sign-in'], ['st-company', 'Company details'], ['st-numbers', 'Employee numbers'], ['st-requirements', 'Document requirements']].map(([id, label], i) => `<button type="button" data-st-jump="${id}" class="${i === 0 ? 'active' : ''}">${label}</button>`).join('')}</nav>
       <form id="settings-form">
       <section class="panel st-panel" id="st-company"><div class="st-head"><h2>Company details</h2></div><div class="panel-body">
         <h3 class="st-group">Company identity</h3><div class="form-grid">${field('Company name', 'company.name', s.company.name, 'required maxlength="120"')}${field('System title', 'company.systemTitle', s.company.systemTitle, 'required maxlength="120"')}</div>
@@ -90,8 +90,10 @@ export function createAdmin(ctx) {
       <div class="st-footer"><span>Changes apply across your organization.</span><span><button type="button" data-st-cancel>Cancel</button><button class="primary">Save settings</button></span></div></form>`);
     const form = document.querySelector('#settings-form');
     officeWifi(form);
+    letterheads(form);
     phoneSignIn(form);
     feishuAlerts(form);
+    feishuSignIn(form);
     document.querySelector('.st-tabs').addEventListener('click', event => {
       const b = event.target.closest('[data-st-jump]'); if (!b) return;
       document.querySelectorAll('.st-tabs button').forEach(x => x.classList.toggle('active', x === b));
@@ -172,7 +174,38 @@ export function createAdmin(ctx) {
     });
     try { draw(await ctx.api('/integrations/feishu')); } catch (error) { box.innerHTML = `<div class="panel-body"><p class="muted">Feishu alerts are available after the HR server restarts. (${ctx.esc(error.message)})</p></div>`; }
   }
+  // Sign in with Feishu (src/feishu-login.mjs): the GDS HR System app's App ID and App Secret; people link their own
+  // Feishu account in Account & security. Administrator accounts keep password sign-in only.
+  async function feishuSignIn(form) {
+    const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-feishu-login'; form.before(box);
+    const draw = (d, message = '', ok = true) => {
+      box.innerHTML = `<div class="st-head"><h2>Feishu sign-in</h2><span class="st-chip ${d.enabled ? 'ok' : ''}"><i></i>${d.enabled ? 'On' : d.configured ? 'Off' : 'Not set up'}</span></div><div class="panel-body">
+        <p class="legend">Employees and HR staff can sign in with their Feishu account after linking it once in Account &amp; security (while signed in with their password). The HR system keeps every record; Feishu only confirms who the person is. Administrator accounts keep password sign-in. Linked accounts: <strong>${d.linked}</strong>.</p>
+        <ol class="legend"><li>Feishu Developer Console → <strong>Create custom app</strong> (name it GDS HR System).</li><li>Security settings → Redirect URL: add <code>${ctx.esc(d.callbackUrl)}</code></li><li>Copy the <strong>App ID</strong> and <strong>App Secret</strong> from Credentials &amp; Basic Info and type them here (never in a chat or screenshot). Publish the app version, then tick On and Save.</li></ol>
+        <form data-fl-form class="form-grid">
+          <label class="field">App ID<input name="appId" autocomplete="off" value="${ctx.esc(d.appId)}" placeholder="cli_…"></label>
+          <label class="field">App Secret<input name="appSecret" type="password" autocomplete="off" placeholder="${d.hasSecret ? 'Saved — leave blank to keep' : 'Not saved yet'}"></label>
+          <label class="field">Feishu or Lark<select name="domain"><option value="feishu" ${d.domain === 'feishu' ? 'selected' : ''}>Feishu (feishu.cn)</option><option value="lark" ${d.domain === 'lark' ? 'selected' : ''}>Lark (larksuite.com)</option></select></label>
+          <label class="field check"><input type="checkbox" name="enabled" ${d.enabled ? 'checked' : ''}> On: show “Sign in with Feishu”</label>
+          <div class="actions"><button class="primary">Save</button>${d.configured ? '<button type="button" class="danger" data-fl-remove>Remove</button>' : ''}</div>
+        </form>
+        ${message ? `<p class="${ok ? 'notice success' : 'form-error'}" role="status">${ctx.esc(message)}</p>` : ''}</div>`;
+    };
+    const run = async (body, done) => { try { draw(await ctx.api('/integrations/feishu-login', body), done); } catch (error) { draw(await ctx.api('/integrations/feishu-login'), error.message, false); } };
+    box.addEventListener('submit', event => { event.preventDefault(); const f = event.target; run({ appId: f.elements.appId.value, appSecret: f.elements.appSecret.value, domain: f.elements.domain.value, enabled: f.elements.enabled.checked }, 'Saved.'); });
+    box.addEventListener('click', event => { if (event.target.closest('[data-fl-remove]') && window.confirm('Remove Feishu sign-in? The button disappears; linked accounts stay linked for when it is set up again.')) run({ remove: true }, 'Removed.'); });
+    try { draw(await ctx.api('/integrations/feishu-login')); } catch (error) { box.innerHTML = `<div class="panel-body"><p class="muted">Feishu sign-in settings are available after the HR server restarts. (${ctx.esc(error.message)})</p></div>`; }
+  }
   // Office Wi-Fi for time in / out: recognised by the office's internet address. Add it while on the office Wi-Fi.
+  // Letterhead per issuing company (memo PDFs): a JPEG uploaded here replaces the built-in image.
+  async function letterheads(form) {
+    if (ctx.context?.()?.roleLabel && !/Administrator|HR Manager/.test(ctx.context().roleLabel)) return;
+    const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-letterheads'; form.before(box);
+    const draw = list => { box.innerHTML = `<div class="st-head"><h2>Company letterheads (memo PDFs)</h2></div><div class="panel-body"><p class="legend">Each issuing company prints its own letterhead at the top of memo PDFs. Upload a JPEG (up to 3 MB, wide banner). Already issued memos keep the PDF they were issued with.</p>
+      <ul class="plain-list">${list.map(l => `<li><strong>${ctx.esc(l.company)}</strong> · ${l.uploaded ? `uploaded by ${ctx.esc(l.uploaded.by)} ${ctx.esc(l.uploaded.at.slice(0, 10))}` : l.builtIn ? 'built-in letterhead' : 'none yet: the company name is printed'} <label class="button small">Upload JPEG<input type="file" accept="image/jpeg" data-letterhead="${ctx.esc(l.company)}" hidden></label></li>`).join('')}</ul></div>`; };
+    box.addEventListener('change', async event => { const input = event.target.closest('[data-letterhead]'); const file = input?.files?.[0]; if (!file) return; try { const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => no(new Error('Unable to read the file.')); r.readAsDataURL(file); }); draw(await ctx.api('/hr/letterheads', { company: input.dataset.letterhead, data })); ctx.toast('Letterhead saved.'); } catch (error) { ctx.toast(error.message); } });
+    try { draw(await ctx.api('/hr/letterheads')); } catch { box.remove(); }
+  }
   async function officeWifi(form) {
     const box = document.createElement('section'); box.className = 'panel st-panel'; box.id = 'st-wifi'; form.before(box);
     const draw = d => {
@@ -182,7 +215,8 @@ export function createAdmin(ctx) {
         <label class="field st-ip">This device's network address<input value="${ctx.esc(d.current || 'unknown')}" readonly></label>
         ${d.networks.length ? `<ul class="plain-list office-net-list">${d.networks.map(n => `<li><span><strong>${ctx.esc(n.label)}</strong> · ${ctx.esc(n.ip)} <small>added by ${ctx.esc(n.addedBy)}</small>${n.ip === d.current ? ' <span class="badge">✓ This network</span>' : ''}</span><button type="button" class="small danger" data-net-remove="${ctx.esc(n.ip)}">Remove</button></li>`).join('')}</ul>` : `<p class="st-warn">${sIcon('info')}No office network saved. Time in / out is currently unrestricted.</p>`}
         ${here ? '' : '<div class="st-wifi-add"><button type="button" class="primary" data-net-add>Add this network as office Wi-Fi</button><small>Connect to office Wi-Fi before adding. Add the network again if your public address changes.</small></div>'}
-        <p class="form-error hidden" role="alert" data-net-error></p></div>`;
+        <div data-net-suggest></div><p class="form-error hidden" role="alert" data-net-error></p></div>`;
+      ctx.api('/office-networks/suggestions').then(list => { const s = box.querySelector('[data-net-suggest]'); if (s && list.length) s.innerHTML = `<div class="notice"><strong>Suggested office addresses</strong> — seen on office time in / out confirmed by the office GPS area but not on the saved Wi-Fi (the office may have a second internet line):<ul class="plain-list">${list.map(x => `<li>${ctx.esc(x.ip)} · ${x.punches} time in / out by ${x.employees} employees, last ${ctx.esc(x.last)} <button type="button" class="small primary" data-net-suggested="${ctx.esc(x.ip)}">Add as office Wi-Fi</button></li>`).join('')}</ul></div>`; }).catch(() => {});
     };
     const show = async body => {
       try { draw(await ctx.api('/office-networks', body)); }
@@ -191,6 +225,7 @@ export function createAdmin(ctx) {
     box.addEventListener('click', event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-net-add')) show({ action: 'add-current', label: 'Office Wi-Fi' });
+      if (b.dataset.netSuggested && window.confirm(`Add ${b.dataset.netSuggested} as office Wi-Fi? Time in / out from it will count as verified office attendance.`)) show({ action: 'add-suggested', ip: b.dataset.netSuggested, label: 'Office Wi-Fi (second line)' });
       if (b.dataset.netRemove && window.confirm(`Remove ${b.dataset.netRemove}? Time in from that network will need Off-site work.`)) show({ action: 'remove', ip: b.dataset.netRemove });
     });
     await show();
