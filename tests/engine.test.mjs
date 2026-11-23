@@ -48,12 +48,12 @@ test('rest-day night work adds only differential, with no double-counting', () =
   assert.equal(row.earnings.restDay, 886.36);
   assert.equal(row.earnings.nsd, 88.64);
 });
-test('unworked special holiday defaults unpaid; policy can pay it', () => {
+test('a special day recorded off follows the rate: 0 is unpaid, 1 stays paid', () => {
   const s = fixture(); s.holidays = [{ id: 'h1', date: '2026-09-01', name: 'Test holiday', kind: 'special', basis: 'Test proclamation' }];
   s.attendance = [attend('2026-09-01', { status: 'off', timeIn: '', timeOut: '' })]; withOtherDays(s);
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 1363.64);
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 1363.64, 'statutory floor: recorded off is not paid');
   s.rules[0].specialUnworked = 1;
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 0);
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].absenceAmount, 0, 'company rate pays the day');
 });
 test('loan deduction is capped to balance and respects its schedule', () => {
   const s = fixture(); s.loans = [{ id: 'l1', employeeId: 'EMP-001', type: 'Salary Loan', reference: 'L1', original: 50000, balance: 1200, monthlyAmortization: 5000, perPayroll: 2500, startDate: '2026-01-01', endDate: '2026-12-31', terms: 20, remainingTerms: 1, authorized: true }];
@@ -143,11 +143,15 @@ test('invalid shift duration, overlapping breaks and invalid dates are rejected'
   assert.throws(() => workMinutes('2026-09-01T08:00', '2026-09-01T17:00', [{ start: '2026-09-01T12:00', end: '2026-09-01T13:00' }, { start: '2026-09-01T12:30', end: '2026-09-01T14:00' }]));
   assert.throws(() => calculatePayroll(completeState(), '2026-02-30', '2026-03-15'));
 });
-test('unworked holiday on a rest day needs an eligibility record before posting', () => {
+test('an unworked regular holiday on a rest day is paid when the preceding workday was worked', () => {
   const s = completeState(); s.holidays = [{ id: 'h', date: '2026-09-06', kind: 'regular' }];
-  assert.ok(calculatePayroll(s, '2026-09-01', '2026-09-15').reviewItems.some(i => i.date === '2026-09-06' && i.issue === 'missing-punch'), 'held for HR review');
-  s.attendance.push(attend('2026-09-06', { status: 'off', timeIn: '', timeOut: '' }));
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday, 1363.64);
+  const first = calculatePayroll(s, '2026-09-01', '2026-09-15');
+  assert.equal(first.rows[0].earnings.regularHoliday, 1363.64, 'Friday Sep 4 was worked; Saturday is a rest day');
+  assert.ok(!first.rows[0].reviewItems.some(i => i.date === '2026-09-06'), 'the preceding-workday rule prices it; no eligibility record');
+  s.attendance.push(attend('2026-09-06', { status: 'off', timeIn: '', timeOut: '', holidayEligible: false }));
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday || 0, 0, 'HR withheld it');
+  s.attendance = s.attendance.filter(a => a.date !== '2026-09-06' && a.date !== '2026-09-04');
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday || 0, 0, 'absent the preceding workday');
 });
 
 test('scheduled workdays with no time in and no time out are absent (HR rule, Nov 23, 2026): not credited, nothing held', () => {
