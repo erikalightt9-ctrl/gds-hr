@@ -28,7 +28,9 @@ test('the month is split between the two cutoffs and shown beside each cutoff co
   }
 });
 
-test('Nov 2 (a holiday on a workday) is a scheduled working day and a credited Holiday Day', () => {
+test('Nov 2 stays a scheduled working day; an unworked special day is not a credited holiday day', () => {
   const r = row(state([0]), '2026-11-01', '2026-11-15');
-  assert.equal(r.workingDays, 12); assert.equal(r.holidayDays, 1);
+  assert.equal(r.workingDays, 12); assert.equal(r.holidayDays, 0);
+  const paid = state([0]); paid.rules[0].specialUnworked = 1;
+  assert.equal(row(paid, '2026-11-01', '2026-11-15').holidayDays, 1, 'company policy pays it');
 });

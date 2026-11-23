@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { date as dateSchema } from './schema.mjs';
+import { qualifiesForUnworkedHoliday } from './holiday-rates.mjs';
 
 // Computed amounts an authorized user may override. Loans (balances), contributions (own approval flow) and the
 // 13th month (annual ledger) are not overridable here.
@@ -73,6 +74,8 @@ export function classification(state, employee, date) {
   const kind = state.holidays.find(h => h.date === date)?.kind || 'ordinary';
   return kind === 'ordinary' ? (isRest(employee, date) ? 'rest' : 'ordinary') : `${kind}${isRest(employee, date) ? '-rest' : ''}`;
 }
+// DOLE Handbook 2024: a regular holiday on a rest day is 200% × 130%, a double regular holiday on a rest day
+// is 300% × 130%. Overtime on those days multiplies again by premiumOT (30% of the hourly rate on that day).
 export function dayRate(kind, r) {
   return ({ ordinary: 1, rest: r.rest, special: r.special, 'special-rest': r.specialRest,
     regular: r.regular, 'regular-rest': r.regular * r.rest, double: r.double,
@@ -304,6 +307,23 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     trace.push({ component: 'basic', side: 'earnings', amount: baseline, formula: dailyPaid || perDayWorked ? `${daily} × ${scheduled.length} scheduled workdays (${dailyPaid ? 'daily-paid' : 'paid per day worked; days not worked are taken off below'})` : `${e.monthlySalary} × ${factor} × ${scheduled.length}/${allScheduled.length || 1} scheduled days employed`, sourceId: e.id, sourceKind: 'employees', date: start });
     // Manual entry for exactly this cutoff: "replace" skips attendance; "add" pays the typed hours on top of it.
     const manual = (state.payrollInputs || []).find(i => i.employeeId === e.id && i.start === start && i.end === end) || null;
+    // Unworked holiday: special / other use the rules rate (0 = no work, no pay). Regular and double use that rate
+    // only when the employee qualifies under the DOLE preceding-workday rule. countBase keeps the 13th-month
+    // treatment the absent-record path already had; a day with no attendance record stays in basic as before.
+    const priceUnworked = (record, d, rest, kind, countBase) => {
+      const holiday = kind.replace('-rest', '');
+      if (!['special', 'regular', 'double', 'other'].includes(holiday)) return false;
+      let paidRate = Number(r[`${holiday}Unworked`]) || 0;
+      // No attendance on a special day that is already the employee's rest day does not create a paid day.
+      // Company policy (special unworked above 0) keeps a scheduled workday, or a rest day HR marked off.
+      if ((holiday === 'special' || holiday === 'other') && rest && !record) paidRate = 0;
+      if ((holiday === 'regular' || holiday === 'double') && !qualifiesForUnworkedHoliday(state, e, d, attendanceProfile)) paidRate = 0;
+      const coveredBase = rest ? 0 : 1;
+      if (paidRate < coveredBase) add(deductions, 'absence', adjDaily * (coveredBase - paidRate), `${round(adjDaily)} × (${coveredBase} salary credit − ${paidRate} unworked policy)`, record, d);
+      if (paidRate > coveredBase) add(earnings, holiday === 'special' ? 'specialHoliday' : 'regularHoliday', daily * (paidRate - coveredBase), `${round(daily)} × (${paidRate} unworked policy − ${coveredBase} salary credit)`, record, d);
+      if (countBase) holidayBase += daily * Math.min(coveredBase, paidRate);
+      return true;
+    };
     for (const d of manual?.mode === 'replace' ? [] : employed) {
       // Real time: a time-in with no time out yet counts as a scheduled workday (lateness from the actual time in);
       // it stays flagged until the time out is recorded.
@@ -349,10 +369,13 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         continue;
       }
       if (!record) {
-        if ((!rest || kind !== 'rest') && !perDayWorked) blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
+        const holidayKind = kind.replace('-rest', ''), holidayDay = ['special', 'regular', 'double', 'other'].includes(holidayKind);
+        // A holiday the unworked rule prices is not "missing attendance". A future day still blocks posting.
+        if ((!rest || kind !== 'rest') && !perDayWorked && !(holidayDay && !notYet(d))) blockers.push(`${prefix}: Missing attendance / approved leave on ${d}.`);
         // No attendance on a scheduled workday: the day is not credited (no pay) until attendance or a leave is recorded.
         if (!rest && kind === 'ordinary' && !notYet(d)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day with no attendance record (not credited)`, null, d);
         else if (!rest && notYet(d)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
+        else if (holidayDay && !notYet(d)) priceUnworked(null, d, rest, kind, false);
         continue;
       }
       // Unapproved attendance is still counted (real time) but must be approved before the payroll is final.
@@ -362,14 +385,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         if (record.status === 'rest-day-swap') { add(earnings, 'basic', 0, `Rest-day swap (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
         // Offset: the day is not worked because the hours were worked on another day; paid, not absent.
         if (record.status === 'offset') { daysPresent++; presentOrLeave.add(d); creditedMinutes += scheduleOn(e, attendanceProfile, d, r).hoursPerDay * 60; add(earnings, 'basic', 0, `Offset (${record.explanation}); salary already included in cutoff basic`, record, d); continue; }
-        const holiday = kind.replace('-rest', '');
-        if (['special', 'regular', 'double', 'other'].includes(holiday)) {
-          const paidRate = (holiday === 'special' || holiday === 'other' || (e.coveredHoliday && record.holidayEligible)) ? r[`${holiday}Unworked`] : 0;
-          const coveredBase = rest ? 0 : 1;
-          if (paidRate < coveredBase) add(deductions, 'absence', adjDaily * (coveredBase - paidRate), `${round(adjDaily)} × (${coveredBase} salary credit − ${paidRate} unworked policy)`, record, d);
-          if (paidRate > coveredBase) add(earnings, holiday === 'special' ? 'specialHoliday' : 'regularHoliday', daily * (paidRate - coveredBase), `${daily} × (${paidRate} unworked policy − ${coveredBase} salary credit)`, record, d);
-          holidayBase += daily * Math.min(coveredBase, paidRate);
-        } else if (!rest) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 absent day`, record, d);
+        if (!priceUnworked(record, d, rest, kind, true) && !rest) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 absent day`, record, d);
         continue;
       }
       daysPresent++; presentOrLeave.add(d);
@@ -457,6 +473,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
           if (component === 'basic') additionalBasic += amount;
         }
         else if (!g.ot) add(earnings, 'basic', 0, `${round(hours)} regular hours; salary already included in cutoff basic`, record, g.date, round(hours), 1);
+        // Night differential stays a separate 10% of the rate for that hour (holiday and overtime included), added on top.
         if (g.night && e.coveredNSD) add(earnings, 'nsd', hours * hourly * fullRate * r.nsd, `${round(hours)} night h × ${round(hourly)} × ${mult}${g.ot ? ` × ${overtime}` : ''} × ${r.nsd} differential only`, record, g.date, round(hours), fullRate * (1 + r.nsd));
       }
     }
@@ -649,8 +666,9 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
     // Holidays (from the holiday calendar) on this employee's scheduled workdays in the cutoff: a holiday on a rest day is
     // not counted, and a Sunday holiday moves only when a substitute date is in the calendar. Each one credited is one
     // day's pay inside basic (daily rate, or monthly ÷ 26 for monthly-paid), adjusted by any "unworked policy" line on
-    // that date (recorded absent = the Rules & rates share); a holiday worked also earns its holiday-work premium in the
-    // holiday earnings lines. Leave days and HR-typed days or basic (manual replace / basic override) are not split out.
+    // that date (no attendance, or recorded absent = the Rules & rates share; a regular holiday also needs the
+    // preceding-workday condition); a holiday worked also earns its holiday-work premium in the holiday earnings
+    // lines. Leave days and HR-typed days or basic (manual replace / basic override) are not split out.
     const typedDays = manual?.mode === 'replace' || basicOverridden, rateForDay = dailyPaid || perDayWorked ? daily : adjDaily;
     const holidays = scheduled.map(d => ({ d, h: state.holidays.find(x => x.date === d && x.kind !== 'ordinary') })).filter(x => x.h)
       .map(({ d, h }) => {

@@ -1,9 +1,8 @@
-export const handbook = 'https://nwpc.dole.gov.ph/wp-content/uploads/2024/11/Workers-Statutory-Monetary-Benefits-Handbook-2024-Edition.pdf';
+import { DOLE_HANDBOOK, DOLE_HOLIDAY_RATES } from './holiday-rates.mjs';
+export const handbook = DOLE_HANDBOOK;
 export const defaultRules = {
-  id: 'initial', effectiveDate: '2026-01-01', basis: `Starting policy template; verify employee coverage and current issuances. ${handbook}`,
-  approvedBy: '', updatedAt: '', ordinaryOT: 1.25, rest: 1.3, premiumOT: 1.3,
-  special: 1.3, specialRest: 1.5, regular: 2, double: 3, nsd: 0.1,
-  specialUnworked: 0, regularUnworked: 1, doubleUnworked: 2, other: 1, otherUnworked: 0,
+  id: 'initial', effectiveDate: '2026-01-01', basis: `DOLE holiday pay (Handbook on Workers' Statutory Monetary Benefits, 2024). Verify employee coverage and current issuances before approving. ${handbook}`,
+  approvedBy: '', updatedAt: '', ...DOLE_HOLIDAY_RATES,
   normalHours: 8, dailyDivisor: 22, hourlyDivisor: 8, workdaysPerMonth: 22,
   graceMinutes: 15, lateThresholdMinutes: 5, deductLate: true, deductUndertime: true, cutoff: 'semi-monthly', overtimeApproval: 'separate',
   includeHolidayBaseIn13th: false, contributionsReviewed: false,

@@ -19,19 +19,20 @@ function state({ basis = 'daily', worked = [] } = {}) {
 const run = s => calculatePayroll(s, '2026-11-01', '2026-11-15').rows[0];
 const round2 = v => Math.round(v * 100) / 100;
 
-test('Nov 1-15, Sunday rest: Nov 1 (Sunday) counts 0, Nov 2 counts 1 holiday day; days present = regular workdays attended', () => {
+test('Nov 1-15, Sunday rest: Nov 1 (Sunday) counts 0; unworked Nov 2 (special) is no work, no pay', () => {
   for (const basis of ['daily', 'monthly']) {
     const row = run(state({ basis }));
-    assert.equal(row.holidayDays, 1, basis);
+    assert.equal(row.holidayDays, 0, basis);
     assert.equal(row.regularDays, 11, `${basis}: 11 regular workdays attended`);
-    assert.deepEqual(row.holidays.map(h => [h.date, h.worked]), [['2026-11-02', false]], 'Nov 1 is a Sunday rest day');
+    assert.deepEqual(row.holidays.map(h => [h.date, h.worked, h.pay]), [['2026-11-02', false, 0]], 'Nov 1 is a Sunday rest day');
   }
 });
 
-test('holiday pay is one day, paid once: regular basic + holiday pay = the cutoff basic', () => {
-  const daily = holidaySplit(run(state()));
+test('company policy can still pay an unworked special day (specialUnworked 1), once, inside the half-month', () => {
+  const pay = s => { s.rules[0].specialUnworked = 1; return run(s); };
+  const daily = holidaySplit(pay(state()));
   assert.deepEqual([daily.holidayPay, daily.regularBasic], [755, 11 * 755], 'daily-paid: 11 days worked + Nov 2');
-  const row = run(state({ basis: 'monthly' })), monthly = holidaySplit(row);
+  const row = pay(state({ basis: 'monthly' })), monthly = holidaySplit(row);
   assert.equal(monthly.holidayPay, 755, 'monthly-paid: 19,630 ÷ 26');
   assert.equal(round2(monthly.regularBasic + monthly.holidayPay), row.earnings.basic, 'reconciled with the fixed half-month');
   assert.equal(row.earnings.basic, 9815, 'the half-month itself is unchanged');
@@ -41,7 +42,9 @@ test('a holiday falling on Sunday moves only when a substitute date is configure
   const s = state(); s.holidays.push({ date: '2026-11-03', kind: 'special', name: "All Saints' Day (substitute)" });
   s.attendance = s.attendance.filter(a => a.date !== '2026-11-03');
   const row = run(s);
-  assert.equal(row.holidayDays, 2, 'Nov 2 + the configured substitute Nov 3'); assert.equal(row.regularDays, 10);
+  assert.equal(row.holidayDays, 0, 'both special days are unworked'); assert.equal(row.regularDays, 10);
+  s.rules[0].specialUnworked = 1;
+  assert.equal(run(s).holidayDays, 2, 'company policy pays Nov 2 and the substitute Nov 3');
 });
 
 test('a worked holiday keeps its attendance and gets the holiday-work rate, shown under holiday pay', () => {
@@ -81,10 +84,11 @@ test('a work-from-home "present without time in" day is credited only once the d
   assert.ok(!midway.trace.some(t => t.date === '2026-11-07' && /Absence/.test(t.formula)), 'the past Saturday Nov 7 is still present');
 });
 
-test('a holiday that has not arrived yet is not paid in advance', () => {
-  const s = state(); s.holidays.push({ date: '2026-11-13', kind: 'special', name: 'Future holiday' });
+test('a regular holiday that has not arrived yet is not paid in advance', () => {
+  const s = state(); s.holidays.push({ date: '2026-11-13', kind: 'regular', name: 'Future regular holiday' });
   s.attendance = s.attendance.filter(a => a.date !== '2026-11-13');
   const before = run({ ...s, asOf: '2026-11-12' }), after = run({ ...s, asOf: '2026-11-13' });
-  assert.equal(before.holidayDays, 1, 'only Nov 2'); assert.equal(after.holidayDays, 2, 'Nov 13 once it arrives');
+  assert.equal(before.holidayDays, 0, 'Nov 2 special is unpaid; Nov 13 has not arrived');
+  assert.equal(after.holidayDays, 1, 'Nov 13 once it arrives, because Nov 12 was worked');
   assert.equal(round2(after.earnings.basic - before.earnings.basic), 755);
 });

@@ -143,11 +143,15 @@ test('invalid shift duration, overlapping breaks and invalid dates are rejected'
   assert.throws(() => workMinutes('2026-09-01T08:00', '2026-09-01T17:00', [{ start: '2026-09-01T12:00', end: '2026-09-01T13:00' }, { start: '2026-09-01T12:30', end: '2026-09-01T14:00' }]));
   assert.throws(() => calculatePayroll(completeState(), '2026-02-30', '2026-03-15'));
 });
-test('unworked holiday on a rest day needs an eligibility record before posting', () => {
+test('an unworked regular holiday on a rest day is paid when the preceding workday was worked', () => {
   const s = completeState(); s.holidays = [{ id: 'h', date: '2026-09-06', kind: 'regular' }];
-  assert.ok(calculatePayroll(s, '2026-09-01', '2026-09-15').blockers.some(b => b.includes('2026-09-06')));
-  s.attendance.push(attend('2026-09-06', { status: 'off', timeIn: '', timeOut: '' }));
-  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday, 1363.64);
+  const first = calculatePayroll(s, '2026-09-01', '2026-09-15');
+  assert.equal(first.rows[0].earnings.regularHoliday, 1363.64, 'Friday Sep 4 was worked; Saturday is a rest day');
+  assert.ok(!first.blockers.some(b => b.includes('2026-09-06')));
+  s.attendance.push(attend('2026-09-06', { status: 'off', timeIn: '', timeOut: '', holidayEligible: false }));
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday || 0, 0, 'HR withheld it');
+  s.attendance = s.attendance.filter(a => a.date !== '2026-09-06' && a.date !== '2026-09-04');
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday || 0, 0, 'absent the preceding workday');
 });
 
 test('scheduled workdays with no attendance are not credited: 0 days worked means 0 basic pay, and the payroll stays flagged', () => {
