@@ -1204,27 +1204,31 @@ const DOTS_ICON = '<svg class="fp-ico" viewBox="0 0 48 48" aria-hidden="true">' 
 function quickSignIn() {
   const form = document.querySelector('#login-form'), who = lastUser.get(); if (!form || auth?.setup) return;
   const fp = form.querySelector('[data-fingerprint-login]'), labelOf = name => form.elements[name]?.closest('label');
+  // Username box (filled in with the account last used on this device), then two tiles: Biometrics Login and Password.
+  // The password box and Sign in appear only after Password is tapped; under the tiles, two plain links.
   const tiles = document.createElement('div'); tiles.className = 'login-tiles';
+  if (fp) { fp.querySelector('span').textContent = 'Biometrics Login'; tiles.append(fp); }
+  const pw = document.createElement('button'); pw.type = 'button'; pw.className = 'fingerprint-login'; pw.dataset.passwordLogin = ''; pw.innerHTML = `${DOTS_ICON}<span>Password</span>`; tiles.append(pw);
   const otpLabel = labelOf('otp'), recovery = form.querySelector('[data-recovery]');
   const links = document.createElement('div'); links.className = 'login-links';
   const otpLink = document.createElement('button'); otpLink.type = 'button'; otpLink.className = 'login-link'; otpLink.textContent = 'Authenticator code';
   otpLink.onclick = () => { otpLabel?.classList.remove('hidden'); form.elements.otp?.focus(); };
-  otpLabel?.classList.add('hidden');
   links.append(otpLink); if (recovery) { recovery.className = 'login-link'; links.append(recovery); }
-  const placeLinks = () => tiles.after(links);
-  if (fp) { fp.querySelector('span').textContent = 'Biometrics Login'; tiles.append(fp); }
-  if (!who) {
-    // First visit on this phone: both tiles; Password moves to the username and password boxes (filled in from the next visit).
-    const pw0 = document.createElement('button'); pw0.type = 'button'; pw0.className = 'fingerprint-login'; pw0.innerHTML = `${DOTS_ICON}<span>Password</span>`; pw0.onclick = () => { const u = form.elements.username; (u.value ? form.elements.password : u).focus(); }; tiles.append(pw0);
-    form.querySelector('button.primary').after(tiles); placeLinks(); return;
+  const hide = [labelOf('password'), otpLabel, form.querySelector('button.primary')];
+  hide.forEach(el => el?.classList.add('hidden')); otpLabel?.classList.add('hidden');
+  let after = labelOf('username');
+  if (who) {
+    form.elements.username.value = who;
+    const hello = document.createElement('p'); hello.className = 'login-who'; hello.innerHTML = '<button type="button" class="link-button" data-switch-account>Not you? Clear the username</button>';
+    after.after(hello); after = hello;
+    hello.querySelector('[data-switch-account]').onclick = () => { lastUser.set(''); renderLogin(); };
   }
-  const pw = document.createElement('button'); pw.type = 'button'; pw.className = 'fingerprint-login'; pw.dataset.passwordLogin = ''; pw.innerHTML = `${DOTS_ICON}<span>Password</span>`; tiles.append(pw);
-  form.elements.username.value = who;   // shown filled in the username box (editable: another person types their own)
-  const hide = ['password'].map(labelOf).concat(form.querySelector('button.primary')); hide.forEach(el => el?.classList.add('hidden'));
-  const hello = document.createElement('p'); hello.className = 'login-who'; hello.innerHTML = '<button type="button" class="link-button" data-switch-account>Not you? Clear the username</button>';
-  labelOf('username').after(hello); hide[0].before(tiles); placeLinks();
-  pw.onclick = () => { hide.forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); hide.at(-1).after(links); form.elements.password.focus(); };
-  hello.querySelector('[data-switch-account]').onclick = () => { lastUser.set(''); renderLogin(); };
+  after.after(tiles); tiles.after(links);
+  form.elements.username.addEventListener('keydown', event => { if (event.key === 'Enter' && hide[0]?.classList.contains('hidden')) { event.preventDefault(); pw.click(); } });
+  pw.onclick = () => {
+    if (!form.elements.username.value.trim()) { form.elements.username.focus(); form.elements.username.reportValidity?.(); return; }
+    [hide[0], hide[2]].forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); hide[2].after(links); form.elements.password.focus();
+  };
 }
 function renderLogin() {
   messagesSignedOut();
