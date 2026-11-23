@@ -35,6 +35,8 @@ document.addEventListener('focusout', event => {
 const money = n => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(n || 0);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+// The last account signed in on this device (username only); see quickSignIn().
+const lastUser = { get: () => { try { return localStorage.getItem('hr-last-user') || ''; } catch { return ''; } }, set: v => { try { if (v) localStorage.setItem('hr-last-user', v); else localStorage.removeItem('hr-last-user'); } catch { /* storage unavailable: full form */ } } };
 const label = key => key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
 const uid = () => crypto.randomUUID();
 let auth, state, balances = [], page = 'dashboard', hrContext = null, currentRun = null, filter = '', subtab = 'requests';
@@ -745,6 +747,7 @@ function renderForcedPassword() {
 }
 function render() {
   if (!auth?.user) { renderLogin(); return; }
+  if (auth.user.username && lastUser.get() !== auth.user.username) lastUser.set(auth.user.username);   // remembered for the next sign-in on this device
   if (auth.user.mustChangePassword) { renderForcedPassword(); return; }
   if (auth.user.mfaRequired) { renderForcedMfa(); return; }
   offerInstall();
@@ -1196,7 +1199,6 @@ function edit(kind, id, preset = {}) {
 }
 // The last account that signed in on this device (username only, this browser only); the sign-in page then asks only
 // for the fingerprint or the password, like a phone banking app. "Not you?" forgets it.
-const lastUser = { get: () => { try { return localStorage.getItem('hr-last-user') || ''; } catch { return ''; } }, set: v => { try { if (v) localStorage.setItem('hr-last-user', v); else localStorage.removeItem('hr-last-user'); } catch { /* storage unavailable: full form */ } } };
 const DOTS_ICON = '<svg class="fp-ico" viewBox="0 0 48 48" aria-hidden="true">' + [[12, 12], [24, 12], [36, 12], [12, 24], [24, 24], [36, 24], [12, 36], [24, 36], [36, 36]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="4.2" fill="none" stroke="currentColor" stroke-width="2.6" opacity="${[1, 4, 6, 8].includes(i) ? 1 : 0.55}"/>`).join('') + '</svg>';
 // Two tiles under the remembered account: Biometrics Login and Password (password field shown on tap).
 function quickSignIn() {
@@ -1204,7 +1206,11 @@ function quickSignIn() {
   const fp = form.querySelector('[data-fingerprint-login]'), labelOf = name => form.elements[name]?.closest('label');
   const tiles = document.createElement('div'); tiles.className = 'login-tiles';
   if (fp) { fp.querySelector('span').textContent = 'Biometrics Login'; tiles.append(fp); }
-  if (!who) { if (fp) form.querySelector('button.primary').after(tiles); return; }
+  if (!who) {
+    // First visit on this phone: both tiles; Password moves to the username and password boxes (filled in from the next visit).
+    const pw0 = document.createElement('button'); pw0.type = 'button'; pw0.className = 'fingerprint-login'; pw0.innerHTML = `${DOTS_ICON}<span>Password</span>`; pw0.onclick = () => { const u = form.elements.username; (u.value ? form.elements.password : u).focus(); }; tiles.append(pw0);
+    form.querySelector('button.primary').after(tiles); return;
+  }
   const pw = document.createElement('button'); pw.type = 'button'; pw.className = 'fingerprint-login'; pw.dataset.passwordLogin = ''; pw.innerHTML = `${DOTS_ICON}<span>Password</span>`; tiles.append(pw);
   form.elements.username.value = who; labelOf('username').classList.add('hidden');
   const hide = ['password', 'otp'].map(labelOf).concat(form.querySelector('button.primary')); hide.forEach(el => el?.classList.add('hidden'));
