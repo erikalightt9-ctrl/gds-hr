@@ -1989,3 +1989,5 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   #login-form .login-mascot + .login-links{margin-top:10px}
   .welcome-login .welcome-scene, .welcome-login .welcome-motto{display:none}
 }
+
+.acc-actions{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}

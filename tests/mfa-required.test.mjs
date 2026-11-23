@@ -23,3 +23,20 @@ test('two-factor sign-in is required for HR, Payroll and Management accounts; th
     assert.deepEqual(roles.find(r => r.role === 'hr'), { ...roles.find(r => r.role === 'hr'), accounts: 1, withMfa: 0, mfaRequired: true });
   } finally { store.close(); }
 });
+
+test('accounts: disable signs the person out and blocks sign-in; the last active Administrator cannot be disabled', async () => {
+  const { setDisabled } = await import('../src/auth.mjs');
+  const store = new Store(':memory:'); store.write(completeState());
+  try {
+    const boss = await addUser(store, { username: 'only.admin', password: 'Fictional-pass-123', role: 'admin' });
+    const staff = await addUser(store, { username: 'some.maker', password: 'Fictional-pass-123', role: 'maker' }, boss);
+    const actor = { ...boss, username: 'only.admin', role: 'admin' };
+    setDisabled(store, actor, staff.id, true);
+    await assert.rejects(() => login(store, 'some.maker', 'Fictional-pass-123', 't:x'), /Incorrect|disabled/i);
+    setDisabled(store, actor, staff.id, false);
+    assert.ok((await login(store, 'some.maker', 'Fictional-pass-123', 't:y')).user);
+    const second = await addUser(store, { username: 'other.admin', password: 'Fictional-pass-123', role: 'admin' }, boss);
+    setDisabled(store, { ...second, role: 'admin' }, boss.id, true);
+    assert.throws(() => setDisabled(store, actor, second.id, true), /last active System Administrator/);
+  } finally { store.close(); }
+});

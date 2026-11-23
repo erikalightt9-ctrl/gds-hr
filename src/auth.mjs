@@ -226,7 +226,9 @@ export async function redeemPasswordReset(store, token, password) {
 export function setDisabled(store, actor, id, disabled) {
   permit(actor, ['admin']);
   if (id === actor.id) throw new AppError('You cannot disable your own account.');
-  if (!store.db.prepare('SELECT id FROM users WHERE id=?').get(id)) throw new AppError('User not found.', 404);
+  const user = store.db.prepare('SELECT id, role FROM users WHERE id=?').get(id);
+  if (!user) throw new AppError('User not found.', 404);
+  if (disabled && user.role === 'admin' && store.db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) AND id<>?").get(id).n === 0) throw new AppError('This is the last active System Administrator account and cannot be disabled.');
   store.transaction(() => {
     store.db.prepare('UPDATE users SET disabled=? WHERE id=?').run(disabled ? 1 : 0, id);
     store.db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);
