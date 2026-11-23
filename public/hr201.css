@@ -2000,3 +2000,10 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .gen-pass{display:flex;gap:8px;align-items:center}
 .gen-pass input{flex:1;min-width:0}
 .gen-pass button{width:auto;margin:0;white-space:nowrap}
+
+/* HR password reset hand-over: a link to copy (Nov 23, 2026). */
+.reset-handover{max-width:min(620px,calc(100vw - 80px));box-sizing:border-box;position:sticky;left:0;border:1px solid #ead9b0;background:#fffaf0;border-radius:10px;padding:12px 14px;margin-top:10px}
+.reset-handover .reset-link{display:flex;gap:8px;align-items:center}
+.reset-handover .reset-link input{flex:1;min-width:0;font-size:12px}
+.reset-handover .reset-link button{width:auto;margin:0;white-space:nowrap}
+.reset-handover details{margin-top:8px}.reset-handover code{word-break:break-all;font-size:11px}

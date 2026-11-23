@@ -642,7 +642,10 @@ export function createPortal(ctx) {
         }
         if (button.dataset.userReset) {
           const result = await api(`/users/${button.dataset.userReset}/reset`, { resetMfa: container.querySelector('#reset-mfa').checked });
-          container.querySelector('#reset-result').innerHTML = `<p>${esc(result.message)}</p><code>${esc(result.token)}</code><p>Expires: ${stamp(result.expires)}</p>`;
+          const link = `${location.origin}/#reset=${result.token}`, who = button.closest('tr')?.querySelector('td')?.textContent.trim() || 'the employee';
+          container.querySelector('#reset-result').innerHTML = `<div class="reset-handover"><p><strong>Send this link to ${esc(who)}</strong> (privately, e.g. a direct Feishu message). They open it and choose their own password. It works once and expires at ${stamp(result.expires)}.</p><div class="reset-link"><input readonly value="${esc(link)}" aria-label="Reset link"><button type="button" class="primary small" data-copy-reset>Copy link</button></div><details><summary>Or give the code instead</summary><p class="legend">On the sign-in page: Forgot password? → Have a reset code from HR?</p><code>${esc(result.token)}</code></details></div>`;
+          const copy = container.querySelector('[data-copy-reset]');
+          copy.onclick = async () => { const input = copy.previousElementSibling; try { await navigator.clipboard.writeText(input.value); copy.textContent = 'Copied ✓'; } catch { input.select(); toast('Select the link and copy it.'); } };
         }
         if (button.dataset.userEmail) {
           const email = window.prompt('Email for password reset links (leave blank to use the employee profile email):', button.dataset.current);
