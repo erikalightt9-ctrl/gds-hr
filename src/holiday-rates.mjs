@@ -8,14 +8,14 @@
 //   special non-working day worked 130%; OT 169%; on a rest day 150%; rest-day OT 195%
 //   double regular holiday worked 300%; OT 390%; on a rest day 390%; rest-day OT 507%
 //   unworked regular 100% and unworked double 200%, only when qualifiesForUnworkedHoliday is true
-//   unworked special: statutory floor 0 (no pay). GDS company policy is 1 (stay paid) and applies first.
+//   unworked special on a scheduled workday: 1 (100%, GDS decision 23 Nov 2026). 0 remains the DOLE no-pay option.
 // Night differential (nsd) is added on top of the rate for that hour. It is not folded into these day rates.
 export const DOLE_HANDBOOK = 'https://nwpc.dole.gov.ph/wp-content/uploads/2024/11/Workers-Statutory-Monetary-Benefits-Handbook-2024-Edition.pdf';
 
 export const DOLE_HOLIDAY_RATES = {
   ordinaryOT: 1.25, rest: 1.3, premiumOT: 1.3,
   special: 1.3, specialRest: 1.5, regular: 2, double: 3, other: 1, nsd: 0.1,
-  specialUnworked: 0, regularUnworked: 1, doubleUnworked: 2, otherUnworked: 0,
+  specialUnworked: 1, regularUnworked: 1, doubleUnworked: 2, otherUnworked: 0,
 };
 
 // Legal basis stored on the unapproved rules version. Must stay within the 1,000-character rules limit,

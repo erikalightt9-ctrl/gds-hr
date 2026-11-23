@@ -55,7 +55,7 @@ test('a worked holiday keeps its attendance and gets the holiday-work rate, show
 test('holidays before the start date are not listed; a holiday recorded absent at 0% earns no holiday pay', () => {
   const late = state(); late.employees[0].startDate = '2026-11-05';
   assert.deepEqual(run(late).holidays, []);
-  const absent = state(); absent.attendance.push({ id: 'h', employeeId: 'E1', date: '2026-11-02', status: 'absent', scheduledIn: '09:00', timeIn: '', timeOut: '', endNextDay: false, breaks: [], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true });
+  const absent = state(); absent.rules[0].specialUnworked = 0; absent.attendance.push({ id: 'h', employeeId: 'E1', date: '2026-11-02', status: 'absent', scheduledIn: '09:00', timeIn: '', timeOut: '', endNextDay: false, breaks: [], approved: true, offsetMinutes: 0, exception: false, explanation: '', holidayEligible: true });
   const row = run(absent);
   assert.equal(row.holidayPay, 0); assert.equal(row.holidayDays, 0);
 });

@@ -410,12 +410,14 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
           add(earnings, 'basic', 0, `No time-in / time-out on ${d}: ${treatmentNote}; salary already included in cutoff basic`, { id: dayCase.id, sourceKind: 'attendance-cases' }, d);
           continue;
         }
-        const statutoryHoliday = ['regular', 'double'].includes(kind.replace('-rest', ''));
+        const holidayDay = ['special', 'regular', 'double', 'other'].includes(kind.replace('-rest', ''));
         if (dayCase) { noteDecided(); trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `No time-in / time-out on ${d}: ${treatmentNote}`, sourceKind: 'attendance-cases', sourceId: dayCase.id, date: d }); }
         // No time in and no time out on a scheduled ordinary workday that has passed = absent (HR, Nov 23, 2026).
+        // A holiday with no record is priced by the unworked-holiday rule (special stays paid at the company rate;
+        // regular and double need presence or paid leave the workday before). It is not a review item.
         if (!rest && kind === 'ordinary' && !notYet(d) && (dayCase || d !== state.asOf)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day ${dayCase ? `with no attendance record (not credited: ${treatmentNote})` : perDayWorked ? 'with no attendance record (not credited)' : `absent: no time in / time out on ${d}`}`, null, d);
         else if (!rest && (notYet(d) || (d === state.asOf && kind === 'ordinary'))) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
-        else if (statutoryHoliday && !notYet(d)) priceUnworked(null, d, rest, kind, false);
+        else if (holidayDay && !notYet(d)) priceUnworked(null, d, rest, kind, false);
         continue;
       }
       // Unapproved attendance is still counted (real time) but must be approved before the payroll is final.
