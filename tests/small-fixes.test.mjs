@@ -39,7 +39,7 @@ test('minutes an offset covers are never also paid as overtime', () => {
 test('rounding of days credited is a rules setting: 2 decimals (default) or exact', () => {
   const late = { date: '2026-11-10', timeIn: '09:30' };   // 30 min late = 0.0625 day
   const days = run(state({ basis: 'monthly', record: late }));
-  assert.deepEqual([days.creditedDays, days.earnings.basic], [12.94, 12940], '12.9375 → 12.94 × 1,000');
+  assert.deepEqual([days.creditedDays, days.earnings.basic], [11.94, 12417.6], '12 working days less 0.0625 = 11.9375 → 11.94 × 1,040 (26,000 ÷ 25)');
   const exact = run(state({ basis: 'monthly', record: late, rules: { creditRounding: 'exact' } }));
-  assert.deepEqual([exact.creditedDays, exact.earnings.basic], [12.9375, 12937.5], 'exact: 13,000 − 62.50');
+  assert.deepEqual([exact.creditedDays, exact.earnings.basic], [11.9375, 12415], 'exact: 12,480 − 65.00');
 });

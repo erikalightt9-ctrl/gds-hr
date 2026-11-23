@@ -36,8 +36,10 @@ test('an approved offset covers late time fully or partly', () => {
 
 test('daily-paid pay follows credited days; a 12-hour day loses less per minute', () => {
   const daily = run(lateOn(state({ basis: 'daily' }), '2026-09-21', '10:00'));          // 60 of 480 = 0.125 day
-  assert.equal(daily.earnings.basic, 13 * 1000 - 125);
-  assert.equal(daily.creditedDays, 12.875);
+  assert.equal(daily.creditedDays, 12.88, '12.875 rounded to 2 decimals (Nov 20, 2026)');
+  assert.equal(daily.earnings.basic, 12880, 'days shown × daily rate: 12.88 × 1,000');
+  const exactRules = lateOn(state({ basis: 'daily' }), '2026-09-21', '10:00'); exactRules.rules = exactRules.rules.map(x => ({ ...x, creditRounding: 'exact' }));
+  assert.deepEqual([run(exactRules).creditedDays, run(exactRules).earnings.basic], [12.875, 12875], 'Rules → rounding "exact" keeps the minutes');
   const long = run(lateOn(state({ hoursPerDay: 12 }), '2026-09-21', '10:00'));           // 60 of 720 min
   assert.equal(long.creditedDays, round2(13 - 60 / 720), 'monthly-paid days shown with 2 decimals');
 });

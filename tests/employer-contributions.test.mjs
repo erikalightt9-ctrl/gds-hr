@@ -53,17 +53,17 @@ test('HR can override one employee\'s calculated shares; viewers cannot', () => 
   } finally { store.close(); }
 });
 
-test('HR can edit rates; rules used by posted payroll stay locked, unused approved rules can be corrected', () => {
+test('approved rules versions are locked (who approved and when is kept); posted payroll keeps its amounts', () => {
   const store = new Store(':memory:');
   try {
     const state = withTables(completeState()); state.rules[0].id = 'r-2026'; store.write(state);
     const rule = store.read().rules[0];
-    saveRecord(store, hr, 'rules', { ...rule, contributions: { ...rule.contributions, 'Pag-IBIG': [{ ...pagIbig[0], fixed: 150 }] }, approvedBy: 'approve' });
-    assert.equal(store.read().rules[0].contributions['Pag-IBIG'][0].fixed, 150, 'approved but unused version corrected');
-    saveRecord(store, hr, 'rules', { ...store.read().rules[0], contributions: { ...rule.contributions, 'Pag-IBIG': pagIbig }, approvedBy: 'approve' });
+    assert.throws(() => saveRecord(store, hr, 'rules', { ...rule, contributions: { ...rule.contributions, 'Pag-IBIG': [{ ...pagIbig[0], fixed: 150 }] }, approvedBy: 'approve' }), /locked/);
+    assert.doesNotThrow(() => saveRecord(store, hr, 'rules', { ...rule, contributionsReviewed: true }), 'the review checkboxes stay editable');
+    assert.throws(() => saveRecord(store, hr, 'rules', { ...rule, approvedBy: '' }), /cannot be unapproved/);
     const p = preview(store, '2026-09-01', '2026-09-15');
     postPayroll(store, admin, { start: p.start, end: p.end, pay13th: false, fingerprint: p.fingerprint });
-    assert.throws(() => saveRecord(store, hr, 'rules', { ...store.read().rules[0], approvedBy: 'approve' }), /posted payroll/);
+    assert.throws(() => saveRecord(store, hr, 'rules', { ...store.read().rules[0], approvedBy: 'approve' }), /posted payroll|locked/);
     assert.equal(store.read().runs[0].rows[0].employerTotal, 1990, 'posted payroll keeps its employer amounts');
   } finally { store.close(); }
 });

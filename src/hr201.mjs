@@ -120,6 +120,7 @@ export function assertCanView(store, actor, employeeId) {
 export const displayNumber = e => e.employeeNumber || e.id;
 export function activity(e, employment = {}) {
   if (e.archived) return 'Archived';
+  if (e.endDate && e.endDate < localToday()) return 'Inactive';   // separated: never counted as active
   const status = employment.employeeStatus || (e.active ? 'Active' : '');
   return ['Active', 'On Leave'].includes(status) || (!status && !e.endDate) ? 'Active' : 'Inactive';
 }
@@ -242,6 +243,8 @@ export function profileExtras(store, actor, id) {
     education: hrView ? { entries: [], ...profileOf(store, id, 'education') } : null,
     history: hrView ? { entries: [], ...profileOf(store, id, 'history') } : null,
     compensation: PAY_ROLES.includes(actor.role) ? { monthlySalary: e.monthlySalary, basis: pay.basis || 'monthly', dailyRate: pay.dailyRate ?? null, hourlyRate: pay.hourlyRate ?? null, frequency: pay.frequency || '', status: pay.status || 'Active', withholdingTax: pay.withholdingTax === 'exempt' ? 'exempt' : 'withhold', coveredOT: e.coveredOT, coveredNSD: e.coveredNSD, coveredHoliday: e.coveredHoliday, covered13th: e.covered13th, deductions: (store.read().deductions || []).filter(d => d.employeeId === id && d.active).map(d => ({ name: d.name, amount: d.amount, schedule: d.schedule })) } : null,
+    // Final pay computations of this employee with their release status (Payroll & 13th Month → Final pay).
+    finalPay: PAY_ROLES.includes(actor.role) && store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='final_pay'").get() ? store.db.prepare('SELECT data FROM final_pay WHERE employee_id=? ORDER BY rowid DESC').all(id).map(r => JSON.parse(r.data)).map(r => ({ id: r.id, separationDate: r.separationDate, net: r.net, releaseDue: r.releaseDue, computedBy: r.computedBy, computedAt: r.computedAt, release: r.release || null })) : null,
     canEdit: hrView, canEditPay: ['admin', 'hr'].includes(actor.role),
   };
 }
@@ -282,10 +285,11 @@ export function dashboard(store, actor, extras = {}) {
   permit(actor, DASHBOARD);
   const today = localToday(), settings = readSettings(store), people = directory(store, actor).filter(p => !p.archived);
   // Every department / company set up in Settings (even with no employees yet), plus any in use, with head counts.
-  const counted = people.reduce((m, p) => ({ ...m, [p.department || 'Unassigned']: (m[p.department || 'Unassigned'] || 0) + 1 }), {});
+  const activePeople = people.filter(p => p.status === 'Active');
+  const counted = activePeople.reduce((m, p) => ({ ...m, [p.department || 'Unassigned']: (m[p.department || 'Unassigned'] || 0) + 1 }), {});
   for (const d of settings.departments || []) counted[d] = counted[d] || 0;
   const byDept = Object.entries(counted).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const byClass = Object.entries(people.reduce((m, p) => ({ ...m, [p.classification || 'Not set']: (m[p.classification || 'Not set'] || 0) + 1 }), {}));
+  const byClass = Object.entries(activePeople.reduce((m, p) => ({ ...m, [p.classification || 'Not set']: (m[p.classification || 'Not set'] || 0) + 1 }), {}));
   const upcoming = (field, days) => people.filter(p => p.status === 'Active' && p[field] && p[field] >= today && p[field] <= addDays(today, days)).map(p => ({ id: p.id, name: p.name, date: p[field] }));
   return {
     asOf: today,

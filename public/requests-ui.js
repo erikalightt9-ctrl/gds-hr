@@ -2,14 +2,17 @@
 // off-site reconsideration; leave opens the existing leave form), follow its status, answer HR, cancel. HR / Admin:
 // a review dashboard with counts, the day's record and clock events, and Review / Ask for information / Remark /
 // Reject / Approve. Nothing changes in attendance until HR approves.
-export const CATEGORIES = { 'forgot-in': 'Forgot to time in', 'forgot-out': 'Forgot to time out', failed: 'Failed or incorrect office time in / out', system: 'System error (app, website or server problem)', offsite: 'Off-site work reconsideration', other: 'Other reason' };
+export const CATEGORIES = { 'forgot-in': 'Missed time in', 'forgot-out': 'Missed time out', failed: 'Failed or incorrect office time in / out', system: 'System error (app, website or server problem)', offsite: 'Off-site work reconsideration', other: 'Other reason' };
 // Like a failed time in / out: transaction, requested times and a description of the problem.
 export const PROBLEM_CATEGORIES = ['failed', 'system', 'other'];
+const MISSED_POLICY = 'Time correction requests for missed time-in or time-out entries must include a valid reason and are subject to HR verification and approval. Forgetfulness alone, without a justifiable explanation, will not be accepted as sufficient grounds for approval.';
+const MISSED_REASONS = ['Urgent work or meeting on arrival / departure', 'Official business or field work without access to TimeHub', 'Phone problem (no battery, broken, no data or signal)', 'Internet or power outage', 'TimeHub / app problem', 'Emergency (health, family or safety)', 'Instructed by the supervisor to start or leave immediately', 'Other justifiable reason'];
+const VERIFY_CATEGORIES = ['forgot-in', 'forgot-out', 'other'];
+const VERIFY_METHODS = ['Supervisor / manager confirmation', 'CCTV or building / guard logbook', 'Work output, system or email logs', 'Client or site confirmation', 'Supporting document from the employee', 'Other (describe)'];
 export const STATUS = { pending: ['Pending HR approval', 'pending'], review: ['Under review', 'pending'], info: ['Additional information required', 'rejected'], approved: ['Approved', ''], rejected: ['Rejected', 'rejected'], cancelled: ['Cancelled by employee', 'neutral'] };
 const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const stamp = iso => (iso ? new Date(iso).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '');
 const manilaToday = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
-const daysAgo = n => new Date(Date.now() + 8 * 3600000 - n * 86400000).toISOString().slice(0, 10);
 const times = r => `${r.timeIn || '—'} – ${r.timeOut || '—'}${r.endNextDay ? ' (next day)' : ''}`;
 const ACTIONS = { submitted: 'Submitted', review: 'HR started the review', info: 'HR asked for more information', replied: 'Employee answered', remark: 'HR remark', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled by the employee' };
 const historyHtml = (r, esc) => `<ol class="ar-history">${(r.history || []).map(h => `<li><strong>${esc(ACTIONS[h.action] || h.action)}</strong> · ${esc(stamp(h.at))} · ${esc(h.by)}${h.note ? `<br><span class="wrap">${esc(h.note)}</span>` : ''}</li>`).join('')}</ol>`;
@@ -28,7 +31,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
   let list = [];
   const badge = s => { const [label, tone] = STATUS[s] || [s, 'neutral']; return `<span class="badge ${tone}">${esc(label)}</span>`; };
   function render(box) {
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>My attendance requests</h2><p class="legend">Forgot to time in or out, a failed time in, a system error or another reason? File a request; HR approves it before your record changes.</p><p class="ar-policy">${esc(POLICY)}</p></div><button class="primary" data-ar-new>New request</button></div>
+    box.innerHTML = `<div data-my-cases></div><section class="panel"><div class="panel-head"><div><h2>My attendance requests</h2><p class="legend">Missed a time in or out, a failed time in, a system error or another reason? File a request; HR approves it before your record changes.</p><p class="ar-policy">${esc(POLICY)}</p></div><button class="primary" data-ar-new>New request</button></div>
       ${list.length ? `<div class="ar-list">${list.map(r => `<article class="ar-item"><header><strong>${esc(r.reference)}</strong>${badge(r.status)}</header>
         <p><b>${esc(CATEGORIES[r.category])}</b> · ${esc(nice(r.date))} · requested ${esc(times(r))}</p>
         ${r.decision?.approved && r.status === 'approved' ? `<p>Approved: ${esc(times(r.decision.approved))}</p>` : ''}
@@ -39,6 +42,8 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
   }
   async function fill(box) {
     try { list = await api('/me/attendance-requests'); render(box); } catch (error) { box.innerHTML = `<p class="muted">${esc(error.message)}</p>`; }
+    // Records to correct (incomplete attendance), loaded on demand so this screen works even before a server restart.
+    import('./attendance-cases-ui.js').then(m => m.mountMyCases(box.querySelector('[data-my-cases]'), { api, esc, openForm: (category, done, date) => openForm(category, () => { done(); fill(box); }, date) })).catch(() => {});
     box.onclick = async event => {
       const b = event.target.closest('button'); if (!b) return;
       if (b.hasAttribute('data-ar-new')) openForm('', () => fill(box));
@@ -56,10 +61,10 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
     };
   }
   // The request form; the fields follow the chosen category.
-  function openForm(category = '', done = () => {}) {
+  function openForm(category = '', done = () => {}, date = '') {
     openDialog('New attendance request', `<form class="dialog-body form-grid" id="ar-form">
       <label class="field full">Request<select name="category" required><option value="">Choose…</option>${Object.entries(CATEGORIES).map(([k, v]) => `<option value="${k}" ${k === category ? 'selected' : ''}>${esc(v)}</option>`).join('')}<option value="leave">Leave application</option></select></label>
-      <label class="field">Date (within 3 days)<input type="date" name="date" required min="${daysAgo(3)}" max="${manilaToday()}" value="${manilaToday()}"></label>
+      <label class="field">Date to correct<input type="date" name="date" required max="${manilaToday()}" value="${date || manilaToday()}"></label>
       <label class="field" data-show="failed system other">Transaction<select name="transaction"><option value="in">Time in</option><option value="out">Time out</option><option value="both">Time in and time out</option></select></label>
       <label class="field" data-show="forgot-in failed system other offsite">Requested time in<input type="time" name="timeIn"></label>
       <label class="field" data-show="forgot-out failed system other offsite forgot-in">Requested time out<input type="time" name="timeOut"></label>
@@ -68,7 +73,9 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
       <label class="field full" data-show="forgot-in forgot-out offsite">Exact work location and address<input name="location" maxlength="300" placeholder="Unit / floor, building, street, barangay, city"></label>
       <label class="field full" data-show="offsite">Purpose of the official assignment<input name="purpose" maxlength="300"></label>
       <label class="field full" data-show="failed system other">Description of the problem<textarea name="problem" maxlength="2000" placeholder="e.g. The office Wi-Fi was down; the app said I was not on the office network"></textarea></label>
-      <label class="field full" data-show="forgot-in forgot-out failed system other offsite">Reason<textarea name="reason" minlength="5" maxlength="2000" placeholder="Why the time in / out was not recorded"></textarea></label>
+      <p class="full ar-policy" data-show="forgot-in forgot-out">${esc(MISSED_POLICY)}</p>
+      <label class="field full" data-show="forgot-in forgot-out">Why could the time in / out not be recorded?<select name="reasonType"><option value="">Choose…</option>${MISSED_REASONS.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
+      <label class="field full" data-show="forgot-in forgot-out failed system other offsite">Reason (explain what happened)<textarea name="reason" minlength="5" maxlength="2000" placeholder="What prevented you from timing in / out, and who can confirm the time you worked. 'I forgot' alone is not accepted."></textarea></label>
       <label class="field full" data-show="forgot-in forgot-out failed system other offsite">Supporting evidence (optional: screenshot, photo, PDF up to 5 MB)<input type="file" name="file" accept="application/pdf,image/png,image/jpeg"></label>
       <p class="full legend" data-show="forgot-in">If the whole day was not recorded, enter both the time in and the time out.</p>
       <p class="full ar-policy">${esc(POLICY)}</p>
@@ -87,7 +94,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
       const f = new FormData(form), submit = form.querySelector('[type=submit]'), c = String(f.get('category'));
       const tx = PROBLEM_CATEGORIES.includes(c) ? String(f.get('transaction')) : '';
       const body = { category: c, date: String(f.get('date')), timeIn: tx === 'out' || c === 'forgot-out' ? '' : String(f.get('timeIn') || ''), timeOut: tx === 'in' ? '' : String(f.get('timeOut') || ''), endNextDay: !!f.get('endNextDay'),
-        attendanceType: c === 'offsite' ? 'offsite' : String(f.get('attendanceType') || 'office'), transaction: tx, location: String(f.get('location') || ''), purpose: String(f.get('purpose') || ''), reason: String(f.get('reason') || ''), problem: String(f.get('problem') || ''), evidence: [] };
+        attendanceType: c === 'offsite' ? 'offsite' : String(f.get('attendanceType') || 'office'), transaction: tx, location: String(f.get('location') || ''), purpose: String(f.get('purpose') || ''), reason: String(f.get('reason') || ''), ...(['forgot-in', 'forgot-out'].includes(c) && f.get('reasonType') ? { reasonType: String(f.get('reasonType')) } : {}), problem: String(f.get('problem') || ''), evidence: [] };
       submit.disabled = true; submit.textContent = 'Submitting…';
       try {
         const doc = await upload(api, form.elements.file.files[0]); if (doc) body.evidence = [doc];
@@ -101,7 +108,7 @@ export function createEmployeeRequests({ api, esc, openDialog, dialog, toast, co
 
 // ---------- HR / Admin ----------
 export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, onLeave }) {
-  let data = { requests: [], leave: { pending: 0, needsInfo: 0 } }, filter = 'open', who = '';
+  let data = { requests: [], leave: { pending: 0, needsInfo: 0 } }, filter = 'open', who = '', cases = null;
   const statusBadge = s => { const [label, tone] = STATUS[s] || [s, 'neutral']; return badge(label, tone); };
   const open = r => ['pending', 'review', 'info'].includes(r.status);
   const shown = () => data.requests.filter(r => (!who || r.employeeId === who) && (filter === 'open' ? ['pending', 'review'].includes(r.status) : filter === 'all' ? true : CATEGORIES[filter] ? r.category === filter && open(r) : r.status === filter));
@@ -109,26 +116,28 @@ export function createHrRequests({ api, esc, badge, openDialog, dialog, toast, o
     const n = f => data.requests.filter(f).length, waiting = r => ['pending', 'review'].includes(r.status);
     const tile = (key, count, label) => `<button data-ar-filter="${key}" class="${filter === key ? 'active' : ''}"><strong>${count}</strong>${label}</button>`;
     const people = [...new Map(data.requests.map(r => [r.employeeId, r.employeeName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>Attendance requests</h2><p class="legend">Nothing changes in attendance until you approve. Approved requests become HR-approved adjustments; the original record stays in the correction history.</p><p class="ar-policy">${esc(POLICY)}</p></div></div>
-      <div class="ot-summary ar-tiles">${tile('open', n(waiting) + data.leave.pending, 'Total pending')}${tile('forgot-in', n(r => r.category === 'forgot-in' && open(r)), 'Forgot time in')}${tile('forgot-out', n(r => r.category === 'forgot-out' && open(r)), 'Forgot time out')}${tile('failed', n(r => r.category === 'failed' && open(r)), 'Failed time in / out')}${tile('system', n(r => r.category === 'system' && open(r)), 'System error')}${tile('other', n(r => r.category === 'other' && open(r)), 'Other reason')}${tile('offsite', n(r => r.category === 'offsite' && open(r)), 'Off-site reconsideration')}<button data-ar-leave><strong>${data.leave.pending}</strong>Leave applications</button>${tile('info', n(r => r.status === 'info') + data.leave.needsInfo, 'Awaiting more information')}${tile('approved', n(r => r.status === 'approved'), 'Approved')}${tile('rejected', n(r => r.status === 'rejected'), 'Rejected')}${tile('all', data.requests.length, 'All requests')}</div>
+    box.innerHTML = `<div data-cases-box></div><section class="panel"><div class="panel-head"><div><h2>Attendance requests</h2><p class="legend">Nothing changes in attendance until you approve. Approved requests become HR-approved adjustments; the original record stays in the correction history.</p><p class="ar-policy">${esc(POLICY)}</p></div></div>
+      <div class="ot-summary ar-tiles">${tile('open', n(waiting), 'Pending requests')}${tile('forgot-in', n(r => r.category === 'forgot-in' && open(r)), 'Missed time in')}${tile('forgot-out', n(r => r.category === 'forgot-out' && open(r)), 'Missed time out')}${tile('failed', n(r => r.category === 'failed' && open(r)), 'Failed time in / out')}${tile('system', n(r => r.category === 'system' && open(r)), 'System error')}${tile('other', n(r => r.category === 'other' && open(r)), 'Other reason')}${tile('offsite', n(r => r.category === 'offsite' && open(r)), 'Off-site reconsideration')}<button data-ar-leave><strong>${data.leave.pending}</strong>Leave applications</button>${tile('info', n(r => r.status === 'info') + data.leave.needsInfo, 'Awaiting more information')}${tile('approved', n(r => r.status === 'approved'), 'Approved')}${tile('rejected', n(r => r.status === 'rejected'), 'Rejected')}${tile('cancelled', n(r => r.status === 'cancelled'), 'Cancelled')}${tile('all', data.requests.length, 'All requests')}</div>
       <div class="ot-filters"><label class="field">Employee<select data-ar-who><option value="">All employees</option>${people.map(([id, name]) => `<option value="${esc(id)}" ${id === who ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label></div>
       <div class="table-wrap"><table><thead><tr><th>Reference</th><th>Employee</th><th>Request</th><th>Date</th><th>Requested</th><th>Status</th><th>Submitted</th><th></th></tr></thead><tbody>
-      ${shown().map(r => `<tr><td><strong>${esc(r.reference)}</strong></td><td>${esc(r.employeeName)}</td><td>${esc(CATEGORIES[r.category])}</td><td>${esc(nice(r.date))}</td><td>${esc(times(r))}</td><td>${statusBadge(r.status)}</td><td>${esc(stamp(r.submittedAt))}</td><td><button class="small" data-ar-open="${esc(r.id)}">Open</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">Nothing to show yet.</td></tr>'}
+      ${shown().map(r => `<tr><td><strong>${esc(r.reference)}</strong></td><td>${esc(r.employeeName)}</td><td>${esc(CATEGORIES[r.category])}</td><td>${esc(nice(r.date))}</td><td>${esc(times(r))}</td><td>${statusBadge(r.status)}</td><td>${esc(stamp(r.submittedAt))}</td><td><button class="small" data-ar-open="${esc(r.id)}">Open</button></td></tr>`).join('') || `<tr><td colspan="8" class="empty">${filter === 'open' ? `No attendance requests are waiting.${data.leave.pending ? ` ${data.leave.pending} leave application${data.leave.pending === 1 ? ' is' : 's are'} waiting: use the Leave applications box.` : ''} Choose <strong>All requests</strong> to see earlier ones.` : 'Nothing to show yet.'}</td></tr>`}
       </tbody></table></div></section>`;
+    // Incomplete attendance cases above the requests (loaded on demand).
+    import('./attendance-cases-ui.js').then(m => (cases ||= m.createHrCases({ api, esc, badge, openDialog, dialog, toast })).mount(box.querySelector('[data-cases-box]'))).catch(() => {});
   }
   function detail(r, box) {
     const cur = r.current, clock = (r.clock || []).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'} ${esc(e.time)} · ${e.type === 'offsite' ? 'Off-site' : 'Office'}${e.hrApproved ? ' · HR-approved' : ''}${e.address ? ` · ${esc(e.address)}` : ''}`).join('<br>') || 'No time in / out recorded';
     const rows = [['Reference', esc(r.reference)], ['Employee', esc(r.employeeName)], ['Request', esc(CATEGORIES[r.category])], ['Status', statusBadge(r.status)], ['Date', esc(nice(r.date))], ['Requested time', esc(times(r))],
       ...(r.transaction ? [['Transaction', esc({ in: 'Time in', out: 'Time out', both: 'Time in and time out' }[r.transaction])]] : []), ['Attendance type', r.attendanceType === 'offsite' ? 'Off-site work' : 'Office'], ...(r.location ? [['Location', esc(r.location)]] : []), ...(r.purpose ? [['Purpose', esc(r.purpose)]] : []),
-      ...(r.problem ? [['Problem', `<span class="wrap">${esc(r.problem)}</span>`]] : []), ['Reason', `<span class="wrap">${esc(r.reason)}</span>`], ['Evidence', evidenceHtml(r, esc) || 'None attached'],
+      ...(r.problem ? [['Problem', `<span class="wrap">${esc(r.problem)}</span>`]] : []), ['Reason', `${r.reasonType ? `<strong>${esc(r.reasonType)}</strong><br>` : ''}<span class="wrap">${esc(r.reason)}</span>`], ['Evidence', evidenceHtml(r, esc) || 'None attached'],
       ['Record for that day', cur ? `${esc(cur.timeIn || '—')} – ${esc(cur.timeOut || '—')} · ${esc(cur.status)}${cur.approved ? ' · approved' : ' · not approved'}` : 'No attendance record'], ['Time in / out events', clock],
       ...(r.decision ? [['Decision', `${esc(r.status === 'approved' ? 'Approved' : 'Rejected')} by ${esc(r.decision.by)} · ${esc(stamp(r.decision.at))}${r.decision.approved ? `<br>Approved time: ${esc(times(r.decision.approved))}` : ''}${r.decision.original ? `<br>Original: ${esc(times(r.decision.original))}` : ''}${r.decision.remarks ? `<br>Remarks: ${esc(r.decision.remarks)}` : ''}`]] : [])];
-    const actions = open(r) ? `<form class="form-grid ar-decide" id="ar-decide"><label class="field">Approved time in<input type="time" name="timeIn" value="${esc(r.timeIn)}"></label><label class="field">Approved time out<input type="time" name="timeOut" value="${esc(r.timeOut)}"></label><label class="field full ar-check"><input type="checkbox" name="endNextDay" ${r.endNextDay ? 'checked' : ''}> Time out on the next day</label><label class="field full">HR remarks / reason (required to reject, ask for information, or approve a different time)<textarea name="note" maxlength="2000"></textarea></label><p class="full oof-error" data-ar-error hidden></p></form>` : '';
+    const actions = open(r) ? `<form class="form-grid ar-decide" id="ar-decide"><label class="field">Approved time in<input type="time" name="timeIn" value="${esc(r.timeIn)}"></label><label class="field">Approved time out<input type="time" name="timeOut" value="${esc(r.timeOut)}"></label><label class="field full ar-check"><input type="checkbox" name="endNextDay" ${r.endNextDay ? 'checked' : ''}> Time out on the next day</label>${VERIFY_CATEGORIES.includes(r.category) ? `<p class="full ar-policy">${esc(MISSED_POLICY)}</p><label class="field">HR verification (required to approve)<select name="verifiedBy"><option value="">Choose…</option>${VERIFY_METHODS.map(x => `<option>${esc(x)}</option>`).join('')}</select></label><label class="field">Verification details<input name="verification" maxlength="1000" placeholder="Who confirmed / what record was checked"></label>` : ''}<label class="field full">HR remarks / reason (required to reject, ask for information, or approve a different time)<textarea name="note" maxlength="2000"></textarea></label><p class="full oof-error" data-ar-error hidden></p></form>` : '';
     const foot = open(r) ? `<div class="dialog-foot">${r.status === 'pending' ? '<button data-ar-act="review">Start review</button>' : ''}<button data-ar-act="remark">Add remark</button><button data-ar-act="info">Ask for information</button><button data-ar-act="reject">Reject</button><button class="primary" data-ar-act="approve">Approve</button></div>` : '<div class="dialog-foot"><button data-close>Close</button></div>';
     openDialog(`${r.reference} · ${CATEGORIES[r.category]}`, `<div class="dialog-body"><dl class="ar-facts">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl><h3>History</h3>${historyHtml(r, esc)}${actions}</div>`, foot);
     dialog.querySelectorAll('[data-ar-act]').forEach(b => { b.onclick = async () => {
       const form = dialog.querySelector('#ar-decide'), f = new FormData(form), note = String(f.get('note') || '').trim(), err = form.querySelector('[data-ar-error]'), act = b.dataset.arAct;
-      const body = { review: undefined, remark: { note }, info: { note }, reject: { remarks: note }, approve: { timeIn: String(f.get('timeIn') || ''), timeOut: String(f.get('timeOut') || ''), endNextDay: !!f.get('endNextDay'), remarks: note } }[act];
+      const body = { review: undefined, remark: { note }, info: { note }, reject: { remarks: note }, approve: { timeIn: String(f.get('timeIn') || ''), timeOut: String(f.get('timeOut') || ''), endNextDay: !!f.get('endNextDay'), remarks: note, ...(VERIFY_CATEGORIES.includes(r.category) ? { verifiedBy: String(f.get('verifiedBy') || ''), verification: String(f.get('verification') || '') } : {}) } }[act];
       // Remark, Ask for information and Reject send the HR remarks text to the employee: ask for it in plain words and
       // point at the box instead of showing the server's field message ("note: …").
       const needsNote = { remark: 'Type the remark in the HR remarks box first.', info: 'Type in the HR remarks box what information or document you need from the employee, then click Ask for information again.', reject: 'Type the reason for rejecting in the HR remarks box first.' }[act];

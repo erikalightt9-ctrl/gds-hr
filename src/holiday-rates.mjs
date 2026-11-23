@@ -8,19 +8,19 @@
 //   special non-working day worked 130%; OT 169%; on a rest day 150%; rest-day OT 195%
 //   double regular holiday worked 300%; OT 390%; on a rest day 390%; rest-day OT 507%
 //   unworked regular 100% and unworked double 200%, only when qualifiesForUnworkedHoliday is true
-//   unworked special 0 (no work, no pay) unless the rules set specialUnworked above 0
+//   unworked special 100% on a scheduled workday (company policy, Nov 23, 2026; DOLE default is 0: no work, no pay)
 // Night differential (nsd) is added on top of the rate for that hour. It is not folded into these day rates.
 export const DOLE_HANDBOOK = 'https://nwpc.dole.gov.ph/wp-content/uploads/2024/11/Workers-Statutory-Monetary-Benefits-Handbook-2024-Edition.pdf';
 
 export const DOLE_HOLIDAY_RATES = {
   ordinaryOT: 1.25, rest: 1.3, premiumOT: 1.3,
   special: 1.3, specialRest: 1.5, regular: 2, double: 3, other: 1, nsd: 0.1,
-  specialUnworked: 0, regularUnworked: 1, doubleUnworked: 2, otherUnworked: 0,
+  specialUnworked: 1, regularUnworked: 1, doubleUnworked: 2, otherUnworked: 0,
 };
 
 // Legal basis stored on the unapproved rules version. Must stay within the 1,000-character rules limit,
 // and must not contain the word "draft" (an approved version cannot keep that wording).
-export const DOLE_HOLIDAY_BASIS = `Holiday pay follows the DOLE Handbook on Workers' Statutory Monetary Benefits, 2024 edition, adopted 20 November 2026. Unworked regular holiday: 100% if present or on paid leave the workday before (successive regular holidays: the later day is paid when the earlier one was worked or itself payable). Unworked double regular holiday: 200% on that condition. Worked regular holiday: 200% for the scheduled hours, overtime 260%. Regular holiday on a rest day, worked: 260%, overtime 338%. Special non-working day not worked: no pay unless Special holiday unworked is set above 0. Worked: 130%, overtime 169%; on a rest day 150%, overtime 195%. Double regular holiday worked: 300%, overtime 390%. Night differential stays 10% of the rate for that hour, added on top. Not approved. ${DOLE_HANDBOOK}`;
+export const DOLE_HOLIDAY_BASIS = `Holiday pay follows the DOLE Handbook on Workers' Statutory Monetary Benefits, 2024 edition, adopted 20 November 2026. Unworked regular holiday: 100% if present or on paid leave the workday before (successive regular holidays: the later day is paid when the earlier one was worked or itself payable). Unworked double regular holiday: 200% on that condition. Worked regular holiday: 200% for the scheduled hours, overtime 260%. Regular holiday on a rest day, worked: 260%, overtime 338%. Special non-working day not worked: paid 100% on a scheduled workday (company policy). Worked: 130%, overtime 169%; on a rest day 150%, overtime 195%. Double regular holiday worked: 300%, overtime 390%. Night differential stays 10% of the rate for that hour, added on top. Not approved. ${DOLE_HANDBOOK}`;
 
 export const DOLE_HOLIDAY_DRAFT_ID = 'dole-holiday-2026-11-16';
 export const DOLE_HOLIDAY_EFFECTIVE = '2026-11-16';

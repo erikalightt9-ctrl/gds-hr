@@ -437,7 +437,7 @@ dialog::backdrop { background: rgb(20 16 8 / .45); backdrop-filter: blur(6px); }
 .welcome-culture strong { font-size: 13.5px; }
 .welcome-culture span { font-size: 12.5px; }
 
-/* Sign-in title ("HRM System") in the same serif as "Our Company Culture" (not a script font). */
+/* Sign-in title ("TimeHub") in the same serif as "Our Company Culture" (not a script font). */
 .welcome-login .login-form h2 {
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 700; font-size: clamp(30px, 3vw, 38px); line-height: 1.1; letter-spacing: .5px;

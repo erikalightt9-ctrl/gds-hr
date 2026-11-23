@@ -43,7 +43,7 @@ test('default rules match the DOLE handbook combined rates', () => {
   const p = holidayPremiums(defaultRules);
   assert.deepEqual(p, {
     regularUnworked: 1, regular: 2, regularOT: 2.6, regularRest: 2.6, regularRestOT: 3.38, regularNight: 2.2,
-    specialUnworked: 0, special: 1.3, specialOT: 1.69, specialRest: 1.5, specialRestOT: 1.95,
+    specialUnworked: 1, special: 1.3, specialOT: 1.69, specialRest: 1.5, specialRestOT: 1.95,
     doubleUnworked: 2, double: 3, doubleOT: 3.9, doubleRest: 3.9, doubleRestOT: 5.07,
     nsd: 0.1,
   });
@@ -140,13 +140,13 @@ test('Bonifacio Day 30 November 2026 (regular holiday, Nov 16–30): 100% if the
   assert.equal(holidayPayOn(pay(uncovered, '2026-11-16', '2026-11-30'), '2026-11-30'), 0);
 });
 
-test('unworked special day is unpaid unless the rules say otherwise; successive regular holidays follow the handbook', () => {
+test('unworked special day is paid by default (company policy), unpaid at 0; successive regular holidays follow the handbook', () => {
   const special = baseState();
   special.holidays = [{ id: 's', date: '2026-11-16', name: 'Special', kind: 'special', basis: 'Test' }];
   fill(special, '2026-11-16', '2026-11-30', ['2026-11-16']);
-  assert.equal(holidayPayOn(pay(special, '2026-11-16', '2026-11-30'), '2026-11-16'), 0);
-  special.rules[0].specialUnworked = 1;
   assert.equal(holidayPayOn(pay(special, '2026-11-16', '2026-11-30'), '2026-11-16'), DAILY);
+  special.rules[0].specialUnworked = 0;
+  assert.equal(holidayPayOn(pay(special, '2026-11-16', '2026-11-30'), '2026-11-16'), 0);
 
   // 1 Apr 2026 Wednesday, 2 Apr Maundy Thursday, 3 Apr Good Friday. Sunday rest.
   const holy = (workedThursday = false, wednesday = 'present') => {
@@ -225,7 +225,7 @@ test('the DOLE rules version is saved as an unapproved draft and does not change
     assert.equal(draft.dailyDivisor, 26, 'divisor and the rest of the approved version are copied');
     assert.equal(draft.regular, DOLE_HOLIDAY_RATES.regular);
     assert.equal(draft.special, DOLE_HOLIDAY_RATES.special);
-    assert.equal(draft.specialUnworked, 0);
+    assert.equal(draft.specialUnworked, 1, 'company policy: unworked special days stay paid');
     assert.equal(draft.basis, DOLE_HOLIDAY_BASIS);
     assert.ok(draft.basis.length <= 1000);
     assert.doesNotMatch(draft.basis, /\bdraft\b/i);
