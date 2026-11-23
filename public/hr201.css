@@ -2007,3 +2007,4 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .reset-handover .reset-link input{flex:1;min-width:0;font-size:12px}
 .reset-handover .reset-link button{width:auto;margin:0;white-space:nowrap}
 .reset-handover details{margin-top:8px}.reset-handover code{word-break:break-all;font-size:11px}
+.reset-handover .reset-sent{color:#1f6b3a;margin:0 0 4px}.reset-handover .reset-failed{color:#a11d2b;margin:0 0 4px}

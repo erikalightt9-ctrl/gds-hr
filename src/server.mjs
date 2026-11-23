@@ -444,7 +444,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
-        if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); send(200, issuePasswordReset(store, auth.user, userAction[1], v.resetMfa)); }
+        if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); const r = issuePasswordReset(store, auth.user, userAction[1], v.resetMfa, { mailer, origin }); const emailed = await r.delivery; send(200, { token: r.token, expires: r.expires, message: r.message, sentTo: emailed ? r.sentTo : null, emailFailed: !!r.sentTo && !emailed }); }
         else if (userAction[2] === 'delete') { const v = z.object({ confirm: z.string().max(80) }).strict().parse(body); send(200, deleteUser(store, auth.user, userAction[1], v.confirm)); }
         else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;

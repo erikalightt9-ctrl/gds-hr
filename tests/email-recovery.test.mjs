@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { Store } from '../src/store.mjs';
-import { addUser, login, requestRecovery, redeemPasswordReset, setUserEmail, registeredEmail } from '../src/auth.mjs';
+import { addUser, login, requestRecovery, redeemPasswordReset, setUserEmail, registeredEmail, issuePasswordReset } from '../src/auth.mjs';
 import { createMailer, mailerFromEnv } from '../src/mailer.mjs';
 import { completeState } from './helpers.mjs';
 
@@ -116,5 +116,26 @@ test('a reset email that cannot be sent goes to HR (alert) and the unsent link i
     assert.ok(store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(employee.id), 'HR has the request');
     assert.equal(store.db.prepare('SELECT COUNT(*) n FROM password_resets').get().n, 0, 'no live link left behind');
     assert.ok(store.db.prepare('SELECT message FROM notifications WHERE employee_id IS NULL').all().some(n => /could not be sent \(Mail server refused/.test(n.message)));
+  } finally { store.close(); }
+});
+
+test('HR Reset password also emails the link to the registered email; the employee sets their own password', async () => {
+  const { store, admin, employee } = await fixture();
+  try {
+    const mailer = fakeMailer();
+    store.db.prepare('INSERT INTO employee_profiles VALUES(?,?,?)').run('EMP-001', 'employment', JSON.stringify({ businessEmail: 'alex@gds.example' }));
+    const r = issuePasswordReset(store, admin, employee.id, false, { mailer, origin: 'https://hr.example.com' });
+    assert.equal(await r.delivery, true);
+    assert.equal(r.sentTo, 'a***@gds.example');
+    assert.equal(mailer.sent[0].to, 'alex@gds.example');
+    assert.equal(linkToken(mailer.sent[0]), r.token, 'the emailed link carries the same one-time code');
+    assert.match(mailer.sent[0].text, /expires in 15 minutes/);
+    assert.doesNotMatch(mailer.sent[0].text, /password:/i, 'no password in the email');
+    await redeemPasswordReset(store, r.token, 'chosen-by-employee-9');
+    await login(store, 'EMP-001', 'chosen-by-employee-9', 'test');
+    const failing = { from: 'hr@example.com', send: async () => { throw new Error('535'); } };
+    const f = issuePasswordReset(store, admin, employee.id, false, { mailer: failing, origin: 'https://hr.example.com' });
+    assert.equal(await f.delivery, false, 'HR still has the link to send by hand');
+    assert.match(f.token, /^[a-f0-9]{64}$/);
   } finally { store.close(); }
 });

@@ -184,11 +184,11 @@ function queueHrRecovery(store, user, reason) {
   });
 }
 export const maskEmail = email => email.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(Math.min(rest.length, 6))}${domain}`);
-const resetEmail = (username, link) => `Hello,
+const resetEmail = (username, link, minutes = EMAIL_RESET_MINUTES) => `Hello,
 
 We received a request to reset the password for your GDS CAPITAL INC. HR account (${username}).
 
-Open this link to choose a new password. It works once and expires in ${EMAIL_RESET_MINUTES} minutes:
+Open this link to choose a new password. It works once and expires in ${minutes} minutes:
 ${link}
 
 If you did not ask for this, ignore this email; your password stays the same. For help, contact HR.
@@ -208,9 +208,9 @@ export function setUserEmail(store, actor, userId, email) {
   });
   return { email: value || null };
 }
-export function issuePasswordReset(store, actor, userId, resetMfa = false) {
+export function issuePasswordReset(store, actor, userId, resetMfa = false, { mailer = null, origin = '' } = {}) {
   permit(actor, ['admin']);
-  const user = store.db.prepare('SELECT id FROM users WHERE id=?').get(userId);
+  const user = store.db.prepare('SELECT * FROM users WHERE id=?').get(userId);
   if (!user) throw new AppError('User not found.', 404);
   const token = randomBytes(32).toString('hex'), expires = Date.now() + 15 * 60000;
   store.transaction(() => {
@@ -221,7 +221,13 @@ export function issuePasswordReset(store, actor, userId, resetMfa = false) {
     if (resetMfa) store.db.prepare('UPDATE users SET mfa_secret=NULL,mfa_pending=NULL,mfa_last_step=NULL WHERE id=?').run(userId);
     store.log(actor, 'issue-password-reset', 'users', userId, null, { expires, resetMfa });
   });
-  return { token, expires, message: 'Give this one-time code directly to the employee after verifying their identity. It expires in 15 minutes.' };
+  const email = mailer && origin ? registeredEmail(store, user) : null;
+  const delivery = email
+    ? mailer.send({ to: email, subject: 'GDS HR password reset', text: resetEmail(user.username, `${origin}/#reset=${token}`, 15) }).then(() => {
+      store.log(actor, 'email-reset-link', 'users', userId, null, { sentTo: maskEmail(email), expires, by: 'hr' }); return true;
+    }, error => { console.error('HR reset email failed:', error.message); return false; })
+    : Promise.resolve(false);
+  return { token, expires, sentTo: email ? maskEmail(email) : null, delivery, message: 'Give this one-time code directly to the employee after verifying their identity. It expires in 15 minutes.' };
 }
 export async function redeemPasswordReset(store, token, password) {
   if (!/^[a-f0-9]{64}$/.test(token) || password.length < 9 || password.length > 200) throw new AppError('Invalid reset code or password.');
