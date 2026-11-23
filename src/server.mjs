@@ -607,7 +607,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     console.log(mailer ? `Password reset emails are sent from ${mailer.from}.` : 'Password reset email is not configured (set HR_SMTP_* in .env); recovery goes to HR.');
     mailer?.verify?.().then(() => console.log('Mail server sign-in OK.'), error => {
       console.error(`Mail server sign-in failed: ${error.message}. Forgot password requests go to HR until HR_SMTP_* in .env is fixed.`);
-      try { store.notify(null, `Password reset emails cannot be sent: the mail server refused the sign-in (${error.message.replace(/.$/, '')}). Check HR_SMTP_USER / HR_SMTP_PASS in .env; until then Forgot password requests come to HR.`); } catch { /* notice only */ }
+      try { store.notify(null, `Password reset emails cannot be sent: the mail server refused the sign-in (${error.message.replace(/\.$/, '')}). Check HR_SMTP_USER / HR_SMTP_PASS in .env; until then Forgot password requests come to HR.`); } catch { /* notice only */ }
     });
     if (!store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n) console.log(`One-time setup code: ${setupToken}\nOpen the app to create your administrator account.`);
   });
