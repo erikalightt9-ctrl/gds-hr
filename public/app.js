@@ -1337,11 +1337,11 @@ async function account() {
     catch (error) { toast(error.message); }
   });
   const userForm = dialog.querySelector('#user-form');
-  // Generate: a strong 14-character password (no look-alike characters), shown and copied for handing over.
+  // Generate: a strong 10-character password (no look-alike characters), shown and copied for handing over.
   const genPass = userForm?.querySelector('[data-gen-password]');
   if (genPass) genPass.onclick = async () => {
     const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%*?-'], all = sets.join(''), pick = s => s[crypto.getRandomValues(new Uint32Array(1))[0] % s.length];
-    const chars = [...sets.map(pick), ...Array.from({ length: 10 }, () => pick(all))];
+    const chars = [...sets.map(pick), ...Array.from({ length: 6 }, () => pick(all))];
     for (let i = chars.length - 1; i > 0; i--) { const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1); [chars[i], chars[j]] = [chars[j], chars[i]]; }
     const input = userForm.elements.password; input.value = chars.join(''); input.type = 'text';
     try { await navigator.clipboard.writeText(input.value); toast('Password generated and copied. Give it to the user privately.'); } catch { toast('Password generated. Copy it and give it to the user privately.'); }
