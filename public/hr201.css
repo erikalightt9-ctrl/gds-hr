@@ -1977,3 +1977,6 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .login-form .login-tiles, .login-form .login-links { max-width: none; width: 100%; }
   .login-form .login-links { padding: 0 4px; }
 }
+/* Sign-in: only the user ID, centred and larger (Nov 23, 2026). */
+.login-form .login-user input{text-align:center;font-size:20px;font-weight:600;letter-spacing:.3px;padding:14px 12px;color:#3b2a1e}
+.login-form .login-user input::placeholder{font-size:15px;font-weight:400;color:#9a8a78}

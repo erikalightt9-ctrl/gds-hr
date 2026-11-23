@@ -1220,6 +1220,9 @@ function quickSignIn() {
   hide.forEach(el => el?.classList.add('hidden')); otpLabel?.classList.add('hidden');
   const after = labelOf('username');
   if (who) form.elements.username.value = who;   // another person simply types over it
+  // Only the user ID, centred and larger; the label text becomes the placeholder (still read out to screen readers).
+  const userLabel = labelOf('username'); [...userLabel.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).forEach(n => n.remove());
+  userLabel.classList.add('login-user'); form.elements.username.placeholder = 'Employee ID / username'; form.elements.username.setAttribute('aria-label', 'Employee ID / username');
   after.after(tiles); tiles.after(links);
   form.elements.username.addEventListener('keydown', event => { if (event.key === 'Enter' && hide[0]?.classList.contains('hidden')) { event.preventDefault(); pw.click(); } });
   pw.onclick = () => {
