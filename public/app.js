@@ -1216,13 +1216,8 @@ function quickSignIn() {
   links.append(otpLink); if (recovery) { recovery.className = 'login-link'; links.append(recovery); }
   const hide = [labelOf('password'), otpLabel, form.querySelector('button.primary')];
   hide.forEach(el => el?.classList.add('hidden')); otpLabel?.classList.add('hidden');
-  let after = labelOf('username');
-  if (who) {
-    form.elements.username.value = who;
-    const hello = document.createElement('p'); hello.className = 'login-who'; hello.innerHTML = '<button type="button" class="link-button" data-switch-account>Not you? Clear the username</button>';
-    after.after(hello); after = hello;
-    hello.querySelector('[data-switch-account]').onclick = () => { lastUser.set(''); renderLogin(); };
-  }
+  const after = labelOf('username');
+  if (who) form.elements.username.value = who;   // another person simply types over it
   after.after(tiles); tiles.after(links);
   form.elements.username.addEventListener('keydown', event => { if (event.key === 'Enter' && hide[0]?.classList.contains('hidden')) { event.preventDefault(); pw.click(); } });
   pw.onclick = () => {
