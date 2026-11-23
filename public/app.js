@@ -1205,18 +1205,25 @@ function quickSignIn() {
   const form = document.querySelector('#login-form'), who = lastUser.get(); if (!form || auth?.setup) return;
   const fp = form.querySelector('[data-fingerprint-login]'), labelOf = name => form.elements[name]?.closest('label');
   const tiles = document.createElement('div'); tiles.className = 'login-tiles';
+  const otpLabel = labelOf('otp'), recovery = form.querySelector('[data-recovery]');
+  const links = document.createElement('div'); links.className = 'login-links';
+  const otpLink = document.createElement('button'); otpLink.type = 'button'; otpLink.className = 'login-link'; otpLink.textContent = 'Authenticator code';
+  otpLink.onclick = () => { otpLabel?.classList.remove('hidden'); form.elements.otp?.focus(); };
+  otpLabel?.classList.add('hidden');
+  links.append(otpLink); if (recovery) { recovery.className = 'login-link'; links.append(recovery); }
+  const placeLinks = () => tiles.after(links);
   if (fp) { fp.querySelector('span').textContent = 'Biometrics Login'; tiles.append(fp); }
   if (!who) {
     // First visit on this phone: both tiles; Password moves to the username and password boxes (filled in from the next visit).
     const pw0 = document.createElement('button'); pw0.type = 'button'; pw0.className = 'fingerprint-login'; pw0.innerHTML = `${DOTS_ICON}<span>Password</span>`; pw0.onclick = () => { const u = form.elements.username; (u.value ? form.elements.password : u).focus(); }; tiles.append(pw0);
-    form.querySelector('button.primary').after(tiles); return;
+    form.querySelector('button.primary').after(tiles); placeLinks(); return;
   }
   const pw = document.createElement('button'); pw.type = 'button'; pw.className = 'fingerprint-login'; pw.dataset.passwordLogin = ''; pw.innerHTML = `${DOTS_ICON}<span>Password</span>`; tiles.append(pw);
   form.elements.username.value = who; labelOf('username').classList.add('hidden');
-  const hide = ['password', 'otp'].map(labelOf).concat(form.querySelector('button.primary')); hide.forEach(el => el?.classList.add('hidden'));
+  const hide = ['password'].map(labelOf).concat(form.querySelector('button.primary')); hide.forEach(el => el?.classList.add('hidden'));
   const hello = document.createElement('p'); hello.className = 'login-who'; hello.innerHTML = `Welcome back, <strong>${esc(who)}</strong> · <button type="button" class="link-button" data-switch-account>Not you?</button>`;
-  form.querySelector('h2').after(hello); hello.after(tiles);
-  pw.onclick = () => { hide.forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); form.elements.password.focus(); };
+  form.querySelector('h2').after(hello); hello.after(tiles); placeLinks();
+  pw.onclick = () => { hide.forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); hide.at(-1).after(links); form.elements.password.focus(); };
   hello.querySelector('[data-switch-account]').onclick = () => { lastUser.set(''); renderLogin(); };
 }
 function renderLogin() {
@@ -1241,7 +1248,7 @@ function renderLogin() {
         result = await api('/login/passkey', { pendingToken: result.pendingToken, credential });
       }
       auth = result; lastUser.set(auth.user?.username || data.username); await refresh(); render();
-    } catch (e) { const error = document.querySelector('#login-error'); error.textContent = e.message; error.classList.remove('hidden'); button.disabled = false; }
+    } catch (e) { const error = document.querySelector('#login-error'); error.textContent = e.message; error.classList.remove('hidden'); button.disabled = false; if (/authenticator code/i.test(e.message)) { form.elements.otp?.closest('label')?.classList.remove('hidden'); form.elements.otp?.focus(); } }
   };
   // Employees with a fingerprint set up (Account & security) sign in with it alone: no username or password. The phone
   // confirms with the fingerprint or, without one, its own screen-lock PIN / pattern.
