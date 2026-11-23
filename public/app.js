@@ -241,6 +241,8 @@ async function checkVersion() {
   try {
     const { version } = await fetch('/api/version', { cache: 'no-store' }).then(r => r.json());
     if (!loadedVersion) { loadedVersion = version; return; }
+    // On the sign-in screen nothing can be lost: load the new version at once (unless someone is typing there).
+    if (version !== loadedVersion && !auth?.user && !document.activeElement?.matches('input,textarea') && !document.querySelector('#login-form [name=password]')?.value) { location.reload(); return; }
     if (version !== loadedVersion && !updateReady) {
       updateReady = true;
       const bar = document.createElement('div'); bar.className = 'update-bar'; bar.setAttribute('role', 'status');
@@ -1198,7 +1200,7 @@ function edit(kind, id, preset = {}) {
   };
 }
 // The last account that signed in on this device (username only, this browser only); the sign-in page then asks only
-// for the fingerprint or the password, like a phone banking app. "Not you?" forgets it.
+// for the fingerprint or the password, like a phone banking app; another person simply types over the username.
 const DOTS_ICON = '<svg class="fp-ico" viewBox="0 0 48 48" aria-hidden="true">' + [[12, 12], [24, 12], [36, 12], [12, 24], [24, 24], [36, 24], [12, 36], [24, 36], [36, 36]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="4.2" fill="none" stroke="currentColor" stroke-width="2.6" opacity="${[1, 4, 6, 8].includes(i) ? 1 : 0.55}"/>`).join('') + '</svg>';
 // Two tiles under the remembered account: Biometrics Login and Password (password field shown on tap).
 function quickSignIn() {
