@@ -67,3 +67,17 @@ test('accounts for all registered employees: existing ones untouched, default pa
     assert.ok(!JSON.stringify(db.audit()).includes('default-pass-123'), 'the password is never logged');
   } finally { db.close(); }
 });
+
+test('Add user stores the registered email used by Forgot password; invalid or duplicate emails are refused', async () => {
+  const { registeredEmail } = await import('../src/auth.mjs');
+  const db = new Store(':memory:');
+  try {
+    const admin = await addUser(db, { username: 'admin', password: 'initial-password-123', role: 'admin' });
+    const actor = { id: admin.id, username: 'admin', role: 'admin' };
+    const hr = await addUser(db, { username: 'hr.one', password: 'initial-password-123', role: 'viewer', email: 'hr.one@example.com' }, actor);
+    assert.equal(hr.email, 'hr.one@example.com');
+    assert.equal(registeredEmail(db, db.db.prepare('SELECT * FROM users WHERE id=?').get(hr.id)), 'hr.one@example.com');
+    await assert.rejects(() => addUser(db, { username: 'hr.two', password: 'initial-password-123', role: 'viewer', email: 'not an email' }, actor), /valid email/);
+    await assert.rejects(() => addUser(db, { username: 'hr.three', password: 'initial-password-123', role: 'viewer', email: 'HR.ONE@example.com' }, actor), /already uses this email/);
+  } finally { db.close(); }
+});

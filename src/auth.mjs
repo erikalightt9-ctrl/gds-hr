@@ -16,6 +16,10 @@ export async function addUser(store, input, actor = null) {
     if (!actor && store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n) throw new AppError('Initial setup is already complete.', 409);
     if (!actor && value.role !== 'admin') throw new AppError('The first user must be an administrator.');
     if (store.db.prepare('SELECT id FROM users WHERE username=?').get(value.username)) throw new AppError('Username already exists.');
+    // Registered email for Forgot password (reset links are sent there). Optional for the first administrator.
+    const email = (value.email || '').trim();
+    if (email && !isEmailAddress(email)) throw new AppError('Enter a valid email address.');
+    if (email && store.db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE').get(email)) throw new AppError('Another account already uses this email.');
     const employees = store.read().employees;
     if (employees.some(e => e.id.toLowerCase() === value.username.toLowerCase() && e.id !== value.employeeId)) throw new AppError('This username is reserved for an Employee ID.');
     if (['employee', 'dept_manager'].includes(value.role)) {
@@ -26,8 +30,8 @@ export async function addUser(store, input, actor = null) {
       const taken = store.db.prepare("SELECT username FROM users WHERE (employee_id=? AND role IN ('employee','dept_manager')) OR username=?").get(value.employeeId, value.employeeId);
       if (taken) throw new AppError(`${emp.name} already has an employee login: ${taken.username}. Each employee can have only one.`);
     }
-    const user = { id: randomUUID(), username: value.username, role: value.role, employeeId: value.employeeId || null };
-    store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id) VALUES(?,?,?,?,?)').run(user.id, user.username, hash, user.role, user.employeeId);
+    const user = { id: randomUUID(), username: value.username, role: value.role, employeeId: value.employeeId || null, email: email || null };
+    store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id,email) VALUES(?,?,?,?,?,?)').run(user.id, user.username, hash, user.role, user.employeeId, user.email);
     store.log(actor || user, 'create', 'users', user.id, null, user);
     return user;
   });
