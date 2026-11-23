@@ -1950,3 +1950,10 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .login-form .fingerprint-login .fp-ico{width:46px;height:46px}
 .login-form .fingerprint-login:hover{background:#fff8ec}
 .login-form .fingerprint-login:disabled{opacity:.55}
+
+/* Quick sign-in (Nov 23, 2026): the remembered account and two tiles side by side (Biometrics Login, Password). */
+.login-form .login-who{text-align:center;color:#5a4a3a;font-size:14px;margin:-4px 0 12px}
+.login-form .login-who .link-button{width:auto;margin:0;padding:0;display:inline;font-size:14px}
+.login-form .login-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));max-width:320px;margin:10px auto 8px;border:1px solid #ead9b0;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 6px 18px rgb(90 16 24 / .10)}
+.login-form .login-tiles .fingerprint-login{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;padding:18px 8px 14px}
+.login-form .login-tiles .fingerprint-login + .fingerprint-login{border-left:1px solid #ead9b0}

@@ -1194,12 +1194,32 @@ function edit(kind, id, preset = {}) {
     try { await api(`/records/${kind}?id=${encodeURIComponent(id)}`, null, 'DELETE'); await refresh(); if (['adjustments', 'deductions'].includes(kind) && computationContext) { dialog.close(); await reopenComputation(); toast(`${kind === 'deductions' ? 'Deduction' : 'Adjustment'} removed. Payroll recalculated.`); return; } currentRun = null; dialog.close(); render(); toast('Record removed; audit history retained.'); } catch (e) { reportError(e); deleteButton.disabled = false; }
   };
 }
+// The last account that signed in on this device (username only, this browser only); the sign-in page then asks only
+// for the fingerprint or the password, like a phone banking app. "Not you?" forgets it.
+const lastUser = { get: () => { try { return localStorage.getItem('hr-last-user') || ''; } catch { return ''; } }, set: v => { try { if (v) localStorage.setItem('hr-last-user', v); else localStorage.removeItem('hr-last-user'); } catch { /* storage unavailable: full form */ } } };
+const DOTS_ICON = '<svg class="fp-ico" viewBox="0 0 48 48" aria-hidden="true">' + [[12, 12], [24, 12], [36, 12], [12, 24], [24, 24], [36, 24], [12, 36], [24, 36], [36, 36]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="4.2" fill="none" stroke="currentColor" stroke-width="2.6" opacity="${[1, 4, 6, 8].includes(i) ? 1 : 0.55}"/>`).join('') + '</svg>';
+// Two tiles under the remembered account: Biometrics Login and Password (password field shown on tap).
+function quickSignIn() {
+  const form = document.querySelector('#login-form'), who = lastUser.get(); if (!form || auth?.setup) return;
+  const fp = form.querySelector('[data-fingerprint-login]'), labelOf = name => form.elements[name]?.closest('label');
+  const tiles = document.createElement('div'); tiles.className = 'login-tiles';
+  if (fp) { fp.querySelector('span').textContent = 'Biometrics Login'; tiles.append(fp); }
+  if (!who) { if (fp) form.querySelector('button.primary').after(tiles); return; }
+  const pw = document.createElement('button'); pw.type = 'button'; pw.className = 'fingerprint-login'; pw.dataset.passwordLogin = ''; pw.innerHTML = `${DOTS_ICON}<span>Password</span>`; tiles.append(pw);
+  form.elements.username.value = who; labelOf('username').classList.add('hidden');
+  const hide = ['password', 'otp'].map(labelOf).concat(form.querySelector('button.primary')); hide.forEach(el => el?.classList.add('hidden'));
+  const hello = document.createElement('p'); hello.className = 'login-who'; hello.innerHTML = `Welcome back, <strong>${esc(who)}</strong> · <button type="button" class="link-button" data-switch-account>Not you?</button>`;
+  form.querySelector('h2').after(hello); hello.after(tiles);
+  pw.onclick = () => { hide.forEach(el => el?.classList.remove('hidden')); tiles.classList.add('hidden'); form.elements.password.focus(); };
+  hello.querySelector('[data-switch-account]').onclick = () => { lastUser.set(''); renderLogin(); };
+}
 function renderLogin() {
   messagesSignedOut();
   document.documentElement.dataset.theme = 'gds';   // the sign-in screen keeps its approved red-and-gold design
   page = 'dashboard'; currentRun = null;
   stopLive(); portal.reset(); document.querySelector('.install-banner')?.remove();
   app.innerHTML = `<div class="login welcome-login"><section class="login-form"><form id="login-form"><img class="login-card-logo" src="${brandLogo}" alt="GDS Capital Inc. logo" width="661" height="245"><h2>${auth?.setup ? 'Set up your workspace' : 'TimeHub'}</h2>${auth?.setup ? '<p>Create your administrator account using the one-time setup code shown in your server terminal.</p>' : ''}<div id="login-error" class="form-error hidden" role="alert"></div>${auth?.setup ? '<label>One-time setup code<input name="token" type="password" autocomplete="off" required></label>' : ''}<label>Employee ID / username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label><label>Password<input name="password" type="password" autocomplete="${auth?.setup ? 'new-password' : 'current-password'}" required ${auth?.setup ? 'minlength="9"' : ''} maxlength="200"></label><label>Authenticator code (if enabled)<input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label><button class="primary" type="submit">${auth?.setup ? 'Create administrator account' : 'Sign in'} →</button>${!auth?.setup && passkeySupported() ? '<button type="button" class="fingerprint-login" data-fingerprint-login aria-label="Sign in with fingerprint"><svg class="fp-ico" viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10.5 17.5A16 16 0 0 1 37.5 17.5"/><path d="M7 25a17 17 0 0 1 2-6.4M41 25a17 17 0 0 0-1.4-5.6"/><path d="M14 39c-1.6-3.6-2.4-7.6-2-11.6a12 12 0 0 1 24 .6c0 1.8-.2 3.6-.6 5.3"/><path d="M19.5 42.5C17.6 38.5 16.8 34 17.2 29.6a6.8 6.8 0 0 1 13.6.4c.2 4.2-.6 8.4-2.2 12.2"/><path d="M24 29.5c.3 4.6-.5 9.2-2.4 13.4"/><path d="M34.4 38.6c-.6 1.4-1.3 2.8-2.2 4"/></svg><span>Fingerprint login</span></button>' : ''}${auth?.setup ? '' : '<a class="feishu-login" data-feishu-login href="/api/login/feishu/start" hidden><span aria-hidden="true">💬</span> Sign in with Feishu</a>'}<button type="button" data-recovery>Forgot password?</button>${auth?.setup ? '<p class="footnote">Use a unique password of at least 9 characters.</p>' : ''}</form></section><section class="welcome-body" aria-label="Our culture">${welcomeScene()}${welcomeCulture()}</section></div>`;
+  quickSignIn();
   document.querySelector('#login-form').onsubmit = async event => {
     event.preventDefault(); const form = event.target, button = form.querySelector('button'); button.disabled = true;
     const data = Object.fromEntries(new FormData(form));
@@ -1214,7 +1234,7 @@ function renderLogin() {
         try { credential = await passkeyGet(result.options); } catch { throw new Error('Fingerprint sign-in was cancelled or is not available on this phone. If your fingerprint is not saved here, choose “Use a phone or tablet” and scan the code with your registered phone.'); }
         result = await api('/login/passkey', { pendingToken: result.pendingToken, credential });
       }
-      auth = result; await refresh(); render();
+      auth = result; lastUser.set(auth.user?.username || data.username); await refresh(); render();
     } catch (e) { const error = document.querySelector('#login-error'); error.textContent = e.message; error.classList.remove('hidden'); button.disabled = false; }
   };
   // Employees with a fingerprint set up (Account & security) sign in with it alone: no username or password. The phone
@@ -1226,7 +1246,7 @@ function renderLogin() {
       const start = await api('/login/fingerprint/options', {});
       let credential;
       try { credential = await passkeyGet(start.options); } catch { if (automatic) { fingerprintButton.disabled = false; return; } throw new Error('Fingerprint sign-in was cancelled, or no fingerprint is set up for this site on this phone. Sign in with your username and password, then set it up in Account & security → Fingerprint sign-in.'); }
-      auth = await api('/login/fingerprint', { token: start.token, credential }); screenLockHere.set(true); await refresh(); render();
+      auth = await api('/login/fingerprint', { token: start.token, credential }); screenLockHere.set(true); lastUser.set(auth.user?.username || ''); await refresh(); render();
     } catch (e) { if (/not recognised/i.test(e.message)) screenLockHere.set(false); error.textContent = e.message; error.classList.remove('hidden'); fingerprintButton.disabled = false; }
   };
   if (fingerprintButton) fingerprintButton.onclick = () => screenLockSignIn();
