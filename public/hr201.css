@@ -1991,3 +1991,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 }
 
 .acc-actions{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+
+/* Final pay release status (Nov 23, 2026). */
+.fp-release{width:auto;min-width:130px;padding:4px 8px;font-size:13px;border-color:#e0c9c9;color:#a11d2b;background:#fff}
+.fp-release.is-released{color:#1f6b3a;border-color:#b9dcc4;background:#f1faf3}

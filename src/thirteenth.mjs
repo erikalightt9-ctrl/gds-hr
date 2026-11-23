@@ -176,6 +176,19 @@ export function finalPayRecord(store, actor, id) {
   if (!row) throw new AppError('Final pay computation not found.', 404);
   return JSON.parse(row.data);
 }
+// Release status of a saved final pay (Nov 23, 2026): Released / Not released, with who and when; audited.
+export function setFinalPayRelease(store, actor, id, input) {
+  permit(actor, PAY);
+  const v = z.object({ released: z.boolean(), releasedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict().parse(input);
+  return store.transaction(() => {
+    const before = finalPayRecord(store, actor, id);
+    const release = v.released ? { released: true, releasedOn: v.releasedOn || localToday(), by: actor.username, at: new Date().toISOString() } : { released: false, by: actor.username, at: new Date().toISOString() };
+    const after = { ...before, release };
+    store.db.prepare('UPDATE final_pay SET data=? WHERE id=?').run(JSON.stringify(after), id);
+    store.log(actor, v.released ? 'release-final-pay' : 'unrelease-final-pay', 'final-pay', id, { release: before.release || null }, { employeeId: before.employeeId, release });
+    return after;
+  });
+}
 export function finalPayRecords(store, actor) {
   permit(actor, PAY);
   return store.db.prepare('SELECT data FROM final_pay ORDER BY rowid DESC').all().map(r => JSON.parse(r.data));
