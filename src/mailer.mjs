@@ -23,29 +23,37 @@ export function mailerFromEnv(env = process.env) {
 }
 
 export function createMailer({ host, port, secure, user, pass, from, timeoutMs = 20000 }) {
+  async function handshake(session) {
+    await session.expect(220);
+    let features = await session.command(`EHLO ${hostLabel(from)}`, 250);
+    if (secure === 'starttls') {
+      if (!/STARTTLS/i.test(features)) throw new Error('The mail server does not offer STARTTLS.');
+      await session.command('STARTTLS', 220);
+      await session.upgrade(host);
+      features = await session.command(`EHLO ${hostLabel(from)}`, 250);
+    }
+    if (user) {
+      if (/AUTH[ =][^\n]*PLAIN/i.test(features)) await session.command(`AUTH PLAIN ${Buffer.from(`\0${user}\0${pass || ''}`).toString('base64')}`, 235);
+      else {
+        await session.command('AUTH LOGIN', 334);
+        await session.command(Buffer.from(user).toString('base64'), 334);
+        await session.command(Buffer.from(pass || '').toString('base64'), 235);
+      }
+    }
+  }
   return {
     from,
+    // Connects, signs in and quits: checks the settings without sending an email.
+    async verify() {
+      const session = await open({ host, port, secure, timeoutMs });
+      try { await handshake(session); await session.command('QUIT', 221).catch(() => {}); return true; } finally { session.close(); }
+    },
     async send({ to, subject, text }) {
       if (!isEmailAddress(to)) throw new Error('Invalid recipient address.');
       if (/[\r\n]/.test(subject)) throw new Error('Invalid subject.');
       const session = await open({ host, port, secure, timeoutMs });
       try {
-        await session.expect(220);
-        let features = await session.command(`EHLO ${hostLabel(from)}`, 250);
-        if (secure === 'starttls') {
-          if (!/STARTTLS/i.test(features)) throw new Error('The mail server does not offer STARTTLS.');
-          await session.command('STARTTLS', 220);
-          await session.upgrade(host);
-          features = await session.command(`EHLO ${hostLabel(from)}`, 250);
-        }
-        if (user) {
-          if (/AUTH[ =][^\n]*PLAIN/i.test(features)) await session.command(`AUTH PLAIN ${Buffer.from(`\0${user}\0${pass || ''}`).toString('base64')}`, 235);
-          else {
-            await session.command('AUTH LOGIN', 334);
-            await session.command(Buffer.from(user).toString('base64'), 334);
-            await session.command(Buffer.from(pass || '').toString('base64'), 235);
-          }
-        }
+        await handshake(session);
         await session.command(`MAIL FROM:<${from}>`, 250);
         await session.command(`RCPT TO:<${to}>`, [250, 251]);
         await session.command('DATA', 354);
