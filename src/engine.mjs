@@ -46,7 +46,10 @@ export function scheduleOn(employee, profile = {}, date, rule) {
     mealBreakMinutes: override.mealBreakMinutes ?? profile.mealBreakMinutes ?? 60,
     arrangement: override.arrangement || profile.arrangement || '',
     // Flexible day: any start time; only the regular hours must be rendered. Never late, and no overtime.
-    flexible: !!override.flexible,
+    // Flexible time (whole schedule, Nov 24, 2026; e.g. event staff working to a call time): any start, never late;
+    // the regular hours must be worked (undertime if fewer) and overtime counts after them (with an approved filing).
+    flexible: !!override.flexible || (!!profile.flexibleTime && !override.scheduleStart),
+    flexibleOT: !override.flexible && !!profile.flexibleTime && !override.scheduleStart,
     // Work-from-home day counted present without time in / out (e.g. Saturdays for office staff).
     autoPresent: !!override.autoPresent,
   };
@@ -120,10 +123,12 @@ export const LUNCH_START = '12:00';
 export function withScheduledLunch(record, sched, profile, rest = false) {
   const meal = Number(sched?.mealBreakMinutes) || 0;
   const set = profile?.mealBreakMinutes != null || profile?.daySchedules?.some(d => d.day === weekday(record?.date) && d.mealBreakMinutes != null);
-  if (!set || rest || record?.regularHoursOnly || !record?.timeIn || !record.timeOut || record.breaks?.length || meal <= 0 || sched.flexible) return record;
+  if (!set || rest || record?.regularHoursOnly || !record?.timeIn || !record.timeOut || record.breaks?.length || meal <= 0 || (sched.flexible && !sched.flexibleOT)) return record;
   const hm = v => v.split(':').map(Number).reduce((h, m) => h * 60 + m), fmt = v => `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`;
   const a = hm(record.timeIn), b = record.endNextDay ? 1440 : hm(record.timeOut);
-  const s = Math.max(hm(LUNCH_START), a), e = Math.min(hm(LUNCH_START) + meal, b, 1439);
+  const from = sched.flexibleOT ? a + Math.round((Number(sched.hoursPerDay) || 8) * 30) : hm(LUNCH_START);
+  if (sched.flexibleOT && (b - a) <= (Number(sched.hoursPerDay) || 8) * 60) return record;   // short day: no lunch taken off
+  const s = Math.max(from, a), e = Math.min(from + meal, b, 1439);
   return e > s ? { ...record, breaks: [{ start: `${record.date}T${fmt(s)}`, end: `${record.date}T${fmt(e)}` }] } : record;
 }
 export function attendanceMinutes(record) {
@@ -506,7 +511,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       let schedEnd = daySched.end ? hm(daySched.end) : null;
       if (schedEnd !== null && schedEnd <= schedStart) schedEnd += 1440;
       const otFrom = rest || flexible || record.regularHoursOnly || schedEnd === null ? null : stamp(`${d}T00:00`) + (schedEnd + Math.min(lateOffset, lateMinutes)) * 60000;
-      const isOT = (m, index) => !flexible && (otFrom === null ? index >= normalHours * 60 : m >= otFrom);
+      const isOT = (m, index) => (!flexible || daySched.flexibleOT) && (otFrom === null ? index >= normalHours * 60 : m >= otFrom);
       const eligible = minutes.map((m, index) => {
         if (!isOT(m, index)) return false;
         if (!gatedOT) return true;

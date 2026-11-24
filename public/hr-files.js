@@ -183,23 +183,27 @@ export function createFiles(ctx) {
   const block = (icon, title, body, action = '') => sectionCard(icon, title, body, action);
   // Work schedule: the same schedule attendance and payroll use (late, overtime, undertime, rest days).
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const scheduleCard = record => { const s = record.schedule || {}; return block('🕘', 'Work schedule', dl([['Time in', s.start || 'Not set'], ['Time out', s.end || 'Not set'], ['Regular hours', s.hoursPerDay ? `${s.hoursPerDay} h per day` : 'Not set'], ['Meal break', s.mealBreakMinutes === null || s.mealBreakMinutes === undefined ? 'Not set' : `${s.mealBreakMinutes} min`], ['Rest days', (s.restDays || []).length ? s.restDays.map(d => DAYS[d]).join(', ') : 'None'], ['Arrangement', s.arrangement || 'Office']]), record.canEdit && !record.archived ? '<button class="small" data-edit-schedule>Edit schedule</button>' : ''); };
+  const scheduleCard = record => { const s = record.schedule || {}; return block('🕘', 'Work schedule', dl([...(s.flexible ? [['Time in / out', 'Flexible time: any time (event call time); the regular hours must be worked']] : [['Time in', s.start || 'Not set'], ['Time out', s.end || 'Not set']]), ['Regular hours', s.hoursPerDay ? `${s.hoursPerDay} h per day` : 'Not set'], ['Meal break', s.mealBreakMinutes === null || s.mealBreakMinutes === undefined ? 'Not set' : `${s.mealBreakMinutes} min`], ['Rest days', (s.restDays || []).length ? s.restDays.map(d => DAYS[d]).join(', ') : 'None'], ['Arrangement', s.arrangement || 'Office']]), record.canEdit && !record.archived ? '<button class="small" data-edit-schedule>Edit schedule</button>' : ''); };
   function scheduleDialog(id, record, after) {
     const s = record.schedule || {};
     openDialog(`Work schedule · ${record.name}`, `<form id="schedule-form" class="dialog-body form-grid">
-      <label class="field">Time in<input type="time" name="start" required value="${esc(s.start || '09:00')}"></label>
-      <label class="field">Time out<input type="time" name="end" required value="${esc(s.end || '18:00')}"></label>
+      <label class="check full flex-time"><input type="checkbox" name="flexible" ${s.flexible ? 'checked' : ''}> <span><strong>Flexible time</strong> · no fixed time in / out (e.g. events with their own call time). Never late; the regular hours must be worked; overtime counts after them.</span></label>
+      <label class="field"><span data-flex-label="Usual time in (reference)">Time in</span><input type="time" name="start" required value="${esc(s.start || '09:00')}"></label>
+      <label class="field"><span data-flex-label="Usual time out (reference)">Time out</span><input type="time" name="end" required value="${esc(s.end || '18:00')}"></label>
       <label class="field">Regular hours per day<input type="number" name="hoursPerDay" min="1" max="16" step="0.5" required value="${esc(s.hoursPerDay ?? 8)}"></label>
       <label class="field">Meal break (minutes)<input type="number" name="mealBreakMinutes" min="0" max="240" step="5" required value="${esc(s.mealBreakMinutes ?? 60)}"></label>
       <fieldset class="field full rest-days"><legend>Rest days</legend>${DAYS.map((d, i) => `<label class="inline-check"><input type="checkbox" name="restDays" value="${i}" ${(s.restDays || []).includes(i) ? 'checked' : ''}> ${d}</label>`).join('')}</fieldset>
       <label class="field">Arrangement<select name="arrangement">${['Office', 'WFH', 'Hybrid'].map(a => `<option ${a === (s.arrangement || 'Office') ? 'selected' : ''}>${a}</option>`).join('')}</select></label>
-      <p class="legend full">Attendance and payroll use this schedule: lateness from the time in, overtime and undertime from the regular hours, and rest days.</p>
+      <p class="legend full" data-flex-legend>Attendance and payroll use this schedule: lateness from the time in, overtime and undertime from the regular hours, and rest days.</p>
       <p class="form-error full hidden" role="alert" data-schedule-error></p>
       <div class="full"><button class="primary">Save schedule</button></div></form>`);
+    const form = dialog.querySelector('#schedule-form'), flexBox = form.elements.flexible;
+    const showFlex = () => { form.querySelectorAll('[data-flex-label]').forEach(el => { el.dataset.plain ??= el.textContent; el.textContent = flexBox.checked ? el.dataset.flexLabel : el.dataset.plain; }); form.querySelector('[data-flex-legend]').textContent = flexBox.checked ? 'Flexible time: any time in and out; never late. Undertime when fewer than the regular hours are worked; overtime after them (with an approved filing). The meal break is taken off mid-shift on a full day.' : 'Attendance and payroll use this schedule: lateness from the time in, overtime and undertime from the regular hours, and rest days.'; };
+    flexBox.onchange = showFlex; showFlex();
     dialog.querySelector('#schedule-form').onsubmit = async event => {
       event.preventDefault(); const f = new FormData(event.target);
       try {
-        await api(`/hr/employees/${encodeURIComponent(id)}/schedule`, { start: f.get('start'), end: f.get('end'), hoursPerDay: Number(f.get('hoursPerDay')), mealBreakMinutes: Number(f.get('mealBreakMinutes')), restDays: f.getAll('restDays').map(Number), arrangement: f.get('arrangement') });
+        await api(`/hr/employees/${encodeURIComponent(id)}/schedule`, { start: f.get('start'), end: f.get('end'), hoursPerDay: Number(f.get('hoursPerDay')), mealBreakMinutes: Number(f.get('mealBreakMinutes')), restDays: f.getAll('restDays').map(Number), arrangement: f.get('arrangement'), flexible: f.get('flexible') === 'on' });
         dialog.close(); toast('Work schedule saved. Attendance and payroll now use it.'); await after();
       } catch (error) { const e = dialog.querySelector('[data-schedule-error]'); e.textContent = error.message; e.classList.remove('hidden'); }
     };

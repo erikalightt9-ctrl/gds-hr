@@ -202,7 +202,7 @@ export function overtimeCheck(state, employee, o, today = localToday()) {
   if (end0 !== null && end0 <= from0) end0 += 1440;
   const lateMin = Math.max(0, (stamp(`${o.date}T${record.timeIn}`) - stamp(`${o.date}T${record.scheduledIn}`)) / 60000);
   const otFrom = rest || end0 === null ? null : stamp(`${o.date}T00:00`) + (end0 + Math.min(record.offsetMinutes || 0, lateMin)) * 60000;
-  const inPeriod = sched.flexible ? 0 : minutes.filter((m, i) => (otFrom === null ? i >= sched.hoursPerDay * 60 : m >= otFrom) && m >= s && m < e).length;
+  const inPeriod = sched.flexible && !sched.flexibleOT ? 0 : minutes.filter((m, i) => (otFrom === null ? i >= sched.hoursPerDay * 60 : m >= otFrom) && m >= s && m < e).length;
   const workedInPeriod = round(inPeriod / 60), payableHours = round(Math.floor(Math.min(inPeriod, Math.round(target * 60)) / OT_BLOCK) * OT_BLOCK / 60);
   if (!attendanceValid(state, record)) flags.push('Attendance not approved yet');
   if (['pending', 'approved'].includes(o.status) && target - workedInPeriod >= OT_BLOCK / 60) flags.push(`Worked ${workedInPeriod} h within the period, ${round(target - workedInPeriod)} h less than ${o.status === 'approved' ? 'approved' : 'filed'}`);

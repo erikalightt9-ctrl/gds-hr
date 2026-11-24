@@ -2008,3 +2008,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .reset-handover .reset-link button{width:auto;margin:0;white-space:nowrap}
 .reset-handover details{margin-top:8px}.reset-handover code{word-break:break-all;font-size:11px}
 .reset-handover .reset-sent{color:#1f6b3a;margin:0 0 4px}.reset-handover .reset-failed{color:#a11d2b;margin:0 0 4px}
+
+/* Work schedule: Flexible time option (Nov 24, 2026). */
+.flex-time{grid-column:1/-1;display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #ead9b0;border-radius:10px;background:#fffaf0;font-size:13px;line-height:1.4}
+.flex-time input{margin-top:3px}
