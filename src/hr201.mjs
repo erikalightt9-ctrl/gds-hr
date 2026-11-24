@@ -120,6 +120,9 @@ export function assertCanView(store, actor, employeeId) {
 
 // ---------- Directory ----------
 export const displayNumber = e => e.employeeNumber || e.id;
+// Resigned Employees (Nov 24, 2026): a person whose separation has taken effect (last day passed) moves out of the
+// working list into Resigned Employees; records stay available to authorized staff. Archived files stay separate.
+export const isResigned = (e, employment = {}) => !e.archived && !!e.endDate && e.endDate < localToday() || (!e.archived && ['Resigned', 'Terminated'].includes(employment.employeeStatus) && (!e.endDate || e.endDate < localToday()));
 export function activity(e, employment = {}) {
   if (e.archived) return 'Archived';
   if (e.endDate && e.endDate < localToday()) return 'Inactive';   // separated: never counted as active
@@ -130,7 +133,7 @@ export function directory(store, actor) {
   const people = scopeEmployees(store, actor);
   return people.map(e => {
     const job = profileOf(store, e.id, 'employment'), personal = profileOf(store, e.id, 'personal');
-    return { id: e.id, schedule: scheduleOf(store, e).text, number: displayNumber(e), name: e.name, department: e.department, position: job.position || '', classification: job.employmentStatus || '', status: activity(e, job), employeeStatus: job.employeeStatus || '', dateHired: e.startDate, workEmail: job.businessEmail || '', supervisor: job.supervisor || '', probationEnd: job.probationEnd || '', reviewDate: job.reviewDate || '', employmentType: job.employmentType || '', workLocation: job.workLocation || '', archived: !!e.archived, draft: !!e.draft, ...(HR_TEAM.includes(actor.role) ? { personalEmail: personal.personalEmail || '', mobile: personal.mobile || profileOf(store, e.id, 'contact').mobile || '' } : {}) };
+    return { id: e.id, resigned: isResigned(e, job), endDate: e.endDate || '', schedule: scheduleOf(store, e).text, number: displayNumber(e), name: e.name, department: e.department, position: job.position || '', classification: job.employmentStatus || '', status: activity(e, job), employeeStatus: job.employeeStatus || '', dateHired: e.startDate, workEmail: job.businessEmail || '', supervisor: job.supervisor || '', probationEnd: job.probationEnd || '', reviewDate: job.reviewDate || '', employmentType: job.employmentType || '', workLocation: job.workLocation || '', archived: !!e.archived, draft: !!e.draft, ...(HR_TEAM.includes(actor.role) ? { personalEmail: personal.personalEmail || '', mobile: personal.mobile || profileOf(store, e.id, 'contact').mobile || '' } : {}) };
   });
 }
 

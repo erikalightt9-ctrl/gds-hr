@@ -38,3 +38,17 @@ test('archiving a 201 file disables its logins; the last active administrator is
     assert.equal(store.db.prepare('SELECT disabled FROM users WHERE id=?').get(admin.id).disabled, 0, 'last administrator kept');
   } finally { store.close(); }
 });
+
+test('Resigned Employees: a separation that has taken effect leaves the working list; records stay', async () => {
+  const { directory, isResigned } = await import('../src/hr201.mjs');
+  const store = new Store(':memory:'), s = completeState();
+  s.employees.push({ ...s.employees[0], id: 'EMP-LEFT', name: 'Gone, Already', endDate: '2026-01-31' });
+  s.employees.push({ ...s.employees[0], id: 'EMP-SOON', name: 'Leaving, Soon', endDate: '2099-12-31' });
+  store.write(s);
+  try {
+    const list = directory(store, { username: 'hr1', role: 'hr' });
+    assert.deepEqual(list.filter(p => p.resigned).map(p => p.id), ['EMP-LEFT'], 'only once the last day has passed');
+    assert.equal(isResigned({ endDate: '', archived: false }, { employeeStatus: 'Resigned' }), true);
+    assert.equal(isResigned({ endDate: '2026-01-31', archived: true }, {}), false, 'archived files stay under Archived');
+  } finally { store.close(); }
+});

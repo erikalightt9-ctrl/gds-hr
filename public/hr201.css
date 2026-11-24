@@ -2016,3 +2016,4 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .dp-toolbar{justify-content:space-between}
 .dp-toolbar .search{margin-left:0;flex:0 1 340px;min-width:220px}
 .dp-toolbar .download-links{margin-left:auto}
+.ml-card-ico.ml-minus { background: #eceef2; color: #5a6270; }

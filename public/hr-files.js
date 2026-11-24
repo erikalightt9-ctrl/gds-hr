@@ -26,9 +26,9 @@ export function createFiles(ctx) {
   // ---------- Directory ----------
   function filtered() {
     const q = query.q.toLowerCase();
-    let list = people.filter(p => (query.status === 'Archived' ? p.archived : !p.archived) && (!q || [p.number, p.name, p.department, p.position, p.workEmail].join(' ').toLowerCase().includes(q))
+    let list = people.filter(p => (query.status === 'Archived' ? p.archived : query.status === 'Resigned' ? p.resigned : !p.archived && !p.resigned) && (!q || [p.number, p.name, p.department, p.position, p.workEmail].join(' ').toLowerCase().includes(q))
       && (!query.department || p.department === query.department) && (!query.position || p.position === query.position)
-      && (!query.status || query.status === 'Archived' || p.status === query.status) && (!query.classification || p.classification === query.classification)
+      && (!query.status || query.status === 'Archived' || query.status === 'Resigned' || p.status === query.status) && (!query.classification || p.classification === query.classification)
       && (!query.docs || (query.docs === 'missing' ? p.documents?.missing : query.docs === 'review' ? p.documents?.review : query.docs === 'expired' ? p.documents?.expired : query.docs === 'newhires' ? p.dateHired >= ctx.daysAgo(30) : true)));
     list = [...list].sort((a, b) => String(a[sort.key] ?? '').localeCompare(String(b[sort.key] ?? ''), undefined, { numeric: true }) * sort.dir);
     return list;
@@ -79,15 +79,15 @@ export function createFiles(ctx) {
     const list = filtered(), size = PAGE_SIZE, pages = Math.max(1, Math.ceil(list.length / size)); pageNo = Math.min(pageNo, pages);
     const rows = list.slice((pageNo - 1) * size, pageNo * size);
     if (!selectedId || !people.some(p => p.id === selectedId)) selectedId = rows[0]?.id || null;
-    const current = people.filter(p => !p.archived), active = current.filter(p => p.status === 'Active').length;
+    const current = people.filter(p => !p.archived && !p.resigned), active = current.filter(p => p.status === 'Active').length, resigned = people.filter(p => p.resigned).length;
     const card = (key, ic, value, label) => `<button class="ml-card${(query.status || '') === key ? ' active' : ''}" data-ml-status="${key}"><span class="ml-card-ico ml-${ic}">${svg(ic)}</span><span><strong>${value}</strong><small>${label}</small></span></button>`;
     const from = list.length ? (pageNo - 1) * size + 1 : 0, to = Math.min(pageNo * size, list.length);
     return `<div class="ml-header"><div><h1>Employee Masterlist</h1><p>Manage employee profiles and employment records</p></div><div class="ml-header-tools"><a class="ml-btn" href="/api/reports/employees.xlsx" download>${svg('export')}Export</a>${can().manage ? `<button class="ml-btn primary" data-hr-add-employee>${svg('plus')}Add employee</button>` : ''}</div></div>
       <div class="ml-layout"><section class="ml-main">
-        <div class="ml-cards">${card('', 'all', current.length, 'Employee records')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}</div>
+        <div class="ml-cards">${card('', 'all', current.length, 'Employee records')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}${card('Resigned', 'minus', resigned, 'Resigned employees')}</div>
         <div class="ml-filters"><label class="ml-search">${svg('search')}<input type="search" data-q value="${esc(query.q)}" placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
           <select data-f="department" aria-label="Subsidiary">${options(people.map(p => p.department), query.department, 'Subsidiary')}</select>
-          <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+          <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Resigned', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
         <div class="ml-table-wrap"><table class="ml-table"><thead><tr><th>Employee</th><th>Subsidiary / Position</th><th>Status</th><th>Date hired</th></tr></thead><tbody>
           ${rows.map(p => `<tr class="${p.id === selectedId ? 'selected' : ''}" data-ml-row="${esc(p.id)}"><td><div class="ml-emp">${avatar(p)}<span><button class="ml-name" data-open="${esc(p.id)}" data-start-tab="overview" title="Open personal information">${esc(personName(p.name))}</button><small>${esc(p.number)}</small></span></div></td><td><span class="ml-two"><strong>${esc(p.department || '—')}</strong><small>${esc(p.position || '—')}</small></span></td><td>${pill(p)}</td><td>${p.dateHired ? fmtDate(p.dateHired) : '—'}</td></tr>`).join('') || `<tr><td colspan="4" class="empty">${query.q || query.department || query.status ? 'No employees match these filters.' : 'No employees yet.'}</td></tr>`}
         </tbody></table></div>
