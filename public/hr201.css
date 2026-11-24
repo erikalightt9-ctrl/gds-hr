@@ -2012,3 +2012,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* Work schedule: Flexible time option (Nov 24, 2026). */
 .flex-time{grid-column:1/-1;display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #ead9b0;border-radius:10px;background:#fffaf0;font-size:13px;line-height:1.4}
 .flex-time input{margin-top:3px}
+/* Due Process: search on the left, Excel on the right (Nov 24, 2026). */
+.dp-toolbar{justify-content:space-between}
+.dp-toolbar .search{margin-left:0;flex:0 1 340px;min-width:220px}
+.dp-toolbar .download-links{margin-left:auto}
