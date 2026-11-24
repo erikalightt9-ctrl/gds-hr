@@ -183,7 +183,7 @@ export function createPortal(ctx) {
   // Time in / Time out comes first, right after sign-in.
   // Quick Actions: every section of the menu as a card, in menu order (Nov 24, 2026).
   const QUICK_LABEL = { profile201: 'My Profile', attendance: 'Attendance', overtime201: 'Overtime', leave: 'Leave', payslips: 'Payslip', loans201: 'Loan', memos: 'Notices', trainings: 'Training', cases: 'Due Process' };
-  const quickCards = () => { const all = [['attendance'], ['leave'], ['payslips'], ...(ctx.portalHr?.tabs || [])].map(([id]) => id); return MENU_GROUPS.flatMap(([, ids]) => ids).filter(id => all.includes(id)).map(id => `<button type="button" class="sc-quick sc-q-${id}" data-portal-tab="${id}"><span class="sc-quick-ico">${menuIcon(id)}</span><span>${QUICK_LABEL[id] || id}</span></button>`).join(''); };
+  const quickCards = () => { const all = [['attendance'], ['leave'], ['payslips'], ...(ctx.portalHr?.tabs || [])].map(([id]) => id); return MENU_GROUPS.flatMap(([, ids]) => ids).filter(id => all.includes(id)).map(id => id === 'profile201' ? `<button type="button" class="sc-quick sc-q-benefits" data-benefits><span class="sc-quick-ico"><svg class="em-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/></svg></span><span>Benefits</span></button>` : `<button type="button" class="sc-quick sc-q-${id}" data-portal-tab="${id}"><span class="sc-quick-ico">${menuIcon(id)}</span><span>${QUICK_LABEL[id] || id}</span></button>`).join(''); };
   // My attendance this month (Nov 24, 2026): days present, on-time rate, late arrivals, hours logged (time in to time out
   // less recorded breaks), hours per day and leave left. Read from the employee's own records; nothing is estimated.
   function attendanceStats(data) {
@@ -245,6 +245,7 @@ export function createPortal(ctx) {
     // Analytics bar heights (the page's security policy blocks inline style attributes; CSSOM is allowed).
     app.querySelectorAll('.sc-bar[data-bar]').forEach(el => el.style.setProperty('--bar', `${el.dataset.bar}%`));
     app.querySelectorAll('.sc-bars-ref[data-ref]').forEach(el => el.style.setProperty('--r', el.dataset.ref));
+    app.querySelectorAll('[data-benefits]').forEach(b => { b.onclick = () => openDialog('Benefits', '<div class="dialog-body"><p><strong>Coming soon.</strong></p><p class="muted">Your benefits will be listed here.</p></div>', '<div class="dialog-foot"><button data-close>Close</button></div>'); });
     // The whole Welcome card opens My profile & 201 file (Nov 24, 2026).
     const welcome = app.querySelector('.sc-welcome');
     if (welcome) { welcome.setAttribute('role', 'link'); welcome.tabIndex = 0; welcome.title = 'Open My profile & 201 file'; const open = () => app.querySelector('.sc-namelink')?.click(); welcome.onclick = e => { if (!e.target.closest('button')) open(); }; welcome.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }; }

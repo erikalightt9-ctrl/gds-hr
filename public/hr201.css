@@ -2561,3 +2561,4 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .theme-scarlet .clock-block { box-sizing: border-box; min-height: 100dvh; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; padding: 12px 0 94px; margin-top: 0 !important; scroll-snap-align: start; }
   .theme-scarlet .clock-block > * { margin-top: 0 !important; margin-bottom: 0 !important; }
 }
+.theme-scarlet .sc-q-benefits { background: linear-gradient(160deg, #fff, #fff1d6) !important; } .theme-scarlet .sc-q-benefits .sc-quick-ico .em-ico { color: #d98a00 !important; }
