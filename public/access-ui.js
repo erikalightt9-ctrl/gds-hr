@@ -15,7 +15,7 @@ export async function usersPage({ api, esc, shell, heading, table, badge, accoun
     r.mfaRequired && r.withMfa < r.accounts ? badge(`${r.accounts - r.withMfa} must set up two-factor sign-in`, 'pending') : '',
     r.unnamed ? badge(`${r.unnamed} not linked to a person`, 'rejected') : '',
   ].filter(Boolean).join(' ') || '—';
-  shell(head + `<section class="panel">${table(['Role', 'What they can do', 'Accounts', 'Needs attention'], used.map(r => [`<strong>${esc(r.label)}</strong>`, `<span class="wrap">${esc(r.scope)}</span>`, r.accounts, notes(r)]), 'No accounts yet.')}
+  shell(head + `<section class="panel">${table(['Role', 'What they can do', 'Accounts', 'Needs attention'], used.map(r => [`<strong>${esc(r.label)}</strong>`, `<span class="wrap">${esc(r.scope)}</span>`, r.people ? `<details class="role-people"><summary title="Show who has this role">${r.accounts}</summary><ul>${r.people.map(p => `<li><strong>${esc(p.name || p.username)}</strong>${p.name ? ` <small class="muted">${esc(p.username)}</small>` : ''}${r.mfaRequired && !p.twoFactor ? ' <small class="muted">· two-factor not set up</small>' : ''}</li>`).join('')}</ul></details>` : r.accounts, notes(r)]), 'No accounts yet.')}
     ${unused.length ? `<p class="panel-body legend">No accounts yet: ${unused.map(r => esc(r.label)).join(' · ')}</p>` : ''}</section>`);
   document.querySelector('[data-open-accounts]')?.addEventListener('click', () => account());
 }
