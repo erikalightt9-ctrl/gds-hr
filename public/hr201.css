@@ -2351,3 +2351,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-welcome:focus-visible { outline: 3px solid #f3a6a6; outline-offset: 2px; }
 /* No menu button in the phone header: Quick Actions and More cover it (Nov 24, 2026). */
 @media (max-width: 900px) { .theme-scarlet .employee-top .employee-menu-button { display: none !important; } .theme-scarlet .employee-top { justify-content: flex-end !important; } }
+/* Bottom bar: Account & Security instead of Home; larger bell (Nov 24, 2026). */
+.theme-scarlet .sc-bottom button[data-account] .em-ico { width: 26px; height: 26px; }
+.theme-scarlet .employee-top .portal-bell { width: 52px !important; height: 52px !important; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center; }
+.theme-scarlet .employee-top .portal-bell .tb-ico { width: 34px !important; height: 34px !important; }
