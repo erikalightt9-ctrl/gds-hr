@@ -462,7 +462,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const loanSchedule = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/schedule$/);
       if (loanSchedule && req.method === 'POST') { send(200, setLoanSchedule(store, auth.user, loanSchedule[1], await readBody(req))); return; }
       const releaseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/release$/);
-      if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1])); return; }
+      if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1], await readBody(req))); return; }
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);
       if (reverseRun && req.method === 'POST') { send(200, reversePayroll(store, auth.user, reverseRun[1], await readBody(req))); return; }
       if (pathname === '/api/approvals/inbox' && req.method === 'GET') { permit(auth.user, ['admin', 'hr', 'hr_staff', 'maker', 'dept_manager']); send(200, approvalInbox(store, auth.user)); return; }
@@ -581,7 +581,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/users-roles' && req.method === 'GET') { send(200, usersAndRoles(store, auth.user)); return; }
       if (pathname === '/api/payroll/decisions' && req.method === 'POST') { send(200, recordPayrollDecision(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/payroll/post' && req.method === 'POST') {
-        permit(auth.user, ['admin', 'payroll']); send(200, postPayroll(store, auth.user, postSchema.parse(await readBody(req)))); return;
+        permit(auth.user, ['admin', 'hr']); send(200, postPayroll(store, auth.user, postSchema.parse(await readBody(req)))); return;
       }
       if (pathname.startsWith('/api/runs/') && req.method === 'GET') {
         const id = pathname.split('/')[3].replace(/\.(xlsx|pdf)$/, ''), run = store.read().runs.find(r => r.id === id);

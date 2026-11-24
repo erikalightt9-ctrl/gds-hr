@@ -6,6 +6,7 @@ import { markCaseAdjustments, unmarkCaseAdjustments } from './attendance-cases.m
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
 import { decide as decideChain } from './approval-chain.mjs';
+import { localToday } from './profiles.mjs';
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 // Leave of this many days or more needs a supporting document (November 2026 policy); shorter leave only when HR asks.
 export const PROOF_FROM_DAYS = 2;   // kept for reference only: supporting documents are optional (Nov 11, 2026)
@@ -182,13 +183,17 @@ export function deleteRecord(store, actor, kind, id) {
 }
 // Send a finalized payroll's payslips to the employees now (before salary day if needed): each employee gets the
 // payslip in My payslips and a notice in their bell. Sending again only re-notifies those not yet told.
-export function releasePayslips(store, actor, runId) {
-  permit(actor, ['admin', 'payroll']);
+export function releasePayslips(store, actor, runId, input = {}) {
+  if (!(actor.finance || actor.role === 'admin')) throw new AppError('You do not have permission for this action. The Finance / Releasing Officer or the System Administrator records the salary release.', 403);
+  const reference = String(input.reference || '').trim().slice(0, 120), releaseDate = /^\d{4}-\d{2}-\d{2}$/.test(input.date || '') ? input.date : localToday();
   return store.transaction(() => {
     const state = store.read(), run = state.runs.find(r => r.id === runId);
     if (!run) throw new AppError('Payroll not found.', 404);
     if (run.status !== 'posted') throw new AppError('Finalize this payroll first; only final payslips can be sent.');
-    if (!run.releasedAt) { run.releasedAt = new Date().toISOString(); run.releasedBy = actor.username; state.version++; store.write(state); }
+    if (!run.releasedAt) {
+      if (reference.length < 2) throw new AppError('Enter the payment reference of the salary release (e.g. bank batch number).');
+      run.releasedAt = new Date().toISOString(); run.releasedBy = actor.username; run.release = { date: releaseDate, reference, by: actor.username, at: run.releasedAt }; state.version++; store.write(state);
+    }
     let notified = 0;
     for (const row of run.rows) {
       const key = `payslip-notice:${run.id}:${row.employeeId}`;
@@ -197,7 +202,7 @@ export function releasePayslips(store, actor, runId) {
       store.notify(row.employeeId, `Your payslip for ${run.start} to ${run.end} is now available in My payslips.`);
       notified++;
     }
-    store.log(actor, 'release-payslips', 'runs', run.id, null, { start: run.start, end: run.end, notified });
+    store.log(actor, 'release-payslips', 'runs', run.id, null, { start: run.start, end: run.end, notified, release: run.release || null });
     return { id: run.id, releasedAt: run.releasedAt, releasedBy: run.releasedBy, employees: run.rows.length, notified };
   });
 }
@@ -256,7 +261,9 @@ export function reviewLeave(store, actor, id, input) {
 export const manilaToday = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
 export const preview = (store, start, end, pay13th = false, employeeIds = null) => calculatePayroll({ ...store.read(), asOf: manilaToday() }, start, end, pay13th, employeeIds);
 export function postPayroll(store, actor, request) {
-  permit(actor, ['admin', 'payroll']);
+  // Payroll chain (Nov 24, 2026): Payroll prepares and checks the draft; the Company Admin / System Administrator
+  // approves and finalizes it; Finance then records the salary release (releasePayslips) and payslips appear.
+  permit(actor, ['admin', 'hr']);
   return store.transaction(() => {
     const state = store.read();
     const existing = state.runs.find(run => run.status === 'posted' && run.fingerprint === request.fingerprint);
