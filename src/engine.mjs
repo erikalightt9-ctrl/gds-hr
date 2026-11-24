@@ -48,8 +48,9 @@ export function scheduleOn(employee, profile = {}, date, rule) {
     // Flexible day: any start time; only the regular hours must be rendered. Never late, and no overtime.
     // Flexible time (whole schedule, Nov 24, 2026; e.g. event staff working to a call time): any start, never late;
     // the regular hours must be worked (undertime if fewer) and overtime counts after them (with an approved filing).
-    flexible: !!override.flexible || (!!profile.flexibleTime && !override.scheduleStart),
-    flexibleOT: !override.flexible && !!profile.flexibleTime && !override.scheduleStart,
+    // It applies on every workday; a day-specific schedule then only gives that day's hours and meal break.
+    flexible: !!override.flexible || !!profile.flexibleTime,
+    flexibleOT: !override.flexible && !!profile.flexibleTime,
     // Work-from-home day counted present without time in / out (e.g. Saturdays for office staff).
     autoPresent: !!override.autoPresent,
   };

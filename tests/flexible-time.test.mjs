@@ -48,3 +48,9 @@ test('saving the attendance profile without the Flexible time field keeps it on'
     assert.equal(saved.flexibleTime, true);
   } finally { store.close(); }
 });
+
+test('flexible time also applies on weekdays that have their own day schedule (hours and meal break from that day)', () => {
+  const profile = { flexibleTime: true, hoursPerDay: 8, mealBreakMinutes: 60, daySchedules: [{ day: 2, scheduleStart: '09:00', scheduleEnd: '18:00', hoursPerDay: 8, mealBreakMinutes: 1 }] };
+  const sched = scheduleOn(state().employees[0], profile, '2026-11-17');   // Tuesday
+  assert.deepEqual([sched.flexible, sched.flexibleOT, sched.mealBreakMinutes], [true, true, 1]);
+});
