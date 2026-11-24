@@ -12,7 +12,7 @@ import { listMovements } from './movements.mjs';
 import { recordView, requestClarification, answerClarification, recordPaperAck, ackEvidence, remindNow } from './memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
-import { mySheet, saveMySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
+import { mySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
 import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './roles.mjs';
 import { celebrationsOn, celebrationsThisMonth, celebrantPhoto } from './celebrations.mjs';
 import { applyLoan, cancelLoanApplication, myLoans } from './loans.mjs';
@@ -79,7 +79,8 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
       res.writeHead(200, { 'Content-Type': row.meta.mime, 'Cache-Control': 'private, no-store' }); res.end(row.content); return true;
     }
     if (pathname === '/api/hr/me/datasheet' && method === 'GET') { send(200, mySheet(store, actor)); return true; }
-    if (pathname === '/api/hr/me/datasheet' && method === 'POST') { const b = await readBody(req); send(200, saveMySheet(store, actor, b.fields, !!b.submit)); return true; }
+    // Employees cannot change their own profile (Nov 24, 2026): HR updates the 201 file.
+    if (pathname === '/api/hr/me/datasheet' && method === 'POST') { throw new AppError('Only HR can change your profile. Tell HR what needs to be updated.', 403); }
     if (pathname === '/api/hr/me/documents' && method === 'GET') { send(200, employeeChecklist(store, actor, actor.employeeId)); return true; }
     if (pathname === '/api/hr/me/documents' && method === 'POST') { send(201, upload201(store, actor, actor.employeeId, await readBody(req, BIG))); return true; }
     if ((p = m(/^\/api\/hr\/me\/documents\/([a-f0-9-]+)\/content$/)) && method === 'GET') { const { meta, content } = document201Content(store, actor, p[1]); res.writeHead(200, fileHeaders(meta, url.searchParams.has('download'))); res.end(content); return true; }

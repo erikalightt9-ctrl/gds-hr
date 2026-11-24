@@ -7,25 +7,23 @@ const loadViewer = () => (viewer ? Promise.resolve(viewer) : import('./memo-view
 
 export function createPortalHr({ api, esc, table, toast, confirm = (title, message) => toast(message), openDialog, dialog }) {
   const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
-  const SHEET = { new: 'Not started', draft: 'Draft (only you can see it)', submitted: 'Submitted to HR', 'under-review': 'HR is reviewing', returned: 'Returned for correction', approved: 'Approved', rejected: 'Rejected' };
 
   // My 201 file: documents and the data sheet under one menu item, one sub-tab at a time.
-  let fileView = 'documents';
-  const showDatasheet = () => { fileView = 'datasheet'; };
+  let fileView = 'profile';
+  const showProfile = () => { fileView = 'profile'; };
   async function file201(box) {
-    box.innerHTML = `<div class="tabs sub-tabs"><button data-file-view="documents" class="${fileView === 'documents' ? 'active' : ''}">📁 Documents</button><button data-file-view="datasheet" class="${fileView === 'datasheet' ? 'active' : ''}">🗂️ Data sheet</button></div><div id="file201-view"><div class="loading">Loading…</div></div>`;
+    box.innerHTML = `<div class="tabs sub-tabs"><button data-file-view="profile" class="${fileView === 'profile' ? 'active' : ''}">👤 Profile</button><button data-file-view="documents" class="${fileView === 'documents' ? 'active' : ''}">📁 Documents</button></div><div id="file201-view"><div class="loading">Loading…</div></div>`;
     box.querySelector('.sub-tabs').onclick = e => { const b = e.target.closest('[data-file-view]'); if (b && b.dataset.fileView !== fileView) { fileView = b.dataset.fileView; file201(box); } };
     const view = box.querySelector('#file201-view');
-    return fileView === 'datasheet' ? datasheet(view, await api('/hr/me/datasheet')) : documents(view, await api('/hr/me/documents'));
+    return fileView === 'profile' ? profile(view, await api('/hr/me/profile')) : documents(view, await api('/hr/me/documents'));
   }
   async function fill(tab, box) {
     try {
-      if (tab === 'profile201') return profile(box, await api('/hr/me/profile'));
+      if (tab === 'profile201') return file201(box);
       if (tab === 'loans201') return loans(box, await api('/hr/me/loans'));
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
       if (tab === 'memos') { const [list] = await Promise.all([api('/hr/me/memos'), loadViewer()]); return memos(box, list); }
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
-      if (tab === 'files201') return file201(box);
       // Loaded on first use (Notices & due process).
       if (tab === 'cases') return (await import('./portal-cases.js')).createPortalCases({ api, esc, toast, confirm }).fill(box);
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
@@ -69,7 +67,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
         ${block('Emergency contact', [info('people', 'Contact person', f.emergency.name), info('people', 'Relationship', f.emergency.relationship), info('phone', 'Contact number', f.emergency.contact)])}
         ${block('Government IDs', [info('doc', 'TIN', f.government.tin), info('doc', 'SSS number', f.government.sss), info('doc', 'PhilHealth number', f.government.philHealth), info('doc', 'Pag-IBIG MID', f.government.pagIbig)])}
       </div>
-      <p class="legend">This is read-only. To update your details, use <strong>My data sheet</strong>; HR reviews the change before it is saved.</p></section>`;
+      <p class="legend">Only HR can change these details. If something is wrong or out of date, tell HR.</p></section>`;
     box.querySelector('[data-mp-photo]')?.addEventListener('error', event => event.target.remove());
   }
   // My overtime: apply (period, unpaid break, work to be done, optional attachment), edit or cancel while pending,
@@ -198,32 +196,11 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     };
   }
 
-  const field = (name, label, value, type = 'text', extra = '') => `<label class="field">${label}<input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;
-  function datasheet(box, data) {
-    const s = data.current, f = s.fields, locked = ['submitted', 'under-review'].includes(s.status);
-    box.innerHTML = `<section class="panel"><div class="panel-head"><div><h2>My data sheet</h2><p>Update your personal information. HR reviews it before it changes your record.</p></div>${badge(SHEET[s.status] || s.status, s.status === 'returned' ? 'rejected' : ['submitted', 'under-review'].includes(s.status) ? 'pending' : 'neutral')}</div>
-      ${['submitted', 'under-review'].includes(s.status) ? `<div class="notice compact">📨 <strong>Sent to HR${s.submittedAt ? ` on ${fmtDateTime(s.submittedAt)}` : ''}.</strong> It is locked while HR reviews it. Once HR approves, the details go into your 201 profile and you can edit this form again.</div>` : ''}
-      ${s.status === 'returned' ? `<div class="notice compact">HR returned your data sheet: <strong>${esc(s.reviewNote || '')}</strong> Please correct it and submit again.</div>` : ''}
-      <form id="my-sheet" class="panel-body"><fieldset ${locked ? 'disabled' : ''} class="plain-fieldset">
-        <fieldset class="form-section-box"><legend>Personal information</legend><div class="form-grid">${field('personal.firstName', 'First name *', f.personal.firstName, 'text', 'required maxlength="120"')}${field('personal.middleName', 'Middle name', f.personal.middleName)}${field('personal.lastName', 'Last name *', f.personal.lastName, 'text', 'required maxlength="120"')}${field('personal.suffix', 'Suffix', f.personal.suffix)}${field('personal.preferredName', 'Preferred name', f.personal.preferredName)}<label class="field">Sex<select name="personal.sex">${['', 'Female', 'Male', 'Other'].map(o => `<option ${o === f.personal.sex ? 'selected' : ''} value="${o}">${o || '—'}</option>`).join('')}</select></label>${field('personal.birthDate', 'Date of birth', f.personal.birthDate, 'date')}${field('personal.birthPlace', 'Place of birth', f.personal.birthPlace)}${field('personal.civilStatus', 'Civil status', f.personal.civilStatus)}${field('personal.nationality', 'Nationality', f.personal.nationality)}</div></fieldset>
-        <fieldset class="form-section-box"><legend>Contact</legend><div class="form-grid">${field('contact.mobile', 'Mobile number *', f.contact.mobile, 'tel', 'required maxlength="40"')}${field('contact.personalEmail', 'Personal email', f.contact.personalEmail, 'email')}${field('contact.currentAddress', 'Current address', f.contact.currentAddress)}${field('contact.permanentAddress', 'Permanent address', f.contact.permanentAddress)}</div></fieldset>
-        <fieldset class="form-section-box"><legend>Emergency contact</legend><div class="form-grid">${field('emergency.name', 'Contact person *', f.emergency.name, 'text', 'required')}${field('emergency.relationship', 'Relationship', f.emergency.relationship)}${field('emergency.contact', 'Contact number', f.emergency.contact, 'tel')}</div></fieldset>
-        <fieldset class="form-section-box"><legend>Government numbers (only if new or changed)</legend><div class="form-grid">${field('government.tin', 'TIN', f.government.tin)}${field('government.sss', 'SSS', f.government.sss)}${field('government.philHealth', 'PhilHealth', f.government.philHealth)}${field('government.pagIbig', 'Pag-IBIG MID', f.government.pagIbig)}</div><p class="legend">For your privacy, numbers already on file are not shown here.</p></fieldset>
-        <div class="actions"><button type="button" data-sheet-save>Save draft</button><button class="primary" type="submit">Submit to HR</button></div></fieldset></form>
-      ${data.past.length ? `<div class="panel-body"><h3>Earlier submissions</h3>${table(['Submitted', 'Result', 'HR note'], data.past.map(p => [fmtDateTime(p.submittedAt), esc(SHEET[p.status] || p.status), esc(p.reviewNote || '—')]))}</div>` : ''}</section>`;
-    const form = box.querySelector('#my-sheet');
-    const collect = () => { const out = { personal: {}, contact: {}, emergency: {}, government: {} }; for (const el of form.querySelectorAll('[name]')) { const [g, k] = el.name.split('.'); out[g][k] = el.value.trim(); } return out; };
-    const save = async submit => {
-      try { await api('/hr/me/datasheet', { fields: collect(), submit }); confirm(submit ? 'Data sheet submitted' : 'Draft saved', submit ? 'Your data sheet was sent to HR.<br>Status: <strong>Waiting for HR review</strong>.' : 'Your data sheet draft was saved. Submit it when you are ready.'); datasheet(box, await api('/hr/me/datasheet')); } catch (error) { toast(error.message); }
-    };
-    box.querySelector('[data-sheet-save]')?.addEventListener('click', () => save(false));
-    form.onsubmit = event => { event.preventDefault(); if (window.confirm('Submit your data sheet to HR for review?')) save(true); };
-  }
 
   // Required items the employee still has to upload (missing, rejected or expired). Uploading lifts the signal;
   // a file HR rejects, or one that expires, raises it again.
   const toComply = list => list.items.filter(i => i.requirement.required && ['Missing', 'Rejected', 'Expired'].includes(i.status));
-  const statusText = i => (i.numberOnly ? (i.status === 'Verified' ? 'Complied — number on file' : 'Not complied — enter the number in My data sheet') : STATUS_TEXT[i.status] || i.status);
+  const statusText = i => (i.numberOnly ? (i.status === 'Verified' ? 'Complied — number on file' : 'Not complied — HR will record the number') : STATUS_TEXT[i.status] || i.status);
   const STATUS_TEXT = { Missing: 'Not complied — upload required', Rejected: 'Rejected — upload again', Expired: 'Expired — upload a renewed copy', Submitted: 'Submitted — waiting for HR review', 'Under Review': 'Under HR review', Verified: 'Complied', 'Not Applicable': 'Not applicable' };
   // Memos waiting for acknowledgement: a count on the Memos menu item and a red notice on the dashboard that stay
   // until the employee acknowledges each memo (the bell notice alone can be cleared by opening the bell).
@@ -251,16 +228,15 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     if (anchor) anchor.after(box); else main.prepend(box);
   }
   async function compliance(app, onDashboard) {
-    if (onDashboard) missingNotice(app).catch(() => {});
     memoNotice(app, onDashboard).catch(() => {});
     try {
       const list = await api('/hr/me/documents'), due = toComply(list);
-      const tabButton = app.querySelector('[data-portal-tab="files201"]');
+      const tabButton = app.querySelector('.employee-sidebar nav [data-portal-tab="profile201"]');
       if (tabButton && due.length && !tabButton.querySelector('.nav-flag')) tabButton.insertAdjacentHTML('beforeend', `<span class="nav-flag" aria-label="${due.length} requirement${due.length === 1 ? '' : 's'} to upload">${due.length}</span>`);
       const main = app.querySelector('.employee-main');
       if (!onDashboard || !due.length || !main || main.querySelector('.compliance-alert')) return;
       const box = document.createElement('section'); box.className = 'compliance-alert'; box.setAttribute('role', 'alert');
-      box.innerHTML = `<div><strong>⚠️ Not complied: ${due.length} 201 file requirement${due.length === 1 ? '' : 's'} to upload</strong><ol class="comply-list">${due.map(i => `<li>${esc(i.requirement.name)}${i.numberOnly ? ' <small>(enter the number in My data sheet)</small>' : i.status === 'Missing' ? '' : ` <small>(${esc(STATUS_TEXT[i.status])})</small>`}</li>`).join('')}</ol><p class="legend">Upload ${due.length === 1 ? 'it' : 'them'} in My 201 documents. This notice is lifted once every required file is uploaded.</p></div><button class="primary" data-portal-tab="files201">Upload now</button>`;
+      box.innerHTML = `<div><strong>⚠️ Not complied: ${due.length} 201 file requirement${due.length === 1 ? '' : 's'} to upload</strong><ol class="comply-list">${due.map(i => `<li>${esc(i.requirement.name)}${i.numberOnly ? ' <small>(HR will record the number)</small>' : i.status === 'Missing' ? '' : ` <small>(${esc(STATUS_TEXT[i.status])})</small>`}</li>`).join('')}</ol><p class="legend">Upload ${due.length === 1 ? 'it' : 'them'} in My 201 documents. This notice is lifted once every required file is uploaded.</p></div><button class="primary" data-portal-tab="files201">Upload now</button>`;
       // Below the welcome and the time-in card, above the menu cards.
       const anchor = main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
       if (anchor) anchor.after(box); else main.prepend(box);
@@ -268,11 +244,11 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   }
   function documents(box, list) {
     const due = toComply(list);
-    box.innerHTML = `${due.length ? `<div class="compliance-alert" role="alert"><div><strong>⚠️ ${due.length} required document${due.length === 1 ? ' is' : 's are'} not yet complied</strong><ol class="comply-list">${due.map(i => `<li>${esc(i.requirement.name)}${i.numberOnly ? ' <small>(enter the number in My data sheet)</small>' : i.status === 'Missing' ? '' : ` <small>(${esc(STATUS_TEXT[i.status])})</small>`}</li>`).join('')}</ol><p class="legend">Upload ${due.length === 1 ? 'it' : 'each one'} below. The notice is lifted as soon as the file is uploaded; HR then reviews it.</p></div></div>` : `<div class="notice success">All required documents are uploaded${list.completeCount < list.requiredCount ? '; HR is reviewing the rest' : ' and verified'}.</div>`}<section class="panel"><div class="panel-head"><div><h2>My 201 documents</h2><p>Upload what HR asked for. HR checks each file before it counts as complete.</p></div><span class="legend">${list.completeCount} of ${list.requiredCount} required documents verified</span></div>
+    box.innerHTML = `${due.length ? `<div class="compliance-alert" role="alert"><div><strong>⚠️ ${due.length} required document${due.length === 1 ? ' is' : 's are'} not yet complied</strong><ol class="comply-list">${due.map(i => `<li>${esc(i.requirement.name)}${i.numberOnly ? ' <small>(HR will record the number)</small>' : i.status === 'Missing' ? '' : ` <small>(${esc(STATUS_TEXT[i.status])})</small>`}</li>`).join('')}</ol><p class="legend">Upload ${due.length === 1 ? 'it' : 'each one'} below. The notice is lifted as soon as the file is uploaded; HR then reviews it.</p></div></div>` : `<div class="notice success">All required documents are uploaded${list.completeCount < list.requiredCount ? '; HR is reviewing the rest' : ' and verified'}.</div>`}<section class="panel"><div class="panel-head"><div><h2>My 201 documents</h2><p>Upload what HR asked for. HR checks each file before it counts as complete.</p></div><span class="legend">${list.completeCount} of ${list.requiredCount} required documents verified</span></div>
       <div class="doc-cards">${list.items.some(i => !(i.numberOnly && i.status === 'Verified')) ? list.items.filter(i => !(i.numberOnly && i.status === 'Verified')).map(i => {
         // One card per requirement so the upload button is always on screen (phones included).
         const upload = i.numberOnly
-          ? (i.status === 'Missing' ? '<button class="primary doc-upload" data-portal-tab="datasheet">Enter number</button>' : '')
+          ? ''
           : ['Missing', 'Rejected', 'Expired'].includes(i.status) ? `${i.requirement.id === 'valid-id' ? `<label class="doc-idtype">Which ID will you upload?${idTypeSelect(esc, 'idType', 'data-idtype')}</label>` : ''}<label class="doc-upload button-like primary-like">📤 Upload file<input type="file" data-up="${esc(i.requirement.id)}" accept="application/pdf,image/png,image/jpeg" hidden></label>` : '';
         const when = i.current?.expiryDate ? `Expires ${fmtDate(i.current.expiryDate)}` : i.due ? `Due ${fmtDate(i.due)}` : '';
         const file = i.versions[0] ? `<a href="/api/hr/me/documents/${i.versions[0].id}/content" target="_blank" rel="noopener">${esc(i.versions[0].name)}</a>` : '';
@@ -287,17 +263,6 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (input.dataset.up === 'valid-id' && !idType) { input.value = ''; toast('Choose which ID you are uploading first.'); box.querySelector('[data-idtype]')?.focus(); return; }
       try { await api('/hr/me/documents', { requirementId: input.dataset.up, name: file.name, mime: file.type, data: await readFile(file), ...(idType ? { idType } : {}) }); confirm('Document uploaded', `<strong>${esc(file.name)}</strong> was uploaded to your 201 file.<br>Status: <strong>Waiting for HR review</strong>.`); documents(box, await api('/hr/me/documents')); } catch (error) { toast(error.message); }
     };
-  }
-  // Employee dashboard: details still missing from their record, with a button to fill them in (data sheet).
-  async function missingNotice(app) {
-    const main = app.querySelector('.employee-main'); if (!main || main.querySelector('.missing-details')) return;
-    const sheet = await api('/hr/me/datasheet');
-    if (!sheet.missing?.length || ['submitted', 'under-review'].includes(sheet.current?.status)) return;
-    const box = document.createElement('section'); box.className = 'compliance-alert missing-details'; box.setAttribute('role', 'status');
-    box.className = 'pm-card pm-details missing-details';
-    box.innerHTML = `<div class="pm-details-head"><div><h2>Complete your details</h2><p>Update your data sheet and submit it to HR.</p></div><span class="pm-chip pm-late">${sheet.missing.length} missing</span></div><div class="pm-details-body"><ul class="pm-todo">${sheet.missing.map(x => `<li>${esc(x)}</li>`).join('')}</ul><button class="pm-fill" data-portal-tab="datasheet">Fill in now</button></div>`;
-    const anchor = main.querySelector('.clock-block') || main.querySelector('.employee-welcome');
-    if (anchor) anchor.after(box); else main.prepend(box);
   }
   // Shown at the top of the employee's dashboard on celebration days.
   async function celebrations(main) {
@@ -319,5 +284,5 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['cases', 'Notices & due process', '⚖️'], ['files201', 'My 201 file', '📁']], showDatasheet, showDocuments: () => { fileView = 'documents'; } };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile &amp; 201 file', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['cases', 'Notices & due process', '⚖️']], showProfile, showDocuments: () => { fileView = 'documents'; } };
 }

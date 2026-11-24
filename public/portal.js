@@ -23,7 +23,7 @@ const MENU_ICON = {
 };
 const menuIcon = id => `<svg class="em-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${MENU_ICON[id] || MENU_ICON.memos}</svg>`;
 // My dashboard is opened by tapping the name in the menu header (Nov 24, 2026), so it is not listed.
-const MENU_GROUPS = [['', ['profile201', 'files201']], ['Time &amp; attendance', ['attendance', 'overtime201', 'leave']], ['Pay', ['payslips', 'loans201']], ['Company', ['memos', 'cases', 'trainings']]];
+const MENU_GROUPS = [['', ['profile201']], ['Time &amp; attendance', ['attendance', 'overtime201', 'leave']], ['Pay', ['payslips', 'loans201']], ['Company', ['memos', 'cases', 'trainings']]];
 export function createPortal(ctx) {
   const { api, esc, money, toast, openDialog, dialog, refresh, render, app, today } = ctx;
   const table = (headers, rows, empty = 'Nothing to show yet.') => ctx.table(headers, rows, empty);
@@ -563,9 +563,9 @@ export function createPortal(ctx) {
       // Older links point at the merged sections; open the Attendance tab at that section.
       const section = ['explanations', 'documents'].includes(button.dataset.portalTab) ? button.dataset.portalTab : null;
       if (section) attendanceView = section; else if (button.dataset.portalTab === 'attendance') attendanceView = 'history';
-      // My 201 file opens on Documents; "Enter number" / data sheet links open its Data sheet sub-tab.
+      // My profile & 201 file (one page): 201 document links open its Documents sub-tab, everything else the Profile.
       let target = button.dataset.portalTab;
-      if (target === 'datasheet') { ctx.portalHr?.showDatasheet?.(); target = 'files201'; } else if (target === 'files201') ctx.portalHr?.showDocuments?.();
+      if (target === 'files201') { ctx.portalHr?.showDocuments?.(); target = 'profile201'; } else if (['profile201', 'datasheet'].includes(target)) { ctx.portalHr?.showProfile?.(); target = 'profile201'; }
       tab = section ? 'attendance' : target; dirty = false; render(); window.scrollTo({ top: 0 });
     }
     if (button.dataset.calNav) { const [y, m] = (calMonth || today().slice(0, 7)).split('-').map(Number), d = new Date(Date.UTC(y, m - 1 + Number(button.dataset.calNav), 1)); calMonth = d.toISOString().slice(0, 7); calDay = ''; render(); return; }
