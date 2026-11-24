@@ -11,8 +11,8 @@
 //   service     Service account for an integration (e.g. the AI assistant): reads like Management, never changes or
 //               approves anything (every change is refused), so approvals always carry a named person's account
 export const ROLE_LABELS = {
-  admin: 'System Administrator', hr: 'HR Manager', hr_staff: 'HR Staff', maker: 'Maker', dept_manager: 'Department Manager',
-  viewer: 'Management', payroll: 'Payroll', service: 'Service account (read-only, AI integration)', employee: 'Employee',
+  admin: 'System Administrator', hr: 'Company Admin / HR Head', hr_staff: 'HR Staff', maker: 'HR Maker', dept_manager: 'Supervisor / Approver',
+  viewer: 'Auditor / Viewer', payroll: 'Payroll Officer', finance: 'Finance / Releasing Officer', service: 'Service account (read-only, AI integration)', employee: 'Employee',
 };
 export const HR_MANAGERS = ['admin', 'hr'];
 export const HR_TEAM = ['admin', 'hr', 'hr_staff', 'maker'];

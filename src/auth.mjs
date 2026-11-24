@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { userSchema } from './schema.mjs';
 import { AppError, permit } from './service.mjs';
 import { isEmailAddress } from './mailer.mjs';
+import { ensureScopeColumns, scopeOf } from './account-scope.mjs';
 const scrypt = promisify(scryptCallback);
 const hashToken = token => createHash('sha256').update(token).digest('hex');
 export async function passwordHash(password, salt = randomBytes(16).toString('hex')) {
@@ -101,9 +102,11 @@ export function issueSession(store, user, currentTokenHash = '') {
 export function session(store, cookie = '') {
   const token = cookie.split(';').map(v => v.trim()).find(v => v.startsWith('hr_session='))?.slice(11);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
+  ensureScopeColumns(store.db);
+  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password, u.companies, u.permissions FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
   if (!row || row.disabled || row.expires < Date.now()) return null;
-  return { user: { id: row.id, username: row.username, role: row.role === 'service' ? 'viewer' : row.role, ...(row.role === 'service' ? { service: true } : {}), employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mfaRequired: process.env.HR_REQUIRE_MFA !== 'off' && ['hr', 'hr_staff', 'payroll', 'viewer'].includes(row.role) && !row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
+  const scope = scopeOf(row);
+  return { user: { id: row.id, username: row.username, role: ['service', 'finance'].includes(row.role) ? 'viewer' : row.role, ...(row.role === 'service' ? { service: true } : {}), ...(row.role === 'finance' ? { finance: true } : {}), companies: scope.companies, permissions: scope.permissions, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mfaRequired: process.env.HR_REQUIRE_MFA !== 'off' && ['hr', 'hr_staff', 'payroll', 'viewer'].includes(row.role) && !row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
 }
 export async function changePassword(store, user, currentPassword, newPassword) {
   const row = store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id);

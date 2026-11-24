@@ -41,6 +41,7 @@ import { saveMonthEdit } from './contribution-month.mjs';
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
 import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
+import { setAccountScope, scopeOf } from './account-scope.mjs';
 import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
@@ -212,6 +213,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
       // The service account (integrations such as the AI assistant) reads only: changes and approvals need a named person.
+      if (auth.user.finance && mutation && !['/api/logout', '/api/password', '/api/me/mfa'].includes(pathname) && !pathname.startsWith('/api/me/')) throw new AppError('The Finance / Releasing Officer role reads payroll and loans; recording releases is not available yet.', 403);
       if (auth.user.service && mutation && !['/api/logout', '/api/password'].includes(pathname)) throw new AppError('The service account is read-only. Changes and approvals must be made with a named person\'s account.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
@@ -441,11 +443,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
       const proofRequest = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/request-proof$/);
       if (proofRequest && req.method === 'POST') { send(200, requestLeaveProof(store, auth.user, proofRequest[1], await readBody(req))); return; }
-      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete)$/);
+      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete|scope)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
         if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); const r = issuePasswordReset(store, auth.user, userAction[1], v.resetMfa, { mailer, origin }); const emailed = await r.delivery; send(200, { token: r.token, expires: r.expires, message: r.message, sentTo: emailed ? r.sentTo : null, emailFailed: !!r.sentTo && !emailed }); }
         else if (userAction[2] === 'delete') { const v = z.object({ confirm: z.string().max(80) }).strict().parse(body); send(200, deleteUser(store, auth.user, userAction[1], v.confirm)); }
+        else if (userAction[2] === 'scope') { const companies = [...new Set([...readSettings(store).departments, ...store.read().employees.map(e => e.department).filter(Boolean)])]; send(200, setAccountScope(store, auth.user, userAction[1], body, companies)); }
         else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;
       }
@@ -500,7 +503,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (resetUser && req.method === 'POST') { send(200, resetDevices(store, auth.user, resetUser[1])); return; }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
-        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
+        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, scope: scopeOf(u), signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
         if (req.method === 'POST') { send(201, { user: await addUser(store, await readBody(req), auth.user) }); return; }
       }
       if (pathname.startsWith('/api/records/')) {
