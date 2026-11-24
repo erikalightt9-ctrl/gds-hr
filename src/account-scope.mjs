@@ -13,7 +13,7 @@ export const ensureScopeColumns = db => {
   if (!columns.has('permissions')) db.exec('ALTER TABLE users ADD COLUMN permissions TEXT');
 };
 // Roles that saw pay and sensitive files before these permissions existed keep them until an administrator changes it.
-const PAY_BEFORE = ['admin', 'hr', 'payroll', 'viewer'], SENSITIVE_BEFORE = ['admin', 'hr', 'payroll', 'maker'];
+const PAY_BEFORE = ['admin', 'hr', 'payroll', 'viewer', 'finance'], SENSITIVE_BEFORE = ['admin', 'hr', 'payroll', 'maker'];
 export function scopeOf(row) {
   const companies = (() => { try { const v = JSON.parse(row?.companies || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch { return []; } })();
   const saved = (() => { try { return JSON.parse(row?.permissions || 'null'); } catch { return null; } })();

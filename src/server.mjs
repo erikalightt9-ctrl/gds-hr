@@ -33,7 +33,7 @@ import { thirteenthStatement, finalizeThirteenthPayslip, voidThirteenthPayslip, 
 import { renderLeavePdf } from './leave-pdf.mjs';
 import { staffNames, fullNameOf } from './staff-names.mjs';
 import { messageContacts, unreadMessages, conversation, sendMessage, onChat } from './messages.mjs';
-import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayRecord, finalPayOverview, setFinalPayRelease, addThirteenthYear } from './thirteenth.mjs';
+import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayRecord, finalPayOverview, setFinalPayRelease, approveFinalPay, addThirteenthYear } from './thirteenth.mjs';
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
@@ -437,6 +437,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.end(renderFinalPayPdf(record, { designation: designationOf(store, record.employeeId), startDate: employee?.startDate || '', preparedBy: fullNameOf(store, record.computedBy) })); return;
       }
       const fpRelease = pathname.match(/^\/api\/final-pay\/([a-f0-9-]+)\/release$/);
+      const fpApprove = pathname.match(/^\/api\/final-pay\/([a-f0-9-]+)\/approve$/);
+      if (fpApprove && req.method === 'POST') { send(200, approveFinalPay(store, auth.user, fpApprove[1], await readBody(req))); return; }
       if (fpRelease && req.method === 'POST') { send(200, setFinalPayRelease(store, auth.user, fpRelease[1], await readBody(req))); return; }
       if (pathname === '/api/final-pay/compute' && req.method === 'POST') { send(200, computeFinalPay(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }

@@ -165,7 +165,7 @@ export function computeFinalPay(store, actor, input) {
   const gross = r2(items.filter(i => i.side === 'earnings').reduce((s, i) => s + i.amount, 0)), less = r2(items.filter(i => i.side === 'deductions').reduce((s, i) => s + i.amount, 0));
   const result = { employeeId: e.id, name: e.name, separationDate: v.separationDate, releaseDue: new Date(Date.parse(v.separationDate) + 30 * 86400000).toISOString().slice(0, 10), dailyRate: daily, monthlySalary: monthly, yearsOfService: years, ruleId: rule.id, items, gross, deductions: less, net: r2(gross - less), notes: v.notes };
   if (v.save) {
-    const record = { id: randomUUID(), ...result, input: v, computedBy: actor.username, computedAt: new Date().toISOString() };
+    const record = { id: randomUUID(), ...result, input: v, computedBy: actor.username, computedAt: new Date().toISOString(), stage: 'prepared' };
     store.transaction(() => { store.db.prepare('INSERT INTO final_pay(id,employee_id,data) VALUES(?,?,?)').run(record.id, e.id, JSON.stringify(record)); store.log(actor, 'compute-final-pay', 'final-pay', record.id, null, { employeeId: e.id, net: record.net, separationDate: v.separationDate }); });
     return record;
   }
@@ -178,20 +178,40 @@ export function finalPayRecord(store, actor, id) {
   return JSON.parse(row.data);
 }
 // Release status of a saved final pay (Nov 23, 2026): Released / Not released, with who and when; audited.
-export function setFinalPayRelease(store, actor, id, input) {
-  permit(actor, PAY);
-  const v = z.object({ released: z.boolean(), releasedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict().parse(input);
+// Final pay chain (Nov 24, 2026): Payroll prepares (saved computation, stage 'prepared') → the Company Admin / System
+// Administrator approves → Finance (or the System Administrator) records the settlement with its payment reference.
+// Computations saved before the chain count as approved.
+export const finalPayStage = r => (r.release?.released ? 'released' : r.approval || r.stage !== 'prepared' ? 'approved' : 'prepared');
+export function approveFinalPay(store, actor, id, input = {}) {
+  permit(actor, ['admin', 'hr']);
   return store.transaction(() => {
-    const before = finalPayRecord(store, actor, id);
-    const release = v.released ? { released: true, releasedOn: v.releasedOn || localToday(), by: actor.username, at: new Date().toISOString() } : { released: false, by: actor.username, at: new Date().toISOString() };
+    const before = finalPayRecord(store, { ...actor, role: 'admin' }, id);
+    if (finalPayStage(before) !== 'prepared') throw new AppError('This final pay is already approved.');
+    const after = { ...before, approval: { by: actor.username, at: new Date().toISOString(), note: String(input.note || '').trim().slice(0, 500) } };
+    store.db.prepare('UPDATE final_pay SET data=? WHERE id=?').run(JSON.stringify(after), id);
+    store.log(actor, 'approve-final-pay', 'final-pay', id, null, { employeeId: before.employeeId, net: before.net });
+    store.notify(null, `Final pay of ${before.name} (₱${before.net.toLocaleString('en-US', { minimumFractionDigits: 2 })}) approved by ${actor.username}; Finance to record the settlement.`);
+    return after;
+  });
+}
+export function setFinalPayRelease(store, actor, id, input) {
+  if (!(actor.finance || actor.role === 'admin')) throw new AppError('The Finance / Releasing Officer or the System Administrator records the final pay settlement.', 403);
+  const v = z.object({ released: z.boolean(), releasedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), reference: z.string().trim().max(120).default('') }).strict().parse(input);
+  if (!v.released && actor.role !== 'admin') throw new AppError('Only the System Administrator can undo a recorded settlement.', 403);
+  if (v.released && v.reference.length < 2) throw new AppError('Enter the payment reference of the settlement (e.g. bank transfer or cheque number).');
+  return store.transaction(() => {
+    const before = finalPayRecord(store, { ...actor, role: 'admin' }, id);
+    if (v.released && finalPayStage(before) === 'prepared') throw new AppError('Final pay must be approved by the Company Admin before it is settled.');
+    const release = v.released ? { released: true, releasedOn: v.releasedOn || localToday(), reference: v.reference, by: actor.username, at: new Date().toISOString() } : { released: false, by: actor.username, at: new Date().toISOString() };
     const after = { ...before, release };
     store.db.prepare('UPDATE final_pay SET data=? WHERE id=?').run(JSON.stringify(after), id);
     store.log(actor, v.released ? 'release-final-pay' : 'unrelease-final-pay', 'final-pay', id, { release: before.release || null }, { employeeId: before.employeeId, release });
     // The employee's 201 file: the separation clearance item 'Final pay computed and released' follows the status.
-    const sep = listMovements(store, actor, before.employeeId).find(m => m.clearance?.some(i => i.key === 'finalpay'));
+    const internal = { username: actor.username, role: 'admin' };   // the clearance item follows the recorded settlement
+    const sep = listMovements(store, internal, before.employeeId).find(m => m.clearance?.some(i => i.key === 'finalpay'));
     const item = sep?.clearance.find(i => i.key === 'finalpay');
-    if (v.released && item?.status === 'pending') clearItem(store, actor, sep.id, { key: 'finalpay', status: 'cleared', note: `Final pay ₱${after.net.toLocaleString('en-US', { minimumFractionDigits: 2 })} released on ${release.releasedOn}` });
-    if (!v.released && item?.status === 'cleared' && /^Final pay .* released on /.test(item.note || '')) clearItem(store, actor, sep.id, { key: 'finalpay', status: 'pending', note: '' });
+    if (v.released && item?.status === 'pending') clearItem(store, internal, sep.id, { key: 'finalpay', status: 'cleared', note: `Final pay ₱${after.net.toLocaleString('en-US', { minimumFractionDigits: 2 })} released on ${release.releasedOn}` });
+    if (!v.released && item?.status === 'cleared' && /^Final pay .* released on /.test(item.note || '')) clearItem(store, internal, sep.id, { key: 'finalpay', status: 'pending', note: '' });
     return after;
   });
 }
@@ -231,6 +251,6 @@ export function thirteenthOverview(store, actor, year) {
   };
 }
 export function finalPayOverview(store, actor) {
-  permit(actor, PAY);
-  return { records: finalPayRecords(store, actor), leaveTypes: store.read().leaveTypes.map(t => ({ id: t.id, name: t.name })) };
+  permit(actor, [...PAY, 'viewer']);
+  return { canApprove: ['admin', 'hr'].includes(actor.role), canSettle: !!actor.finance || actor.role === 'admin', records: finalPayRecords(store, { ...actor, role: actor.role === 'viewer' ? 'admin' : actor.role }).map(r => ({ ...r, stage: finalPayStage(r) })), leaveTypes: store.read().leaveTypes.map(t => ({ id: t.id, name: t.name })) };
 }
