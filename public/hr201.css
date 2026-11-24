@@ -2252,3 +2252,4 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .pm-attend-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; }
 .theme-scarlet .pm-attend-head > div { flex: 1 1 auto; min-width: 0; }
 .theme-scarlet .pm-attend-head .pm-chip { flex: 0 0 auto; max-width: 100%; white-space: nowrap; }
+.theme-scarlet .pm-attend .sc-office { margin: 14px 0 0 !important; }
