@@ -217,6 +217,9 @@ export function createPortal(ctx) {
     scrim.onclick = () => setMenu(false);
     app.querySelectorAll('[data-open-menu]').forEach(b => { b.onclick = () => setMenu(true); });
     app.querySelectorAll('[data-support]').forEach(b => { b.onclick = () => app.querySelector('.employee-top [data-msg-open]')?.click(); });
+    // The whole Welcome card opens My profile & 201 file (Nov 24, 2026).
+    const welcome = app.querySelector('.sc-welcome');
+    if (welcome) { welcome.setAttribute('role', 'link'); welcome.tabIndex = 0; welcome.title = 'Open My profile & 201 file'; const open = () => app.querySelector('.sc-namelink')?.click(); welcome.onclick = e => { if (!e.target.closest('button')) open(); }; welcome.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }; }
     sidebar.addEventListener('click', event => { if (event.target.closest('[data-portal-tab]')) setMenu(false); });
     // Phones: swipe the menu left to close it; swipe right from the left edge of the screen to open it.
     let touch = null;

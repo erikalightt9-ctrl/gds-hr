@@ -2347,3 +2347,5 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .employee-top { min-height: 74px !important; padding-bottom: 22px !important; }
 .theme-scarlet .employee-top::after { height: 24px; }
 .theme-scarlet .employee-main { margin-top: -10px !important; padding-top: 6px !important; }
+.theme-scarlet .sc-welcome { cursor: pointer; }
+.theme-scarlet .sc-welcome:focus-visible { outline: 3px solid #f3a6a6; outline-offset: 2px; }
