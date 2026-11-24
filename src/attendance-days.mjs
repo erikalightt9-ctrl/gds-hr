@@ -3,7 +3,7 @@
 // time in / out events (off-site reasons and places included), and any gap: missing time-in, missing time-out, or no
 // record ("Attendance for verification"). Used by the 201 Attendance history and the incomplete-attendance cases.
 // Nothing here assumes an absence or substitutes a scheduled time: it only reports what is recorded.
-import { dates, isRest, scheduleOn, ruleOn } from './engine.mjs';
+import { dates, isRest, scheduleOn, ruleOn, withScheduledLunch, attendanceMinutes } from './engine.mjs';
 
 export const ISSUE_LABELS = { 'missing-in': 'Missing Time-In', 'missing-out': 'Missing Time-Out', 'no-record': 'Absent (No Time-In / Time-Out)' };
 // A day with time records that HR has not approved yet (shown, not a case).
@@ -44,7 +44,11 @@ export function dayStatuses(store, state, employee, from, to, now = new Date()) 
     const label = { 'not-employed': 'Not employed', rest: 'Rest day', holiday: `${holiday?.name || 'Holiday'} (${holiday?.kind === 'regular' || holiday?.kind === 'double' ? 'regular holiday' : 'special day'})`, leave: leaveType, wfh: 'Work from home', workday: 'Workday' }[kind] + (halfLeave ? ` · ${leaveType} (half day)` : '');
     const timeIn = record?.timeIn || open?.time || dayEvents.find(e => e.kind === 'in')?.time || '';
     const timeOut = record?.timeOut || (record ? '' : dayEvents.filter(e => e.kind === 'out').at(-1)?.time || '');
-    const late = record?.status === 'present' && timeIn && hm(record.scheduledIn) !== null ? Math.max(0, hm(timeIn) - hm(record.scheduledIn)) : open && sched.start ? Math.max(0, hm(open.time) - hm(sched.start)) : 0;
+    // Flexible time: any start, never late (payroll agrees). Hours worked: time in to time out less recorded breaks or the
+    // scheduled meal break, as payroll counts them (Nov 24, 2026).
+    const late = sched.flexible ? 0 : record?.status === 'present' && timeIn && hm(record.scheduledIn) !== null ? Math.max(0, hm(timeIn) - hm(record.scheduledIn)) : open && sched.start ? Math.max(0, hm(open.time) - hm(sched.start)) : 0;
+    let hoursWorked = null;
+    if (record?.status === 'present' && record.timeIn && record.timeOut) { try { hoursWorked = Math.round([].concat(attendanceMinutes(withScheduledLunch(record, sched, profile, rest))).length / 60 * 100) / 100; } catch { hoursWorked = null; } }
     // Gaps, only for dates already reached (a shift in progress is not missing anything yet).
     let issue = null;
     const reached = date < today || (date === today && shiftOver(employee, profile, date, rule, nowLocal));
@@ -57,6 +61,6 @@ export function dayStatuses(store, state, employee, from, to, now = new Date()) 
       else if (kind === 'workday' && !absentByHr) issue = 'no-record';   // rest days, holidays, whole-day leave and WFH days need no record
     }
     const offsite = dayEvents.filter(e => e.outOfOffice || e.attendanceType === 'offsite' || e.mode === 'outside').map(e => ({ kind: e.kind, time: e.time, reason: e.reason || '', place: e.address || e.place || '', latitude: e.latitude ?? null, longitude: e.longitude ?? null }));
-    return { date, kind, label, scheduled: { start: sched.start || '', end: sched.end || '', flexible: !!sched.flexible }, status: record?.status || (open ? 'open' : absentByHr ? 'absent' : ''), absentByHr, timeIn, timeOut, endNextDay: !!record?.endNextDay, late, approved: !!record?.approved, explanation: /^Employee clock events:/.test(record?.explanation || '') ? '' : record?.explanation || '', offsite, issue, issueLabel: issue ? ISSUE_LABELS[issue] : '' };
+    return { date, kind, label, scheduled: { start: sched.start || '', end: sched.end || '', flexible: !!sched.flexible }, status: record?.status || (open ? 'open' : absentByHr ? 'absent' : ''), absentByHr, hoursWorked, flexible: !!sched.flexible, regularHours: sched.hoursPerDay, timeIn, timeOut, endNextDay: !!record?.endNextDay, late, approved: !!record?.approved, explanation: /^Employee clock events:/.test(record?.explanation || '') ? '' : record?.explanation || '', offsite, issue, issueLabel: issue ? ISSUE_LABELS[issue] : '' };
   });
 }
