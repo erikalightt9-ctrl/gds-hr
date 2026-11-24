@@ -2379,3 +2379,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-quick-wrap { margin: 4px 0 14px !important; }
 @media (max-width: 900px) { .theme-scarlet .employee-top { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; } }
 @media (max-width: 900px) { .theme-scarlet .employee-top-actions { position: relative; z-index: 2; } }
+/* Time In, Time Out and Correction Request in one row (Nov 24, 2026). */
+.theme-scarlet .sc-punch:has(.sc-corr) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
+.theme-scarlet .sc-punch .sc-punch-btn { font-size: 13.5px !important; line-height: 1.15; text-align: center; }
+.theme-scarlet .sc-corr span { font-size: 12.5px; }
