@@ -22,7 +22,8 @@ const MENU_ICON = {
   signout: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>',
 };
 const menuIcon = id => `<svg class="em-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${MENU_ICON[id] || MENU_ICON.memos}</svg>`;
-const MENU_GROUPS = [['', ['dashboard', 'profile201', 'files201']], ['Time &amp; attendance', ['attendance', 'overtime201', 'leave']], ['Pay', ['payslips', 'loans201']], ['Company', ['memos', 'cases', 'trainings']]];
+// My dashboard is opened by tapping the name in the menu header (Nov 24, 2026), so it is not listed.
+const MENU_GROUPS = [['', ['profile201', 'files201']], ['Time &amp; attendance', ['attendance', 'overtime201', 'leave']], ['Pay', ['payslips', 'loans201']], ['Company', ['memos', 'cases', 'trainings']]];
 export function createPortal(ctx) {
   const { api, esc, money, toast, openDialog, dialog, refresh, render, app, today } = ctx;
   const table = (headers, rows, empty = 'Nothing to show yet.') => ctx.table(headers, rows, empty);

@@ -259,3 +259,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Employee platform theme changed to Classic Red (Nov 24, 2026; hr201.css .theme-scarlet block): #D62828 / #8B0000 / white, solid deep-red header, filled red Sign out (option 1 of the mock-up). Same layout as Modern Scarlet.
 - Employee menu (Nov 24, 2026; portal.js .em-home, hr201.css): the photo and name in the red menu header are one button that opens My dashboard.
 - Employee menu (Nov 24, 2026): Account & Security moved from the red header to the bottom of the menu, just above Sign out (rounded outline button).
+- Employee menu (Nov 24, 2026): 'My dashboard' removed from the list; tapping the name in the red header opens it.
