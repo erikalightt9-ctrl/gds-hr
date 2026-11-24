@@ -2238,3 +2238,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .theme-scarlet .sc-bottom button[data-support] { position: relative; }
   .theme-scarlet .sc-support-count { position: absolute; top: 2px; right: calc(50% - 26px); }
 }
+
+/* Quick Actions: every menu section as a card (Nov 24, 2026). */
+.theme-scarlet .sc-quick-ico .em-ico { width: 32px; height: 32px; color: var(--sc); }
+.theme-scarlet .sc-quick { min-height: 92px; }
