@@ -2214,3 +2214,15 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 @media (max-width: 480px) { .theme-scarlet .cg .cg-head h2 { font-size: 13.5px !important; } .theme-scarlet .cg .cg-toggle { font-size: 11.5px; padding: 4px 8px !important; } .theme-scarlet .cg:not(.cg-open) .cg-item { padding: 2px 7px !important; gap: 6px; } .theme-scarlet .cg { padding-left: 14px !important; padding-right: 14px !important; } }
 
 @media (max-width: 480px) { .theme-scarlet .cg .cg-word { display: none; } .theme-scarlet .cg .cg-head h2 { font-size: 14.5px !important; } }
+
+/* Off-site work as a clickable row inside the time-in card (Nov 24, 2026). */
+.theme-scarlet .sc-office .att-offsite { border-top: 0 !important; padding-top: 0 !important; margin-top: 12px !important; }
+.theme-scarlet .sc-offsite { display: flex !important; align-items: center; gap: 12px; width: 100% !important; padding: 12px 14px !important; border-radius: 16px !important; background: linear-gradient(135deg, #fff5f4, #ffecea) !important; border: 1px solid var(--sc-line) !important; box-shadow: 0 4px 12px rgb(139 0 0 / .06) !important; color: #1f1f24 !important; text-align: left; cursor: pointer; }
+.theme-scarlet .sc-offsite:hover { border-color: var(--sc) !important; }
+.theme-scarlet .sc-offsite:disabled { opacity: .55; cursor: not-allowed; }
+.theme-scarlet .sc-offsite-ico { color: var(--sc); display: inline-flex; flex: 0 0 auto; }
+.theme-scarlet .sc-offsite-ico svg { width: 30px; height: 30px; }
+.theme-scarlet .sc-offsite-text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.theme-scarlet .sc-offsite-text strong { font-size: 16px; color: #141418; }
+.theme-scarlet .sc-offsite-text small { font-size: 12.5px; color: #5a5a64; line-height: 1.35; }
+.theme-scarlet .sc-offsite .sc-chev { color: var(--sc-deep); flex: 0 0 auto; }
