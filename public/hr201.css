@@ -2370,3 +2370,12 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-punch-top + .sc-rows { padding: 0 12px !important; border-radius: 14px !important; }
 .theme-scarlet .sc-punch-top + .sc-rows .pm-row { padding: 9px 2px !important; font-size: 14px !important; }
 .theme-scarlet .sc-punch-top + .sc-rows .pm-row svg { width: 18px; height: 18px; }
+/* Welcome card overlaps the red header; My Workspace above Today’s attendance (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .employee-top { z-index: auto !important; }
+  .theme-scarlet .employee-main { position: relative; z-index: 1; }
+  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: -48px !important; }
+}
+.theme-scarlet .sc-quick-wrap { margin: 4px 0 14px !important; }
+@media (max-width: 900px) { .theme-scarlet .employee-top { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; } }
+@media (max-width: 900px) { .theme-scarlet .employee-top-actions { position: relative; z-index: 2; } }
