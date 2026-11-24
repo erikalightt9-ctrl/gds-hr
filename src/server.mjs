@@ -42,6 +42,7 @@ import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feish
 import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
 import { inbox as approvalInbox } from './approval-chain.mjs';
+import { confirmRunPayment, confirmLoanPayment } from './payment-tracking.mjs';
 import { setAccountScope, scopeOf, canSeePay, canSeeSensitive, PAY_PATHS, stripForPermissions } from './account-scope.mjs';
 import { permissionContext } from './company-scope.mjs';
 import { scopeContext, companyScope, filterPayload, refusedSingle, recordOwner, namedEmployees, REFUSED } from './company-scope.mjs';
@@ -248,7 +249,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         }
       }
       // The service account (integrations such as the AI assistant) reads only: changes and approvals need a named person.
-      if (auth.user.finance && mutation && !['/api/logout', '/api/password', '/api/me/mfa'].includes(pathname) && !pathname.startsWith('/api/me/') && !/\/release$|\/settle$/.test(pathname)) throw new AppError('The Finance / Releasing Officer records releases and payment references; other changes are made by HR or Payroll.', 403);
+      if (auth.user.finance && mutation && !['/api/logout', '/api/password', '/api/me/mfa'].includes(pathname) && !pathname.startsWith('/api/me/') && !/\/release$|\/settle$|\/confirm$/.test(pathname)) throw new AppError('The Finance / Releasing Officer records releases and payment references; other changes are made by HR or Payroll.', 403);
       if (auth.user.service && mutation && !['/api/logout', '/api/password'].includes(pathname)) throw new AppError('The service account is read-only. Changes and approvals must be made with a named person\'s account.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
@@ -452,6 +453,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.end(renderLoanApplicationPdf(application, { employee, loan, designation: designationOf(store, application.employeeId), decidedBy: application.decidedBy ? fullNameOf(store, application.decidedBy) : '', company: c.name || 'GDS CAPITAL INC.', verified: { name: c.leaveVerifiedName, title: c.leaveVerifiedTitle }, approved: { name: c.leaveApprovedName, title: c.leaveApprovedTitle } })); return;
       }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
+      const payConfirm = pathname.match(/^\/api\/(runs|loans)\/([a-zA-Z0-9_-]+)\/confirm$/);
+      if (payConfirm && req.method === 'POST') { const body = await readBody(req); send(200, payConfirm[1] === 'runs' ? confirmRunPayment(store, auth.user, payConfirm[2], body) : confirmLoanPayment(store, auth.user, payConfirm[2], body)); return; }
       const loanRelease = pathname.match(/^\/api\/loans\/([a-zA-Z0-9_-]+)\/release$/);
       if (loanRelease && req.method === 'POST') { send(200, releaseLoan(store, auth.user, loanRelease[1], await readBody(req))); return; }
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
