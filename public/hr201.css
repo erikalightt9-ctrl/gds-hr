@@ -2242,3 +2242,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* Quick Actions: every menu section as a card (Nov 24, 2026). */
 .theme-scarlet .sc-quick-ico .em-ico { width: 32px; height: 32px; color: var(--sc); }
 .theme-scarlet .sc-quick { min-height: 92px; }
+
+/* Location records inside Today’s attendance (Nov 24, 2026). */
+.theme-scarlet .pm-attend .sc-loc-in { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--sc-line); }
+.theme-scarlet .pm-attend .sc-loc-in h3 { font-size: 15px; font-weight: 800; color: #141418; margin: 0 0 8px; }

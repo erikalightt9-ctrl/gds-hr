@@ -271,3 +271,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Employee header (Nov 24, 2026, HR): on phones the chat (Messages) icon is hidden from the red header; messages open from Support in the bottom bar, which now carries the unread count (data-msg-count). Desktop keeps the header icon (no bottom bar there).
 - Employee home (Nov 24, 2026, HR): the 'Apply for overtime' row is removed (overtime is filed in My overtime); only 'Attendance correction request' stays under Quick Actions.
 - Quick Actions (Nov 24, 2026, HR; portal.js quickCards / QUICK_LABEL): every employee menu section is a card on the home screen, in menu order (My Profile, Attendance, My Overtime, My Leave, My Payslips, My Loans, Notices, Trainings; 4 x 2 on phones); 'See All' removed.
+- Employee home (Nov 24, 2026, HR): Today's location records (time in / out with GPS coordinates) moved inside the Today's attendance card, under the tiles; no separate card.
