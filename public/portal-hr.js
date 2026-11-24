@@ -17,15 +17,23 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     const view = box.querySelector('#file201-view');
     return fileView === 'profile' ? profile(view, await api('/hr/me/profile')) : documents(view, await api('/hr/me/documents'));
   }
+  let noticeView = 'memos';
+  const loadMemos = async view => { const [list] = await Promise.all([api('/hr/me/memos'), loadViewer()]); return memos(view, list); };
+  async function notices(box) {
+    box.innerHTML = `<div class="tabs sub-tabs"><button data-notice-view="memos" class="${noticeView === 'memos' ? 'active' : ''}">📝 Memos</button><button data-notice-view="cases" class="${noticeView === 'cases' ? 'active' : ''}">⚖️ Due process</button></div><div id="notice-view"><div class="loading">Loading…</div></div>`;
+    box.querySelector('.sub-tabs').onclick = e => { const b = e.target.closest('[data-notice-view]'); if (b && b.dataset.noticeView !== noticeView) { noticeView = b.dataset.noticeView; notices(box); } };
+    const view = box.querySelector('#notice-view');
+    return noticeView === 'cases' ? (await import('./portal-cases.js')).createPortalCases({ api, esc, toast, confirm }).fill(view) : loadMemos(view);
+  }
   async function fill(tab, box) {
     try {
       if (tab === 'profile201') return file201(box);
       if (tab === 'loans201') return loans(box, await api('/hr/me/loans'));
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
-      if (tab === 'memos') { const [list] = await Promise.all([api('/hr/me/memos'), loadViewer()]); return memos(box, list); }
+      if (tab === 'memos') return notices(box);
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
       // Loaded on first use (Notices & due process).
-      if (tab === 'cases') return (await import('./portal-cases.js')).createPortalCases({ api, esc, toast, confirm }).fill(box);
+      if (tab === 'cases') { noticeView = 'cases'; return notices(box); }
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
   }
 
@@ -180,7 +188,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       const ack = event.target.closest('[data-ack]');
       if (ack) { ack.disabled = true; api(`/hr/me/memos/${ack.dataset.ack}/${ack.dataset.version}/acknowledge`, {}).then(() => { confirm('Memo acknowledged', 'Your acknowledgement was recorded. HR can see the date and time.'); return fill('memos', box); }).then(() => memoNotice(document, false)).catch(error => { toast(error.message); ack.disabled = false; }); return; }
       const b = event.target.closest('[data-memo-open]'); if (!b) return;
-      const refresh = async () => { await fill('memos', box); memoNotice(document, false).catch(() => {}); };
+      const refresh = async () => { await loadMemos(box); memoNotice(document, false).catch(() => {}); };
       if (openDialog && viewer && list[Number(b.dataset.memoOpen)].statusLabel) viewer.openMyMemo({ api, esc, toast, openDialog, dialog }, list[Number(b.dataset.memoOpen)], refresh);
       else window.open(`/api/hr/me/memos/${list[Number(b.dataset.memoOpen)].memoId}/${list[Number(b.dataset.memoOpen)].version}.pdf`, '_blank', 'noopener');
     };
@@ -213,8 +221,7 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
     const dp = cases.flatMap(c => [...c.notices.filter(n => !n.receivedAt).map(n => ({ text: `${n.title} ${n.reference || c.reference}`, label: '🔔 Pending Acknowledgment' })), ...(c.canExplain && !c.explanation ? [{ text: `Notice to Explain ${c.reference} — due ${fmtDate(c.deadline)}`, label: '📝 Explanation Required' }] : [])]);
     const total = pending.length + dp.length;
     const flag = (selector, count, label) => { const el = app.querySelector(selector); el?.querySelector('.nav-flag')?.remove(); if (el && count) el.insertAdjacentHTML('beforeend', `<span class="nav-flag" aria-label="${count} ${label}">${count}</span>`); };
-    flag('[data-portal-tab="memos"]', pending.length, `memo${pending.length === 1 ? '' : 's'} to acknowledge`);
-    flag('[data-portal-tab="cases"]', dp.length, `due process action${dp.length === 1 ? '' : 's'}`);
+    flag('.employee-sidebar nav [data-portal-tab="memos"]', total, `notice${total === 1 ? '' : 's'} waiting for your action`);
     const bell = app.querySelector('[data-portal-bell]');
     bell?.querySelector('.bell-pending')?.remove();
     if (bell && total) bell.insertAdjacentHTML('beforeend', `<span class="bell-pending" title="${total} action${total === 1 ? '' : 's'} waiting for you" aria-label="${total} actions waiting">${total}</span>`);
@@ -284,5 +291,5 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile &amp; 201 file', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🎓'], ['cases', 'Notices & due process', '⚖️']], showProfile, showDocuments: () => { fileView = 'documents'; } };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile &amp; 201 file', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Official notices', '📝'], ['trainings', 'Trainings', '🎓']], showProfile, showMemos: () => { noticeView = 'memos'; }, showCases: () => { noticeView = 'cases'; }, showDocuments: () => { fileView = 'documents'; } };
 }

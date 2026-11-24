@@ -8,7 +8,7 @@ export function createPortalCases({ api, esc, toast, confirm }) {
   const para = t => `<div class="dp-text">${esc(t || '').replace(/\n/g, '<br>')}</div>`;
   async function fill(box) {
     const list = await api('/hr/me/cases');
-    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>Notices &amp; due process</h2><span class="legend">${list.some(c => c.canExplain) ? 'You have a notice to answer' : 'Notices addressed to you'}</span></div><div class="panel-body">
+    box.innerHTML = `<section class="panel"><div class="panel-head"><h2>Due process notices</h2><span class="legend">${list.some(c => c.canExplain) ? 'You have a notice to answer' : 'Notices addressed to you'}</span></div><div class="panel-body">
       ${list.length ? list.map(c => `<article class="memo-card dp-case"><header><strong>${esc(c.reference)}</strong> · ${esc(c.offense)} ${badge(c.status, c.canExplain ? 'pending' : '')}<br><small>Incident on ${fmtDate(c.incidentDate)}</small></header>
         ${c.notices.map(n => `<details ${!n.receivedAt ? 'open' : ''}><summary>${esc(n.title)} · issued ${fmtDate(n.issuedAt)}${n.deadline ? ` · answer by ${fmtDate(n.deadline)}` : ''}${n.scheduledAt ? ` · ${fmtDate(n.scheduledAt)} ${esc(n.scheduledAt.slice(11, 16))}, ${esc(n.place)}` : ''}</summary>${para(n.body)}
           ${n.reviewDeadline && !c.review && c.canAskReview ? `<p class="legend">You may ask for an internal review of this decision until ${fmtDate(n.reviewDeadline)} (below). Your statutory remedies are not affected.</p>` : ''}${n.receivedAt ? '' : `<p class="dp-ack-wording">“${esc(n.ackWording)}”</p>`}
