@@ -2553,3 +2553,11 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .theme-scarlet .pm-attend .pm-loc-row { padding: 3px 0 !important; }
   .theme-scarlet .clock-block > .cg { padding: 10px 12px !important; }
 }
+/* Exact pages on phones (Nov 24, 2026): screen 1 = Welcome … My Workspace; screen 2 = My attendance, Today's attendance and
+   the celebrations, spread to fill the screen above the bottom bar; scrolling settles on each screen. */
+@media (max-width: 900px) {
+  html:has(.sc-first) { scroll-snap-type: y proximity; }
+  .theme-scarlet .sc-first { min-height: calc(100dvh - 26px) !important; scroll-snap-align: start; scroll-margin-top: 26px; }
+  .theme-scarlet .clock-block { box-sizing: border-box; min-height: 100dvh; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; padding: 12px 0 94px; margin-top: 0 !important; scroll-snap-align: start; }
+  .theme-scarlet .clock-block > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+}
