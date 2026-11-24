@@ -340,6 +340,21 @@ export function myAccount(store, actor, employees) {
   return { username: row.username, role: row.role, employeeId: row.employee_id || '', employeeName: e?.name || '', email: row.email || '' };
 }
 // A staff account (admin, HR, payroll…) can be linked to its own employee record so it has a profile too.
+// The person's name on a staff login that is not linked to an employee record (e.g. the System Administrator login of
+// someone whose Company Admin login holds the link): shown in the account list and every 'by' line. Admin only, audited.
+export function setDisplayName(store, actor, userId, name) {
+  permit(actor, ['admin']);
+  const value = String(name || '').trim().replace(/\s+/g, ' ');
+  if (value && (value.length < 3 || value.length > 120)) throw new AppError('Enter the person\'s full name (3-120 characters).');
+  const user = store.db.prepare('SELECT id, role, display_name FROM users WHERE id=?').get(userId);
+  if (!user) throw new AppError('User not found.', 404);
+  if (user.role === 'employee') throw new AppError('Employee logins show the name from their 201 file.');
+  store.transaction(() => {
+    store.db.prepare('UPDATE users SET display_name=? WHERE id=?').run(value || null, userId);
+    store.log(actor, 'set-display-name', 'users', userId, { displayName: user.display_name || null }, { displayName: value || null });
+  });
+  return { displayName: value || null };
+}
 export function linkMyAccount(store, actor, employeeId, employees) {
   if (!actor || actor.role === 'employee') throw new AppError('Employee accounts are already linked to their record.', 403);
   const id = String(employeeId || '').trim();

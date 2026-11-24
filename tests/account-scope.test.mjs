@@ -47,3 +47,17 @@ test('salary and sensitive permissions: pay modules closed, values stripped, 201
   const out = stripForPermissions({ employees: [{ id: 'E', monthlySalary: 30000, name: 'X' }], runs: [{ id: 'r' }], government: { tin: '123456789', sss: '' }, bank: { accountNumber: '0011223344' } }, { pay: false, sensitive: false });
   assert.deepEqual(out, { employees: [{ id: 'E', monthlySalary: null, name: 'X' }], runs: [], government: { tin: '•••• 789', sss: '' }, bank: {} });
 });
+
+test('an unlinked staff login gets the person\'s name (admin only, audited); employee logins keep their 201 name', async () => {
+  const { setDisplayName } = await import('../src/auth.mjs');
+  const { staffNames } = await import('../src/staff-names.mjs').catch(() => ({}));
+  const store = new Store(':memory:');
+  try {
+    const admin = await addUser(store, { username: 'admin', password: 'initial-password-123', role: 'admin' }), actor = { id: admin.id, username: 'admin', role: 'admin' };
+    assert.deepEqual(setDisplayName(store, actor, admin.id, '  Erika   Lima Hernando '), { displayName: 'Erika Lima Hernando' });
+    assert.equal(store.db.prepare('SELECT display_name FROM users WHERE id=?').get(admin.id).display_name, 'Erika Lima Hernando');
+    assert.throws(() => setDisplayName(store, { username: 'x', role: 'hr' }, admin.id, 'Someone Else'), /permission/i);
+    assert.ok(store.db.prepare("SELECT 1 FROM audit WHERE action='set-display-name'").get());
+    if (staffNames) assert.equal(staffNames(store).admin, 'Erika Lima Hernando', 'shown in every by line');
+  } finally { store.close(); }
+});
