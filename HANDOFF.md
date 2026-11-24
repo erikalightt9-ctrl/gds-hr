@@ -285,3 +285,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Employee home (Nov 24, 2026, HR): the Welcome card sits just below the red header (phones; employee-main:has(> .sc-welcome) margin-top -12px; header without its own stacking layer so the bell list stays on top; header backdrop blur off on phones); My Workspace sits above Today's attendance. Other pages keep their title below the header.
 - Employee home (Nov 24, 2026, HR): Time In, Time Out and Correction Request are three buttons in one row (the separate attendance correction card is gone; Correction Request opens the attendance request form).
 - Employee home (Nov 24, 2026, HR): My Workspace cards made smaller (66 px, 24 px icons).
+- Employee bottom bar (Nov 24, 2026, HR): More removed (Account · Support · Sign Out). Every page other than home has a '‹ Home' button at the top (portal.js .sc-back), since phones no longer have Home, More or ☰.

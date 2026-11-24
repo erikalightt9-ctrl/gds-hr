@@ -2390,3 +2390,6 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-quick-ico .em-ico, .theme-scarlet .sc-quick-ico .sc-ico { width: 24px !important; height: 24px !important; }
 /* More space below My Workspace (Nov 24, 2026). */
 .theme-scarlet .sc-quick-wrap { margin-bottom: 26px !important; }
+/* Bottom bar without More (Nov 24, 2026). */
+@media (max-width: 900px) { .theme-scarlet .sc-bottom { grid-template-columns: repeat(3, 1fr) !important; } }
+.theme-scarlet .sc-back { display: inline-flex !important; align-items: center; gap: 2px; width: auto !important; margin: 4px 0 8px; padding: 6px 12px 6px 6px !important; border-radius: 999px !important; background: #fff !important; border: 1px solid #fbe0e0 !important; color: #b3121a !important; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px rgb(200 16 46 / .08) !important; }
