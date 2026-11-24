@@ -2093,3 +2093,100 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .em-side .employee-sidebar-foot .em-account { margin: 0 !important; box-shadow: none !important; border: 1.5px solid var(--sc-line) !important; color: var(--sc-deep) !important; }
 .theme-scarlet .em-side .employee-sidebar-foot .em-account:hover { background: var(--sc-tint) !important; }
 .theme-scarlet .em-side .employee-sidebar-foot .em-account, .theme-scarlet .em-side .employee-sidebar-foot .em-signout { flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; padding: 11px 16px !important; border-radius: 999px !important; font-size: 15px !important; line-height: 1.2 !important; }
+
+/* ===== Employee home screen redesign (Nov 24, 2026; Classic Red) ===== */
+.theme-scarlet .employee-top { background: radial-gradient(120% 140% at 85% -20%, #e23a3a 0%, var(--sc) 35%, var(--sc-deep) 100%) !important; }
+.theme-scarlet .employee-top .portal-logo { background: transparent !important; box-shadow: none !important; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .25)); }
+.theme-scarlet .employee-top .employee-top-actions .msg-button, .theme-scarlet .employee-top .portal-bell { border-radius: 14px !important; background: rgb(255 255 255 / .16) !important; border: 1px solid rgb(255 255 255 / .35) !important; }
+.theme-scarlet .sc-ico { width: 22px; height: 22px; flex: 0 0 auto; }
+
+/* Welcome card. */
+.theme-scarlet .sc-welcome { display: flex !important; align-items: center; gap: 16px; padding: 18px !important; border-radius: 22px !important; background: linear-gradient(120deg, #fff 0%, #fff 45%, var(--sc-tint) 100%) !important; border: 1px solid var(--sc-line) !important; box-shadow: 0 8px 24px rgb(139 0 0 / .10) !important; overflow: hidden; position: relative; }
+.theme-scarlet .sc-photo { position: relative; flex: 0 0 auto; width: 92px; height: 92px; border-radius: 50%; border: 4px solid #fff; box-shadow: 0 6px 16px rgb(139 0 0 / .18); background: linear-gradient(150deg, var(--sc), var(--sc-deep)); display: grid; place-items: center; }
+.theme-scarlet .sc-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.theme-scarlet .sc-photo.no-photo img { display: none; }
+.theme-scarlet .sc-photo .sc-ini { color: #fff; font-weight: 800; font-size: 28px; }
+.theme-scarlet .sc-photo::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 16px; height: 16px; border-radius: 50%; background: #16a34a; border: 3px solid #fff; z-index: 2; }
+.theme-scarlet .sc-welcome .employee-welcome-copy { flex: 1 1 auto; min-width: 0; }
+.theme-scarlet .sc-welcome .eyebrow { color: #4b4b55 !important; letter-spacing: .08em; font-size: 11px; }
+.theme-scarlet .sc-welcome h1 { margin: 4px 0 6px !important; font-size: clamp(22px, 5.8vw, 30px) !important; color: #141418 !important; font-weight: 800; }
+.theme-scarlet .sc-namelink { display: inline-flex !important; align-items: center; gap: 4px; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; color: #2b2b33 !important; font-size: 15px; font-weight: 500; cursor: pointer; width: auto !important; }
+.theme-scarlet .sc-welcome .welcome-mascot { width: 104px !important; height: auto !important; margin: -6px -8px -10px 0; flex: 0 0 auto; }
+
+/* Clock card with greeting. */
+.theme-scarlet .sc-clock { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px !important; border-radius: 22px !important; background: linear-gradient(115deg, #fff 0%, #fff 55%, var(--sc-tint) 100%) !important; border: 1px solid var(--sc-line) !important; box-shadow: 0 8px 22px rgb(139 0 0 / .08) !important; color: #1f1f24 !important; }
+.theme-scarlet .sc-clock-main { display: grid; gap: 2px; min-width: 0; }
+.theme-scarlet .sc-clock .clock-zone { color: #2b2b33 !important; font-size: 14px; }
+.theme-scarlet .sc-clock .clock-zone b { color: #2b2b33 !important; font-weight: 500; }
+.theme-scarlet .sc-clock time { color: var(--sc) !important; font-size: clamp(30px, 9vw, 44px) !important; font-weight: 800 !important; letter-spacing: -.01em; line-height: 1.1; }
+.theme-scarlet .sc-clock .clock-date { color: #2b2b33 !important; font-size: 14px; }
+.theme-scarlet .sc-greet { flex: 0 0 auto; align-self: flex-start; padding: 8px 14px; border-radius: 999px; background: #fff3f1; border: 1px solid var(--sc-line); color: var(--sc-deep); font-weight: 700; font-size: 14px; white-space: nowrap; box-shadow: 0 4px 12px rgb(139 0 0 / .08); }
+
+/* Cards and attendance tiles. */
+.theme-scarlet .employee-main .pm-card { border-radius: 22px !important; border: 1px solid var(--sc-line) !important; box-shadow: 0 8px 22px rgb(139 0 0 / .07) !important; background: #fff !important; }
+.theme-scarlet .pm-attend-head h2, .theme-scarlet .sc-office h3 { display: flex; align-items: center; gap: 12px; color: #141418 !important; font-size: 19px !important; font-weight: 800 !important; }
+.theme-scarlet .sc-title-ico { color: var(--sc); display: inline-flex; }
+.theme-scarlet .sc-title-ico .sc-ico { width: 30px; height: 30px; }
+.theme-scarlet .pm-chip.pm-ok { background: #e7f6ec !important; color: #157a3a !important; border: 0 !important; }
+.theme-scarlet .pm-tiles { gap: 12px !important; }
+.theme-scarlet .pm-tile { display: flex !important; align-items: center; gap: 12px; padding: 14px !important; border-radius: 16px !important; background: linear-gradient(135deg, #fff5f4, #ffecea) !important; border: 1px solid var(--sc-line) !important; box-shadow: 0 4px 12px rgb(139 0 0 / .06); }
+.theme-scarlet .sc-tile-ico { color: var(--sc); display: inline-flex; flex: 0 0 auto; }
+.theme-scarlet .sc-tile-ico .sc-ico { width: 34px; height: 34px; stroke-width: 1.7; }
+.theme-scarlet .sc-tile-text { display: grid; gap: 2px; min-width: 0; }
+.theme-scarlet .sc-tile-text span { color: #3a3a44 !important; font-size: 13.5px; }
+.theme-scarlet .sc-tile-text strong { color: #141418 !important; font-size: 22px !important; font-weight: 800; }
+
+/* Office attendance card: red alert line. */
+.theme-scarlet .sc-office .net-status.away { border-left: 3px solid var(--sc); padding: 6px 0 6px 12px; color: var(--sc-deep) !important; background: transparent !important; }
+.theme-scarlet .sc-office .net-status.ok { color: #157a3a !important; }
+
+/* Quick Actions. */
+.theme-scarlet .sc-quick-wrap { margin: 18px 0 12px; }
+.theme-scarlet .sc-quick-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 10px; }
+.theme-scarlet .sc-quick-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 20px; font-weight: 800; color: #141418; }
+.theme-scarlet .sc-bolt { color: var(--sc); display: inline-flex; }
+.theme-scarlet .sc-seeall { background: none !important; border: 0 !important; box-shadow: none !important; padding: 4px 0 !important; color: var(--sc) !important; font-weight: 700; font-size: 15px; width: auto !important; }
+.theme-scarlet .sc-quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.theme-scarlet .sc-quick { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 14px 6px !important; border-radius: 18px !important; background: linear-gradient(160deg, #fff, #fff1f0) !important; border: 1px solid var(--sc-line) !important; box-shadow: 0 6px 16px rgb(139 0 0 / .08) !important; color: var(--sc-deep) !important; font-weight: 700; font-size: 13px; width: auto !important; text-align: center; }
+.theme-scarlet .sc-quick-ico { color: var(--sc); display: inline-flex; }
+.theme-scarlet .sc-quick-ico .sc-ico { width: 34px; height: 34px; }
+
+/* Request rows card. */
+.theme-scarlet .sc-rows { padding: 6px 16px !important; }
+.theme-scarlet .sc-rows .pm-row { border-bottom: 1px solid var(--sc-line); padding: 14px 4px !important; color: #1f1f24 !important; font-size: 16px; }
+.theme-scarlet .sc-rows .pm-row:last-child { border-bottom: 0; }
+
+/* Bottom bar (phones). */
+.theme-scarlet .sc-bottom { display: none; }
+@media (max-width: 900px) {
+  .theme-scarlet .employee-top .employee-menu-button { display: none !important; }
+  .theme-scarlet .employee-top .portal-logo { position: static !important; transform: none !important; height: 52px !important; }
+  .theme-scarlet .employee-main { padding-bottom: 104px !important; }
+  .theme-scarlet .sc-bottom { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--sc-line); border-radius: 22px 22px 0 0; box-shadow: 0 -8px 24px rgb(139 0 0 / .12); }
+  .theme-scarlet .sc-bottom button { display: flex !important; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px !important; border: 0 !important; background: transparent !important; box-shadow: none !important; color: #3a3a44 !important; font-size: 13px; font-weight: 600; border-radius: 18px !important; width: auto !important; }
+  .theme-scarlet .sc-bottom button .sc-ico { width: 26px; height: 26px; }
+  .theme-scarlet .sc-bottom button.active { background: linear-gradient(135deg, var(--sc), var(--sc-deep)) !important; color: #fff !important; box-shadow: 0 6px 14px rgb(139 0 0 / .3) !important; }
+  .theme-scarlet .sc-quick-grid { gap: 8px; }
+  .theme-scarlet .sc-quick { font-size: 12px; padding: 12px 4px !important; }
+  .theme-scarlet .sc-welcome .welcome-mascot { width: 84px !important; }
+  .theme-scarlet .sc-photo { width: 78px; height: 78px; }
+}
+
+.theme-scarlet .sc-welcome .eyebrow { white-space: nowrap; font-size: 10.5px; }
+@media (max-width: 480px) { .theme-scarlet .sc-welcome { gap: 12px; padding: 14px !important; } .theme-scarlet .sc-welcome .welcome-mascot { width: 72px !important; margin-right: -6px; } .theme-scarlet .sc-photo { width: 70px; height: 70px; } .theme-scarlet .sc-namelink { font-size: 14px; text-align: left; } }
+
+.theme-scarlet .sc-clock { flex-direction: row !important; flex-wrap: nowrap !important; text-align: left !important; align-items: flex-start !important; }
+.theme-scarlet .sc-clock-main { justify-items: start !important; text-align: left !important; flex: 1 1 auto; }
+.theme-scarlet .sc-greet { margin: 0 !important; }
+@media (max-width: 480px) { .theme-scarlet .sc-greet { font-size: 12.5px; padding: 6px 10px; } .theme-scarlet .sc-clock time { font-size: clamp(26px, 8.4vw, 40px) !important; } }
+.theme-scarlet .pm-attend-head h2 { white-space: nowrap; font-size: 18px !important; }
+.theme-scarlet .pm-attend-head h2 .sc-ico { width: 26px; height: 26px; }
+
+.theme-scarlet .sc-tile-text span { white-space: nowrap; font-size: 12.5px !important; }
+@media (max-width: 480px) { .theme-scarlet .pm-tile { gap: 8px; padding: 12px 10px !important; } .theme-scarlet .sc-tile-ico .sc-ico { width: 28px; height: 28px; } .theme-scarlet .sc-tile-text strong { font-size: 20px !important; } }
+.theme-scarlet .sc-office .att-mode { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 4px 0 !important; margin: 0 !important; }
+.theme-scarlet .sc-office .att-offsite { border-top: 1px solid var(--sc-line) !important; margin-top: 12px !important; padding-top: 14px !important; }
+
+.theme-scarlet .em-side .employee-sidebar-foot .em-account span { white-space: nowrap; }
+
+.theme-scarlet .sc-rows .pm-row { border-top: 0 !important; margin: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; }

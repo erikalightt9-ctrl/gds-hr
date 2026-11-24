@@ -312,8 +312,9 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       const html = `<section class="pm-card cg" aria-labelledby="cg-title"><div class="cg-head"><h2 id="cg-title">🎉 Congratulations this ${esc(MONTH)}</h2><span class="pm-chip pm-ok">${list.length} celebration${list.length === 1 ? '' : 's'}</span></div>
         <div class="cg-list">${list.map(c => `<article class="cg-item${c.today ? ' today' : ''}"><span class="cg-photo"><span>${esc(ini(c.name))}</span><img src="/api/hr/celebrations/${encodeURIComponent(c.employeeId)}/photo" alt="" loading="lazy" data-celebrant-photo></span><div><strong>${esc(c.name)}</strong>${c.position ? `<small>${esc(c.position)}</small>` : ''}<p>${c.occasion === 'birthday' ? `🎂 Happy Birthday!` : `🏆 Happy ${c.years}-year work anniversary!`}</p><em>${c.today ? 'Today' : esc(day(c.day))}</em></div></article>`).join('')}</div></section>`;
       const box = document.createElement('div'); box.innerHTML = html;
-      const section = box.firstElementChild, anchor = main.querySelector('.employee-welcome');
-      if (anchor) anchor.after(section); else main.prepend(section);
+      // Home screen order (Nov 24, 2026): welcome, clock, attendance, quick actions, then greetings.
+      const section = box.firstElementChild, anchor = main.querySelector('#portal-content') || main.querySelector('.employee-welcome');
+      if (anchor?.id === 'portal-content') anchor.before(section); else if (anchor) anchor.after(section); else main.prepend(section);
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
