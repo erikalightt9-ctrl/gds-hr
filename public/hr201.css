@@ -2355,3 +2355,4 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-bottom button[data-account] .em-ico { width: 26px; height: 26px; }
 .theme-scarlet .employee-top .portal-bell { width: 52px !important; height: 52px !important; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center; }
 .theme-scarlet .employee-top .portal-bell .tb-ico { width: 34px !important; height: 34px !important; }
+.theme-scarlet .sc-punch-top + .sc-rows { margin: 0 0 12px !important; }
