@@ -2469,3 +2469,22 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
     background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 400 40%27 preserveAspectRatio=%27none%27%3E%3Cpath d=%27M0 40V26C110 6 250 0 400 14v26z%27 fill=%27%23fff6f6%27/%3E%3C/svg%3E") no-repeat 0 104px / 100% 34px,
                 linear-gradient(180deg, #c8102e 0, #d81c24 80px, #c8102e 137px, transparent 137px) !important; }
 }
+
+/* Notifications in the bottom bar; Welcome card inside the red frame (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .sc-bottom { grid-template-columns: repeat(4, 1fr) !important; }
+  .theme-scarlet .sc-bottom button { position: relative; font-size: 12px !important; }
+  .theme-scarlet .sc-bottom [data-bell-bottom] .bell-count, .theme-scarlet .sc-bottom [data-bell-bottom] .bell-pending { position: absolute; top: 2px; right: calc(50% - 26px); left: auto; bottom: auto; background: #fff !important; color: #c8102e !important; }
+  .theme-scarlet .sc-bottom [data-bell-bottom] .bell-pending { right: auto; left: calc(50% - 26px); background: #f5b400 !important; color: #3a2a00 !important; }
+  .theme-scarlet .employee-top .employee-bell > .portal-bell { display: none !important; }
+  .theme-scarlet .bell-menu { top: auto !important; bottom: calc(96px + env(safe-area-inset-bottom)) !important; left: 12px !important; right: 12px !important; max-height: 65vh; overflow: auto; }
+  .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 16px !important; padding: 0 !important; }
+  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: 0 !important; padding-top: 10px !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 40V26C110 6 250 0 400 14v26z' fill='%23fff6f6'/%3E%3C/svg%3E") no-repeat 0 136px / 100% 34px,
+                linear-gradient(180deg, #c8102e 0, #d81c24 90px, #c8102e 169px, transparent 169px) !important; }
+}
+/* Welcome card fully inside the red frame (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .employee-main > .sc-welcome { margin-top: 0 !important; }
+  .theme-scarlet .employee-main:has(> .sc-welcome) { background-position: 0 146px, 0 0 !important; background-size: 100% 34px, 100% 180px !important; background-repeat: no-repeat, no-repeat !important; }
+}
