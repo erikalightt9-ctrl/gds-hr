@@ -2276,3 +2276,70 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .pm-attend .pm-loc-row { font-size: 13px; padding: 6px 0 !important; }
 .theme-scarlet .pm-attend .pm-loc-row small, .theme-scarlet .pm-attend .pm-loc-row code { font-size: 11px; }
 .theme-scarlet .pm-attend .pm-loc-row strong { font-size: 14px; }
+
+/* ===== Employee home: design of Nov 24, 2026 (no logo, wave header, compact cards) ===== */
+.theme-scarlet { background: #fff6f6 !important; }
+.theme-scarlet .employee-main { background: transparent !important; }
+.theme-scarlet .employee-top .portal-logo { display: none !important; }
+.theme-scarlet .employee-top { position: relative; overflow: visible; min-height: 88px !important; padding: 10px 14px 30px !important; border: 0 !important; box-shadow: none !important;
+  background: radial-gradient(90% 120% at 100% -10%, #7d0000 0%, rgb(125 0 0 / 0) 55%), radial-gradient(70% 90% at 0% -20%, #8b0000 0%, rgb(139 0 0 / 0) 60%), linear-gradient(160deg, #c8102e 0%, #e01e1e 45%, #b00d0d 100%) !important; }
+.theme-scarlet .employee-top::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 30px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 30' preserveAspectRatio='none'%3E%3Cpath d='M0 30V22C120 4 260 0 400 8v22z' fill='%23fff6f6'/%3E%3C/svg%3E") no-repeat bottom / 100% 100%; }
+.theme-scarlet .employee-top .employee-menu-button { display: inline-flex !important; align-items: center; justify-content: center; background: transparent !important; border: 0 !important; box-shadow: none !important; color: #fff !important; font-size: 30px !important; min-width: 44px !important; min-height: 44px !important; padding: 4px 6px !important; }
+.theme-scarlet .employee-top .portal-bell { background: transparent !important; border: 0 !important; box-shadow: none !important; color: #fff !important; }
+.theme-scarlet .employee-main { margin-top: -6px; }
+
+/* Welcome card. */
+.theme-scarlet .sc-welcome { background: radial-gradient(circle at 92% 120%, #fbd3d3 0 32%, transparent 32.5%), radial-gradient(circle at 92% 120%, #fde4e4 0 46%, transparent 46.5%), radial-gradient(circle at 92% 120%, #fff0f0 0 60%, transparent 60.5%), #fff !important; border: 1px solid #fbe3e3 !important; box-shadow: 0 10px 26px rgb(200 16 46 / .10) !important; padding: 16px !important; gap: 14px !important; }
+.theme-scarlet .sc-photo { width: 84px !important; height: 84px !important; border: 4px solid #fff !important; background: radial-gradient(circle at 35% 30%, #e3262b, #a80d0d) !important; box-shadow: 0 6px 16px rgb(168 13 13 / .25) !important; }
+.theme-scarlet .sc-photo .sc-ini { font-size: 30px !important; letter-spacing: -.02em; }
+.theme-scarlet .sc-photo::after { width: 18px !important; height: 18px !important; right: 0 !important; bottom: 4px !important; background: #1fb34a !important; }
+.theme-scarlet .sc-welcome h1 { margin: 0 0 4px !important; font-size: 28px !important; line-height: 1.1; font-weight: 800; color: #1a1a1f !important; }
+.theme-scarlet .sc-welcome h1 span { display: block; font-size: 20px; font-weight: 700; }
+.theme-scarlet .sc-namelink { font-size: 14px !important; color: #1a1a1f !important; }
+.theme-scarlet .sc-welcome .welcome-mascot { width: 92px !important; margin: -8px -4px -12px 0 !important; }
+
+/* Clock card with skyline. */
+.theme-scarlet .sc-clock { position: relative; overflow: hidden; background: linear-gradient(115deg, #fff 0%, #fff 50%, #fdeeee 100%) !important; border: 1px solid #fbe3e3 !important; box-shadow: 0 10px 26px rgb(200 16 46 / .08) !important; padding: 14px 16px !important; }
+.theme-scarlet .sc-clock .sc-clock-main { position: relative; z-index: 1; }
+.theme-scarlet .sc-clock .clock-zone, .theme-scarlet .sc-clock .clock-zone b { font-size: 13px !important; font-weight: 500 !important; color: #2b2b33 !important; }
+.theme-scarlet .sc-clock time { font-size: 34px !important; color: #d7141a !important; }
+.theme-scarlet .sc-clock .clock-date { font-size: 13.5px !important; color: #1f1f24 !important; }
+.theme-scarlet .sc-greet { position: relative; z-index: 1; background: #fff !important; border: 1px solid #f6d5d5 !important; color: #b3121a !important; font-size: 13px !important; padding: 6px 12px !important; }
+.theme-scarlet .sc-skyline { position: absolute; right: 0; bottom: 0; width: 46%; max-width: 230px; height: auto; color: #f7c6c6; opacity: .75; pointer-events: none; }
+
+/* Time In / Time Out. */
+.theme-scarlet .sc-punch-top { margin: 0 0 12px !important; }
+.theme-scarlet .sc-punch { gap: 12px !important; }
+.theme-scarlet .sc-punch-btn { min-height: 80px !important; border-radius: 22px !important; font-size: 17px !important; gap: 4px !important; }
+.theme-scarlet .sc-punch-btn svg { width: 30px !important; height: 30px !important; }
+.theme-scarlet .sc-punch-btn.is-next { background: linear-gradient(150deg, #ef2b2b 0%, #c8102e 55%, #9d0c0c 100%) !important; border: 0 !important; box-shadow: 0 10px 22px rgb(200 16 46 / .32) !important; }
+.theme-scarlet .sc-punch-btn.is-other { background: #fff !important; border: 1px solid #fbe0e0 !important; color: #b3121a !important; box-shadow: 0 8px 20px rgb(200 16 46 / .08) !important; }
+.theme-scarlet .sc-punch-btn em { background: rgb(255 255 255 / .25) !important; font-size: 10.5px !important; top: 7px !important; right: 9px !important; }
+
+/* Today's attendance. */
+.theme-scarlet .pm-attend { border: 1px solid #fbe3e3 !important; box-shadow: 0 10px 26px rgb(200 16 46 / .08) !important; padding: 14px !important; }
+.theme-scarlet .pm-attend-head { flex-wrap: nowrap !important; align-items: center !important; }
+.theme-scarlet .pm-attend-head h2 { font-size: 16px !important; }
+.theme-scarlet .pm-attend-head p { display: none; }
+.theme-scarlet .pm-attend-head .pm-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px !important; padding: 4px 10px !important; border-radius: 999px !important; }
+.theme-scarlet .pm-attend-head .pm-chip.pm-ok { background: #dff5e6 !important; color: #138a3e !important; }
+.theme-scarlet .sc-check { width: 13px; height: 13px; }
+.theme-scarlet .pm-attend .pm-tile { background: #fdeeee !important; border: 0 !important; box-shadow: none !important; padding: 10px !important; border-radius: 14px !important; }
+.theme-scarlet .pm-attend .sc-tile-ico { color: #e0262b !important; }
+.theme-scarlet .pm-attend .sc-tile-ico .sc-ico { width: 26px !important; height: 26px !important; stroke-width: 2 !important; }
+.theme-scarlet .pm-attend .sc-tile-text span { font-size: 12px !important; color: #3a3a44 !important; }
+.theme-scarlet .pm-attend .sc-tile-text strong { font-size: 17px !important; color: #141418 !important; }
+
+/* Office attendance card. */
+.theme-scarlet .sc-wifi { padding: 0 !important; border: 1px solid #fbe3e3 !important; box-shadow: 0 10px 26px rgb(200 16 46 / .08) !important; overflow: hidden; }
+.theme-scarlet .sc-wifi-btn { display: grid !important; gap: 6px; width: 100% !important; padding: 14px 16px !important; background: linear-gradient(115deg, #fff 0%, #fff6f6 100%) !important; border: 0 !important; box-shadow: none !important; text-align: left; color: #b3121a !important; border-radius: 0 !important; cursor: pointer; }
+.theme-scarlet .sc-wifi-head { display: flex; align-items: center; gap: 10px; }
+.theme-scarlet .sc-wifi-head strong { flex: 1; font-size: 16px; font-weight: 800; color: #c8102e; }
+.theme-scarlet .sc-wifi-ico { width: 26px; height: 26px; color: #e0262b; }
+.theme-scarlet .sc-wifi-chev { width: 18px; height: 18px; color: #b3121a; }
+.theme-scarlet .sc-wifi-note { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.4; color: #c8102e; padding-left: 4px; }
+.theme-scarlet .sc-wifi-note svg { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; color: #b3121a; }
+.theme-scarlet .sc-wifi-note b { font-weight: 700; }
+.theme-scarlet .sc-wifi-note.ok, .theme-scarlet .sc-wifi-note.ok svg { color: #138a3e; }
+.theme-scarlet .sc-wifi-note > span { font-weight: 400; }
