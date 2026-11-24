@@ -54,3 +54,30 @@ test('flexible time also applies on weekdays that have their own day schedule (h
   const sched = scheduleOn(state().employees[0], profile, '2026-11-17');   // Tuesday
   assert.deepEqual([sched.flexible, sched.flexibleOT, sched.mealBreakMinutes], [true, true, 1]);
 });
+
+test('flexible time: a time in / out outside office hours needs a reason, which HR sees', async () => {
+  const { Store } = await import('../src/store.mjs');
+  const { punch, flexibleReasonNeeded } = await import('../src/portal.mjs');
+  const { reasonsFor } = await import('../src/live-reasons.mjs');
+  const { completeState } = await import('./helpers.mjs');
+  const emp = { restDays: [0], scheduleStart: '09:00' }, wp = { flexibleTime: true, scheduleEnd: '18:00' };
+  assert.equal(flexibleReasonNeeded(emp, wp, '2026-11-24', 'in', '09:10'), '', 'within 15 minutes of the usual time in');
+  assert.match(flexibleReasonNeeded(emp, wp, '2026-11-24', 'in', '14:05'), /time in at 2:05 PM is outside office hours \(9:00 AM – 6:00 PM\)/);
+  assert.match(flexibleReasonNeeded(emp, wp, '2026-11-24', 'out', '16:00'), /time out at 4:00 PM/);
+  assert.equal(flexibleReasonNeeded(emp, wp, '2026-11-24', 'out', '18:20'), '');
+  assert.match(flexibleReasonNeeded(emp, wp, '2026-11-24', 'out', '22:00'), /10:00 PM/);
+  assert.equal(flexibleReasonNeeded(emp, { ...wp, flexibleTime: false }, '2026-11-24', 'in', '14:05'), '', 'fixed schedules unchanged');
+  assert.equal(flexibleReasonNeeded(emp, wp, '2026-11-29', 'in', '14:05'), '', 'not on a rest day (Sunday)');
+
+  const store = new Store(':memory:'), s = completeState(); s.attendance = []; store.write(s);
+  store.db.prepare('INSERT INTO employee_profiles(employee_id,section,data) VALUES(?,?,?)').run('EMP-001', 'attendance', JSON.stringify({ flexibleTime: true, scheduleEnd: '18:00', hoursPerDay: 8, mealBreakMinutes: 60 }));
+  const worker = { id: 'w', username: 'employee1', role: 'employee', employeeId: 'EMP-001' }, now = new Date('2026-11-24T06:05:00Z');   // 2:05 PM Manila
+  const reading = extra => ({ kind: 'in', requestId: '44444444-4444-4444-8444-444444444444', latitude: 14.55, longitude: 121.02, accuracy: 15, capturedAt: now.toISOString(), ...extra });
+  try {
+    assert.throws(() => punch(store, worker, reading(), now, { ip: '1.2.3.4' }), /^Error: Flexible time: your time in at 2:05 PM/);
+    const event = punch(store, worker, reading({ reason: 'Event at SMX, call time 2:00 PM' }), now, { ip: '1.2.3.4' });
+    assert.deepEqual([event.flexibleReason, event.reason], [true, 'Event at SMX, call time 2:00 PM']);
+    const r = reasonsFor(store, store.read(), 'EMP-001', '2026-11-24').find(x => x.kind === 'flexible');
+    assert.equal(r.explanation, 'Event at SMX, call time 2:00 PM');
+  } finally { store.close(); }
+});

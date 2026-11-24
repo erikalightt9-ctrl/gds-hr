@@ -98,6 +98,18 @@ export function attendanceAlert(store, employee, kind, time, location) {
   const [h, m] = String(time || '').split(':').map(Number), clock = Number.isFinite(h) ? `${h % 12 || 12}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}` : time;
   return `${name} – Time ${kind === 'in' ? 'In' : 'Out'}: ${clock} – Location: ${location}`;
 }
+// Flexible time (Nov 24, 2026): any hours, but a time in after the usual time in (+15 min) or a time out before the
+// usual time out or more than 30 minutes after it, on a scheduled workday, needs a reason (off-site already has one).
+export const FLEX_REASON_PREFIX = 'Flexible time:';
+const hmMin = t => { const [h, m] = String(t || '').split(':').map(Number); return h * 60 + (m || 0); };
+const ampm = t => { const m = hmMin(t), h = Math.floor(m / 60); return `${(h + 11) % 12 + 1}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+export function flexibleReasonNeeded(employee, workplace, date, kind, time) {
+  if (!workplace?.flexibleTime || (employee.restDays || []).includes(new Date(`${date}T00:00:00Z`).getUTCDay())) return '';
+  const start = employee.scheduleStart || '09:00', end = workplace.scheduleEnd || '18:00', hours = `${ampm(start)} – ${ampm(end)}`;
+  if (kind === 'in' && hmMin(time) > hmMin(start) + 15) return `your time in at ${ampm(time)} is outside office hours (${hours})`;
+  if (kind === 'out' && (hmMin(time) < hmMin(end) || hmMin(time) > hmMin(end) + 30)) return `your time out at ${ampm(time)} is outside office hours (${hours})`;
+  return '';
+}
 export function punch(store, actor, input, now = new Date(), { ip = '', userAgent = '' } = {}) {
   const employee = ownEmployee(store, actor), value = clockSchema.parse(input);
   if (remittanceOnlyIds(store).has(employee.id)) throw new AppError('This account does not use time in / out.');
@@ -142,8 +154,10 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
       if (duration < 60000 || duration > 86400000) throw new AppError('Shift must last at least one minute and at most 24 hours. Ask HR to correct missing time-out.');
     }
     const workDate = clockIn?.workDate || day;
+    const flexReason = flexibleReasonNeeded(employee, workplace, workDate, value.kind, local(now).slice(11, 16));
+    if (flexReason && value.mode !== 'outside' && value.reason.length < 5) throw new AppError(`${FLEX_REASON_PREFIX} ${flexReason}. Give the reason (for example the event and its call time).`);
     if (state.runs.some(r => r.start <= workDate && r.end >= workDate && r.rows.some(row => row.employeeId === employee.id))) throw new AppError('This attendance belongs to posted payroll. Contact HR.');
-    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, inOfficeArea: officeArea, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason } : {}), approvedLocation: workplace.approvedLocation || '', clockInId: clockIn?.id || null,
+    const event = { id: value.requestId, employeeId: employee.id, kind: value.kind, workDate, time: local(now).slice(11, 16), latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy, capturedAt: value.capturedAt, recordedAt: now.toISOString(), synchronizedAt: new Date().toISOString(), geofence: geofence(value, workplace), onOfficeNetwork: network.office, inOfficeArea: officeArea, ...(value.mode === 'outside' ? { outOfOffice: true, reason: value.reason } : flexReason && value.reason ? { flexibleReason: true, reason: value.reason } : {}), approvedLocation: workplace.approvedLocation || '', clockInId: clockIn?.id || null,
       attendanceType: value.mode === 'outside' ? 'offsite' : 'office', accuracyLimit: limit,
       network: { verified: network.office, configured: network.configured, ip: String(ip || '').replace(/^::ffff:/, '').slice(0, 64), connection: value.connection },
       device: { userAgent: String(userAgent || '').slice(0, 300) },
