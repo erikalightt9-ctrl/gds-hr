@@ -2388,3 +2388,5 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-quick-grid { gap: 8px !important; }
 .theme-scarlet .sc-quick { min-height: 66px !important; padding: 8px 4px !important; gap: 4px !important; border-radius: 14px !important; font-size: 11.5px !important; }
 .theme-scarlet .sc-quick-ico .em-ico, .theme-scarlet .sc-quick-ico .sc-ico { width: 24px !important; height: 24px !important; }
+/* More space below My Workspace (Nov 24, 2026). */
+.theme-scarlet .sc-quick-wrap { margin-bottom: 26px !important; }
