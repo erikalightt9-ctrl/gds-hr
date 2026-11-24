@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { Store } from '../src/store.mjs';
-import { addUser, login, requestRecovery, redeemPasswordReset, setUserEmail, registeredEmail } from '../src/auth.mjs';
+import { addUser, login, requestRecovery, redeemPasswordReset, setUserEmail, registeredEmail, issuePasswordReset } from '../src/auth.mjs';
 import { createMailer, mailerFromEnv } from '../src/mailer.mjs';
 import { completeState } from './helpers.mjs';
 
@@ -80,4 +80,62 @@ test('the SMTP sender delivers a complete message and rejects header injection',
   } finally { server.close(); }
   assert.equal(mailerFromEnv({}), null);
   assert.throws(() => mailerFromEnv({ HR_SMTP_HOST: 'smtp.example.com', HR_SMTP_SECURE: 'plain', HR_MAIL_FROM: 'hr@example.com' }), /this machine/);
+});
+
+test('employee self-service: link to the registered email, single use, expires, old sessions end, no HR step', async () => {
+  const { store, employee } = await fixture();
+  try {
+    const mailer = fakeMailer();
+    store.db.prepare('INSERT INTO employee_profiles VALUES(?,?,?)').run('EMP-001', 'employment', JSON.stringify({ businessEmail: 'alex@gds.example' }));
+    const before = await login(store, 'EMP-001', 'employee-password-1', 'test');
+    assert.equal(await requestRecovery(store, 'EMP-001', { mailer, origin: 'https://hr.example.com' }).delivery, true);
+    assert.equal(mailer.sent[0].to, 'alex@gds.example');
+    assert.match(mailer.sent[0].text, /https:\/\/hr\.example\.com\/#reset=[a-f0-9]{64}/);
+    assert.equal(store.db.prepare('SELECT COUNT(*) n FROM recovery_requests').get().n, 0, 'no HR request when the email went out');
+    const stored = store.db.prepare('SELECT token_hash FROM password_resets WHERE user_id=?').get(employee.id);
+    assert.notEqual(stored.token_hash, linkToken(mailer.sent[0]), 'only a hash of the link is stored');
+    await redeemPasswordReset(store, linkToken(mailer.sent[0]), 'brand-new-pass-9');
+    await assert.rejects(() => redeemPasswordReset(store, linkToken(mailer.sent[0]), 'another-pass-99'), /invalid or expired/, 'single use');
+    assert.equal(store.db.prepare('SELECT COUNT(*) n FROM sessions WHERE user_id=?').get(employee.id).n, 0, 'signed out everywhere');
+    assert.ok(before);
+    await login(store, 'EMP-001', 'brand-new-pass-9', 'test');
+    // Expired link: refused.
+    store.db.prepare('DELETE FROM password_resets').run();
+    await requestRecovery(store, 'EMP-001', { mailer }).delivery;
+    store.db.prepare('UPDATE password_resets SET expires=?').run(Date.now() - 1);
+    await assert.rejects(() => redeemPasswordReset(store, linkToken(mailer.sent.at(-1)), 'later-pass-999'), /invalid or expired/);
+  } finally { store.close(); }
+});
+
+test('a reset email that cannot be sent goes to HR (alert) and the unsent link is withdrawn', async () => {
+  const { store, employee } = await fixture();
+  try {
+    const failing = { from: 'hr@example.com', send: async () => { throw new Error('the mail server rejected the mail username or password (535)'); } };
+    store.db.prepare('INSERT INTO employee_profiles VALUES(?,?,?)').run('EMP-001', 'employment', JSON.stringify({ businessEmail: 'alex@gds.example' }));
+    assert.equal(await requestRecovery(store, 'EMP-001', { mailer: failing }).delivery, false);
+    assert.ok(store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(employee.id), 'HR has the request');
+    assert.equal(store.db.prepare('SELECT COUNT(*) n FROM password_resets').get().n, 0, 'no live link left behind');
+    assert.ok(store.db.prepare('SELECT message FROM notifications WHERE employee_id IS NULL').all().some(n => /could not be sent: the mail server rejected the mail username or password \(535\)\. Verify/.test(n.message)));
+  } finally { store.close(); }
+});
+
+test('HR Reset password also emails the link to the registered email; the employee sets their own password', async () => {
+  const { store, admin, employee } = await fixture();
+  try {
+    const mailer = fakeMailer();
+    store.db.prepare('INSERT INTO employee_profiles VALUES(?,?,?)').run('EMP-001', 'employment', JSON.stringify({ businessEmail: 'alex@gds.example' }));
+    const r = issuePasswordReset(store, admin, employee.id, false, { mailer, origin: 'https://hr.example.com' });
+    assert.equal(await r.delivery, true);
+    assert.equal(r.sentTo, 'a***@gds.example');
+    assert.equal(mailer.sent[0].to, 'alex@gds.example');
+    assert.equal(linkToken(mailer.sent[0]), r.token, 'the emailed link carries the same one-time code');
+    assert.match(mailer.sent[0].text, /expires in 15 minutes/);
+    assert.doesNotMatch(mailer.sent[0].text, /password:/i, 'no password in the email');
+    await redeemPasswordReset(store, r.token, 'chosen-by-employee-9');
+    await login(store, 'EMP-001', 'chosen-by-employee-9', 'test');
+    const failing = { from: 'hr@example.com', send: async () => { throw new Error('535'); } };
+    const f = issuePasswordReset(store, admin, employee.id, false, { mailer: failing, origin: 'https://hr.example.com' });
+    assert.equal(await f.delivery, false, 'HR still has the link to send by hand');
+    assert.match(f.token, /^[a-f0-9]{64}$/);
+  } finally { store.close(); }
 });

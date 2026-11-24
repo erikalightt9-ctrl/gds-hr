@@ -13,6 +13,9 @@ export function reasonsFor(store, state, employeeId, day) {
     const r = split(e.reason);
     reasons.push({ kind: 'out-of-office', title: `Off-site work time ${e.kind}`, label: r.label || 'Off-site work', explanation: r.explanation || e.reason || '', detail: `Time ${e.kind} at ${e.time}`, status: '', documentId: '' });
   }
+  for (const e of events.filter(x => x.flexibleReason && !x.outOfOffice)) {
+    reasons.push({ kind: 'flexible', title: `Flexible time · time ${e.kind}`, label: 'Outside office hours', explanation: e.reason || '', detail: `Time ${e.kind} at ${e.time}`, status: '', documentId: '' });
+  }
   const explanation = store.db.prepare('SELECT data FROM attendance_explanations WHERE employee_id=? ORDER BY rowid DESC').all(employeeId).map(r => JSON.parse(r.data)).find(x => x.date === day && x.status !== 'rejected');
   if (explanation) reasons.push({ kind: 'late', title: 'Late arrival explanation', label: explanation.reason || 'Late', explanation: explanation.explanation || '', detail: explanation.requestedOffset ? `Requested offset ${explanation.requestedOffset} min` : '', status: STATUS[explanation.status] || explanation.status, documentId: document(explanation.documentId) });
   for (const l of state.leaves.filter(x => x.employeeId === employeeId && ['pending', 'approved'].includes(x.status) && leaveCovers(x, day))) {

@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { userSchema } from './schema.mjs';
 import { AppError, permit } from './service.mjs';
 import { isEmailAddress } from './mailer.mjs';
+import { ensureScopeColumns, scopeOf } from './account-scope.mjs';
 const scrypt = promisify(scryptCallback);
 const hashToken = token => createHash('sha256').update(token).digest('hex');
 export async function passwordHash(password, salt = randomBytes(16).toString('hex')) {
@@ -16,6 +17,10 @@ export async function addUser(store, input, actor = null) {
     if (!actor && store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n) throw new AppError('Initial setup is already complete.', 409);
     if (!actor && value.role !== 'admin') throw new AppError('The first user must be an administrator.');
     if (store.db.prepare('SELECT id FROM users WHERE username=?').get(value.username)) throw new AppError('Username already exists.');
+    // Registered email for Forgot password (reset links are sent there). Optional for the first administrator.
+    const email = (value.email || '').trim();
+    if (email && !isEmailAddress(email)) throw new AppError('Enter a valid email address.');
+    if (email && store.db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE').get(email)) throw new AppError('Another account already uses this email.');
     const employees = store.read().employees;
     if (employees.some(e => e.id.toLowerCase() === value.username.toLowerCase() && e.id !== value.employeeId)) throw new AppError('This username is reserved for an Employee ID.');
     if (['employee', 'dept_manager'].includes(value.role)) {
@@ -26,8 +31,8 @@ export async function addUser(store, input, actor = null) {
       const taken = store.db.prepare("SELECT username FROM users WHERE (employee_id=? AND role IN ('employee','dept_manager')) OR username=?").get(value.employeeId, value.employeeId);
       if (taken) throw new AppError(`${emp.name} already has an employee login: ${taken.username}. Each employee can have only one.`);
     }
-    const user = { id: randomUUID(), username: value.username, role: value.role, employeeId: value.employeeId || null };
-    store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id) VALUES(?,?,?,?,?)').run(user.id, user.username, hash, user.role, user.employeeId);
+    const user = { id: randomUUID(), username: value.username, role: value.role, employeeId: value.employeeId || null, email: email || null };
+    store.db.prepare('INSERT INTO users(id,username,password_hash,role,employee_id,email) VALUES(?,?,?,?,?,?)').run(user.id, user.username, hash, user.role, user.employeeId, user.email);
     store.log(actor || user, 'create', 'users', user.id, null, user);
     return user;
   });
@@ -97,9 +102,11 @@ export function issueSession(store, user, currentTokenHash = '') {
 export function session(store, cookie = '') {
   const token = cookie.split(';').map(v => v.trim()).find(v => v.startsWith('hr_session='))?.slice(11);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
+  ensureScopeColumns(store.db);
+  const row = store.db.prepare('SELECT s.csrf, s.expires, u.id, u.username, u.role, u.employee_id, u.disabled, u.mfa_secret, u.must_change_password, u.companies, u.permissions FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(hashToken(token));
   if (!row || row.disabled || row.expires < Date.now()) return null;
-  return { user: { id: row.id, username: row.username, role: row.role === 'service' ? 'viewer' : row.role, ...(row.role === 'service' ? { service: true } : {}), employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mfaRequired: process.env.HR_REQUIRE_MFA !== 'off' && ['hr', 'hr_staff', 'payroll', 'viewer'].includes(row.role) && !row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
+  const scope = scopeOf(row);
+  return { user: { id: row.id, username: row.username, role: ['service', 'finance'].includes(row.role) ? 'viewer' : row.role, ...(row.role === 'service' ? { service: true } : {}), ...(row.role === 'finance' ? { finance: true } : {}), companies: scope.companies, permissions: scope.permissions, employeeId: row.employee_id, mfaEnabled: !!row.mfa_secret, mfaRequired: process.env.HR_REQUIRE_MFA !== 'off' && ['hr', 'hr_staff', 'payroll', 'viewer'].includes(row.role) && !row.mfa_secret, mustChangePassword: !!row.must_change_password }, csrf: row.csrf, tokenHash: hashToken(token) };
 }
 export async function changePassword(store, user, currentPassword, newPassword) {
   const row = store.db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id);
@@ -159,23 +166,32 @@ export function requestRecovery(store, identifier, { mailer = null, origin = '' 
           store.log({ username: 'recovery-request' }, 'email-reset-link', 'users', user.id, null, { sentTo: maskEmail(email), expires });
         });
         delivery = mailer.send({ to: email, subject: 'GDS HR password reset', text: resetEmail(user.username, `${origin}/#reset=${token}`) })
-          .then(() => true, error => { console.error('Password reset email failed:', error.message); return false; });
+          .then(() => true, error => {
+            console.error('Password reset email failed:', error.message);
+            try { queueHrRecovery(store, user, `the reset email could not be sent: ${error.message.replace(/\.$/, '')}`); } catch (e) { console.error('Recovery fallback failed:', e.message); }
+            return false;
+          });
       }
-    } else if (!store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(user.id)) {
-      store.transaction(() => {
-        store.db.prepare('INSERT INTO recovery_requests(id,user_id,created_at) VALUES(?,?,?)').run(randomUUID(), user.id, new Date().toISOString());
-        store.log({ username: 'recovery-request' }, 'request-recovery', 'users', user.id, null, null);
-      });
-    }
+    } else queueHrRecovery(store, user, '');
   }
   return { message: RECOVERY_MESSAGE, delivery };
 }
+// HR-assisted recovery: one open request per account; when an email failed, HR is told why and the unused link is removed.
+function queueHrRecovery(store, user, reason) {
+  store.transaction(() => {
+    if (reason) store.db.prepare('DELETE FROM password_resets WHERE user_id=?').run(user.id);
+    if (store.db.prepare('SELECT id FROM recovery_requests WHERE user_id=? AND resolved=0').get(user.id)) return;
+    store.db.prepare('INSERT INTO recovery_requests(id,user_id,created_at) VALUES(?,?,?)').run(randomUUID(), user.id, new Date().toISOString());
+    store.log({ username: 'recovery-request' }, 'request-recovery', 'users', user.id, null, reason ? { reason } : null);
+    if (reason) store.notify(null, `Password reset for ${user.username}: ${reason}. Verify the person, then Account & access → Reset password → Copy link and send it to them.`);
+  });
+}
 export const maskEmail = email => email.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(Math.min(rest.length, 6))}${domain}`);
-const resetEmail = (username, link) => `Hello,
+const resetEmail = (username, link, minutes = EMAIL_RESET_MINUTES) => `Hello,
 
 We received a request to reset the password for your GDS CAPITAL INC. HR account (${username}).
 
-Open this link to choose a new password. It works once and expires in ${EMAIL_RESET_MINUTES} minutes:
+Open this link to choose a new password. It works once and expires in ${minutes} minutes:
 ${link}
 
 If you did not ask for this, ignore this email; your password stays the same. For help, contact HR.
@@ -195,9 +211,9 @@ export function setUserEmail(store, actor, userId, email) {
   });
   return { email: value || null };
 }
-export function issuePasswordReset(store, actor, userId, resetMfa = false) {
+export function issuePasswordReset(store, actor, userId, resetMfa = false, { mailer = null, origin = '' } = {}) {
   permit(actor, ['admin']);
-  const user = store.db.prepare('SELECT id FROM users WHERE id=?').get(userId);
+  const user = store.db.prepare('SELECT * FROM users WHERE id=?').get(userId);
   if (!user) throw new AppError('User not found.', 404);
   const token = randomBytes(32).toString('hex'), expires = Date.now() + 15 * 60000;
   store.transaction(() => {
@@ -208,7 +224,13 @@ export function issuePasswordReset(store, actor, userId, resetMfa = false) {
     if (resetMfa) store.db.prepare('UPDATE users SET mfa_secret=NULL,mfa_pending=NULL,mfa_last_step=NULL WHERE id=?').run(userId);
     store.log(actor, 'issue-password-reset', 'users', userId, null, { expires, resetMfa });
   });
-  return { token, expires, message: 'Give this one-time code directly to the employee after verifying their identity. It expires in 15 minutes.' };
+  const email = mailer && origin ? registeredEmail(store, user) : null;
+  const delivery = email
+    ? mailer.send({ to: email, subject: 'GDS HR password reset', text: resetEmail(user.username, `${origin}/#reset=${token}`, 15) }).then(() => {
+      store.log(actor, 'email-reset-link', 'users', userId, null, { sentTo: maskEmail(email), expires, by: 'hr' }); return true;
+    }, error => { console.error('HR reset email failed:', error.message); return false; })
+    : Promise.resolve(false);
+  return { token, expires, sentTo: email ? maskEmail(email) : null, delivery, message: 'Give this one-time code directly to the employee after verifying their identity. It expires in 15 minutes.' };
 }
 export async function redeemPasswordReset(store, token, password) {
   if (!/^[a-f0-9]{64}$/.test(token) || password.length < 9 || password.length > 200) throw new AppError('Invalid reset code or password.');

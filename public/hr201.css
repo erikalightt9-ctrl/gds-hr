@@ -1995,3 +1995,25 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* Final pay release status (Nov 23, 2026). */
 .fp-release{width:auto;min-width:130px;padding:4px 8px;font-size:13px;border-color:#e0c9c9;color:#a11d2b;background:#fff}
 .fp-release.is-released{color:#1f6b3a;border-color:#b9dcc4;background:#f1faf3}
+
+/* Add user: Generate beside the initial password (Nov 23, 2026). */
+.gen-pass{display:flex;gap:8px;align-items:center}
+.gen-pass input{flex:1;min-width:0}
+.gen-pass button{width:auto;margin:0;white-space:nowrap}
+
+/* HR password reset hand-over: a link to copy (Nov 23, 2026). */
+.reset-handover{max-width:min(620px,calc(100vw - 80px));box-sizing:border-box;position:sticky;left:0;border:1px solid #ead9b0;background:#fffaf0;border-radius:10px;padding:12px 14px;margin-top:10px}
+.reset-handover .reset-link{display:flex;gap:8px;align-items:center}
+.reset-handover .reset-link input{flex:1;min-width:0;font-size:12px}
+.reset-handover .reset-link button{width:auto;margin:0;white-space:nowrap}
+.reset-handover details{margin-top:8px}.reset-handover code{word-break:break-all;font-size:11px}
+.reset-handover .reset-sent{color:#1f6b3a;margin:0 0 4px}.reset-handover .reset-failed{color:#a11d2b;margin:0 0 4px}
+
+/* Work schedule: Flexible time option (Nov 24, 2026). */
+.flex-time{grid-column:1/-1;display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #ead9b0;border-radius:10px;background:#fffaf0;font-size:13px;line-height:1.4}
+.flex-time input{margin-top:3px}
+/* Due Process: search on the left, Excel on the right (Nov 24, 2026). */
+.dp-toolbar{justify-content:space-between}
+.dp-toolbar .search{margin-left:0;flex:0 1 340px;min-width:220px}
+.dp-toolbar .download-links{margin-left:auto}
+.ml-card-ico.ml-minus { background: #eceef2; color: #5a6270; }

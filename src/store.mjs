@@ -1,3 +1,4 @@
+import { scopeContext, filterState } from './company-scope.mjs';
 import { loanChangeText } from './loan-notice.mjs';
 import { validationInputs } from './validation-inputs.mjs';
 import { DatabaseSync } from 'node:sqlite';
@@ -77,9 +78,11 @@ export class Store {
     // Payroll attendance validation (src/attendance-validation.mjs): punches vs records, corrections, HR decisions.
     state.validation = validationInputs(this.db, state.attendance);
     state.contributionChanges = this.db.prepare("SELECT data FROM contribution_changes WHERE status='approved'").all().map(r => JSON.parse(r.data));
-    return state;
+    // Company separation: a GET request of a company-limited login reads only its companies (src/company-scope.mjs).
+    const scoped = scopeContext.getStore();
+    return scoped?.filterReads ? filterState(state, scoped.scope) : state;
   }
-  write(state) { const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.validation; delete copy.overtimeRequests; delete copy.attendanceCases; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
+  write(state) { if (scopeContext.getStore()?.filterReads) throw new Error('Read-only request: a company-limited view is never saved.'); const copy = { ...state }; delete copy.employeeProfiles; delete copy.contributionChanges; delete copy.payrollInputs; delete copy.priorEarnings; delete copy.thirteenthOverrides; delete copy.thirteenthAdjustments; delete copy.thirteenthPayslips; delete copy.openClockIns; delete copy.validation; delete copy.overtimeRequests; delete copy.attendanceCases; this.db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(copy)); }
   transaction(fn) {
     if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');

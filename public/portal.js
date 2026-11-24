@@ -315,6 +315,13 @@ export function createPortal(ctx) {
       confirmBox(`Time ${kind} submitted`, `Your <strong>${extra.mode === 'outside' ? 'off-site work ' : ''}time ${kind}</strong> at <strong>${recordedAt}</strong> was recorded with your location${extra.mode === 'outside' ? ' and your reason' : ''}.${kind === 'in' ? '<br>Remember to time out at the end of your shift.' : '<br>Thank you, have a good rest!'}`);
     } catch (error) {
       if (!/fetch|network|connect/i.test(error.message)) pendingClock = null; dirty = false; button.disabled = false;
+      // Flexible time outside office hours: ask for the reason, then record the same time in / out with it.
+      if (extra.mode === 'office' && /^Flexible time:/.test(error.message)) {
+        button.textContent = `Time ${kind}`;
+        openDialog(`Reason for your time ${kind}`, `<form id="flex-reason" class="dialog-body"><p>${esc(error.message)}</p><label class="field">Reason<textarea name="reason" rows="3" minlength="5" maxlength="500" required placeholder="e.g. Event at SMX, call time 2:00 PM"></textarea></label><div class="dialog-actions"><button class="primary">Submit time ${kind}</button></div></form>`, '<div class="dialog-foot"><button data-close>Cancel</button></div>');
+        dialog.querySelector('#flex-reason').onsubmit = ev => { ev.preventDefault(); const reason = String(new FormData(ev.target).get('reason') || '').trim(); dialog.close(); clock(kind, button, { mode: 'office', reason }); };
+        return;
+      }
       // Not at the office: say so plainly and offer the Off-site work time in / out (with a reason).
       if (extra.mode === 'office' && /authorized office Wi-Fi|not at the office/i.test(error.message)) {
         button.textContent = `Time ${kind}`;
@@ -472,7 +479,7 @@ export function createPortal(ctx) {
   // each with its explanation, attachment and leave proof.
   const PROOF = { required: 'HR asked for a document', submitted: 'Proof submitted · awaiting HR', verified: 'Proof confirmed by HR', rejected: 'New proof requested' };
   function showReasons(e) {
-    const ICON = { 'out-of-office': '📍', late: '⏰', leave: '🌴', overtime: '⏱️' };
+    const ICON = { 'out-of-office': '📍', flexible: '🕘', late: '⏰', leave: '🌴', overtime: '⏱️' };
     const block = r => `<section class="lv-reason-card"><div class="lv-reason-card-head"><strong>${ICON[r.kind] || '📝'} ${esc(r.title)}</strong>${r.status ? `<span class="badge ${r.status === 'Approved' ? '' : r.status === 'Rejected' ? 'rejected' : 'pending'}">${esc(r.status)}</span>` : ''}</div>
       <p class="lv-reason-label">${esc(r.label)}</p>${r.detail ? `<p class="legend">${esc(r.detail)}</p>` : ''}
       <p class="lv-reason-text">${r.explanation ? esc(r.explanation) : '<span class="legend">No further explanation given.</span>'}</p>
@@ -642,7 +649,10 @@ export function createPortal(ctx) {
         }
         if (button.dataset.userReset) {
           const result = await api(`/users/${button.dataset.userReset}/reset`, { resetMfa: container.querySelector('#reset-mfa').checked });
-          container.querySelector('#reset-result').innerHTML = `<p>${esc(result.message)}</p><code>${esc(result.token)}</code><p>Expires: ${stamp(result.expires)}</p>`;
+          const link = `${location.origin}/#reset=${result.token}`, who = button.closest('tr')?.querySelector('td')?.textContent.trim() || 'the employee';
+          container.querySelector('#reset-result').innerHTML = `<div class="reset-handover">${result.sentTo ? `<p class="reset-sent">✅ Reset link emailed to <strong>${esc(result.sentTo)}</strong>. ${esc(who)} opens it and chooses a new password.</p><p class="legend">If it does not arrive, send the same link yourself:</p>` : result.emailFailed ? '<p class="reset-failed">The email could not be sent. Send the link yourself:</p>' : ''}<p><strong>Send this link to ${esc(who)}</strong> (privately, e.g. a direct Feishu message). They open it and choose their own password. It works once and expires at ${stamp(result.expires)}.</p><div class="reset-link"><input readonly value="${esc(link)}" aria-label="Reset link"><button type="button" class="primary small" data-copy-reset>Copy link</button></div><details><summary>Or give the code instead</summary><p class="legend">On the sign-in page: Forgot password? → Have a reset code from HR?</p><code>${esc(result.token)}</code></details></div>`;
+          const copy = container.querySelector('[data-copy-reset]');
+          copy.onclick = async () => { const input = copy.previousElementSibling; try { await navigator.clipboard.writeText(input.value); copy.textContent = 'Copied ✓'; } catch { input.select(); toast('Select the link and copy it.'); } };
         }
         if (button.dataset.userEmail) {
           const email = window.prompt('Email for password reset links (leave blank to use the employee profile email):', button.dataset.current);

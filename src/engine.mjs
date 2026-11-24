@@ -46,7 +46,11 @@ export function scheduleOn(employee, profile = {}, date, rule) {
     mealBreakMinutes: override.mealBreakMinutes ?? profile.mealBreakMinutes ?? 60,
     arrangement: override.arrangement || profile.arrangement || '',
     // Flexible day: any start time; only the regular hours must be rendered. Never late, and no overtime.
-    flexible: !!override.flexible,
+    // Flexible time (whole schedule, Nov 24, 2026; e.g. event staff working to a call time): any start, never late;
+    // the regular hours must be worked (undertime if fewer) and overtime counts after them (with an approved filing).
+    // It applies on every workday; a day-specific schedule then only gives that day's hours and meal break.
+    flexible: !!override.flexible || !!profile.flexibleTime,
+    flexibleOT: !override.flexible && !!profile.flexibleTime,
     // Work-from-home day counted present without time in / out (e.g. Saturdays for office staff).
     autoPresent: !!override.autoPresent,
   };
@@ -120,10 +124,12 @@ export const LUNCH_START = '12:00';
 export function withScheduledLunch(record, sched, profile, rest = false) {
   const meal = Number(sched?.mealBreakMinutes) || 0;
   const set = profile?.mealBreakMinutes != null || profile?.daySchedules?.some(d => d.day === weekday(record?.date) && d.mealBreakMinutes != null);
-  if (!set || rest || record?.regularHoursOnly || !record?.timeIn || !record.timeOut || record.breaks?.length || meal <= 0 || sched.flexible) return record;
+  if (!set || rest || record?.regularHoursOnly || !record?.timeIn || !record.timeOut || record.breaks?.length || meal <= 0 || (sched.flexible && !sched.flexibleOT)) return record;
   const hm = v => v.split(':').map(Number).reduce((h, m) => h * 60 + m), fmt = v => `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`;
   const a = hm(record.timeIn), b = record.endNextDay ? 1440 : hm(record.timeOut);
-  const s = Math.max(hm(LUNCH_START), a), e = Math.min(hm(LUNCH_START) + meal, b, 1439);
+  const from = sched.flexibleOT ? a + Math.round((Number(sched.hoursPerDay) || 8) * 30) : hm(LUNCH_START);
+  if (sched.flexibleOT && (b - a) <= (Number(sched.hoursPerDay) || 8) * 60) return record;   // short day: no lunch taken off
+  const s = Math.max(from, a), e = Math.min(from + meal, b, 1439);
   return e > s ? { ...record, breaks: [{ start: `${record.date}T${fmt(s)}`, end: `${record.date}T${fmt(e)}` }] } : record;
 }
 export function attendanceMinutes(record) {
@@ -412,7 +418,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         }
         const statutoryHoliday = ['regular', 'double'].includes(kind.replace('-rest', ''));
         if (dayCase) { noteDecided(); trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `No time-in / time-out on ${d}: ${treatmentNote}`, sourceKind: 'attendance-cases', sourceId: dayCase.id, date: d }); }
-        // No time in and no time out on a scheduled ordinary workday that has passed = absent (HR, Nov 23, 2026).
+        // No time in and no time out on a scheduled ordinary workday that has passed is flagged absent (shown as not
+        // credited); HR confirms the classification before payroll (Nov 24, 2026 workflow): the employee is held until
+        // HR records a payroll decision (absent, credit, hold) or the attendance is corrected.
+        if (!dayCase && !perDayWorked && !rest && kind === 'ordinary' && !notYet(d) && d !== state.asOf) review(d, 'missing-punch', 'No time in / time out: flagged absent, HR to confirm');
         if (!rest && kind === 'ordinary' && !notYet(d) && (dayCase || d !== state.asOf)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day ${dayCase ? `with no attendance record (not credited: ${treatmentNote})` : perDayWorked ? 'with no attendance record (not credited)' : `absent: no time in / time out on ${d}`}`, null, d);
         else if (!rest && (notYet(d) || (d === state.asOf && kind === 'ordinary'))) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
         else if (statutoryHoliday && !notYet(d)) priceUnworked(null, d, rest, kind, false);
@@ -506,7 +515,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       let schedEnd = daySched.end ? hm(daySched.end) : null;
       if (schedEnd !== null && schedEnd <= schedStart) schedEnd += 1440;
       const otFrom = rest || flexible || record.regularHoursOnly || schedEnd === null ? null : stamp(`${d}T00:00`) + (schedEnd + Math.min(lateOffset, lateMinutes)) * 60000;
-      const isOT = (m, index) => !flexible && (otFrom === null ? index >= normalHours * 60 : m >= otFrom);
+      const isOT = (m, index) => (!flexible || daySched.flexibleOT) && (otFrom === null ? index >= normalHours * 60 : m >= otFrom);
       const eligible = minutes.map((m, index) => {
         if (!isOT(m, index)) return false;
         if (!gatedOT) return true;
@@ -610,7 +619,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       add(deductions, 'other', d.amount, d.name, { id: d.id, sourceKind: 'deductions' }, end);
     }
     // A loan with a balance keeps being deducted after its planned last date (e.g. after skipped cutoffs).
-    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && round(l.balance + (l.interestBalance || 0)) > 0 && l.startDate <= end)) {
+    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && !l.awaitingRelease && round(l.balance + (l.interestBalance || 0)) > 0 && l.startDate <= end)) {
       // Loans deducted only in the 1st-15th cutoff (paid on the 22nd) or only in the 16th-end cutoff.
       if ((loan.deductOn === 'first' && !start.endsWith('-01')) || (loan.deductOn === 'second' && !start.endsWith('-16'))) {
         trace.push({ component: 'loans', side: 'deductions', amount: 0, formula: `${loan.type} ${loan.reference}: deducted only in the ${loan.deductOn === 'first' ? '1st-15th' : '16th-end'} cutoff`, sourceKind: 'loans', sourceId: loan.id, date: end });

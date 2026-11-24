@@ -14,4 +14,5 @@ export function payDateFor(start, end) {
 // Payslips of a finalized payroll are released at 9:00 AM (Asia/Manila) on salary day, or earlier when HR sends them.
 export const RELEASE_TIME = '09:00';
 export const manilaNow = (now = new Date()) => new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 16);   // YYYY-MM-DDTHH:MM
-export const payslipReleased = (run, at = manilaNow()) => run.status === 'posted' && (!!run.releasedAt || `${payDateFor(run.start, run.end)}T${RELEASE_TIME}` <= (at.length === 10 ? `${at}T00:00` : at));
+export const RELEASE_RECORD_FROM = '2026-11-24';
+export const payslipReleased = (run, at = manilaNow()) => run.status === 'posted' && (!!run.releasedAt || String(run.postedAt || '').slice(0, 10) < RELEASE_RECORD_FROM && `${payDateFor(run.start, run.end)}T${RELEASE_TIME}` <= (at.length === 10 ? `${at}T00:00` : at));

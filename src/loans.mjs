@@ -59,6 +59,9 @@ export function assertMayBorrow(state, employeeId) {
 const addMonths = (date, n) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 export function decideLoanApplication(store, actor, id, input) {
   permit(actor, APPROVERS);
+  // Loan chain (Nov 24, 2026): Payroll checks eligibility and terms (records 'reviewed'); the Company Admin /
+  // System Administrator approves; Finance then records the release and only then does payroll deduct.
+  if (actor.role === 'payroll' && input?.decision === 'approve') return reviewLoanApplication(store, actor, id, input);
   const v = input?.decision === 'approve' ? approveSchema.parse(input) : rejectSchema.parse(input);
   return store.transaction(() => {
     const app = apps(store, 'WHERE id=?', id)[0];
@@ -87,7 +90,7 @@ export function decideLoanApplication(store, actor, id, input) {
       id: randomUUID(), employeeId: app.employeeId, type: app.type, reference: v.reference || `LOAN-${app.id.slice(0, 8).toUpperCase()}`,
       original: v.approvedAmount, balance: v.approvedAmount, interestTotal: v.interest, interestBalance: v.interest,
       monthlyAmortization: monthly, perPayroll: r2(monthly / perMonth), startDate: v.startDate, endDate: addMonths(v.startDate, v.months),
-      terms, remainingTerms: terms, authorized: true, applicationId: app.id,
+      terms, remainingTerms: terms, authorized: true, applicationId: app.id, awaitingRelease: true, release: null,
       ...(renewed.length ? { payoff, renewalOf: renewed.map(r => ({ id: r.old.id, reference: r.old.reference, amount: r.amount })) } : {}),
     };
     saveRecord(store, actor, 'loans', loan, { trusted: true });
@@ -143,6 +146,36 @@ function nextDeduction(state, loan, today = localToday()) {
 }
 // Cutoffs (start dates) where this loan is not deducted, at the employee's request. Posted cutoffs cannot change.
 const skipSchema = z.object({ cutoffs: z.array(z.string().regex(/^\d{4}-\d{2}-(01|16)$/, 'Choose cutoff start dates (the 1st or the 16th).')).max(500) }).strict();
+// Payroll's review: eligibility and terms checked, noted on the application; the approver decides next.
+function reviewLoanApplication(store, actor, id, input) {
+  return store.transaction(() => {
+    const row = store.db.prepare('SELECT data FROM loan_applications WHERE id=?').get(id);
+    if (!row) throw new AppError('Loan application not found.', 404);
+    const app = JSON.parse(row.data), now = new Date().toISOString();
+    if (app.status !== 'pending') throw new AppError(`This application is already ${app.status}.`);
+    const note = String(input?.remarks || '').trim().slice(0, 500) || 'Eligibility and terms checked';
+    const updated = { ...app, reviewedBy: actor.username, reviewedAt: now, reviewNote: note, history: [...(app.history || []), { at: now, by: actor.username, action: 'reviewed', note }] };
+    store.db.prepare('UPDATE loan_applications SET data=? WHERE id=?').run(JSON.stringify(updated), id);
+    store.log(actor, 'review', 'loan-applications', app.employeeId, app, updated);
+    store.notify(null, `${app.type} application of ${app.employeeId}: reviewed by ${actor.username}; waiting for the Company Admin's approval.`);
+    return { application: updated, loan: null };
+  });
+}
+// Finance / Releasing Officer (or the System Administrator) records that an approved loan was released: date, payment
+// reference; payroll deductions start from then. Audited; the employee is told.
+export function releaseLoan(store, actor, loanId, input) {
+  if (!(actor.finance || actor.role === 'admin')) throw new AppError('Only the Finance / Releasing Officer or the System Administrator records a loan release.', 403);
+  const v = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose the release date.'), reference: z.string().trim().min(2, 'Enter the payment reference (e.g. bank transfer or cheque number).').max(120), note: z.string().trim().max(500).default('') }).strict().parse(input);
+  return store.transaction(() => {
+    const state = store.read(), loan = state.loans.find(l => l.id === loanId);
+    if (!loan) throw new AppError('Loan not found.', 404);
+    if (!loan.awaitingRelease) throw new AppError(loan.release ? `This loan was already released on ${loan.release.date}.` : 'This loan is not waiting for a release.');
+    const after = { ...loan, awaitingRelease: false, release: { date: v.date, reference: v.reference, by: actor.username, at: new Date().toISOString(), note: v.note } };
+    saveRecord(store, actor, 'loans', after, { trusted: true });
+    store.notify(loan.employeeId, `Your ${loan.type} (${loan.reference}) was released on ${v.date} (reference ${v.reference}). Payroll deductions start from the next payroll.`);
+    return after;
+  });
+}
 export function setLoanSkips(store, actor, loanId, input) {
   permit(actor, APPROVERS);
   const { cutoffs } = skipSchema.parse(input);
@@ -187,10 +220,10 @@ export function loanDashboard(store, actor) {
   const state = store.read(), names = new Map(state.employees.map(e => [e.id, e.name]));
   const loans = state.loans.map(l => {
     const paid = repayments(state, l.id), principalPaid = r2(paid.reduce((s, p) => s + p.principal, 0)), interestPaid = r2(paid.reduce((s, p) => s + p.interest, 0));
-    return { ...l, employeeName: names.get(l.employeeId) || l.employeeId, status: loanStatus(l), totalRepaid: r2(principalPaid + interestPaid), principalPaid, interestPaid, outstanding: r2(l.balance + (l.interestBalance || 0)), nextDeduction: nextDeduction(state, l), history: paid };
+    return { ...l, employeeName: names.get(l.employeeId) || l.employeeId, status: l.awaitingRelease ? 'Awaiting release' : loanStatus(l), totalRepaid: r2(principalPaid + interestPaid), principalPaid, interestPaid, outstanding: r2(l.balance + (l.interestBalance || 0)), nextDeduction: nextDeduction(state, l), history: paid };
   });
   const applications = apps(store).map(a => ({ ...a, employeeName: names.get(a.employeeId) || a.employeeId }));
-  return { loans, applications };
+  return { loans, applications, canRelease: !!actor.finance || actor.role === 'admin' };
 }
 export function myLoans(store, actor) {
   permit(actor, ['employee']);

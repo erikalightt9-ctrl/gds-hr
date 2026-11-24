@@ -24,7 +24,7 @@ import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
-import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
+import { decideLoanApplication, releaseLoan, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
 import { renderLoanApplicationPdf } from './loan-pdf.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
@@ -33,7 +33,7 @@ import { thirteenthStatement, finalizeThirteenthPayslip, voidThirteenthPayslip, 
 import { renderLeavePdf } from './leave-pdf.mjs';
 import { staffNames, fullNameOf } from './staff-names.mjs';
 import { messageContacts, unreadMessages, conversation, sendMessage, onChat } from './messages.mjs';
-import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayRecord, finalPayOverview, setFinalPayRelease, addThirteenthYear } from './thirteenth.mjs';
+import { thirteenthOverview, savePriorEarnings, saveThirteenthOverrides, computeFinalPay, finalPayRecord, finalPayOverview, setFinalPayRelease, approveFinalPay, addThirteenthYear } from './thirteenth.mjs';
 import { contributionOverview } from './contribution-report.mjs';
 import { officeNetworks, networkStatus, changeOfficeNetworks } from './office-network.mjs';
 import { addContributionEmployee } from './contribution-encode.mjs';
@@ -41,6 +41,11 @@ import { saveMonthEdit } from './contribution-month.mjs';
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
 import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
+import { inbox as approvalInbox } from './approval-chain.mjs';
+import { confirmRunPayment, confirmLoanPayment } from './payment-tracking.mjs';
+import { setAccountScope, scopeOf, canSeePay, canSeeSensitive, PAY_PATHS, stripForPermissions } from './account-scope.mjs';
+import { permissionContext } from './company-scope.mjs';
+import { scopeContext, companyScope, filterPayload, refusedSingle, recordOwner, namedEmployees, REFUSED } from './company-scope.mjs';
 import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
@@ -53,11 +58,19 @@ import { runTardinessMemos } from './tardiness-memo.mjs';
 import { submitAttendanceRequest, ownAttendanceRequests, cancelAttendanceRequest, replyAttendanceRequest, attendanceRequestsOverview, startReview, requestInformation, addRemark, rejectAttendanceRequest, approveAttendanceRequest, remindOverdueRequests } from './attendance-requests.mjs';
 import { runReminders } from './reminders.mjs';
 import { startBackupSchedule } from './backup-r2.mjs';
+import { runLocalBackup, checkBackupHealth, backupStatus } from './local-backup.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
 async function readBody(req, maximum = 256000) {
+  const body = await readBodyRaw(req, maximum), limited = scopeContext.getStore();
+  if (limited && namedEmployees(new URL('http://x/'), body).some(id => !limited.scope.ids.has(id) && limited.scope.blocked.includes(id))) throw new AppError(REFUSED, 403);
+  // Payroll preview / posting (start, end, pay13th): a company-limited login computes and posts only its companies.
+  if (limited && body && typeof body === 'object' && 'start' in body && 'end' in body && 'pay13th' in body && !(Array.isArray(body.employeeIds) && body.employeeIds.length)) return { ...body, employeeIds: [...limited.scope.ids] };
+  return body;
+}
+async function readBodyRaw(req, maximum = 256000) {
   if (!String(req.headers['content-type']).startsWith('application/json')) throw new AppError('Use application/json.', 415);
   let length = 0; const chunks = [];
   for await (const chunk of req) {
@@ -105,6 +118,13 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     let selfNotice = null;   // set for an employee's own submissions; recorded in their notification bell
     const send = (status, data) => {
       if (selfNotice && status < 300) { try { const text = employeeNotice(selfNotice.pathname, data); if (text) store.notify(selfNotice.employeeId, text); } catch { /* a notice never blocks the submission */ } }
+      const perms = permissionContext.getStore();
+      if (perms && status < 300) data = stripForPermissions(data, perms);
+      const limited = scopeContext.getStore();
+      if (limited && status < 300) {
+        if (refusedSingle(data, limited.scope)) { res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: REFUSED })); return; }
+        data = filterPayload(data, limited.scope);
+      }
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data));
     };
     // no-transform: Cloudflare must not inject scripts (its Web Analytics beacon, which the CSP blocks) or alter pages.
@@ -119,7 +139,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     try {
       const url = new URL(req.url, origin), pathname = url.pathname;
       if (!pathname.startsWith('/api/')) {
-        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/bir-ui.js': ['bir-ui.js', 'text/javascript'], '/discipline-ui.js': ['discipline-ui.js', 'text/javascript'], '/discipline-case.js': ['discipline-case.js', 'text/javascript'], '/report-library-ui.js': ['report-library-ui.js', 'text/javascript'], '/attendance-cases-ui.js': ['attendance-cases-ui.js', 'text/javascript'], '/memo-viewer.js': ['memo-viewer.js', 'text/javascript'], '/payroll-review.js': ['payroll-review.js', 'text/javascript'], '/salary-ui.js': ['salary-ui.js', 'text/javascript'], '/access-ui.js': ['access-ui.js', 'text/javascript'], '/movements-ui.js': ['movements-ui.js', 'text/javascript'], '/portal-cases.js': ['portal-cases.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
+        const files = { '/welcome-mascot.png': ['welcome-mascot.png', 'image/png'], '/gds-logo.png': ['gds-logo.png', 'image/png'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/profiles.js': ['profiles.js', 'text/javascript'], '/searchable-select.js': ['searchable-select.js', 'text/javascript'], '/bir-ui.js': ['bir-ui.js', 'text/javascript'], '/discipline-ui.js': ['discipline-ui.js', 'text/javascript'], '/discipline-case.js': ['discipline-case.js', 'text/javascript'], '/report-library-ui.js': ['report-library-ui.js', 'text/javascript'], '/attendance-cases-ui.js': ['attendance-cases-ui.js', 'text/javascript'], '/memo-viewer.js': ['memo-viewer.js', 'text/javascript'], '/payroll-review.js': ['payroll-review.js', 'text/javascript'], '/salary-ui.js': ['salary-ui.js', 'text/javascript'], '/access-ui.js': ['access-ui.js', 'text/javascript'], '/approvals-inbox.js': ['approvals-inbox.js', 'text/javascript'], '/movements-ui.js': ['movements-ui.js', 'text/javascript'], '/portal-cases.js': ['portal-cases.js', 'text/javascript'], '/portal.js': ['portal.js', 'text/javascript'], '/contributions.js': ['contributions.js', 'text/javascript'], '/install.js': ['install.js', 'text/javascript'], '/welcome.js': ['welcome.js', 'text/javascript'], '/timecard.js': ['timecard.js', 'text/javascript'], '/attendance-import.js': ['attendance-import.js', 'text/javascript'], '/contribution-basis.js': ['contribution-basis.js', 'text/javascript'], '/hr-common.js': ['hr-common.js', 'text/javascript'], '/messages.js': ['messages.js', 'text/javascript'], '/notice-detail.js': ['notice-detail.js', 'text/javascript'], '/overtime-ui.js': ['overtime-ui.js', 'text/javascript'], '/clock-records-ui.js': ['clock-records-ui.js', 'text/javascript'], '/requests-ui.js': ['requests-ui.js', 'text/javascript'], '/attendance-month.js': ['attendance-month.js', 'text/javascript'], '/hr-files.js': ['hr-files.js', 'text/javascript'], '/hr-dashboard.js': ['hr-dashboard.js', 'text/javascript'], '/hr-memos.js': ['hr-memos.js', 'text/javascript'], '/hr-trainings.js': ['hr-trainings.js', 'text/javascript'], '/hr-admin.js': ['hr-admin.js', 'text/javascript'], '/portal-hr.js': ['portal-hr.js', 'text/javascript'], '/payroll-breakdown.js': ['payroll-breakdown.js', 'text/javascript'], '/loans-ui.js': ['loans-ui.js', 'text/javascript'], '/thirteenth-ui.js': ['thirteenth-ui.js', 'text/javascript'], '/contributions-ui.js': ['contributions-ui.js', 'text/javascript'], '/hr201.css': ['hr201.css', 'text/css'], '/theme-forest.css': ['theme-forest.css', 'text/css'], '/welcome-handshake.webp': ['welcome-handshake.webp', 'image/webp'], '/fonts/dancing-script-700.woff2': ['fonts/dancing-script-700.woff2', 'font/woff2'], '/sw.js': ['sw.js', 'text/javascript'], '/offline.html': ['offline.html', 'text/html'], '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icons/icon-192.png': ['icons/icon-192.png', 'image/png'], '/icons/icon-512.png': ['icons/icon-512.png', 'image/png'], '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png'], '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png'], '/theme.css': ['theme.css', 'text/css'], '/style.css': ['style.css', 'text/css'] };
         const file = files[pathname];
         if (req.method !== 'GET' || !file) throw new AppError('Not found.', 404);
         const body = await readFile(path.join(directory, '../public', file[0]));
@@ -211,7 +231,26 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      // Salary and sensitive-file permissions (Account & access → Access): pay modules closed, values stripped.
+      if (auth.user.role !== 'employee' && !pathname.startsWith('/api/me/') && !pathname.startsWith('/api/hr/me/')) {
+        const pay = canSeePay(auth.user), sensitive = canSeeSensitive(auth.user);
+        if (!pay && PAY_PATHS.test(pathname)) throw new AppError('Salary and compensation records need the Salary permission (Account & access → Access).', 403);
+        if (!pay || !sensitive) permissionContext.enterWith({ pay, sensitive });
+      }
+      // Company separation for a company-limited login (src/company-scope.mjs): every read, reply and named record.
+      {
+        const full = store.read(), scope = companyScope(full, auth.user);
+        if (scope) {
+          const outside = id => id && full.employees.some(e => e.id === id) && !scope.ids.has(id);
+          if (namedEmployees(url, null).some(outside)) throw new AppError(REFUSED, 403);
+          for (const segment of pathname.split('/').map(decodeURIComponent).map(s => s.replace(/\.(pdf|xlsx|csv)$/, '')).filter(s => s.length >= 6 && !/^api$/.test(s))) {
+            if (outside(segment) || outside(recordOwner(store, full, segment))) throw new AppError(REFUSED, 403);
+          }
+          scopeContext.enterWith({ scope, filterReads: !mutation });
+        }
+      }
       // The service account (integrations such as the AI assistant) reads only: changes and approvals need a named person.
+      if (auth.user.finance && mutation && !['/api/logout', '/api/password', '/api/me/mfa'].includes(pathname) && !pathname.startsWith('/api/me/') && !/\/release$|\/settle$|\/confirm$/.test(pathname)) throw new AppError('The Finance / Releasing Officer records releases and payment references; other changes are made by HR or Payroll.', 403);
       if (auth.user.service && mutation && !['/api/logout', '/api/password'].includes(pathname)) throw new AppError('The service account is read-only. Changes and approvals must be made with a named person\'s account.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
@@ -400,6 +439,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.end(renderFinalPayPdf(record, { designation: designationOf(store, record.employeeId), startDate: employee?.startDate || '', preparedBy: fullNameOf(store, record.computedBy) })); return;
       }
       const fpRelease = pathname.match(/^\/api\/final-pay\/([a-f0-9-]+)\/release$/);
+      const fpApprove = pathname.match(/^\/api\/final-pay\/([a-f0-9-]+)\/approve$/);
+      if (fpApprove && req.method === 'POST') { send(200, approveFinalPay(store, auth.user, fpApprove[1], await readBody(req))); return; }
       if (fpRelease && req.method === 'POST') { send(200, setFinalPayRelease(store, auth.user, fpRelease[1], await readBody(req))); return; }
       if (pathname === '/api/final-pay/compute' && req.method === 'POST') { send(200, computeFinalPay(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/loans/dashboard' && req.method === 'GET') { send(200, loanDashboard(store, auth.user)); return; }
@@ -413,6 +454,10 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.end(renderLoanApplicationPdf(application, { employee, loan, designation: designationOf(store, application.employeeId), decidedBy: application.decidedBy ? fullNameOf(store, application.decidedBy) : '', company: c.name || 'GDS CAPITAL INC.', verified: { name: c.leaveVerifiedName, title: c.leaveVerifiedTitle }, approved: { name: c.leaveApprovedName, title: c.leaveApprovedTitle } })); return;
       }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
+      const payConfirm = pathname.match(/^\/api\/(runs|loans)\/([a-zA-Z0-9_-]+)\/confirm$/);
+      if (payConfirm && req.method === 'POST') { const body = await readBody(req); send(200, payConfirm[1] === 'runs' ? confirmRunPayment(store, auth.user, payConfirm[2], body) : confirmLoanPayment(store, auth.user, payConfirm[2], body)); return; }
+      const loanRelease = pathname.match(/^\/api\/loans\/([a-zA-Z0-9_-]+)\/release$/);
+      if (loanRelease && req.method === 'POST') { send(200, releaseLoan(store, auth.user, loanRelease[1], await readBody(req))); return; }
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
       if (pathname === '/api/office-networks/suggestions' && req.method === 'GET') { send(200, suggestedOfficeAddresses(store, auth.user)); return; }
       { const m = pathname.match(/^\/api\/clock\/([A-Za-z0-9-]+)\/resolve-flag$/); if (m && req.method === 'POST') { send(200, resolveClockFlag(store, auth.user, m[1], await readBody(req))); return; } }
@@ -423,9 +468,11 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const loanSchedule = pathname.match(/^\/api\/loans\/([A-Za-z0-9_-]+)\/schedule$/);
       if (loanSchedule && req.method === 'POST') { send(200, setLoanSchedule(store, auth.user, loanSchedule[1], await readBody(req))); return; }
       const releaseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/release$/);
-      if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1])); return; }
+      if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1], await readBody(req))); return; }
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);
       if (reverseRun && req.method === 'POST') { send(200, reversePayroll(store, auth.user, reverseRun[1], await readBody(req))); return; }
+      if (pathname === '/api/backups/status' && req.method === 'GET') { permit(auth.user, ['admin']); send(200, backupStatus(store)); return; }
+      if (pathname === '/api/approvals/inbox' && req.method === 'GET') { permit(auth.user, ['admin', 'hr', 'hr_staff', 'maker', 'dept_manager']); send(200, approvalInbox(store, auth.user)); return; }
       const leaveDecision = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/decision$/);
       if (leaveDecision && req.method === 'POST') { send(200, reviewLeave(store, auth.user, leaveDecision[1], await readBody(req))); return; }
       if (pathname === '/api/explanations' && req.method === 'GET') { send(200, explanationsOverview(store, auth.user)); return; }
@@ -441,11 +488,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
       const proofRequest = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/request-proof$/);
       if (proofRequest && req.method === 'POST') { send(200, requestLeaveProof(store, auth.user, proofRequest[1], await readBody(req))); return; }
-      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete)$/);
+      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete|scope)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
-        if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); send(200, issuePasswordReset(store, auth.user, userAction[1], v.resetMfa)); }
+        if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); const r = issuePasswordReset(store, auth.user, userAction[1], v.resetMfa, { mailer, origin }); const emailed = await r.delivery; send(200, { token: r.token, expires: r.expires, message: r.message, sentTo: emailed ? r.sentTo : null, emailFailed: !!r.sentTo && !emailed }); }
         else if (userAction[2] === 'delete') { const v = z.object({ confirm: z.string().max(80) }).strict().parse(body); send(200, deleteUser(store, auth.user, userAction[1], v.confirm)); }
+        else if (userAction[2] === 'scope') { const companies = [...new Set([...readSettings(store).departments, ...store.read().employees.map(e => e.department).filter(Boolean)])]; send(200, setAccountScope(store, auth.user, userAction[1], body, companies)); }
         else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;
       }
@@ -500,7 +548,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (resetUser && req.method === 'POST') { send(200, resetDevices(store, auth.user, resetUser[1])); return; }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
-        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
+        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, scope: scopeOf(u), signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
         if (req.method === 'POST') { send(201, { user: await addUser(store, await readBody(req), auth.user) }); return; }
       }
       if (pathname.startsWith('/api/records/')) {
@@ -540,7 +588,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (pathname === '/api/users-roles' && req.method === 'GET') { send(200, usersAndRoles(store, auth.user)); return; }
       if (pathname === '/api/payroll/decisions' && req.method === 'POST') { send(200, recordPayrollDecision(store, auth.user, await readBody(req))); return; }
       if (pathname === '/api/payroll/post' && req.method === 'POST') {
-        permit(auth.user, ['admin', 'payroll']); send(200, postPayroll(store, auth.user, postSchema.parse(await readBody(req)))); return;
+        permit(auth.user, ['admin', 'hr']); send(200, postPayroll(store, auth.user, postSchema.parse(await readBody(req)))); return;
       }
       if (pathname.startsWith('/api/runs/') && req.method === 'GET') {
         const id = pathname.split('/')[3].replace(/\.(xlsx|pdf)$/, ''), run = store.read().runs.find(r => r.id === id);
@@ -596,6 +644,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   setInterval(reminderCheck, 60000).unref();
   // Daily encrypted off-site backup to Cloudflare R2 (only once npm run backup:setup has saved the keys).
   startBackupSchedule(data);
+  // Daily local backup with an immediate restore test, and an alert when the last good backup is too old (every 10 min).
+  const localBackup = () => { try { const r = runLocalBackup(store, path.join(data, 'backups')); if (r) console.log(r.ok ? `Daily backup saved and restore-tested: ${r.file}` : `Daily backup failed: ${r.error || 'restore test failed'}`); checkBackupHealth(store); } catch (error) { console.error('local backup check failed:', error.message); } };
+  localBackup(); setInterval(localBackup, 600000).unref();
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });
@@ -605,6 +656,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   app.listen(port, host, () => {
     console.log(`GDS CAPITAL INC. HR is running at ${origin}`);
     console.log(mailer ? `Password reset emails are sent from ${mailer.from}.` : 'Password reset email is not configured (set HR_SMTP_* in .env); recovery goes to HR.');
+    mailer?.verify?.().then(() => console.log('Mail server sign-in OK.'), error => {
+      console.error(`Mail server sign-in failed: ${error.message}. Forgot password requests go to HR until HR_SMTP_* in .env is fixed.`);
+      try { store.notify(null, `Password reset emails cannot be sent: ${error.message.replace(/\.$/, '')}. Fix HR_SMTP_USER / HR_SMTP_PASS in .env and restart; until then use Reset password → Copy link in Account & access.`); } catch { /* notice only */ }
+    });
     if (!store.db.prepare('SELECT COUNT(*) AS n FROM users').get().n) console.log(`One-time setup code: ${setupToken}\nOpen the app to create your administrator account.`);
   });
   const close = () => { app.closeAllConnections(); app.close(() => { store.close(); process.exit(0); }); };

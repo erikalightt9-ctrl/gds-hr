@@ -12,13 +12,17 @@ import { readSettings, assertCanView, scopeEmployees, NUMBER_REQUIREMENTS } from
 import { HR_MANAGERS, HR_TEAM } from './roles.mjs';
 
 export const DOC_STATUSES = ['Missing', 'Submitted', 'Under Review', 'Verified', 'Rejected', 'Expired', 'Not Applicable'];
+import { canSeePay, canSeeSensitive } from './account-scope.mjs';
 const TYPE = '201 Document';
 const profileOf = (store, id, section) => JSON.parse(store.db.prepare('SELECT data FROM employee_profiles WHERE employee_id=? AND section=?').get(id, section)?.data ?? '{}');
 const addDays = (d, n) => new Date(Date.parse(d) + n * 86400000).toISOString().slice(0, 10);
 const docsOf = (store, employeeId) => store.db.prepare('SELECT metadata FROM employee_documents WHERE employee_id=?').all(employeeId).map(r => JSON.parse(r.metadata)).filter(m => m.type === TYPE);
 // Restricted requirements are for HR Managers; Makers see every requirement except salary-bearing ones (the contract).
 const canSeeRestricted = (actor, req) => (actor.role === 'maker' ? !isSalaryRequirement(req) : HR_MANAGERS.includes(actor.role));
-const canSee = (actor, req) => (actor.role === 'maker' ? !isSalaryRequirement(req) : !req.restricted || canSeeRestricted(actor, req));
+const SENSITIVE_FILES = /^(valid-id|medical)$|medical|bank/i;
+const canSeeBase = (actor, req) => (actor.role === 'maker' ? !isSalaryRequirement(req) : !req.restricted || canSeeRestricted(actor, req));
+// Medical certificates, government IDs and bank documents also need the Sensitive permission; salary-bearing ones the Salary permission.
+const canSee = (actor, req) => canSeeBase(actor, req) && (actor.role === 'employee' || !SENSITIVE_FILES.test(`${req.id} ${req.category || ''}`) || canSeeSensitive(actor)) && (actor.role === 'employee' || !isSalaryRequirement(req) || canSeePay(actor));
 
 export function applicableRequirements(settings, employee, job) {
   return settings.documentRequirements.filter(r => (!r.departments.length || r.departments.includes(employee.department)) && (!r.classifications.length || r.classifications.includes(job.employmentStatus || '')));

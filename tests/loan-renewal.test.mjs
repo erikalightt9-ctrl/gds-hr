@@ -43,7 +43,9 @@ test('20% or more still owed: no new loan at all — the application is refused,
 test('less than 20% left: renewal or a separate loan is allowed', () => {
   const store = setup();
   approve(store, apply(store, { type: 'Emergency Loan', amount: 5000, months: 5 }).id, { approvedAmount: 5000, months: 5 });
-  assert.equal(loanDashboard(store, admin).loans.filter(l => l.status === 'Active').length, 2);
+  const loans = loanDashboard(store, admin).loans;
+  assert.equal(loans.filter(l => l.status === 'Active').length, 1);
+  assert.equal(loans.filter(l => l.status === 'Awaiting release').length, 1, 'the new loan waits for Finance to record its release (Nov 24, 2026)');
 });
 
 test('renewal is refused when the new amount does not cover the old balance, or the loan is not the employee\'s', () => {

@@ -7,9 +7,9 @@ import { readDpSettings } from './discipline-settings.mjs';
 
 export const MFA_REQUIRED_ROLES = ['hr', 'hr_staff', 'payroll', 'viewer'];
 export const ROLE_SCOPE = {
-  admin: 'Everything, including settings, accounts and roles', hr: 'Employee records, attendance, leave, approvals, memos, discipline', hr_staff: 'Day-to-day 201 work; no settings, sensitive IDs or restricted files',
-  maker: 'Encodes non-salary employee records; never sees pay', dept_manager: 'Reads their own department only', viewer: 'Dashboards and reports; approves disciplinary decisions when set',
-  payroll: 'Payroll, loans, contributions, payroll posting', service: 'Read-only integration (AI assistant); cannot change or approve anything', employee: 'Own records only',
+  admin: 'Company setup, accounts, permissions, backups and technical settings; salaries and sensitive files only with that permission', hr: 'Manages their company\'s employees, reviews sensitive changes, approves payroll, oversees HR records', hr_staff: 'Day-to-day 201 work; no settings, sensitive IDs or restricted files',
+  maker: 'Creates and updates 201 files, checks documents, reviews attendance, prepares corrections; salary access granted separately', dept_manager: 'Reviews their team\'s leave, overtime, explanations and offsets', viewer: 'Read-only access to authorized records and reports of their company',
+  payroll: 'Computes salary, deductions and loans; prepares payslips and remittance reports', finance: 'Receives approved totals, releases salaries and loans, records payment references (read-only until release recording is added)', service: 'Read-only integration (AI assistant); cannot change or approve anything', employee: 'Own records only',
 };
 export function approvalMatrix(store, actor) {
   permit(actor, ['admin', 'hr', 'viewer', 'payroll']);

@@ -26,9 +26,9 @@ export function createFiles(ctx) {
   // ---------- Directory ----------
   function filtered() {
     const q = query.q.toLowerCase();
-    let list = people.filter(p => (query.status === 'Archived' ? p.archived : !p.archived) && (!q || [p.number, p.name, p.department, p.position, p.workEmail].join(' ').toLowerCase().includes(q))
+    let list = people.filter(p => (query.status === 'Archived' ? p.archived : query.status === 'Resigned' ? p.resigned : !p.archived && !p.resigned) && (!q || [p.number, p.name, p.department, p.position, p.workEmail].join(' ').toLowerCase().includes(q))
       && (!query.department || p.department === query.department) && (!query.position || p.position === query.position)
-      && (!query.status || query.status === 'Archived' || p.status === query.status) && (!query.classification || p.classification === query.classification)
+      && (!query.status || query.status === 'Archived' || query.status === 'Resigned' || p.status === query.status) && (!query.classification || p.classification === query.classification)
       && (!query.docs || (query.docs === 'missing' ? p.documents?.missing : query.docs === 'review' ? p.documents?.review : query.docs === 'expired' ? p.documents?.expired : query.docs === 'newhires' ? p.dateHired >= ctx.daysAgo(30) : true)));
     list = [...list].sort((a, b) => String(a[sort.key] ?? '').localeCompare(String(b[sort.key] ?? ''), undefined, { numeric: true }) * sort.dir);
     return list;
@@ -79,15 +79,15 @@ export function createFiles(ctx) {
     const list = filtered(), size = PAGE_SIZE, pages = Math.max(1, Math.ceil(list.length / size)); pageNo = Math.min(pageNo, pages);
     const rows = list.slice((pageNo - 1) * size, pageNo * size);
     if (!selectedId || !people.some(p => p.id === selectedId)) selectedId = rows[0]?.id || null;
-    const current = people.filter(p => !p.archived), active = current.filter(p => p.status === 'Active').length;
+    const current = people.filter(p => !p.archived && !p.resigned), active = current.filter(p => p.status === 'Active').length, resigned = people.filter(p => p.resigned).length;
     const card = (key, ic, value, label) => `<button class="ml-card${(query.status || '') === key ? ' active' : ''}" data-ml-status="${key}"><span class="ml-card-ico ml-${ic}">${svg(ic)}</span><span><strong>${value}</strong><small>${label}</small></span></button>`;
     const from = list.length ? (pageNo - 1) * size + 1 : 0, to = Math.min(pageNo * size, list.length);
     return `<div class="ml-header"><div><h1>Employee Masterlist</h1><p>Manage employee profiles and employment records</p></div><div class="ml-header-tools"><a class="ml-btn" href="/api/reports/employees.xlsx" download>${svg('export')}Export</a>${can().manage ? `<button class="ml-btn primary" data-hr-add-employee>${svg('plus')}Add employee</button>` : ''}</div></div>
       <div class="ml-layout"><section class="ml-main">
-        <div class="ml-cards">${card('', 'all', current.length, 'Employee records')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}</div>
+        <div class="ml-cards">${card('', 'all', current.length, 'Employee records')}${card('Active', 'active', active, 'Active')}${card('Inactive', 'inactive', current.length - active, 'Inactive')}${card('Resigned', 'minus', resigned, 'Resigned employees')}</div>
         <div class="ml-filters"><label class="ml-search">${svg('search')}<input type="search" data-q value="${esc(query.q)}" placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
           <select data-f="department" aria-label="Subsidiary">${options(people.map(p => p.department), query.department, 'Subsidiary')}</select>
-          <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+          <select data-f="status" aria-label="Status"><option value="">Status</option>${['Active', 'Inactive', 'Resigned', 'Archived'].map(s => `<option ${s === query.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
         <div class="ml-table-wrap"><table class="ml-table"><thead><tr><th>Employee</th><th>Subsidiary / Position</th><th>Status</th><th>Date hired</th></tr></thead><tbody>
           ${rows.map(p => `<tr class="${p.id === selectedId ? 'selected' : ''}" data-ml-row="${esc(p.id)}"><td><div class="ml-emp">${avatar(p)}<span><button class="ml-name" data-open="${esc(p.id)}" data-start-tab="overview" title="Open personal information">${esc(personName(p.name))}</button><small>${esc(p.number)}</small></span></div></td><td><span class="ml-two"><strong>${esc(p.department || '—')}</strong><small>${esc(p.position || '—')}</small></span></td><td>${pill(p)}</td><td>${p.dateHired ? fmtDate(p.dateHired) : '—'}</td></tr>`).join('') || `<tr><td colspan="4" class="empty">${query.q || query.department || query.status ? 'No employees match these filters.' : 'No employees yet.'}</td></tr>`}
         </tbody></table></div>
@@ -183,23 +183,27 @@ export function createFiles(ctx) {
   const block = (icon, title, body, action = '') => sectionCard(icon, title, body, action);
   // Work schedule: the same schedule attendance and payroll use (late, overtime, undertime, rest days).
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const scheduleCard = record => { const s = record.schedule || {}; return block('🕘', 'Work schedule', dl([['Time in', s.start || 'Not set'], ['Time out', s.end || 'Not set'], ['Regular hours', s.hoursPerDay ? `${s.hoursPerDay} h per day` : 'Not set'], ['Meal break', s.mealBreakMinutes === null || s.mealBreakMinutes === undefined ? 'Not set' : `${s.mealBreakMinutes} min`], ['Rest days', (s.restDays || []).length ? s.restDays.map(d => DAYS[d]).join(', ') : 'None'], ['Arrangement', s.arrangement || 'Office']]), record.canEdit && !record.archived ? '<button class="small" data-edit-schedule>Edit schedule</button>' : ''); };
+  const scheduleCard = record => { const s = record.schedule || {}; return block('🕘', 'Work schedule', dl([...(s.flexible ? [['Time in / out', 'Flexible time: any time (event call time); the regular hours must be worked']] : [['Time in', s.start || 'Not set'], ['Time out', s.end || 'Not set']]), ['Regular hours', s.hoursPerDay ? `${s.hoursPerDay} h per day` : 'Not set'], ['Meal break', s.mealBreakMinutes === null || s.mealBreakMinutes === undefined ? 'Not set' : `${s.mealBreakMinutes} min`], ['Rest days', (s.restDays || []).length ? s.restDays.map(d => DAYS[d]).join(', ') : 'None'], ['Arrangement', s.arrangement || 'Office']]), record.canEdit && !record.archived ? '<button class="small" data-edit-schedule>Edit schedule</button>' : ''); };
   function scheduleDialog(id, record, after) {
     const s = record.schedule || {};
     openDialog(`Work schedule · ${record.name}`, `<form id="schedule-form" class="dialog-body form-grid">
-      <label class="field">Time in<input type="time" name="start" required value="${esc(s.start || '09:00')}"></label>
-      <label class="field">Time out<input type="time" name="end" required value="${esc(s.end || '18:00')}"></label>
+      <label class="check full flex-time"><input type="checkbox" name="flexible" ${s.flexible ? 'checked' : ''}> <span><strong>Flexible time</strong> · no fixed time in / out (e.g. events with their own call time). Never late; the regular hours must be worked; overtime counts after them.</span></label>
+      <label class="field"><span data-flex-label="Usual time in (reference)">Time in</span><input type="time" name="start" required value="${esc(s.start || '09:00')}"></label>
+      <label class="field"><span data-flex-label="Usual time out (reference)">Time out</span><input type="time" name="end" required value="${esc(s.end || '18:00')}"></label>
       <label class="field">Regular hours per day<input type="number" name="hoursPerDay" min="1" max="16" step="0.5" required value="${esc(s.hoursPerDay ?? 8)}"></label>
       <label class="field">Meal break (minutes)<input type="number" name="mealBreakMinutes" min="0" max="240" step="5" required value="${esc(s.mealBreakMinutes ?? 60)}"></label>
       <fieldset class="field full rest-days"><legend>Rest days</legend>${DAYS.map((d, i) => `<label class="inline-check"><input type="checkbox" name="restDays" value="${i}" ${(s.restDays || []).includes(i) ? 'checked' : ''}> ${d}</label>`).join('')}</fieldset>
       <label class="field">Arrangement<select name="arrangement">${['Office', 'WFH', 'Hybrid'].map(a => `<option ${a === (s.arrangement || 'Office') ? 'selected' : ''}>${a}</option>`).join('')}</select></label>
-      <p class="legend full">Attendance and payroll use this schedule: lateness from the time in, overtime and undertime from the regular hours, and rest days.</p>
+      <p class="legend full" data-flex-legend>Attendance and payroll use this schedule: lateness from the time in, overtime and undertime from the regular hours, and rest days.</p>
       <p class="form-error full hidden" role="alert" data-schedule-error></p>
       <div class="full"><button class="primary">Save schedule</button></div></form>`);
+    const form = dialog.querySelector('#schedule-form'), flexBox = form.elements.flexible;
+    const showFlex = () => { form.querySelectorAll('[data-flex-label]').forEach(el => { el.dataset.plain ??= el.textContent; el.textContent = flexBox.checked ? el.dataset.flexLabel : el.dataset.plain; }); form.querySelector('[data-flex-legend]').textContent = flexBox.checked ? 'Flexible time: any time in and out; never late. Undertime when fewer than the regular hours are worked; overtime after them (with an approved filing). The meal break is taken off mid-shift on a full day. A time in after the usual time in (+15 min), or a time out before the usual time out or more than 30 min after it, asks the employee for a reason (shown to HR on Live attendance).' : 'Attendance and payroll use this schedule: lateness from the time in, overtime and undertime from the regular hours, and rest days.'; };
+    flexBox.onchange = showFlex; showFlex();
     dialog.querySelector('#schedule-form').onsubmit = async event => {
       event.preventDefault(); const f = new FormData(event.target);
       try {
-        await api(`/hr/employees/${encodeURIComponent(id)}/schedule`, { start: f.get('start'), end: f.get('end'), hoursPerDay: Number(f.get('hoursPerDay')), mealBreakMinutes: Number(f.get('mealBreakMinutes')), restDays: f.getAll('restDays').map(Number), arrangement: f.get('arrangement') });
+        await api(`/hr/employees/${encodeURIComponent(id)}/schedule`, { start: f.get('start'), end: f.get('end'), hoursPerDay: Number(f.get('hoursPerDay')), mealBreakMinutes: Number(f.get('mealBreakMinutes')), restDays: f.getAll('restDays').map(Number), arrangement: f.get('arrangement'), flexible: f.get('flexible') === 'on' });
         dialog.close(); toast('Work schedule saved. Attendance and payroll now use it.'); await after();
       } catch (error) { const e = dialog.querySelector('[data-schedule-error]'); e.textContent = error.message; e.classList.remove('hidden'); }
     };
@@ -312,7 +316,7 @@ export function createFiles(ctx) {
         + block('➖', 'Company deductions', table(['Deduction', 'Amount', 'When'], c.deductions.map(d => [esc(d.name), ctx.money(d.amount), SCHEDULE_LABEL[d.schedule] || esc(d.schedule)]), 'No company deductions.'), ctx.legacy() ? ' <button class="small" data-go-deductions>Manage deductions</button>' : '')
         + (extras.canEditPay ? (setTimeout(() => import('./salary-ui.js').then(m => m.mountSalary(document.querySelector('[data-salary-box]'), { api: ctx.api, esc, toast: ctx.toast, openDialog: ctx.openDialog, dialog: ctx.dialog, today: ctx.today }, record.id)).catch(() => {}), 0), '<div data-salary-box></div>') : '')
         + (extras.loans ? loansHtml() : '')
-        + (extras.finalPay?.length ? block('🧾', 'Final pay', table(['Separation', 'Net final pay', 'Release due', 'Status', 'Released on', 'Recorded by'], extras.finalPay.map(r => [fmtDate(r.separationDate), `<a href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF"><strong>${ctx.money(r.net)}</strong></a>`, fmtDate(r.releaseDue), r.release?.released ? '<span class="badge">Released</span>' : '<span class="badge pending">Not released</span>', r.release?.released ? fmtDate(r.release.releasedOn) : '—', r.release ? esc(who(r.release.by)) : '—']), 'No final pay computed.')) : '')
+        + (extras.finalPay?.length ? block('🧾', 'Final pay', table(['Separation', 'Net final pay', 'Release due', 'Status', 'Released on', 'Reference / recorded by'], extras.finalPay.map(r => [fmtDate(r.separationDate), `<a href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF"><strong>${ctx.money(r.net)}</strong></a>`, fmtDate(r.releaseDue), r.release?.released ? '<span class="badge">Released</span>' : r.stage === 'prepared' ? '<span class="badge neutral">Awaiting approval</span>' : '<span class="badge pending">Approved · awaiting settlement</span>', r.release?.released ? fmtDate(r.release.releasedOn) : '—', r.release ? `${r.release.reference ? `${esc(r.release.reference)} · ` : ''}${esc(who(r.release.by))}` : '—']), 'No final pay computed.')) : '')
         + (ctx.legacy() ? `<p class="legend">Salary, schedule and contributions are edited under <button class="link-button" data-legacy-profile="${esc(record.id)}">Attendance, leave &amp; pay</button>.</p>` : '');
     }
     const governmentIds = () => block('🪪', 'Government IDs', dl([['TIN', f.government.tin], ['SSS number', f.government.sss], ['PhilHealth number', f.government.philHealth], ['Pag-IBIG MID', f.government.pagIbig]]), formBtn('government', edit && record.sensitiveIds && ctx.context().can.approve)) + `<p class="legend">${record.sensitiveIds ? 'Shown in full to authorised roles only. HR Managers and Administrators can edit them.' : 'Masked for your role.'}</p>`;

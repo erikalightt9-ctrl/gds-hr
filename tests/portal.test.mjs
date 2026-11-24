@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { releasePayslips } from '../src/service.mjs';
 import { Store } from '../src/store.mjs';
 import { completeState, admin } from './helpers.mjs';
 import { punch, employeeDashboard, applyLeave, cancelLeave, submitExplanation, reviewExplanation, returnExplanation, replyExplanation, liveDashboard, ownPayslip, geofence, correctClock, payslipPdf, locationAddress, earlierHistory } from '../src/portal.mjs';
@@ -55,7 +56,7 @@ test('employees receive only their own posted payslip and payroll posting notifi
   const store = fixture(); store.write(completeState());
   try {
     const computed = preview(store, '2026-09-01', '2026-09-15');
-    const run = postPayroll(store, admin, { start: computed.start, end: computed.end, fingerprint: computed.fingerprint, pay13th: false });
+    const run = postPayroll(store, admin, { start: computed.start, end: computed.end, fingerprint: computed.fingerprint, pay13th: false }); releasePayslips(store, admin, run.id, { reference: 'BATCH-TEST', date: '2026-09-22' });
     const payslip = ownPayslip(store, worker, run.id);
     assert.equal(payslip.employeeId, worker.employeeId); assert.equal(payslip.loans[0].type, 'Salary Loan');
     assert.ok(!('sources' in payslip)); assert.match(payslipPdf(payslip).toString(), /^%PDF-1.4/);
@@ -68,7 +69,7 @@ test('downloaded payslips itemize contributions, individual loans and adjustment
   const store = fixture(); store.write(completeState());
   try {
     const computed = preview(store, '2026-09-01', '2026-09-15');
-    const run = postPayroll(store, admin, { start: computed.start, end: computed.end, fingerprint: computed.fingerprint, pay13th: false });
+    const run = postPayroll(store, admin, { start: computed.start, end: computed.end, fingerprint: computed.fingerprint, pay13th: false }); releasePayslips(store, admin, run.id, { reference: 'BATCH-TEST', date: '2026-09-22' });
     const state = store.read(), row = state.runs.find(r => r.id === run.id).rows[0];
     row.loanDeductions.push({ type: 'SSS Loan', reference: 'TEST-SSS', amount: 250, previousBalance: 1000, remainingBalance: 750 });
     row.deductions.loans += 250; row.deductions.other += 75;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.mjs';
 import { preview, postPayroll, reversePayroll } from '../src/service.mjs';
-import { applyLoan, decideLoanApplication, loanDashboard, myLoans, cancelLoanApplication } from '../src/loans.mjs';
+import { applyLoan, decideLoanApplication, loanDashboard, myLoans, cancelLoanApplication, releaseLoan } from '../src/loans.mjs';
 import { completeState, admin } from './helpers.mjs';
 
 const worker = { username: 'employee1', role: 'employee', employeeId: 'EMP-001' }, hr = { username: 'hr1', role: 'hr' };
@@ -17,6 +17,10 @@ test('a loan application is deducted only after approval; balances move only whe
     assert.throws(() => decideLoanApplication(store, worker, app.id, { decision: 'reject', remarks: 'no' }), /permission/i);
     const { loan } = decideLoanApplication(store, hr, app.id, { decision: 'approve', approvedAmount: 10000, interest: 600, months: 6, startDate: '2026-09-01' });
     assert.equal(loan.monthlyAmortization, 1766.67); assert.equal(loan.perPayroll, Math.round(loan.monthlyAmortization / 2 * 100) / 100);
+    // Nov 24, 2026 chain: nothing is deducted until Finance records the release.
+    assert.equal(run(store).rows[0].loanDeductions.length, 0, 'approved but not released: no deduction');
+    assert.throws(() => releaseLoan(store, hr, loan.id, { date: '2026-09-01', reference: 'BT-1' }), /Finance/);
+    releaseLoan(store, { username: 'fin1', role: 'viewer', finance: true }, loan.id, { date: '2026-09-01', reference: 'BT-0001' });
     const preview1 = run(store), d = preview1.rows[0].loanDeductions[0];
     assert.equal(d.amount, loan.perPayroll);
     assert.equal(Math.round((d.principal + d.interest) * 100) / 100, d.amount, 'principal + interest = deduction');
@@ -43,7 +47,8 @@ test('the final deduction never exceeds what is owed; rejected and cancelled app
   const store = fixture();
   try {
     const app = applyLoan(store, worker, { type: 'Salary Loan', amount: 500, months: 1, purpose: 'Small advance (demo)' });
-    decideLoanApplication(store, hr, app.id, { decision: 'approve', approvedAmount: 500, months: 1, startDate: '2026-09-01' });
+    const approved = decideLoanApplication(store, hr, app.id, { decision: 'approve', approvedAmount: 500, months: 1, startDate: '2026-09-01' });
+    releaseLoan(store, admin, approved.loan.id, { date: '2026-09-01', reference: 'BT-0002' });
     const s = store.read(); s.loans[0].perPayroll = 5000; s.loans[0].monthlyAmortization = 5000; store.write(s);
     assert.equal(run(store).rows[0].loanDeductions[0].amount, 500);
     // A new application needs the current loan below 20% left; record it as paid down first.
@@ -55,5 +60,20 @@ test('the final deduction never exceeds what is owed; rejected and cancelled app
     cancelLoanApplication(store, worker, three.id);
     assert.equal(store.read().loans.length, 1);
     assert.deepEqual(myLoans(store, worker).applications.map(a => a.status).sort(), ['approved', 'cancelled', 'rejected']);
+  } finally { store.close(); }
+});
+
+test('loan chain: Payroll reviews, the Company Admin approves, Finance releases (once)', () => {
+  const store = new Store(':memory:'), st = completeState(); st.loans = []; store.write(st);
+  const payroll = { username: 'pay1', role: 'payroll' }, fin = { username: 'fin1', role: 'viewer', finance: true };
+  try {
+    const app = applyLoan(store, worker, { type: 'Salary Loan', amount: 3000, months: 3, purpose: 'School fees' });
+    const reviewed = decideLoanApplication(store, payroll, app.id, { decision: 'approve', approvedAmount: 3000, months: 3, startDate: '2026-09-01' });
+    assert.deepEqual([reviewed.loan, reviewed.application.status, reviewed.application.reviewedBy], [null, 'pending', 'pay1'], 'Payroll reviews; no loan yet');
+    const { loan } = decideLoanApplication(store, hr, app.id, { decision: 'approve', approvedAmount: 3000, months: 3, startDate: '2026-09-01' });
+    assert.deepEqual([loan.awaitingRelease, loan.release], [true, null]);
+    const released = releaseLoan(store, fin, loan.id, { date: '2026-09-02', reference: 'CHQ-118' });
+    assert.deepEqual([released.awaitingRelease, released.release.reference, released.release.by], [false, 'CHQ-118', 'fin1']);
+    assert.throws(() => releaseLoan(store, fin, loan.id, { date: '2026-09-02', reference: 'CHQ-118' }), /already released/);
   } finally { store.close(); }
 });

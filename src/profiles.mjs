@@ -27,7 +27,7 @@ export const profileSchemas = {
     .refine(v => v.entries.every(e => !e.from || !e.to || e.to >= e.from), 'An employment history end date is before its start date.'),
   government: z.object({ sss: text, philHealth: text, pagIbig: text, tin: text, otherId: text, expiry: optionalDate }).strict(),
   emergency: z.object({ name: text, relationship: text, contact: text, alternateContact: text, address: text }).strict(),
-  attendance: z.object({ scheduleEnd: time, hoursPerDay: number(1, 16), mealBreakMinutes: number(0, 240), graceMinutes: number(0, 120), approvedLocation: text, latitude: number(-90, 90), longitude: number(-180, 180), radiusMeters: number(1, 100000), arrangement: choice(arrangements), paidFrom: choice(['actual', 'schedule']), policy: text, daySchedules: z.array(daySchedule).max(7).default([]) }).strict().refine(v => (v.latitude === null) === (v.longitude === null), 'Enter both GPS coordinates.').refine(v => new Set(v.daySchedules.map(s => s.day)).size === v.daySchedules.length, 'Duplicate day schedule.'),
+  attendance: z.object({ flexibleTime: z.boolean().default(false), scheduleEnd: time, hoursPerDay: number(1, 16), mealBreakMinutes: number(0, 240), graceMinutes: number(0, 120), approvedLocation: text, latitude: number(-90, 90), longitude: number(-180, 180), radiusMeters: number(1, 100000), arrangement: choice(arrangements), paidFrom: choice(['actual', 'schedule']), policy: text, daySchedules: z.array(daySchedule).max(7).default([]) }).strict().refine(v => (v.latitude === null) === (v.longitude === null), 'Enter both GPS coordinates.').refine(v => new Set(v.daySchedules.map(s => s.day)).size === v.daySchedules.length, 'Duplicate day schedule.'),
   payroll: z.object({ basis: choice(['monthly', 'daily', 'days-worked']), dailyRate: number(0.01, 1e9), hourlyRate: number(0.01, 1e9), frequency: choice(['monthly', 'semi-monthly']), schedule: text, status: z.enum(['Active', 'Hold', 'Remittance only']).default('Active'), withholdingTax: choice(['withhold', 'exempt']) }).strict(),
   bank: z.object({ name: text, accountName: text, accountNumber: text }).strict(),
   // Monthly overrides of the calculated government shares for one employee; blank uses the rules table.
@@ -68,6 +68,8 @@ export function derivedInformation(e, personal = {}, asOf = localToday()) {
 export function saveProfile(store, actor, id, section, input, { salaryChange = null } = {}) {
   if (!Object.hasOwn(profileSchemas, section)) throw new AppError('Unknown profile section.', 404);
   if (!canWriteSection(actor, section)) throw new AppError('You cannot edit this profile section.', 403);
+  // Forms that do not show Flexible time (the older attendance profile editor) keep what is saved.
+  if (section === 'attendance' && input && !Object.hasOwn(input, 'flexibleTime')) input = { ...input, flexibleTime: !!JSON.parse(store.db.prepare("SELECT data FROM employee_profiles WHERE employee_id=? AND section='attendance'").get(id)?.data ?? '{}').flexibleTime };
   const value = sectionNames(section, profileSchemas[section].parse(input));
   return store.transaction(() => {
     const employee = findEmployee(store, id), state = store.read();

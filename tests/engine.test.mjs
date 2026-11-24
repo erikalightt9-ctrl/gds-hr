@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultRules } from '../src/defaults.mjs';
 import { calculatePayroll, dayRate, nightMinutes, leaveBalance, workMinutes } from '../src/engine.mjs';
-import { completeState } from './helpers.mjs';
+import { completeState, decide } from './helpers.mjs';
 
 import { fixture, attend } from './engine-fixture.mjs';
 // Present on every other scheduled weekday of the cutoff (days without attendance are not credited).
@@ -154,11 +154,13 @@ test('an unworked regular holiday on a rest day is paid when the preceding workd
   assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].earnings.regularHoliday || 0, 0, 'absent the preceding workday');
 });
 
-test('scheduled workdays with no time in and no time out are absent (HR rule, Nov 23, 2026): not credited, nothing held', () => {
+test('scheduled workdays with no time in and no time out are flagged absent and held until HR confirms (Nov 24, 2026)', () => {
   const s = fixture(); s.attendance = [];
   const row = calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0];
-  assert.equal(row.held, false); assert.equal(row.reviewItems.length, 0);
-  assert.equal(row.earnings.basic, 0, 'every workday absent: no basic pay');
+  assert.equal(row.held, true); assert.equal(row.reviewItems.length, 11);
+  assert.equal(row.earnings.basic, 0, 'shown as not credited while flagged');
+  decide(s, 'EMP-001', row.reviewItems.map(i => i.date));
+  assert.equal(calculatePayroll(s, '2026-09-01', '2026-09-15').rows[0].held, false, 'HR confirmed: released for posting');
   assert.equal(row.trace.filter(t => /absent: no time in \/ time out/.test(t.formula)).length, 11);
 });
 

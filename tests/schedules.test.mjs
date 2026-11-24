@@ -27,10 +27,10 @@ function sixDayState(profile) {
 
 test('day overrides replace the base schedule only on their weekday', () => {
   const employee = { scheduleStart: '09:00' }, profile = { ...weekday, daySchedules: [halfDaySaturday] };
-  assert.deepEqual(scheduleOn(employee, profile, MONDAY), { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'Office', flexible: false, autoPresent: false });
-  assert.deepEqual(scheduleOn(employee, profile, SATURDAY), { start: '09:00', end: '14:00', hoursPerDay: 5, mealBreakMinutes: 0, arrangement: 'Office', flexible: false, autoPresent: false });
+  assert.deepEqual(scheduleOn(employee, profile, MONDAY), { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'Office', flexible: false, flexibleOT: false, autoPresent: false });
+  assert.deepEqual(scheduleOn(employee, profile, SATURDAY), { start: '09:00', end: '14:00', hoursPerDay: 5, mealBreakMinutes: 0, arrangement: 'Office', flexible: false, flexibleOT: false, autoPresent: false });
   const wfh = scheduleOn(employee, { ...weekday, daySchedules: [{ day: 6, arrangement: 'WFH' }] }, SATURDAY);
-  assert.deepEqual(wfh, { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'WFH', flexible: false, autoPresent: false }, 'blank override fields inherit the base schedule');
+  assert.deepEqual(wfh, { start: '09:00', end: '18:00', hoursPerDay: 8, mealBreakMinutes: 60, arrangement: 'WFH', flexible: false, flexibleOT: false, autoPresent: false }, 'blank override fields inherit the base schedule');
   assert.equal(scheduleOn(employee, {}, MONDAY, { normalHours: 7 }).hoursPerDay, 7, 'rules supply hours when no profile value exists');
 });
 

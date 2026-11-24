@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { saveProfile, localToday } from './profiles.mjs';
+import { disableLoginsFor } from './offboarding.mjs';
 
 const MANAGE = ['admin', 'hr'], VIEW = ['admin', 'hr', 'hr_staff', 'payroll', 'viewer'];
 export const MOVEMENT_TYPES = { promotion: 'Promotion', transfer: 'Transfer', regularization: 'Regularization', 'type-change': 'Change of employment type / classification', separation: 'Separation' };
@@ -49,6 +50,7 @@ function apply(store, actor, m) {
     saveProfile(store, actor, e.id, 'employment', { ...job, employeeStatus: status, resignationDate: m.effectiveDate });
     const fresh = store.read().employees.find(x => x.id === e.id);
     saveRecord(store, actor, 'employees', { ...fresh, endDate: m.effectiveDate, active: m.effectiveDate >= localToday() ? fresh.active : false }, { trusted: true });
+    disableLoginsFor(store, actor, e.id, `${c.separationKind || 'separation'} effective ${m.effectiveDate}`);
     return { ...m, status: 'applied', appliedAt: new Date().toISOString(), clearance: CLEARANCE_ITEMS.map(([key, label, owner]) => ({ key, label, owner, status: 'pending' })) };
   }
   if (c.department && c.department !== e.department) { const fresh = store.read().employees.find(x => x.id === e.id); saveRecord(store, actor, 'employees', { ...fresh, department: c.department }, { trusted: true }); }

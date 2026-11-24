@@ -10,8 +10,8 @@ const minutes = t => { const [h, m] = String(t).split(':').map(Number); return h
 
 export function scheduleOf(store, employee) {
   const a = profileOf(store, employee.id, 'attendance'), rest = employee.restDays || [];
-  const s = { start: employee.scheduleStart || '', end: a.scheduleEnd || '', hoursPerDay: a.hoursPerDay ?? null, mealBreakMinutes: a.mealBreakMinutes ?? null, restDays: rest, arrangement: a.arrangement || 'Office' };
-  const text = s.start ? `${s.start}–${s.end || '?'}${s.hoursPerDay ? ` · ${s.hoursPerDay} h` : ''}${rest.length ? ` · ${rest.map(d => DAYS[d]).join(', ')} off` : ''}` : 'Not set';
+  const s = { start: employee.scheduleStart || '', end: a.scheduleEnd || '', hoursPerDay: a.hoursPerDay ?? null, mealBreakMinutes: a.mealBreakMinutes ?? null, restDays: rest, arrangement: a.arrangement || 'Office', flexible: !!a.flexibleTime };
+  const text = s.flexible ? `Flexible time${s.hoursPerDay ? ` · ${s.hoursPerDay} h` : ''}${rest.length ? ` · ${rest.map(d => DAYS[d]).join(', ')} off` : ''}` : s.start ? `${s.start}–${s.end || '?'}${s.hoursPerDay ? ` · ${s.hoursPerDay} h` : ''}${rest.length ? ` · ${rest.map(d => DAYS[d]).join(', ')} off` : ''}` : 'Not set';
   return { ...s, text };
 }
 
@@ -22,6 +22,7 @@ const scheduleSchema = z.object({
   mealBreakMinutes: z.coerce.number().int().min(0).max(240),
   restDays: z.array(z.coerce.number().int().min(0).max(6)).max(6),
   arrangement: z.enum(['Office', 'WFH', 'Hybrid']).default('Office'),
+  flexible: z.boolean().default(false),
 }).strict();
 
 // Called from the 201 Edit record form (inside its save): only when a time in is given; HR Staff cannot change schedules.
@@ -43,12 +44,12 @@ export function saveSchedule(store, actor, id, input) {
   permit(actor, ['admin', 'hr', 'maker']);
   const v = scheduleSchema.parse(input);
   let span = minutes(v.end) - minutes(v.start); if (span <= 0) span += 1440;   // overnight shifts end the next day
-  if (v.hoursPerDay * 60 + v.mealBreakMinutes > span + 1) throw new AppError(`${v.hoursPerDay} h of work plus a ${v.mealBreakMinutes}-minute meal break does not fit between ${v.start} and ${v.end}.`);
+  if (!v.flexible && v.hoursPerDay * 60 + v.mealBreakMinutes > span + 1) throw new AppError(`${v.hoursPerDay} h of work plus a ${v.mealBreakMinutes}-minute meal break does not fit between ${v.start} and ${v.end}.`);
   return store.transaction(() => {
     const e = store.read().employees.find(x => x.id === id);
     if (!e) throw new AppError('Employee not found.', 404);
     saveRecord(store, actor, 'employees', { ...e, scheduleStart: v.start, restDays: [...new Set(v.restDays)].sort() }, { trusted: true });
-    saveProfile(store, actor, id, 'attendance', { ...profileOf(store, id, 'attendance'), scheduleEnd: v.end, hoursPerDay: v.hoursPerDay, mealBreakMinutes: v.mealBreakMinutes, arrangement: v.arrangement });
+    saveProfile(store, actor, id, 'attendance', { ...profileOf(store, id, 'attendance'), scheduleEnd: v.end, hoursPerDay: v.hoursPerDay, mealBreakMinutes: v.mealBreakMinutes, arrangement: v.arrangement, flexibleTime: v.flexible });
     return scheduleOf(store, store.read().employees.find(x => x.id === id));
   });
 }

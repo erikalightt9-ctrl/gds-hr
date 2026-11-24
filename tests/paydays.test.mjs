@@ -41,13 +41,24 @@ test('Send payslips releases a finalized payroll before salary day and notifies 
   store.write(s);
   try {
     assert.throws(() => ownPayslip(store, worker, 'run-future'), /salary day/);
-    const sent = releasePayslips(store, admin, 'run-future');
+    assert.throws(() => releasePayslips(store, admin, 'run-future'), /payment reference/);
+    const sent = releasePayslips(store, admin, 'run-future', { reference: 'BATCH-001', date: '2026-09-10' });
     assert.equal(sent.notified, 1);
     assert.equal(ownPayslip(store, worker, 'run-future').id, 'run-future', 'visible to the employee now');
     assert.ok(employeeDashboard(store, worker).payslips.some(p => p.id === 'run-future'));
     const notices = () => store.db.prepare("SELECT COUNT(*) n FROM notifications WHERE employee_id='EMP-001' AND message LIKE '%now available%'").get().n;
-    assert.equal(notices(), 1); releasePayslips(store, admin, 'run-future'); assert.equal(notices(), 1, 'notified once');
+    assert.equal(notices(), 1); releasePayslips(store, admin, 'run-future', { reference: 'BATCH-001' }); assert.equal(notices(), 1, 'notified once');
     assert.throws(() => releasePayslips(store, admin, 'run-draft'), /Finalize/);
     assert.throws(() => releasePayslips(store, worker, 'run-future'), /permission/i);
   } finally { store.close(); }
+});
+
+test('payroll chain: Company Admin finalizes; Finance records the release with a reference; payslips appear after it', async () => {
+  const { payslipReleased } = await import('../src/paydays.mjs');
+  const { permit } = await import('../src/service.mjs');
+  const fresh = { status: 'posted', start: '2026-11-16', end: '2026-11-30', postedAt: '2026-12-05T02:00:00Z' };
+  assert.equal(payslipReleased(fresh, '2026-12-20T10:00'), false, 'salary day alone no longer shows a payslip finalized from Nov 24, 2026');
+  assert.equal(payslipReleased({ ...fresh, releasedAt: '2026-12-08T03:00:00Z' }, '2026-12-08T04:00'), true);
+  assert.equal(payslipReleased({ ...fresh, postedAt: '2026-11-10T00:00:00Z', start: '2026-10-16', end: '2026-10-31' }, '2026-11-09T10:00'), true, 'earlier payrolls keep the salary-day rule');
+  assert.throws(() => permit({ role: 'payroll' }, ['admin', 'hr']), /permission/i, 'Payroll Officer no longer finalizes');
 });

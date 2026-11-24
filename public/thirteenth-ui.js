@@ -1,7 +1,7 @@
 // 13th Month Pay page: the annual ledger (posted payroll + salary encoded for months before the system),
 // the encoding grid for those earlier months, and the final pay computation for separated employees.
 import { who } from './hr-common.js';
-export function createThirteenthPage({ api, esc, money, table, toast, openDialog, dialog, shell, heading, today, getState = () => null, context = () => null }) {
+export function createThirteenthPage({ api, esc, money, table, badge = (t, c = '') => `<span class="badge ${c}">${t}</span>`, toast, openDialog, dialog, shell, heading, today, getState = () => null, context = () => null }) {
   // Grid filters (Company / Status), kept while the page is open. Rows are only hidden, so saving still covers every employee.
   let thCompany = '', thStatus = 'active';
   const empInfo = id => { const e = (getState()?.employees || []).find(x => x.id === id); return { company: e?.department || '', active: !!e && !e.archived && e.active !== false }; };
@@ -148,6 +148,15 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
       dd.querySelector('[data-leave-summary]').textContent = picked.join(', ') || 'None';
     });
     content.addEventListener('change', async e => {
+      const approveBtn = e.target.closest('[data-fp-approve]'), settleBtn = e.target.closest('[data-fp-settle]');
+      if (approveBtn || settleBtn) {
+        try {
+          if (approveBtn) { if (!window.confirm('Approve this final pay computation?')) return; await api(`/final-pay/${approveBtn.dataset.fpApprove}/approve`, {}); toast('Final pay approved. Finance records the settlement next.'); }
+          else { const reference = window.prompt(`Record the final pay settlement of ${settleBtn.dataset.name}.\n\nPayment reference (bank transfer / cheque number):`); if (!reference || reference.trim().length < 2) return; await api(`/final-pay/${settleBtn.dataset.fpSettle}/release`, { released: true, reference: reference.trim(), releasedOn: today() }); toast('Settlement recorded in the 201 file.'); }
+          await render();
+        } catch (error) { toast(error.message); }
+        return;
+      }
       const sel = e.target.closest('[data-fp-release]'); if (!sel) return;
       sel.disabled = true;
       try { await api(`/final-pay/${sel.dataset.fpRelease}/release`, { released: sel.value === '1' }); toast(sel.value === '1' ? 'Final pay marked as released.' : 'Final pay marked as not released.'); await render(); }
@@ -218,7 +227,7 @@ export function createThirteenthPage({ api, esc, money, table, toast, openDialog
         <label class="field">Notes<input name="notes" maxlength="2000"></label>
         <div class="full"><button class="primary">Compute final pay</button></div>
       </form><div id="fp-result"></div>
-      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by', 'Status'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(who(r.computedBy)), `<select class="fp-release ${r.release?.released ? 'is-released' : ''}" data-fp-release="${esc(r.id)}" aria-label="Release status of ${esc(r.name)}"><option value="">Not released</option><option value="1" ${r.release?.released ? 'selected' : ''}>Released</option></select>${r.release?.released ? `<br><small class="muted">${fmt(r.release.releasedOn)}</small>` : ''}`]), 'No saved final pay computations yet.')}</section>`;
+      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by', 'Status'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(who(r.computedBy)), (r.stage === 'released' ? `${badge('Released')}<br><small class="muted">${fmt(r.release.releasedOn)}${r.release.reference ? ` · ${esc(r.release.reference)}` : ''}</small>` : r.stage === 'approved' ? `${badge('Approved', 'pending')}${finalData.canSettle ? ` <button class="small primary" data-fp-settle="${esc(r.id)}" data-name="${esc(r.name)}">Record settlement</button>` : '<br><small class="muted">Awaiting Finance</small>'}` : `${badge('Prepared', 'neutral')}${finalData.canApprove ? ` <button class="small primary" data-fp-approve="${esc(r.id)}">Approve</button>` : '<br><small class="muted">Awaiting approval</small>'}`)]), 'No saved final pay computations yet.')}</section>`;
   }
 
   const resultHtml = r => `<div class="panel-body"><h3>${esc(r.name)} · final pay as of ${fmt(r.separationDate)}</h3><p class="legend">Daily rate ${money(r.dailyRate)} · monthly ${money(r.monthlySalary)} · ${r.yearsOfService} year${r.yearsOfService === 1 ? '' : 's'} of service (counted) · release due ${fmt(r.releaseDue)}</p>
