@@ -2462,3 +2462,10 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-q-trainings .sc-quick-ico .em-ico { color: #7a2fc0 !important; }
 .theme-scarlet .sc-skyline { opacity: .28 !important; }
 .theme-scarlet .sc-quick > span:last-child { color: #2b2b33 !important; }
+/* Welcome card higher, smaller red area (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 56px !important; }
+  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: -30px !important; padding-top: 0 !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 400 40%27 preserveAspectRatio=%27none%27%3E%3Cpath d=%27M0 40V26C110 6 250 0 400 14v26z%27 fill=%27%23fff6f6%27/%3E%3C/svg%3E") no-repeat 0 104px / 100% 34px,
+                linear-gradient(180deg, #c8102e 0, #d81c24 80px, #c8102e 137px, transparent 137px) !important; }
+}
