@@ -418,7 +418,10 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
         }
         const statutoryHoliday = ['regular', 'double'].includes(kind.replace('-rest', ''));
         if (dayCase) { noteDecided(); trace.push({ component: 'basic', side: 'earnings', amount: 0, formula: `No time-in / time-out on ${d}: ${treatmentNote}`, sourceKind: 'attendance-cases', sourceId: dayCase.id, date: d }); }
-        // No time in and no time out on a scheduled ordinary workday that has passed = absent (HR, Nov 23, 2026).
+        // No time in and no time out on a scheduled ordinary workday that has passed is flagged absent (shown as not
+        // credited); HR confirms the classification before payroll (Nov 24, 2026 workflow): the employee is held until
+        // HR records a payroll decision (absent, credit, hold) or the attendance is corrected.
+        if (!dayCase && !perDayWorked && !rest && kind === 'ordinary' && !notYet(d) && d !== state.asOf) review(d, 'missing-punch', 'No time in / time out: flagged absent, HR to confirm');
         if (!rest && kind === 'ordinary' && !notYet(d) && (dayCase || d !== state.asOf)) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day ${dayCase ? `with no attendance record (not credited: ${treatmentNote})` : perDayWorked ? 'with no attendance record (not credited)' : `absent: no time in / time out on ${d}`}`, null, d);
         else if (!rest && (notYet(d) || (d === state.asOf && kind === 'ordinary'))) add(deductions, 'absence', adjDaily, `${round(adjDaily)} × 1 day not yet reached (credited once the day arrives and is recorded)`, null, d);
         else if (statutoryHoliday && !notYet(d)) priceUnworked(null, d, rest, kind, false);

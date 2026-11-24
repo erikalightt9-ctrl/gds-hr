@@ -62,7 +62,7 @@ test('payroll: unresolved days need HR documented treatment; credit pays the day
   try {
     refreshCases(store, NOW);
     const before = run(store, '2026-11-01', '2026-11-15');
-    assert.ok(!before.reviewItems.some(i => i.date === '2026-11-04'), 'no time in / out = absent, not held');
+    assert.ok(before.reviewItems.some(i => i.date === '2026-11-04' && /flagged absent, HR to confirm/.test(i.detail)), 'flagged absent; HR confirms before payroll');
     assert.ok(before.rows[0].trace.some(t => t.date === '2026-11-04' && /absent: no time in \/ time out/.test(t.formula)));
     assert.ok(before.reviewItems.some(i => i.date === '2026-11-05' && /no time out/.test(i.detail)));
     assert.throws(() => setTreatment(store, admin, caseOf(store, '2026-11-04').id, { mode: 'credit', note: '' }), /reason/);
