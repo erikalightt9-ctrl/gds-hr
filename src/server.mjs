@@ -58,6 +58,7 @@ import { runTardinessMemos } from './tardiness-memo.mjs';
 import { submitAttendanceRequest, ownAttendanceRequests, cancelAttendanceRequest, replyAttendanceRequest, attendanceRequestsOverview, startReview, requestInformation, addRemark, rejectAttendanceRequest, approveAttendanceRequest, remindOverdueRequests } from './attendance-requests.mjs';
 import { runReminders } from './reminders.mjs';
 import { startBackupSchedule } from './backup-r2.mjs';
+import { runLocalBackup, checkBackupHealth, backupStatus } from './local-backup.mjs';
 import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './holidays-auto.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -470,6 +471,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (releaseRun && req.method === 'POST') { send(200, releasePayslips(store, auth.user, releaseRun[1], await readBody(req))); return; }
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);
       if (reverseRun && req.method === 'POST') { send(200, reversePayroll(store, auth.user, reverseRun[1], await readBody(req))); return; }
+      if (pathname === '/api/backups/status' && req.method === 'GET') { permit(auth.user, ['admin']); send(200, backupStatus(store)); return; }
       if (pathname === '/api/approvals/inbox' && req.method === 'GET') { permit(auth.user, ['admin', 'hr', 'hr_staff', 'maker', 'dept_manager']); send(200, approvalInbox(store, auth.user)); return; }
       const leaveDecision = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/decision$/);
       if (leaveDecision && req.method === 'POST') { send(200, reviewLeave(store, auth.user, leaveDecision[1], await readBody(req))); return; }
@@ -642,6 +644,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   setInterval(reminderCheck, 60000).unref();
   // Daily encrypted off-site backup to Cloudflare R2 (only once npm run backup:setup has saved the keys).
   startBackupSchedule(data);
+  // Daily local backup with an immediate restore test, and an alert when the last good backup is too old (every 10 min).
+  const localBackup = () => { try { const r = runLocalBackup(store, path.join(data, 'backups')); if (r) console.log(r.ok ? `Daily backup saved and restore-tested: ${r.file}` : `Daily backup failed: ${r.error || 'restore test failed'}`); checkBackupHealth(store); } catch (error) { console.error('local backup check failed:', error.message); } };
+  localBackup(); setInterval(localBackup, 600000).unref();
   const setupToken = process.env.HR_SETUP_TOKEN || randomBytes(24).toString('hex');
   const mailer = mailerFromEnv();
   const app = createApp({ store, origin, setupToken, mailer });
