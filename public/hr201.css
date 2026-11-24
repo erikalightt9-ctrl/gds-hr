@@ -2231,3 +2231,10 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-last small { font-size: 12.5px; color: #5a5a64; }
 .theme-scarlet .sc-recheck { margin: 4px 0 6px; }
 .theme-scarlet .sc-punch-note { display: block; color: #5a5a64; font-size: 12.5px; }
+
+/* Phones: messages open from Support in the bottom bar (its unread count moves there); no chat icon in the header (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .employee-top .msg-wrap { display: none !important; }
+  .theme-scarlet .sc-bottom button[data-support] { position: relative; }
+  .theme-scarlet .sc-support-count { position: absolute; top: 2px; right: calc(50% - 26px); }
+}
