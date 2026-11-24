@@ -5,6 +5,7 @@ import { markOvertimePaid, unmarkOvertimePaid, carryUnfiledOvertime } from './ov
 import { markCaseAdjustments, unmarkCaseAdjustments } from './attendance-cases.mjs';
 import { payDateFor, payslipReleased, manilaNow } from './paydays.mjs';
 
+import { decide as decideChain } from './approval-chain.mjs';
 export class AppError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 // Leave of this many days or more needs a supporting document (November 2026 policy); shorter leave only when HR asks.
 export const PROOF_FROM_DAYS = 2;   // kept for reference only: supporting documents are optional (Nov 11, 2026)
@@ -235,7 +236,7 @@ export function reversePayroll(store, actor, runId, input) {
 // posted payroll) through saveRecord; balances are derived from approved leave, so the employee's and HR's views
 // always show the same figure and nothing is deducted twice. Cancelling approved leave restores the credits.
 export function reviewLeave(store, actor, id, input) {
-  permit(actor, ['admin', 'hr']);
+  permit(actor, ['admin', 'hr', 'hr_staff', 'maker', 'dept_manager']);
   // Approved leave is final (November 2026 policy): it cannot be cancelled or revoked afterwards.
   if (input?.decision === 'cancel') throw new AppError('Approved leave is final and cannot be cancelled.');
   const decision = ['approve', 'reject'].includes(input?.decision) ? input.decision : null, remarks = String(input?.remarks ?? '').trim();
@@ -245,8 +246,11 @@ export function reviewLeave(store, actor, id, input) {
   const leave = store.read().leaves.find(l => l.id === id);
   if (!leave) throw new AppError('Leave request not found.', 404);
   if (leave.status !== 'pending') throw new AppError(`This request is already ${leave.status}.`);
-  const status = { approve: 'approved', reject: 'rejected' }[decision];
-  return saveRecord(store, actor, 'leaves', { ...leave, status, hrRemarks: remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(decision === 'approve' ? { eligibilityVerified: true } : {}) });
+  // Approval chain (Nov 24, 2026): Supervisor (staffing) → HR verification → approver; see src/approval-chain.mjs.
+  const step = decideChain(store, actor, 'leave', leave, { decision, note: remarks });
+  if (!step.final) return saveRecord(store, actor, 'leaves', { ...leave, approvals: step.approvals }, { trusted: true });
+  const status = step.final;
+  return saveRecord(store, actor, 'leaves', { ...leave, approvals: step.approvals, status, hrRemarks: remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), ...(status === 'approved' ? { eligibilityVerified: true } : {}) }, { trusted: true });
 }
 // Live payroll: days after today (Manila) are not credited until they arrive (engine state.asOf).
 export const manilaToday = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);

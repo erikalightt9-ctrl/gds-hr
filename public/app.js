@@ -152,7 +152,7 @@ function navGroups() {
   const role = auth.user.role, legacy = LEGACY.includes(role);
   const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['bir1601c', 'BIR 1601-C'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
-    ['', [['dashboard', 'Dashboard']]],
+    ['', [['dashboard', 'Dashboard'], ...(['admin', 'hr', 'hr_staff', 'maker', 'dept_manager'].includes(role) ? [['myapprovals', 'My approvals']] : [])]],
     ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ...(['admin', 'hr', 'viewer'].includes(role) ? [['discipline', 'Due Process & Discipline']] : []), ...(['admin', 'hr', 'hr_staff', 'payroll', 'viewer'].includes(role) ? [['movements', 'Movements & clearance']] : []), ['trainings', 'Trainings']]],
     ...(payItems.length ? [['', payItems, PAY_GROUP]] : []),   // hidden entirely when the role may open none of them
     ['Administration', [['reports', 'Reports'], ...(legacy || role === 'maker' ? [['audit', 'Audit trail']] : []), ...(['admin', 'hr', 'viewer', 'payroll'].includes(role) ? [['approvals', 'Approval matrix']] : []), ...(role === 'admin' ? [['users', 'Users & roles'], ['settings', 'Settings']] : [])]],
@@ -766,6 +766,7 @@ function render() {
   const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, holidays: holidaysPage, rules: rulesPage };
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
   if (page === 'movements') { shell(heading('Movements & clearance', 'Promotions, transfers, regularizations, separations and offboarding clearance.') + '<div data-mv-page></div>'); import('./movements-ui.js').then(m => m.mountMovements(document.querySelector('[data-mv-page]'), { api, esc, badge, toast, openDialog, dialog, today })).catch(e => toast(e.message)); return; }
+  if (page === 'myapprovals') { import('./approvals-inbox.js').then(m => m.inboxPage({ api, esc, shell, heading, table, badge, toast })).catch(e => toast(e.message)); return; }
   if (page === 'approvals' || page === 'users') { import('./access-ui.js').then(m => m[page === 'users' ? 'usersPage' : 'approvalsPage']({ api, esc, shell, heading, table, badge, account: () => account() })).catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
   // An unknown page (old link, mistyped address) opens the dashboard instead of failing with 'views[page] is not a function'.
