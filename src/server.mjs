@@ -42,6 +42,7 @@ import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feish
 import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
 import { setAccountScope, scopeOf } from './account-scope.mjs';
+import { scopeContext, companyScope, filterPayload, refusedSingle, recordOwner, namedEmployees, REFUSED } from './company-scope.mjs';
 import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
@@ -59,6 +60,13 @@ import { ensureHolidayYears, addNextHolidayYear, ensureHolidayYear } from './hol
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const loginSchema = z.object({ username: z.string().min(1).max(80), password: z.string().min(1).max(200), otp: z.string().max(6).default('') }).strict();
 async function readBody(req, maximum = 256000) {
+  const body = await readBodyRaw(req, maximum), limited = scopeContext.getStore();
+  if (limited && namedEmployees(new URL('http://x/'), body).some(id => !limited.scope.ids.has(id) && limited.scope.blocked.includes(id))) throw new AppError(REFUSED, 403);
+  // Payroll preview / posting (start, end, pay13th): a company-limited login computes and posts only its companies.
+  if (limited && body && typeof body === 'object' && 'start' in body && 'end' in body && 'pay13th' in body && !(Array.isArray(body.employeeIds) && body.employeeIds.length)) return { ...body, employeeIds: [...limited.scope.ids] };
+  return body;
+}
+async function readBodyRaw(req, maximum = 256000) {
   if (!String(req.headers['content-type']).startsWith('application/json')) throw new AppError('Use application/json.', 415);
   let length = 0; const chunks = [];
   for await (const chunk of req) {
@@ -106,6 +114,11 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     let selfNotice = null;   // set for an employee's own submissions; recorded in their notification bell
     const send = (status, data) => {
       if (selfNotice && status < 300) { try { const text = employeeNotice(selfNotice.pathname, data); if (text) store.notify(selfNotice.employeeId, text); } catch { /* a notice never blocks the submission */ } }
+      const limited = scopeContext.getStore();
+      if (limited && status < 300) {
+        if (refusedSingle(data, limited.scope)) { res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: REFUSED })); return; }
+        data = filterPayload(data, limited.scope);
+      }
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data));
     };
     // no-transform: Cloudflare must not inject scripts (its Web Analytics beacon, which the CSP blocks) or alter pages.
@@ -212,6 +225,18 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      // Company separation for a company-limited login (src/company-scope.mjs): every read, reply and named record.
+      {
+        const full = store.read(), scope = companyScope(full, auth.user);
+        if (scope) {
+          const outside = id => id && full.employees.some(e => e.id === id) && !scope.ids.has(id);
+          if (namedEmployees(url, null).some(outside)) throw new AppError(REFUSED, 403);
+          for (const segment of pathname.split('/').map(decodeURIComponent).map(s => s.replace(/\.(pdf|xlsx|csv)$/, '')).filter(s => s.length >= 6 && !/^api$/.test(s))) {
+            if (outside(segment) || outside(recordOwner(store, full, segment))) throw new AppError(REFUSED, 403);
+          }
+          scopeContext.enterWith({ scope, filterReads: !mutation });
+        }
+      }
       // The service account (integrations such as the AI assistant) reads only: changes and approvals need a named person.
       if (auth.user.finance && mutation && !['/api/logout', '/api/password', '/api/me/mfa'].includes(pathname) && !pathname.startsWith('/api/me/')) throw new AppError('The Finance / Releasing Officer role reads payroll and loans; recording releases is not available yet.', 403);
       if (auth.user.service && mutation && !['/api/logout', '/api/password'].includes(pathname)) throw new AppError('The service account is read-only. Changes and approvals must be made with a named person\'s account.', 403);
