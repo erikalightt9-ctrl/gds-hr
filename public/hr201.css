@@ -2025,19 +2025,19 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .role-people ul{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px;min-width:200px}
 .role-people li{font-size:12.5px;line-height:1.35}
 
-/* Employee platform: Modern Scarlet (Nov 24, 2026). Primary #FF3B30, deep #A50E0E, white.
+/* Employee platform: Classic Red (Nov 24, 2026; was Modern Scarlet). Primary #D62828, deep #8B0000, white.
    Scoped to .employee-shell.theme-scarlet so HR / admin screens keep their theme. */
-.theme-scarlet { --sc: #ff3b30; --sc-deep: #a50e0e; --sc-tint: #ffeceb; --sc-line: #f3d6d4; --sc-ink: #1f1f24; }
-.theme-scarlet { background: #fff7f6; }
+.theme-scarlet { --sc: #d62828; --sc-deep: #8b0000; --sc-tint: #fdecec; --sc-line: #f0d2d2; --sc-ink: #1f1f24; }
+.theme-scarlet { background: #fbf6f6; }
 
 /* Top bar: scarlet gradient, white controls. */
-.theme-scarlet .employee-top { background: linear-gradient(120deg, var(--sc) 0%, #e2211a 55%, var(--sc-deep) 100%) !important; border-bottom: 0 !important; box-shadow: 0 6px 18px rgb(165 14 14 / .22); }
+.theme-scarlet .employee-top { background: linear-gradient(120deg, var(--sc) 0%, #b51d1d 55%, var(--sc-deep) 100%) !important; border-bottom: 0 !important; box-shadow: 0 6px 18px rgb(139 0 0 / .22); }
 .theme-scarlet .employee-top .employee-menu-button, .theme-scarlet .employee-top .portal-bell, .theme-scarlet .employee-top-actions .msg-button { color: #fff !important; background: rgb(255 255 255 / .14) !important; border: 1px solid rgb(255 255 255 / .55) !important; }
 .theme-scarlet .employee-top .portal-logo { background: #fff !important; }
 
 /* Menu: white card, scarlet profile header. */
-.theme-scarlet .em-side { background: #fff !important; color: var(--sc-ink) !important; border-right: 1px solid var(--sc-line); box-shadow: 0 10px 28px rgb(165 14 14 / .10); }
-.theme-scarlet .em-user { position: relative; flex-wrap: wrap; gap: 12px; padding: 22px 18px 18px !important; border-bottom: 0 !important; background: linear-gradient(140deg, var(--sc) 0%, #e8261d 50%, var(--sc-deep) 100%); color: #fff; border-radius: 0 0 22px 22px; }
+.theme-scarlet .em-side { background: #fff !important; color: var(--sc-ink) !important; border-right: 1px solid var(--sc-line); box-shadow: 0 10px 28px rgb(139 0 0 / .10); }
+.theme-scarlet .em-user { position: relative; flex-wrap: wrap; gap: 12px; padding: 22px 18px 18px !important; border-bottom: 0 !important; background: linear-gradient(140deg, var(--sc) 0%, #bf1f1f 50%, var(--sc-deep) 100%); color: #fff; border-radius: 0 0 22px 22px; }
 .theme-scarlet .em-avatar { width: 58px !important; height: 58px !important; border: 3px solid #fff; box-shadow: 0 4px 12px rgb(0 0 0 / .18); background: #fff !important; color: var(--sc-deep) !important; position: relative; }
 .theme-scarlet .em-avatar::after { content: ''; position: absolute; right: 0; bottom: 2px; width: 12px; height: 12px; border-radius: 50%; background: #22c55e; border: 2px solid #fff; }
 .theme-scarlet .em-who strong { color: #fff !important; font-size: 17px; }
@@ -2077,3 +2077,8 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .em-side nav button { gap: 12px !important; box-sizing: border-box; max-width: 100%; }
 .theme-scarlet .em-side nav button > span:not(.nav-flag) { flex: 1 1 0 !important; min-width: 0 !important; width: auto !important; overflow: hidden; text-overflow: ellipsis; }
 .theme-scarlet .em-side nav { grid-template-columns: minmax(0, 1fr) !important; }
+
+/* Classic Red: filled Sign out. */
+.theme-scarlet .em-side .em-signout { background: linear-gradient(135deg, var(--sc), var(--sc-deep)) !important; color: #fff !important; border-color: var(--sc-deep) !important; }
+.theme-scarlet .em-side .em-signout svg { color: #fff !important; }
+.theme-scarlet .em-side .em-signout:hover { background: var(--sc-deep) !important; }
