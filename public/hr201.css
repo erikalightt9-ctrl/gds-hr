@@ -2087,3 +2087,9 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .em-side .em-user .em-home { display: flex !important; align-items: center; gap: 12px; flex: 1 1 auto; width: auto !important; min-width: 0; padding: 0 !important; margin: 0 !important; background: transparent !important; border: 0 !important; box-shadow: none !important; color: inherit !important; text-align: left; cursor: pointer; border-radius: 12px !important; }
 .em-side .em-user .em-home:hover { background: transparent !important; opacity: .92; }
 .em-side .em-user .em-home:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* Employee menu: Account & Security sits at the bottom, above Sign out (Nov 24, 2026). */
+.theme-scarlet .em-side .employee-sidebar-foot { display: flex !important; flex-direction: column; gap: 8px; }
+.theme-scarlet .em-side .employee-sidebar-foot .em-account { margin: 0 !important; box-shadow: none !important; border: 1.5px solid var(--sc-line) !important; color: var(--sc-deep) !important; }
+.theme-scarlet .em-side .employee-sidebar-foot .em-account:hover { background: var(--sc-tint) !important; }
+.theme-scarlet .em-side .employee-sidebar-foot .em-account, .theme-scarlet .em-side .employee-sidebar-foot .em-signout { flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; padding: 11px 16px !important; border-radius: 999px !important; font-size: 15px !important; line-height: 1.2 !important; }
