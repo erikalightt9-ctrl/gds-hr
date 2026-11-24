@@ -20,7 +20,6 @@ export async function addUser(store, input, actor = null) {
     // Registered email for Forgot password (reset links are sent there). Optional for the first administrator.
     const email = (value.email || '').trim();
     if (email && !isEmailAddress(email)) throw new AppError('Enter a valid email address.');
-    if (email && store.db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE').get(email)) throw new AppError('Another account already uses this email.');
     const employees = store.read().employees;
     if (employees.some(e => e.id.toLowerCase() === value.username.toLowerCase() && e.id !== value.employeeId)) throw new AppError('This username is reserved for an Employee ID.');
     if (['employee', 'dept_manager'].includes(value.role)) {
@@ -136,46 +135,56 @@ const profileEmails = (store, employeeId) => {
 export function registeredEmail(store, user) {
   return isEmailAddress(user.email) ? user.email : profileEmails(store, user.employee_id)[0] || null;
 }
-function findRecoveryAccount(store, identifier) {
-  // Username first, then an account's own email, then the employee login of an Employee ID (a staff login linked to the
-  // same person is reached by its username or email), then the employee profile's email.
+function findRecoveryAccounts(store, identifier) {
+  // Username first, then the employee login of an Employee ID, then every login registered to that email (an email may
+  // serve several logins of the same person, e.g. an employee login and a staff login), then the profile's email.
   const byUsername = store.db.prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE').get(identifier);
-  if (byUsername) return byUsername;
-  const byEmail = store.db.prepare('SELECT * FROM users WHERE email=? COLLATE NOCASE').get(identifier);
-  if (byEmail) return byEmail;
+  if (byUsername) return [byUsername];
   const byEmployee = store.db.prepare("SELECT * FROM users WHERE employee_id=? COLLATE NOCASE ORDER BY role IN ('employee','dept_manager') DESC").get(identifier);
-  if (byEmployee || !isEmailAddress(identifier)) return byEmployee || null;
+  if (byEmployee) return [byEmployee];
+  if (!isEmailAddress(identifier)) return [];
   const wanted = identifier.toLowerCase();
-  return store.db.prepare("SELECT * FROM users WHERE employee_id IS NOT NULL ORDER BY role IN ('employee','dept_manager') DESC").all().find(u => profileEmails(store, u.employee_id).some(e => e.toLowerCase() === wanted)) || null;
+  return store.db.prepare('SELECT * FROM users ORDER BY username').all().filter(u => (registeredEmail(store, u) || '').toLowerCase() === wanted);
 }
 // Forgot password: emails a one-time reset link to the registered address, or queues an HR request when no email can be sent.
-// The reply is identical either way so it never reveals whether an account or address exists.
-// `delivery` lets callers (tests) wait for the email; the HTTP route does not, so timing reveals nothing either.
+// Logins sharing one address get one message with a link for each (labelled by username). The reply is identical
+// either way so it never reveals whether an account or address exists. `delivery` lets callers (tests) wait for the
+// email; the HTTP route does not, so timing reveals nothing either.
 export function requestRecovery(store, identifier, { mailer = null, origin = '' } = {}) {
-  const user = findRecoveryAccount(store, identifier.trim());
-  let delivery = Promise.resolve(false);
-  if (user && !user.disabled) {
+  const groups = new Map();
+  for (const user of findRecoveryAccounts(store, identifier.trim()).filter(u => !u.disabled)) {
     const email = mailer ? registeredEmail(store, user) : null;
-    if (email) {
-      const recent = store.db.prepare('SELECT expires FROM password_resets WHERE user_id=?').get(user.id);
-      if (!recent || recent.expires < Date.now() + (EMAIL_RESET_MINUTES - EMAIL_RESEND_MINUTES) * 60000) {
-        const token = randomBytes(32).toString('hex'), expires = Date.now() + EMAIL_RESET_MINUTES * 60000;
-        store.transaction(() => {
-          store.db.prepare('DELETE FROM password_resets WHERE user_id=?').run(user.id);
-          store.db.prepare('INSERT INTO password_resets VALUES(?,?,?)').run(hashToken(token), user.id, expires);
-          store.log({ username: 'recovery-request' }, 'email-reset-link', 'users', user.id, null, { sentTo: maskEmail(email), expires });
-        });
-        delivery = mailer.send({ to: email, subject: 'GDS HR password reset', text: resetEmail(user.username, `${origin}/#reset=${token}`) })
-          .then(() => true, error => {
-            console.error('Password reset email failed:', error.message);
-            try { queueHrRecovery(store, user, `the reset email could not be sent: ${error.message.replace(/\.$/, '')}`); } catch (e) { console.error('Recovery fallback failed:', e.message); }
-            return false;
-          });
-      }
-    } else queueHrRecovery(store, user, '');
+    if (!email) { queueHrRecovery(store, user, ''); continue; }
+    const recent = store.db.prepare('SELECT expires FROM password_resets WHERE user_id=?').get(user.id);
+    if (recent && recent.expires >= Date.now() + (EMAIL_RESET_MINUTES - EMAIL_RESEND_MINUTES) * 60000) continue;   // just sent
+    const token = randomBytes(32).toString('hex'), expires = Date.now() + EMAIL_RESET_MINUTES * 60000;
+    store.transaction(() => {
+      store.db.prepare('DELETE FROM password_resets WHERE user_id=?').run(user.id);
+      store.db.prepare('INSERT INTO password_resets VALUES(?,?,?)').run(hashToken(token), user.id, expires);
+      store.log({ username: 'recovery-request' }, 'email-reset-link', 'users', user.id, null, { sentTo: maskEmail(email), expires });
+    });
+    const key = email.toLowerCase();
+    if (!groups.has(key)) groups.set(key, { to: email, links: [] });
+    groups.get(key).links.push({ user, link: `${origin}/#reset=${token}` });
   }
-  return { message: RECOVERY_MESSAGE, delivery };
+  const sends = [...groups.values()].map(g => mailer.send({ to: g.to, subject: 'GDS HR password reset', text: g.links.length === 1 ? resetEmail(g.links[0].user.username, g.links[0].link) : resetEmailMany(g.links) })
+    .then(() => true, error => {
+      console.error('Password reset email failed:', error.message);
+      for (const { user } of g.links) { try { queueHrRecovery(store, user, `the reset email could not be sent: ${error.message.replace(/\.$/, '')}`); } catch (e) { console.error('Recovery fallback failed:', e.message); } }
+      return false;
+    }));
+  return { message: RECOVERY_MESSAGE, delivery: sends.length ? Promise.all(sends).then(r => r.every(Boolean)) : Promise.resolve(false) };
 }
+const resetEmailMany = links => `Hello,
+
+We received a request to reset a password for the GDS CAPITAL INC. HR accounts registered to this email.
+
+Open the link of the account you want to change. Each link works once and expires in ${EMAIL_RESET_MINUTES} minutes:
+${links.map(l => `\n• ${l.user.username}:\n${l.link}`).join('\n')}
+
+If you did not ask for this, ignore this email; your passwords stay the same. For help, contact HR.
+
+GDS CAPITAL INC. Human Resources`;
 // HR-assisted recovery: one open request per account; when an email failed, HR is told why and the unused link is removed.
 function queueHrRecovery(store, user, reason) {
   store.transaction(() => {
@@ -204,7 +213,6 @@ export function setUserEmail(store, actor, userId, email) {
   if (value && !isEmailAddress(value)) throw new AppError('Enter a valid email address.');
   const user = store.db.prepare('SELECT id,email FROM users WHERE id=?').get(userId);
   if (!user) throw new AppError('User not found.', 404);
-  if (value && store.db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE AND id<>?').get(value, userId)) throw new AppError('Another account already uses this email.');
   store.transaction(() => {
     store.db.prepare('UPDATE users SET email=? WHERE id=?').run(value || null, userId);
     store.log(actor, 'set-account-email', 'users', userId, { email: user.email || null }, { email: value || null });
