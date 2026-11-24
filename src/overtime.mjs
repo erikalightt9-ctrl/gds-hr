@@ -10,6 +10,7 @@ import { AppError, permit } from './service.mjs';
 import { attendanceMinutes, withScheduledLunch, scheduleOn, isRest, ruleOn, round, overtimeWindow, OT_BLOCK, monthlyDailyRate } from './engine.mjs';
 import { localToday } from './profiles.mjs';
 
+import { decide as decideChain } from './approval-chain.mjs';
 const HR = ['admin', 'hr'];
 const stamp = value => Date.parse(`${value}:00Z`);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -144,7 +145,7 @@ const decisionSchema = z.object({ decision: z.enum(['approve', 'reject']), hours
 // The day's attendance is valid for overtime when HR approved it or it is System Validated (original punches).
 export const attendanceValid = (state, record) => !!record && (record.approved || (state.validation?.systemValidated || []).includes(record.id) || (state.validation?.correctionValidated || []).includes(record.id));
 export function decideOvertime(store, actor, id, input) {
-  permit(actor, HR);
+  permit(actor, [...HR, 'dept_manager']);
   const v = decisionSchema.parse(input);
   if (v.decision === 'reject' && v.remarks.length < 3) throw new AppError('Give a reason for rejecting the overtime.');
   return store.transaction(() => {
@@ -153,6 +154,18 @@ export function decideOvertime(store, actor, id, input) {
     if (!['pending', 'approved', 'rejected'].includes(o.status)) throw new AppError('This filing was cancelled.');
     // Only overtime already paid is locked; a decision on a posted date is carried over to the next payroll.
     if (o.paidRunId) throw new AppError(`This overtime was already paid in the ${o.paidCutoff} payroll; the decision is locked. Reverse that payroll to correct it.`);
+    // Approval chain (Nov 24, 2026): the Supervisor approves the work first, then HR decides the hours (src/approval-chain.mjs).
+    let approvals = o.approvals || [];
+    if (o.status === 'pending') {
+      const step = decideChain(store, actor, 'overtime', o, { decision: v.decision, note: v.remarks });
+      approvals = step.approvals;
+      if (!step.final) {
+        const after = { ...o, approvals, history: [...(o.history || []), historyEntry(actor, 'endorsed', v.remarks || 'Work approved by the Supervisor')] };
+        put(store, after); store.log(actor, 'endorse', 'overtime', o.employeeId, o, after);
+        store.notify(null, `Overtime of ${o.employeeId} on ${o.date}: work approved by ${actor.username}; HR to decide the hours.`);
+        return after;
+      }
+    } else if (!HR.includes(actor.role)) throw new AppError('Only HR changes a decided overtime filing.', 403);
     // Changing a decision already made needs its own reason (the earlier decision stays in the history).
     if (['approved', 'rejected'].includes(o.status) && v.changeReason.length < 5) throw new AppError(`This overtime was already ${o.status}. Give the reason for changing the decision (at least 5 characters).`);
     const hours = v.decision === 'approve' ? round(v.hours ?? o.hours) : 0;
@@ -171,7 +184,7 @@ export function decideOvertime(store, actor, id, input) {
       if (problems.length) override = { reason: v.overrideReason, problems, payableHours: check.payableHours, by: actor.username, at: new Date().toISOString() };
     }
     const note = `${v.decision === 'approve' ? `${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''}${v.remarks ? ` · ${v.remarks}` : ''}` : v.remarks}${override ? ` · Override: ${v.overrideReason}` : ''}${v.changeReason && ['approved', 'rejected'].includes(o.status) ? ` · Changed from ${o.status}: ${v.changeReason}` : ''}`;
-    const after = { ...o, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', override, remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
+    const after = { ...o, approvals, status: v.decision === 'approve' ? 'approved' : 'rejected', approvedHours: hours, adjustReason: adjusted ? v.adjustReason : '', override, remarks: v.remarks, decidedBy: actor.username, decidedAt: new Date().toISOString(), history: [...(o.history || []), historyEntry(actor, v.decision === 'approve' ? 'approved' : 'rejected', note)] };
     put(store, after); store.log(actor, v.decision, 'overtime', o.employeeId, o, after);
     store.notify(o.employeeId, `Your overtime for ${o.date} was ${v.decision === 'approve' ? `approved (${hours} h${adjusted ? ` of ${o.hours} h filed: ${v.adjustReason}` : ''})` : 'not approved'}${v.remarks ? `: ${v.remarks}` : ''}.`);
     return after;

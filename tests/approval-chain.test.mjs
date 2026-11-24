@@ -67,3 +67,18 @@ test('My approvals lists what waits for each person\'s step', async () => {
     assert.deepEqual(inbox(store, boss), []);
   } finally { store.close(); }
 });
+
+test('overtime: the Supervisor approves the work, then HR decides the hours', async () => {
+  const { fileOvertime, decideOvertime } = await import('../src/overtime.mjs');
+  const store = await fixture();
+  const worker = { username: 'employee1', role: 'employee', employeeId: 'EMP-001' };
+  try {
+    const o = fileOvertime(store, worker, { date: '2026-09-02', startTime: '16:00', endTime: '18:00', reason: 'Month-end close (demo)' });
+    assert.throws(() => decideOvertime(store, head, o.id, { decision: 'approve' }), /Supervisor's check/);
+    const endorsed = decideOvertime(store, boss, o.id, { decision: 'approve', remarks: 'Needed for the close' });
+    assert.deepEqual([endorsed.status, endorsed.approvals.map(a => a.decision)], ['pending', ['endorsed']]);
+    assert.throws(() => decideOvertime(store, boss, o.id, { decision: 'approve' }), /Waiting for Approval/);
+    const done = decideOvertime(store, head, o.id, { decision: 'approve', overrideReason: 'Attendance to be approved later (test)' });
+    assert.deepEqual([done.status, done.approvals.map(a => a.decision)], ['approved', ['endorsed', 'approved']]);
+  } finally { store.close(); }
+});

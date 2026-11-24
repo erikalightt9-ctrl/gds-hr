@@ -75,5 +75,11 @@ export function inbox(store, actor) {
     if (!mine || l.employeeId === actor.employeeId) continue;
     items.push({ kind: 'leave', id: l.id, reference: l.reference || '', employeeId: l.employeeId, employeeName: names.get(l.employeeId) || l.employeeId, what: `${types.get(l.typeId) || l.typeId} · ${l.days} day${l.days === 1 ? '' : 's'}`, dates: l.startDate === l.endDate ? l.startDate : `${l.startDate} to ${l.endDate}`, reason: l.reason || '', stage, stageLabel: STEP_LABELS[stage], ownStep: canTake(actor, stage, l, store), history: l.approvals || [] });
   }
+  for (const o of store.db.prepare("SELECT data FROM overtime_requests WHERE status='pending'").all().map(r => JSON.parse(r.data))) {
+    const stage = stageOf('overtime', o); if (!stage) continue;
+    const own = canTake(actor, stage, o, store), mine = own || (stage === 'supervisor' && OVERRIDERS.includes(actor.role));
+    if (!mine || o.employeeId === actor.employeeId) continue;
+    items.push({ kind: 'overtime', id: o.id, reference: '', employeeId: o.employeeId, employeeName: names.get(o.employeeId) || o.employeeId, what: `Overtime · ${o.hours} h${o.startTime ? ` (${o.startTime}–${o.endTime})` : ''}`, dates: o.date, reason: o.reason || '', stage, stageLabel: STEP_LABELS[stage], ownStep: own, history: o.approvals || [] });
+  }
   return items.sort((a, b) => b.dates.localeCompare(a.dates));
 }
