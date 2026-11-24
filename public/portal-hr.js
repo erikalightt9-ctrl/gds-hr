@@ -12,9 +12,13 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   let fileView = 'profile';
   const showProfile = () => { fileView = 'profile'; };
   async function file201(box) {
-    box.innerHTML = `<div class="tabs sub-tabs"><button data-file-view="profile" class="${fileView === 'profile' ? 'active' : ''}">👤 Profile</button><button data-file-view="documents" class="${fileView === 'documents' ? 'active' : ''}">📁 Documents</button></div><div id="file201-view"><div class="loading">Loading…</div></div>`;
+    box.innerHTML = `<div class="tabs sub-tabs"><button data-file-view="profile" class="${fileView === 'profile' ? 'active' : ''}">👤 Profile</button><button data-file-view="employment" class="${fileView === 'employment' ? 'active' : ''}">💼 Employment</button><button data-file-view="documents" class="${fileView === 'documents' ? 'active' : ''}">📁 Documents</button></div><div id="file201-view"><div class="loading">Loading…</div></div>`;
     box.querySelector('.sub-tabs').onclick = e => { const b = e.target.closest('[data-file-view]'); if (b && b.dataset.fileView !== fileView) { fileView = b.dataset.fileView; file201(box); } };
     const view = box.querySelector('#file201-view');
+    if (fileView === 'employment') {
+      // Employment information (live from the HR records; loaded on first use).
+      try { const [{ renderEmployment }, data] = await Promise.all([import('./portal-employment.js'), api('/me/employment')]); return renderEmployment(view, data, esc); } catch (error) { view.innerHTML = `<div class="notice">${esc(/not found|import|module/i.test(error.message) ? 'Employment information will be available after the HR server restarts.' : error.message)}</div>`; return; }
+    }
     return fileView === 'profile' ? profile(view, await api('/hr/me/profile')) : documents(view, await api('/hr/me/documents'));
   }
   let noticeView = 'memos';
@@ -32,6 +36,8 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
       if (tab === 'memos') return notices(box);
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
+      // My Benefits (loaded on first use).
+      if (tab === 'benefits') { try { return (await import('./portal-benefits.js')).createPortalBenefits({ api, esc }).fill(box); } catch { box.innerHTML = '<div class="notice">My Benefits will be available after the HR server restarts.</div>'; return; } }
       // Loaded on first use (Notices & due process).
       if (tab === 'cases') { noticeView = 'cases'; return notices(box); }
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
@@ -287,9 +293,12 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       // Home screen order (Nov 24, 2026): welcome, clock, attendance, quick actions, then greetings.
       box.firstElementChild.querySelector('[data-cg-toggle]')?.addEventListener('click', e => { const sec = e.currentTarget.closest('.cg'), open = sec.classList.toggle('cg-open'); e.currentTarget.setAttribute('aria-expanded', String(open)); });
       const section = box.firstElementChild, anchor = main.querySelector('#portal-content') || main.querySelector('.employee-welcome');
-      if (anchor?.id === 'portal-content') anchor.before(section); else if (anchor) anchor.after(section); else main.prepend(section);
+      // Home screen: right after Today's attendance, inside the same block, so the second screen shows My attendance,
+      // Today's attendance and the celebrations together (Nov 24, 2026).
+      const block = main.querySelector('.clock-block');
+      if (block) block.append(section); else if (anchor?.id === 'portal-content') anchor.before(section); else if (anchor) anchor.after(section); else main.prepend(section);
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile &amp; 201 file', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Official notices', '📝'], ['trainings', 'Trainings', '🎓']], showProfile, showMemos: () => { noticeView = 'memos'; }, showCases: () => { noticeView = 'cases'; }, showDocuments: () => { fileView = 'documents'; } };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile &amp; 201 file', '👤'], ['loans201', 'My loans', '💳'], ['benefits', 'My benefits', '🎁'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Official notices', '📝'], ['trainings', 'Trainings', '🎓']], showProfile, showMemos: () => { noticeView = 'memos'; }, showCases: () => { noticeView = 'cases'; }, showDocuments: () => { fileView = 'documents'; } };
 }

@@ -2374,7 +2374,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 @media (max-width: 900px) {
   .theme-scarlet .employee-top { z-index: auto !important; }
   .theme-scarlet .employee-main { position: relative; z-index: 1; }
-  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: -12px !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: -12px !important; }
 }
 .theme-scarlet .sc-quick-wrap { margin: 4px 0 14px !important; }
 @media (max-width: 900px) { .theme-scarlet .employee-top { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; } }
@@ -2388,3 +2388,223 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-quick-grid { gap: 8px !important; }
 .theme-scarlet .sc-quick { min-height: 66px !important; padding: 8px 4px !important; gap: 4px !important; border-radius: 14px !important; font-size: 11.5px !important; }
 .theme-scarlet .sc-quick-ico .em-ico, .theme-scarlet .sc-quick-ico .sc-ico { width: 24px !important; height: 24px !important; }
+/* More space below My Workspace (Nov 24, 2026). */
+.theme-scarlet .sc-quick-wrap { margin-bottom: 26px !important; }
+/* Bottom bar without More (Nov 24, 2026). */
+@media (max-width: 900px) { .theme-scarlet .sc-bottom { grid-template-columns: repeat(3, 1fr) !important; } }
+.theme-scarlet .sc-back { display: inline-flex !important; align-items: center; gap: 2px; width: auto !important; margin: 4px 0 8px; padding: 6px 12px 6px 6px !important; border-radius: 999px !important; background: #fff !important; border: 1px solid #fbe0e0 !important; color: #b3121a !important; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px rgb(200 16 46 / .08) !important; }
+/* My Workspace a little lower: more space above it (Nov 24, 2026). */
+.theme-scarlet .sc-quick-wrap { margin-top: 24px !important; }
+
+/* ===== Employee home: option 3 (card rich & colourful) with option 1's welcome card (Nov 24, 2026) ===== */
+/* Home screen: the red header continues behind the welcome card and ends in a wave below it. */
+@media (max-width: 900px) {
+  .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 60px !important; padding-bottom: 0 !important; background: linear-gradient(180deg, #a10c12 0%, #c8102e 100%) !important; }
+  .theme-scarlet:has(.sc-welcome) .employee-top::after { display: none !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: 0 !important; padding-top: 4px !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 40V26C110 6 250 0 400 14v26z' fill='%23fff6f6'/%3E%3C/svg%3E") no-repeat 0 150px / 100% 40px,
+                linear-gradient(180deg, #c8102e 0, #d81c24 120px, #c8102e 189px, transparent 189px) !important; }
+}
+/* Option 1 welcome card: red gradient, white text, white-ringed photo / initials, mascot on the right. */
+.theme-scarlet .sc-welcome { background: radial-gradient(120% 140% at 0% 0%, #ef3b3b 0%, rgb(239 59 59 / 0) 55%), linear-gradient(135deg, #e0262b 0%, #c8102e 50%, #9c0c12 100%) !important; border: 1px solid rgb(255 255 255 / .28) !important; box-shadow: 0 12px 26px rgb(90 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .25) !important; color: #fff !important; }
+.theme-scarlet .sc-welcome h1, .theme-scarlet .sc-welcome h1 span { color: #fff !important; }
+.theme-scarlet .sc-welcome h1 span { font-size: 17px !important; font-weight: 600 !important; opacity: .95; }
+.theme-scarlet .sc-namelink, .theme-scarlet .sc-namelink .sc-chev { color: #fff !important; }
+.theme-scarlet .sc-photo { border: 4px solid #fff !important; box-shadow: 0 6px 16px rgb(60 0 0 / .35) !important; }
+
+/* Clock card (option 3): soft pink to lilac with a dusk skyline. */
+.theme-scarlet .sc-clock { background: linear-gradient(110deg, #fff 0%, #fff 45%, #fbe6ee 75%, #f1dcef 100%) !important; }
+.theme-scarlet .sc-skyline { color: #b8496b !important; opacity: .5 !important; width: 48% !important; }
+
+/* Time In / Time Out / Correction Request. */
+.theme-scarlet .sc-punch-btn.is-other { background: linear-gradient(180deg, #fff 0%, #fff7f7 100%) !important; }
+
+/* My Workspace (option 3): one soft card, coloured tiles. */
+.theme-scarlet .sc-quick-wrap { background: linear-gradient(180deg, #fff 0%, #fff4f5 100%); border: 1px solid #fbe3e3; border-radius: 22px; padding: 14px 12px 12px; box-shadow: 0 10px 26px rgb(200 16 46 / .08); }
+.theme-scarlet .sc-quick-head { display: flex !important; align-items: center; gap: 10px; margin: 0 2px 12px !important; }
+.theme-scarlet .sc-ws-ico { color: #d7141a; display: inline-flex; }
+.theme-scarlet .sc-ws-ico svg { width: 28px; height: 28px; }
+.theme-scarlet .sc-ws-title { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.theme-scarlet .sc-ws-title h2 { margin: 0 !important; font-size: 17px !important; font-weight: 800; color: #c8102e !important; }
+.theme-scarlet .sc-ws-title small { font-size: 11.5px; color: #a8323d; }
+.theme-scarlet .sc-viewall { width: auto !important; padding: 4px 2px !important; background: none !important; border: 0 !important; box-shadow: none !important; color: #b3121a !important; font-size: 12.5px; font-weight: 600; }
+.theme-scarlet .sc-quick { border: 1px solid rgb(0 0 0 / .04) !important; box-shadow: 0 4px 10px rgb(0 0 0 / .05) !important; color: #2b2b33 !important; font-weight: 600 !important; }
+.theme-scarlet .sc-quick-ico .em-ico { stroke-width: 2 !important; }
+.theme-scarlet .sc-q-profile201 { background: linear-gradient(160deg, #fff, #ffe3e6) !important; } .theme-scarlet .sc-q-profile201 .sc-quick-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-attendance { background: linear-gradient(160deg, #fff, #dcf5e6) !important; } .theme-scarlet .sc-q-attendance .sc-quick-ico { color: #16a34a !important; }
+.theme-scarlet .sc-q-overtime201 { background: linear-gradient(160deg, #fff, #ffecd9) !important; } .theme-scarlet .sc-q-overtime201 .sc-quick-ico { color: #f08a12 !important; }
+.theme-scarlet .sc-q-leave { background: linear-gradient(160deg, #fff, #ece6ff) !important; } .theme-scarlet .sc-q-leave .sc-quick-ico { color: #7c4ddb !important; }
+.theme-scarlet .sc-q-payslips { background: linear-gradient(160deg, #fff, #e0ecff) !important; } .theme-scarlet .sc-q-payslips .sc-quick-ico { color: #2f6fe0 !important; }
+.theme-scarlet .sc-q-loans201 { background: linear-gradient(160deg, #fff, #d9f4f1) !important; } .theme-scarlet .sc-q-loans201 .sc-quick-ico { color: #0f9b8e !important; }
+.theme-scarlet .sc-q-memos { background: linear-gradient(160deg, #fff, #ffe1e6) !important; } .theme-scarlet .sc-q-memos .sc-quick-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-trainings { background: linear-gradient(160deg, #fff, #efe3fb) !important; } .theme-scarlet .sc-q-trainings .sc-quick-ico { color: #7a2fc0 !important; }
+
+/* Today's attendance (option 3): red title on a soft pink card, white tiles. */
+.theme-scarlet .pm-attend { background: linear-gradient(180deg, #fff4f5 0%, #fff 60%) !important; }
+.theme-scarlet .pm-attend-head h2 { color: #c8102e !important; }
+.theme-scarlet .pm-attend .pm-tile { background: #fff !important; border: 1px solid #fbe3e3 !important; box-shadow: 0 4px 10px rgb(200 16 46 / .05) !important; }
+
+/* Bottom bar (option 3): one red bar, white icons and labels. */
+@media (max-width: 900px) {
+  .theme-scarlet .sc-bottom { left: 12px !important; right: 12px !important; bottom: max(8px, env(safe-area-inset-bottom)) !important; padding: 6px !important; border-radius: 22px !important; border: 0 !important; background: linear-gradient(135deg, #e0262b 0%, #c8102e 55%, #9c0c12 100%) !important; box-shadow: 0 10px 24px rgb(140 0 0 / .35) !important; }
+  .theme-scarlet .sc-bottom button { color: #fff !important; background: transparent !important; border-radius: 16px !important; }
+  .theme-scarlet .sc-bottom button:active, .theme-scarlet .sc-bottom button.active { background: rgb(0 0 0 / .18) !important; }
+  .theme-scarlet .sc-bottom .sc-support-count { background: #fff !important; color: #c8102e !important; }
+}
+/* Workspace tile icon colours (Nov 24, 2026). */
+.theme-scarlet .sc-q-profile201 .sc-quick-ico .em-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-attendance .sc-quick-ico .em-ico { color: #16a34a !important; }
+.theme-scarlet .sc-q-overtime201 .sc-quick-ico .em-ico { color: #f08a12 !important; }
+.theme-scarlet .sc-q-leave .sc-quick-ico .em-ico { color: #7c4ddb !important; }
+.theme-scarlet .sc-q-payslips .sc-quick-ico .em-ico { color: #2f6fe0 !important; }
+.theme-scarlet .sc-q-loans201 .sc-quick-ico .em-ico { color: #0f9b8e !important; }
+.theme-scarlet .sc-q-memos .sc-quick-ico .em-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-trainings .sc-quick-ico .em-ico { color: #7a2fc0 !important; }
+.theme-scarlet .sc-skyline { opacity: .28 !important; }
+.theme-scarlet .sc-quick > span:last-child { color: #2b2b33 !important; }
+/* Welcome card higher, smaller red area (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 56px !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: -30px !important; padding-top: 0 !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 400 40%27 preserveAspectRatio=%27none%27%3E%3Cpath d=%27M0 40V26C110 6 250 0 400 14v26z%27 fill=%27%23fff6f6%27/%3E%3C/svg%3E") no-repeat 0 104px / 100% 34px,
+                linear-gradient(180deg, #c8102e 0, #d81c24 80px, #c8102e 137px, transparent 137px) !important; }
+}
+
+/* Notifications in the bottom bar; Welcome card inside the red frame (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .sc-bottom { grid-template-columns: repeat(4, 1fr) !important; }
+  .theme-scarlet .sc-bottom button { position: relative; font-size: 12px !important; }
+  .theme-scarlet .sc-bottom [data-bell-bottom] .bell-count, .theme-scarlet .sc-bottom [data-bell-bottom] .bell-pending { position: absolute; top: 2px; right: calc(50% - 26px); left: auto; bottom: auto; background: #fff !important; color: #c8102e !important; }
+  .theme-scarlet .sc-bottom [data-bell-bottom] .bell-pending { right: auto; left: calc(50% - 26px); background: #f5b400 !important; color: #3a2a00 !important; }
+  .theme-scarlet .employee-top .employee-bell > .portal-bell { display: none !important; }
+  .theme-scarlet .bell-menu { top: auto !important; bottom: calc(96px + env(safe-area-inset-bottom)) !important; left: 12px !important; right: 12px !important; max-height: 65vh; overflow: auto; }
+  .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 16px !important; padding: 0 !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: 0 !important; padding-top: 10px !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 40V26C110 6 250 0 400 14v26z' fill='%23fff6f6'/%3E%3C/svg%3E") no-repeat 0 136px / 100% 34px,
+                linear-gradient(180deg, #c8102e 0, #d81c24 90px, #c8102e 169px, transparent 169px) !important; }
+}
+/* Welcome card fully inside the red frame (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .employee-main .sc-first > .sc-welcome { margin-top: 0 !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { background-position: 0 146px, 0 0 !important; background-size: 100% 34px, 100% 180px !important; background-repeat: no-repeat, no-repeat !important; }
+}
+/* Philippine Time card lower, clear of the red wave (Nov 24, 2026). */
+.theme-scarlet .employee-main .sc-first > .sc-welcome + .sc-clock { margin-top: 48px !important; }
+
+/* First screen fills the phone: Welcome, clock, Time In row and My Workspace spread evenly; Today's attendance starts below
+   the fold (Nov 24, 2026). */
+.theme-scarlet .sc-first { display: flex; flex-direction: column; }
+@media (max-width: 900px) {
+  .theme-scarlet .sc-first { box-sizing: border-box; min-height: calc(100dvh - 40px); padding-bottom: 104px; justify-content: space-between; gap: 14px; }
+  .theme-scarlet .sc-first > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+  .theme-scarlet .sc-first > .sc-welcome + .sc-clock { margin-top: 18px !important; }
+  .theme-scarlet .clock-block > .pm-attend { margin-top: 14px; }
+}
+
+/* My attendance analytics (Nov 24, 2026). */
+.theme-scarlet .sc-stats { margin-top: 14px; padding: 14px !important; border: 1px solid #fbe3e3 !important; background: linear-gradient(180deg, #fff 0%, #fff7f8 100%) !important; box-shadow: 0 10px 26px rgb(200 16 46 / .08) !important; }
+.theme-scarlet .sc-stats-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.theme-scarlet .sc-stats-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 800; color: #c8102e; }
+.theme-scarlet .sc-stats-head .sc-ico { width: 22px; height: 22px; }
+.theme-scarlet .sc-stats-head > span { font-size: 12px; color: #5a5a64; }
+.theme-scarlet .sc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.theme-scarlet .sc-kpi { display: grid; gap: 2px; padding: 10px 6px; border-radius: 14px; background: #fff; border: 1px solid #fbe3e3; text-align: center; }
+.theme-scarlet .sc-kpi span { font-size: 11px; color: #5a5a64; line-height: 1.2; }
+.theme-scarlet .sc-kpi strong { font-size: 19px; font-weight: 800; color: #141418; }
+.theme-scarlet .sc-bars-title { margin: 14px 0 6px; font-size: 12.5px; font-weight: 700; color: #3a3a44; }
+.theme-scarlet .sc-bars { position: relative; display: flex; align-items: flex-end; gap: 3px; height: 96px; padding-bottom: 16px; border-bottom: 1px solid #f0d2d2; }
+.theme-scarlet .sc-bar { position: relative; flex: 1 1 0; min-width: 4px; max-width: 18px; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+.theme-scarlet .sc-bar i { display: block; width: 100%; height: var(--bar); background: #e0262b; border-radius: 4px 4px 0 0; }
+.theme-scarlet .sc-bar.open i { background: repeating-linear-gradient(135deg, #f3a6a6 0 3px, #fff 3px 6px); }
+.theme-scarlet .sc-bar:hover i { background: #9c0c12; }
+.theme-scarlet .sc-bar em { position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 9.5px; color: #8a8a94; }
+.theme-scarlet .sc-bars-ref { position: absolute; left: 0; right: 0; bottom: calc(16px + 80px * var(--r)); border-top: 1px dashed #b8b8c0; pointer-events: none; }
+.theme-scarlet .sc-bars-ref small { position: absolute; right: 0; top: -14px; font-size: 9.5px; color: #8a8a94; font-weight: 600; }
+.theme-scarlet .sc-bars-empty { margin: 4px 0 0; font-size: 12.5px; }
+.theme-scarlet .sc-leave { margin: 12px 0 0; font-size: 12.5px; color: #3a3a44; }
+.theme-scarlet .sc-leave b { color: #141418; }
+.theme-scarlet .pm-attend .sc-loc-in h3 { color: #3a3a44; }
+.theme-scarlet .sc-bar { height: 80px !important; }
+/* Second screen: My attendance, Today's attendance and celebrations fit one phone screen (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .clock-block > * + * { margin-top: 10px !important; }
+  .theme-scarlet .sc-stats { padding: 10px 12px !important; }
+  .theme-scarlet .sc-stats-head { margin-bottom: 6px; }
+  .theme-scarlet .sc-kpi { padding: 6px 4px; border-radius: 12px; }
+  .theme-scarlet .sc-kpi span { font-size: 10px; }
+  .theme-scarlet .sc-kpi strong { font-size: 16px; }
+  .theme-scarlet .sc-bars-title { margin: 8px 0 2px; font-size: 11.5px; }
+  .theme-scarlet .sc-bars { height: 62px; padding-bottom: 14px; }
+  .theme-scarlet .sc-bar { height: 48px !important; }
+  .theme-scarlet .sc-bar em { bottom: -14px; font-size: 9px; }
+  .theme-scarlet .sc-bars-ref { bottom: calc(14px + 48px * var(--r)); }
+  .theme-scarlet .sc-leave { margin-top: 6px; font-size: 11.5px; }
+  .theme-scarlet .pm-attend { padding: 10px 12px !important; }
+  .theme-scarlet .pm-attend .pm-alert { margin-top: 6px !important; padding: 7px 10px !important; }
+  .theme-scarlet .pm-attend .pm-alert strong { font-size: 12.5px !important; }
+  .theme-scarlet .pm-attend .pm-alert small { font-size: 11px !important; line-height: 1.3; }
+  .theme-scarlet .pm-attend .pm-tiles { margin-top: 6px !important; gap: 6px !important; }
+  .theme-scarlet .pm-attend .pm-tile { padding: 6px 8px !important; }
+  .theme-scarlet .pm-attend .sc-tile-ico .sc-ico { width: 20px !important; height: 20px !important; }
+  .theme-scarlet .pm-attend .sc-tile-text span { font-size: 10.5px !important; }
+  .theme-scarlet .pm-attend .sc-tile-text strong { font-size: 15px !important; }
+  .theme-scarlet .pm-attend .sc-loc-in { margin-top: 6px !important; padding-top: 4px !important; }
+  .theme-scarlet .pm-attend .sc-loc-in h3 { font-size: 11.5px !important; margin-bottom: 0 !important; }
+  .theme-scarlet .pm-attend .pm-loc-row { padding: 3px 0 !important; }
+  .theme-scarlet .clock-block > .cg { padding: 10px 12px !important; }
+}
+/* Exact pages on phones (Nov 24, 2026): screen 1 = Welcome … My Workspace; screen 2 = My attendance, Today's attendance and
+   the celebrations, spread to fill the screen above the bottom bar; scrolling settles on each screen. */
+@media (max-width: 900px) {
+  html:has(.sc-first) { scroll-snap-type: y proximity; }
+  .theme-scarlet .sc-first { min-height: calc(100dvh - 26px) !important; scroll-snap-align: start; scroll-margin-top: 26px; }
+  .theme-scarlet .clock-block { box-sizing: border-box; min-height: 100dvh; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; padding: 12px 0 94px; margin-top: 0 !important; scroll-snap-align: start; }
+  .theme-scarlet .clock-block > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+}
+.theme-scarlet .sc-q-benefits { background: linear-gradient(160deg, #fff, #fff1d6) !important; } .theme-scarlet .sc-q-benefits .sc-quick-ico .em-ico { color: #d98a00 !important; }
+
+/* ===== My Benefits (employee) and Benefits (HR) (Nov 24, 2026) ===== */
+.theme-scarlet .sc-q-benefits { background: linear-gradient(160deg, #fff, #fff1d6) !important; } .theme-scarlet .sc-q-benefits .sc-quick-ico .em-ico { color: #d98a00 !important; }
+.bn-page { display: grid; gap: 12px; }
+.bn-tabs { margin-bottom: 2px; }
+.bn-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bn-totals > div { display: grid; gap: 2px; padding: 10px; border-radius: 14px; background: #fff; border: 1px solid #fbe3e3; text-align: center; }
+.bn-totals span, .bn-totals small { font-size: 11px; color: #5a5a64; }
+.bn-totals strong { font-size: 15px; color: #141418; }
+.bn-card { padding: 12px 14px; border-radius: 18px; background: #fff; border: 1px solid #fbe3e3; box-shadow: 0 6px 18px rgb(200 16 46 / .06); display: grid; gap: 8px; }
+.bn-card h3 { margin: 0; font-size: 15px; font-weight: 800; color: #c8102e; }
+.bn-card h4 { margin: 4px 0 0; font-size: 12.5px; color: #3a3a44; }
+.bn-line { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid #f6e3e3; }
+.bn-card h3 + .bn-line { border-top: 0; padding-top: 0; }
+.bn-line-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+.bn-kv { display: grid; gap: 1px; min-width: 0; }
+.bn-kv span { font-size: 11px; color: #6a6a74; }
+.bn-kv strong { font-size: 13.5px; color: #141418; overflow-wrap: anywhere; }
+.bn-chip { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.bn-ok { background: #dff5e6; color: #138a3e; } .bn-wait { background: #fff1d6; color: #8a5a00; } .bn-off { background: #eee; color: #55555f; }
+.bn-proof { font-size: 12.5px; color: #b3121a; font-weight: 600; }
+.bn-text { margin: 0; font-size: 13px; color: #2b2b33; display: grid; gap: 2px; } .bn-text span { font-size: 11px; color: #6a6a74; }
+.bn-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.bn-list li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f6e3e3; } .bn-list li span { color: #5a5a64; text-align: right; }
+.bn-meta, .bn-note { margin: 0; font-size: 11.5px; color: #6a6a74; }
+.bn-empty { padding: 16px; text-align: center; }
+.bn-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.bn-timeline li { padding: 10px 12px; border-radius: 14px; background: #fff; border: 1px solid #fbe3e3; display: grid; gap: 3px; }
+.bn-timeline p { margin: 0; font-size: 13px; color: #1f1f24; } .bn-timeline small { font-size: 11px; color: #6a6a74; }
+.bn-tag { justify-self: start; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: #fdecec; color: #b3121a; }
+.bn-tag-hmo { background: #e0ecff; color: #2350a8; } .bn-tag-allowance { background: #d9f4f1; color: #0b6f66; }
+.bn-admin { display: grid; gap: 14px; }
+.bn-admin-block h3 { margin: 0 0 6px; font-size: 15px; }
+.bn-admin-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bn-admin-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #eee; }
+.bn-admin-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* My profile → Employment (Nov 24, 2026). */
+.em-updated { margin: 0; padding: 8px 12px; border-radius: 12px; background: #eef7f1; color: #1f6b3a; font-size: 12px; font-weight: 600; }
+.em-emp .bn-card h4 { margin-top: 6px; }
+.em-moves li { align-items: flex-start; } .em-moves li > div { display: grid; gap: 2px; } .em-moves li span { text-align: left !important; font-size: 12px; } .em-moves small { white-space: nowrap; color: #6a6a74; }
+.em-changes summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
+.em-changes summary::-webkit-details-marker { display: none; }
+.em-changes summary span { font-size: 12px; font-weight: 700; color: #b3121a; background: #fdecec; border-radius: 999px; padding: 2px 9px; }
+.em-changes[open] summary { margin-bottom: 8px; }
