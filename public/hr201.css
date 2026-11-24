@@ -2488,3 +2488,5 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .theme-scarlet .employee-main > .sc-welcome { margin-top: 0 !important; }
   .theme-scarlet .employee-main:has(> .sc-welcome) { background-position: 0 146px, 0 0 !important; background-size: 100% 34px, 100% 180px !important; background-repeat: no-repeat, no-repeat !important; }
 }
+/* Philippine Time card lower, clear of the red wave (Nov 24, 2026). */
+.theme-scarlet .employee-main > .sc-welcome + .sc-clock { margin-top: 48px !important; }
