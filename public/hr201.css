@@ -2356,3 +2356,17 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .employee-top .portal-bell { width: 52px !important; height: 52px !important; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center; }
 .theme-scarlet .employee-top .portal-bell .tb-ico { width: 34px !important; height: 34px !important; }
 .theme-scarlet .sc-punch-top + .sc-rows { margin: 0 0 12px !important; }
+/* Smaller clock, Time In / Out and correction cards (Nov 24, 2026). */
+.theme-scarlet .sc-clock { padding: 10px 14px !important; border-radius: 18px !important; }
+.theme-scarlet .sc-clock .clock-zone, .theme-scarlet .sc-clock .clock-zone b { font-size: 12px !important; }
+.theme-scarlet .sc-clock time { font-size: 26px !important; line-height: 1.15 !important; }
+.theme-scarlet .sc-clock .clock-date { font-size: 12px !important; }
+.theme-scarlet .sc-greet { font-size: 12px !important; padding: 4px 10px !important; }
+.theme-scarlet .sc-skyline { width: 38%; }
+.theme-scarlet .sc-punch { gap: 10px !important; }
+.theme-scarlet .sc-punch-btn { min-height: 58px !important; border-radius: 16px !important; font-size: 15px !important; gap: 2px !important; padding: 8px !important; }
+.theme-scarlet .sc-punch-btn svg { width: 22px !important; height: 22px !important; }
+.theme-scarlet .sc-punch-btn em { font-size: 9.5px !important; padding: 1px 6px !important; top: 5px !important; right: 7px !important; }
+.theme-scarlet .sc-punch-top + .sc-rows { padding: 0 12px !important; border-radius: 14px !important; }
+.theme-scarlet .sc-punch-top + .sc-rows .pm-row { padding: 9px 2px !important; font-size: 14px !important; }
+.theme-scarlet .sc-punch-top + .sc-rows .pm-row svg { width: 18px; height: 18px; }

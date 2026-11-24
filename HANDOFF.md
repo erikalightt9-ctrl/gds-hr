@@ -281,3 +281,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Employee home (Nov 24, 2026, HR): the Office attendance (Wi-Fi) card is removed; Quick Actions follow Today's attendance. Office / off-site routing on Time In / Out is unchanged.
 - Employee home (Nov 24, 2026, HR): the 'Quick Actions' heading reads 'My Workspace'.
 - Employee home (Nov 24, 2026, HR): the 'Attendance correction request' row sits right below the Time In / Time Out buttons, above Today's attendance.
+- Employee home (Nov 24, 2026, HR): Philippine Time card, Time In / Time Out buttons (58 px) and the attendance correction row made smaller.
