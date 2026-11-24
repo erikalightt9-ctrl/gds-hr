@@ -2395,3 +2395,70 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-back { display: inline-flex !important; align-items: center; gap: 2px; width: auto !important; margin: 4px 0 8px; padding: 6px 12px 6px 6px !important; border-radius: 999px !important; background: #fff !important; border: 1px solid #fbe0e0 !important; color: #b3121a !important; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px rgb(200 16 46 / .08) !important; }
 /* My Workspace a little lower: more space above it (Nov 24, 2026). */
 .theme-scarlet .sc-quick-wrap { margin-top: 24px !important; }
+
+/* ===== Employee home: option 3 (card rich & colourful) with option 1's welcome card (Nov 24, 2026) ===== */
+/* Home screen: the red header continues behind the welcome card and ends in a wave below it. */
+@media (max-width: 900px) {
+  .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 60px !important; padding-bottom: 0 !important; background: linear-gradient(180deg, #a10c12 0%, #c8102e 100%) !important; }
+  .theme-scarlet:has(.sc-welcome) .employee-top::after { display: none !important; }
+  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: 0 !important; padding-top: 4px !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 40V26C110 6 250 0 400 14v26z' fill='%23fff6f6'/%3E%3C/svg%3E") no-repeat 0 150px / 100% 40px,
+                linear-gradient(180deg, #c8102e 0, #d81c24 120px, #c8102e 189px, transparent 189px) !important; }
+}
+/* Option 1 welcome card: red gradient, white text, white-ringed photo / initials, mascot on the right. */
+.theme-scarlet .sc-welcome { background: radial-gradient(120% 140% at 0% 0%, #ef3b3b 0%, rgb(239 59 59 / 0) 55%), linear-gradient(135deg, #e0262b 0%, #c8102e 50%, #9c0c12 100%) !important; border: 1px solid rgb(255 255 255 / .28) !important; box-shadow: 0 12px 26px rgb(90 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .25) !important; color: #fff !important; }
+.theme-scarlet .sc-welcome h1, .theme-scarlet .sc-welcome h1 span { color: #fff !important; }
+.theme-scarlet .sc-welcome h1 span { font-size: 17px !important; font-weight: 600 !important; opacity: .95; }
+.theme-scarlet .sc-namelink, .theme-scarlet .sc-namelink .sc-chev { color: #fff !important; }
+.theme-scarlet .sc-photo { border: 4px solid #fff !important; box-shadow: 0 6px 16px rgb(60 0 0 / .35) !important; }
+
+/* Clock card (option 3): soft pink to lilac with a dusk skyline. */
+.theme-scarlet .sc-clock { background: linear-gradient(110deg, #fff 0%, #fff 45%, #fbe6ee 75%, #f1dcef 100%) !important; }
+.theme-scarlet .sc-skyline { color: #b8496b !important; opacity: .5 !important; width: 48% !important; }
+
+/* Time In / Time Out / Correction Request. */
+.theme-scarlet .sc-punch-btn.is-other { background: linear-gradient(180deg, #fff 0%, #fff7f7 100%) !important; }
+
+/* My Workspace (option 3): one soft card, coloured tiles. */
+.theme-scarlet .sc-quick-wrap { background: linear-gradient(180deg, #fff 0%, #fff4f5 100%); border: 1px solid #fbe3e3; border-radius: 22px; padding: 14px 12px 12px; box-shadow: 0 10px 26px rgb(200 16 46 / .08); }
+.theme-scarlet .sc-quick-head { display: flex !important; align-items: center; gap: 10px; margin: 0 2px 12px !important; }
+.theme-scarlet .sc-ws-ico { color: #d7141a; display: inline-flex; }
+.theme-scarlet .sc-ws-ico svg { width: 28px; height: 28px; }
+.theme-scarlet .sc-ws-title { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.theme-scarlet .sc-ws-title h2 { margin: 0 !important; font-size: 17px !important; font-weight: 800; color: #c8102e !important; }
+.theme-scarlet .sc-ws-title small { font-size: 11.5px; color: #a8323d; }
+.theme-scarlet .sc-viewall { width: auto !important; padding: 4px 2px !important; background: none !important; border: 0 !important; box-shadow: none !important; color: #b3121a !important; font-size: 12.5px; font-weight: 600; }
+.theme-scarlet .sc-quick { border: 1px solid rgb(0 0 0 / .04) !important; box-shadow: 0 4px 10px rgb(0 0 0 / .05) !important; color: #2b2b33 !important; font-weight: 600 !important; }
+.theme-scarlet .sc-quick-ico .em-ico { stroke-width: 2 !important; }
+.theme-scarlet .sc-q-profile201 { background: linear-gradient(160deg, #fff, #ffe3e6) !important; } .theme-scarlet .sc-q-profile201 .sc-quick-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-attendance { background: linear-gradient(160deg, #fff, #dcf5e6) !important; } .theme-scarlet .sc-q-attendance .sc-quick-ico { color: #16a34a !important; }
+.theme-scarlet .sc-q-overtime201 { background: linear-gradient(160deg, #fff, #ffecd9) !important; } .theme-scarlet .sc-q-overtime201 .sc-quick-ico { color: #f08a12 !important; }
+.theme-scarlet .sc-q-leave { background: linear-gradient(160deg, #fff, #ece6ff) !important; } .theme-scarlet .sc-q-leave .sc-quick-ico { color: #7c4ddb !important; }
+.theme-scarlet .sc-q-payslips { background: linear-gradient(160deg, #fff, #e0ecff) !important; } .theme-scarlet .sc-q-payslips .sc-quick-ico { color: #2f6fe0 !important; }
+.theme-scarlet .sc-q-loans201 { background: linear-gradient(160deg, #fff, #d9f4f1) !important; } .theme-scarlet .sc-q-loans201 .sc-quick-ico { color: #0f9b8e !important; }
+.theme-scarlet .sc-q-memos { background: linear-gradient(160deg, #fff, #ffe1e6) !important; } .theme-scarlet .sc-q-memos .sc-quick-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-trainings { background: linear-gradient(160deg, #fff, #efe3fb) !important; } .theme-scarlet .sc-q-trainings .sc-quick-ico { color: #7a2fc0 !important; }
+
+/* Today's attendance (option 3): red title on a soft pink card, white tiles. */
+.theme-scarlet .pm-attend { background: linear-gradient(180deg, #fff4f5 0%, #fff 60%) !important; }
+.theme-scarlet .pm-attend-head h2 { color: #c8102e !important; }
+.theme-scarlet .pm-attend .pm-tile { background: #fff !important; border: 1px solid #fbe3e3 !important; box-shadow: 0 4px 10px rgb(200 16 46 / .05) !important; }
+
+/* Bottom bar (option 3): one red bar, white icons and labels. */
+@media (max-width: 900px) {
+  .theme-scarlet .sc-bottom { left: 12px !important; right: 12px !important; bottom: max(8px, env(safe-area-inset-bottom)) !important; padding: 6px !important; border-radius: 22px !important; border: 0 !important; background: linear-gradient(135deg, #e0262b 0%, #c8102e 55%, #9c0c12 100%) !important; box-shadow: 0 10px 24px rgb(140 0 0 / .35) !important; }
+  .theme-scarlet .sc-bottom button { color: #fff !important; background: transparent !important; border-radius: 16px !important; }
+  .theme-scarlet .sc-bottom button:active, .theme-scarlet .sc-bottom button.active { background: rgb(0 0 0 / .18) !important; }
+  .theme-scarlet .sc-bottom .sc-support-count { background: #fff !important; color: #c8102e !important; }
+}
+/* Workspace tile icon colours (Nov 24, 2026). */
+.theme-scarlet .sc-q-profile201 .sc-quick-ico .em-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-attendance .sc-quick-ico .em-ico { color: #16a34a !important; }
+.theme-scarlet .sc-q-overtime201 .sc-quick-ico .em-ico { color: #f08a12 !important; }
+.theme-scarlet .sc-q-leave .sc-quick-ico .em-ico { color: #7c4ddb !important; }
+.theme-scarlet .sc-q-payslips .sc-quick-ico .em-ico { color: #2f6fe0 !important; }
+.theme-scarlet .sc-q-loans201 .sc-quick-ico .em-ico { color: #0f9b8e !important; }
+.theme-scarlet .sc-q-memos .sc-quick-ico .em-ico { color: #e0262b !important; }
+.theme-scarlet .sc-q-trainings .sc-quick-ico .em-ico { color: #7a2fc0 !important; }
+.theme-scarlet .sc-skyline { opacity: .28 !important; }
+.theme-scarlet .sc-quick > span:last-child { color: #2b2b33 !important; }
