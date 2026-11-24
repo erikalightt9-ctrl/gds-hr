@@ -2374,7 +2374,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 @media (max-width: 900px) {
   .theme-scarlet .employee-top { z-index: auto !important; }
   .theme-scarlet .employee-main { position: relative; z-index: 1; }
-  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: -48px !important; }
+  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: -12px !important; }
 }
 .theme-scarlet .sc-quick-wrap { margin: 4px 0 14px !important; }
 @media (max-width: 900px) { .theme-scarlet .employee-top { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; } }
@@ -2383,3 +2383,8 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-punch:has(.sc-corr) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
 .theme-scarlet .sc-punch .sc-punch-btn { font-size: 13.5px !important; line-height: 1.15; text-align: center; }
 .theme-scarlet .sc-corr span { font-size: 12.5px; }
+/* Smaller My Workspace cards (Nov 24, 2026). */
+.theme-scarlet .sc-quick-head h2 { font-size: 17px !important; }
+.theme-scarlet .sc-quick-grid { gap: 8px !important; }
+.theme-scarlet .sc-quick { min-height: 66px !important; padding: 8px 4px !important; gap: 4px !important; border-radius: 14px !important; font-size: 11.5px !important; }
+.theme-scarlet .sc-quick-ico .em-ico, .theme-scarlet .sc-quick-ico .sc-ico { width: 24px !important; height: 24px !important; }
