@@ -2599,3 +2599,12 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .bn-admin-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bn-admin-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #eee; }
 .bn-admin-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* My profile → Employment (Nov 24, 2026). */
+.em-updated { margin: 0; padding: 8px 12px; border-radius: 12px; background: #eef7f1; color: #1f6b3a; font-size: 12px; font-weight: 600; }
+.em-emp .bn-card h4 { margin-top: 6px; }
+.em-moves li { align-items: flex-start; } .em-moves li > div { display: grid; gap: 2px; } .em-moves li span { text-align: left !important; font-size: 12px; } .em-moves small { white-space: nowrap; color: #6a6a74; }
+.em-changes summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
+.em-changes summary::-webkit-details-marker { display: none; }
+.em-changes summary span { font-size: 12px; font-weight: 700; color: #b3121a; background: #fdecec; border-radius: 999px; padding: 2px 9px; }
+.em-changes[open] summary { margin-bottom: 8px; }

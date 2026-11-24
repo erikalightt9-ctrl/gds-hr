@@ -12,9 +12,13 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
   let fileView = 'profile';
   const showProfile = () => { fileView = 'profile'; };
   async function file201(box) {
-    box.innerHTML = `<div class="tabs sub-tabs"><button data-file-view="profile" class="${fileView === 'profile' ? 'active' : ''}">👤 Profile</button><button data-file-view="documents" class="${fileView === 'documents' ? 'active' : ''}">📁 Documents</button></div><div id="file201-view"><div class="loading">Loading…</div></div>`;
+    box.innerHTML = `<div class="tabs sub-tabs"><button data-file-view="profile" class="${fileView === 'profile' ? 'active' : ''}">👤 Profile</button><button data-file-view="employment" class="${fileView === 'employment' ? 'active' : ''}">💼 Employment</button><button data-file-view="documents" class="${fileView === 'documents' ? 'active' : ''}">📁 Documents</button></div><div id="file201-view"><div class="loading">Loading…</div></div>`;
     box.querySelector('.sub-tabs').onclick = e => { const b = e.target.closest('[data-file-view]'); if (b && b.dataset.fileView !== fileView) { fileView = b.dataset.fileView; file201(box); } };
     const view = box.querySelector('#file201-view');
+    if (fileView === 'employment') {
+      // Employment information (live from the HR records; loaded on first use).
+      try { const [{ renderEmployment }, data] = await Promise.all([import('./portal-employment.js'), api('/me/employment')]); return renderEmployment(view, data, esc); } catch (error) { view.innerHTML = `<div class="notice">${esc(/not found|import|module/i.test(error.message) ? 'Employment information will be available after the HR server restarts.' : error.message)}</div>`; return; }
+    }
     return fileView === 'profile' ? profile(view, await api('/hr/me/profile')) : documents(view, await api('/hr/me/documents'));
   }
   let noticeView = 'memos';
