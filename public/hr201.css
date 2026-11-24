@@ -2608,3 +2608,73 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .em-changes summary::-webkit-details-marker { display: none; }
 .em-changes summary span { font-size: 12px; font-weight: 700; color: #b3121a; background: #fdecec; border-radius: 999px; padding: 2px 9px; }
 .em-changes[open] summary { margin-bottom: 8px; }
+
+/* ===== My leave: Leave Details form and leave calendar (Nov 25, 2026) ===== */
+.lv-card { margin-bottom: 16px; padding: 18px 16px; border-radius: 24px; background: #fff; border: 1px solid #f6dede; box-shadow: 0 12px 30px rgb(200 16 46 / .08); }
+.lv-form { display: grid; gap: 14px; }
+.lv-title { display: flex; align-items: center; gap: 12px; margin: 0 0 2px; padding-bottom: 12px; border-bottom: 1.5px solid #f3c9c9; font-size: 22px; font-weight: 800; color: #14183a; }
+.lv-title-ico { display: inline-flex; color: #d7141a; padding-bottom: 6px; border-bottom: 3px solid #d7141a; margin-bottom: -14px; }
+.lv-title-ico svg { width: 30px; height: 30px; }
+.lv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lv-field { display: grid; gap: 6px; margin: 0; }
+.lv-label { font-size: 15px; font-weight: 700; color: #14183a; }
+.lv-label i { color: #d7141a; font-style: normal; font-weight: 800; }
+.lv-input { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 14px; border-radius: 16px; background: linear-gradient(180deg, #fff, #fbf7f8); border: 1px solid #e9dfe1; box-shadow: 0 3px 10px rgb(0 0 0 / .04) inset, 0 2px 6px rgb(200 16 46 / .04); }
+.lv-input:focus-within { border-color: #d7141a; box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
+.lv-input > svg { flex: 0 0 auto; width: 22px; height: 22px; color: #d7141a; }
+.lv-input select, .lv-input input, .lv-input textarea { flex: 1 1 auto; min-width: 0; width: 100%; border: 0 !important; background: transparent !important; box-shadow: none !important; outline: none; padding: 12px 0 !important; font-size: 16px; color: #1f1f24; font-family: inherit; }
+.lv-area { align-items: flex-start; } .lv-area > svg { margin-top: 13px; }
+.lv-input textarea { resize: vertical; min-height: 72px; }
+.lv-count { justify-self: end; font-size: 13px; color: #3a3a44; }
+.lv-note { display: flex; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #eaf1fd; border: 1px solid #cfe0fa; color: #1f3d8a; }
+.lv-note > svg { flex: 0 0 auto; width: 26px; height: 26px; color: #2342b8; }
+.lv-note strong { display: block; font-size: 15px; color: #1f3d8a; }
+.lv-note p { margin: 2px 0 0; font-size: 13.5px; line-height: 1.45; color: #2a3f7a; }
+.lv-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+.lv-cancel, .lv-submit { display: inline-flex !important; align-items: center; justify-content: center; gap: 10px; min-height: 52px; border-radius: 16px !important; font-size: 17px; font-weight: 800; width: 100% !important; cursor: pointer; }
+.lv-cancel { background: #fff !important; color: #c8102e !important; border: 1.5px solid #e0262b !important; box-shadow: none !important; }
+.lv-submit { background: linear-gradient(135deg, #ef2b2b 0%, #c8102e 60%, #a50d14 100%) !important; color: #fff !important; border: 0 !important; box-shadow: 0 10px 22px rgb(200 16 46 / .3) !important; }
+.lv-submit svg { width: 22px; height: 22px; }
+.lv-submit:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 420px) { .lv-row { gap: 10px; } .lv-input { padding: 0 10px; gap: 8px; } .lv-input select, .lv-input input { font-size: 15px; } .lv-label { font-size: 14px; } }
+
+/* Leave calendar. */
+.lv-cal { padding: 4px 14px 14px; display: grid; gap: 10px; }
+.lv-cal-head { display: flex; align-items: center; justify-content: space-between; }
+.lv-cal-head strong { font-size: 16px; color: #14183a; }
+.lv-cal-nav { width: 38px !important; height: 38px; padding: 0 !important; border-radius: 12px !important; background: #fff !important; border: 1px solid #f0d2d2 !important; color: #c8102e !important; font-size: 22px; line-height: 1; box-shadow: none !important; }
+.lv-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: #3a3a44; }
+.lv-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lv-legend b { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+.lv-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.lv-cal-wd { text-align: center; font-size: 11px; font-weight: 700; color: #6a6a74; padding: 2px 0; }
+.lv-cal-cell { position: relative; aspect-ratio: 1 / 1; min-height: 38px; display: grid; place-items: center; border-radius: 12px !important; border: 1px solid #f3e6e6 !important; background: #fff !important; color: #2b2b33 !important; font-weight: 600; font-size: 14px; padding: 0 !important; box-shadow: none !important; width: auto !important; cursor: pointer; }
+.lv-cal-cell.empty { border: 0 !important; background: transparent !important; cursor: default; }
+.lv-cal-cell.today span { text-decoration: underline; text-underline-offset: 3px; }
+.lv-cal-cell.has { color: #fff !important; border-color: transparent !important; }
+.lv-cal-cell.picked { outline: 3px solid #14183a; outline-offset: 1px; }
+.lv-cal-cell.pending { background: #fff !important; border: 2px dashed currentColor !important; }
+.lv-sil, b.lv-sil { background: #2f6fe0 !important; } .lv-cal-cell.pending.lv-sil { color: #2f6fe0 !important; }
+.lv-half, b.lv-half { background: #f08a12 !important; } .lv-cal-cell.pending.lv-half { color: #c46a00 !important; }
+.lv-vl, b.lv-vl { background: #16a34a !important; } .lv-cal-cell.pending.lv-vl { color: #138a3e !important; }
+.lv-other, b.lv-other { background: #7c4ddb !important; } .lv-cal-cell.pending.lv-other { color: #6a3fc4 !important; }
+.lv-cal-cell.pending.has { background: #fff !important; }
+b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
+.lv-dots { position: absolute; bottom: 3px; left: 0; right: 0; display: flex; justify-content: center; gap: 2px; }
+.lv-dots b { width: 6px; height: 6px; border-radius: 50%; border: 1px solid #fff; }
+.lv-cal-hint { margin: 0; font-size: 12.5px; color: #6a6a74; text-align: center; }
+.lv-cal-detail { display: grid; gap: 8px; }
+.lv-cal-detail h4 { margin: 4px 0 0; font-size: 14px; color: #14183a; }
+.lv-cal-detail article { padding: 10px 12px; border-radius: 14px; background: #fff; border: 1px solid #f0e3e3; border-left: 5px solid; display: grid; gap: 6px; }
+.lv-cal-detail article.lv-sil { border-left-color: #2f6fe0; background: #fff !important; } .lv-cal-detail article.lv-half { border-left-color: #f08a12; background: #fff !important; }
+.lv-cal-detail article.lv-vl { border-left-color: #16a34a; background: #fff !important; } .lv-cal-detail article.lv-other { border-left-color: #7c4ddb; background: #fff !important; }
+.lv-cal-detail-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.lv-status { font-size: 11px; font-weight: 800; padding: 2px 9px; border-radius: 999px; } .lv-status.approved { background: #dff5e6; color: #138a3e; } .lv-status.pending { background: #fff1d6; color: #8a5a00; }
+.lv-cal-detail dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.lv-cal-detail dt { font-size: 11px; color: #6a6a74; } .lv-cal-detail dd { margin: 0; font-size: 13px; font-weight: 600; color: #1f1f24; }
+.lv-reason { margin: 0; display: grid; gap: 2px; font-size: 13.5px; color: #1f1f24; } .lv-reason span { font-size: 11px; color: #6a6a74; }
+.lv-card { box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; }
+.lv-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+.lv-field, .lv-input { min-width: 0; box-sizing: border-box; }
+.lv-input input[type="date"], .lv-input input[type="time"] { min-width: 0; width: 100%; }
+.lv-input input::-webkit-calendar-picker-indicator { margin-left: 0; padding: 0; }

@@ -1,6 +1,6 @@
 import { messagesButton } from './messages.js';
 import { noticeDetail } from './notice-detail.js';
-import { reasonPicker, bindReasonPickers, readReason, LEAVE_REASONS, passkeyCreate, passkeySupported, screenLockHere, mountFeishuLink } from './hr-common.js';
+import { bindReasonPickers, readReason, passkeyCreate, passkeySupported, screenLockHere, mountFeishuLink } from './hr-common.js';
 const componentNames = { basic: 'Basic salary', holidayPay: 'Holiday pay', leavePay: 'Leave pay', regularOT: 'Regular overtime', restDay: 'Rest day pay', restOT: 'Rest day overtime', nsd: 'Night shift differential', specialHoliday: 'Special holiday pay', specialOT: 'Special holiday overtime', regularHoliday: 'Regular / double holiday pay', regularHolidayOT: 'Holiday overtime', otherHoliday: 'Other holiday pay', otherOT: 'Other holiday overtime', allowance: 'Allowances', additional: 'Additional pay', thirteenth: '13th month pay', late: 'Late deduction', undertime: 'Undertime', absence: 'Unpaid leave / absence', tax: 'Withholding tax', loans: 'Loan deductions', other: 'Other authorized deductions', SSS: 'SSS', PhilHealth: 'PhilHealth', 'Pag-IBIG': 'Pag-IBIG' };
 // Common reasons for an attendance explanation (late, undertime, missed clock-in/out). "Other" lets the employee type one.
 const EXPLANATION_REASONS = ['Traffic / transportation delay', 'Medical / health reason', 'Family emergency', 'Official business / client meeting', 'Work from home / field work', 'Forgot to time in or time out', 'System or device problem (GPS / app / internet)', 'Weather / natural calamity', 'Approved schedule change'];
@@ -28,7 +28,7 @@ const MENU_GROUPS = [['', ['profile201']], ['Time &amp; attendance', ['attendanc
 export function createPortal(ctx) {
   const { api, esc, money, toast, openDialog, dialog, refresh, render, app, today } = ctx;
   const table = (headers, rows, empty = 'Nothing to show yet.') => ctx.table(headers, rows, empty);
-  let attendanceView = 'history', calMonth = '', calDay = '';
+  let attendanceView = 'history', calMonth = '', calDay = '', lvMonth = '', lvDay = '';
   let explanationList = [];
   let tab = 'dashboard', currentPayslip = null, dirty = false, liveFilter = 'All', pendingClock = null, historyOverride = null, historyEnd = false;
   let clockTimer;
@@ -144,8 +144,43 @@ export function createPortal(ctx) {
     const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Unable to read the file.')); reader.readAsDataURL(file); });
     return api('/me/documents', { type: 'Leave Supporting', name: file.name, mime: file.type, data, expiry: '', remarks: 'Leave proof' });
   }
+  // Leave calendar (Nov 25, 2026): this month's leave by kind (Service incentive / Half day / Vacation / Other leave);
+  // pending leave is outlined, rejected and cancelled requests are left off; tapping a date shows its leave details.
+  const LV_KINDS = [['sil', 'Service incentive leave'], ['half', 'Half-day leave'], ['vl', 'Vacation leave'], ['other', 'Other leave']];
+  function leaveDates(l) {
+    if (l.countedDates?.length) return l.countedDates;
+    const out = []; for (let d = new Date(`${l.startDate}T00:00:00Z`); d <= new Date(`${l.endDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10));
+    return out;
+  }
+  function leaveKind(l, date, data) {
+    if ((l.partialDates || []).includes(date) || (Number(l.days) > 0 && Number(l.days) < 1)) return 'half';
+    const name = data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId || '';
+    return /service incentive|\bSIL\b/i.test(name) ? 'sil' : /vacation/i.test(name) ? 'vl' : 'other';
+  }
+  function leaveCalendar(data) {
+    const month = lvMonth || today().slice(0, 7), [y, m] = month.split('-').map(Number);
+    const first = new Date(Date.UTC(y, m - 1, 1)), days = new Date(Date.UTC(y, m, 0)).getUTCDate(), lead = first.getUTCDay();
+    const byDate = new Map();
+    for (const l of data.leaves.filter(x => ['approved', 'pending'].includes(x.status))) for (const d of leaveDates(l)) if (d.startsWith(month)) byDate.set(d, [...(byDate.get(d) || []), l]);
+    const cells = Array.from({ length: lead }, () => '<span class="lv-cal-cell empty"></span>').concat(Array.from({ length: days }, (_, k) => {
+      const date = `${month}-${String(k + 1).padStart(2, '0')}`, list = byDate.get(date) || [], kinds = [...new Set(list.map(l => leaveKind(l, date, data)))];
+      const pending = list.length && list.every(l => l.status === 'pending');
+      return `<button type="button" class="lv-cal-cell${list.length ? ` has lv-${kinds[0]}` : ''}${pending ? ' pending' : ''}${date === lvDay ? ' picked' : ''}${date === today() ? ' today' : ''}" data-lv-day="${date}" aria-label="${date}${list.length ? `, ${list.length} leave` : ''}"><span>${k + 1}</span>${kinds.length > 1 ? `<i class="lv-dots">${kinds.map(x => `<b class="lv-${x}"></b>`).join('')}</i>` : ''}</button>`;
+    }));
+    const label = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const picked = lvDay && lvDay.startsWith(month) ? byDate.get(lvDay) || [] : null;
+    const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const STATUS = { pending: 'Pending', approved: 'Approved' };
+    const details = picked === null ? '<p class="lv-cal-hint">Tap a date to see the leave on that day.</p>' : !picked.length ? `<div class="lv-cal-detail"><h4>${esc(nice(lvDay))}</h4><p class="muted">No leave on this date.</p></div>`
+      : `<div class="lv-cal-detail"><h4>${esc(nice(lvDay))}</h4>${picked.map(l => { const k = leaveKind(l, lvDay, data); return `<article class="lv-${k}"><div class="lv-cal-detail-head"><strong>${esc(data.balances.find(b => b.typeId === l.typeId)?.name || l.typeId)}</strong><span class="lv-status ${l.status}">${esc(STATUS[l.status] || l.status)}</span></div>
+          <dl><div><dt>Dates</dt><dd>${esc(l.startDate === l.endDate ? nice(l.startDate) : `${nice(l.startDate)} – ${nice(l.endDate)}`)}</dd></div><div><dt>Time</dt><dd>${l.startTime || l.endTime ? esc(`${l.startTime || '—'} – ${l.endTime || '—'}`) : 'Whole day'}</dd></div><div><dt>Days</dt><dd>${esc(String(l.days))}</dd></div>${l.reference ? `<div><dt>Reference</dt><dd>${esc(l.reference)}</dd></div>` : ''}</dl>
+          <p class="lv-reason"><span>Reason</span>${esc(l.reason || '—')}</p>${l.hrRemarks ? `<p class="lv-reason"><span>HR remarks</span>${esc(l.hrRemarks)}</p>` : ''}</article>`; }).join('')}</div>`;
+    return `<div class="lv-cal"><div class="lv-cal-head"><button type="button" class="lv-cal-nav" data-lv-nav="-1" aria-label="Previous month">‹</button><strong>${esc(label)}</strong><button type="button" class="lv-cal-nav" data-lv-nav="1" aria-label="Next month">›</button></div>
+      <div class="lv-legend">${LV_KINDS.map(([k, n]) => `<span><b class="lv-${k}"></b>${n}</span>`).join('')}<span><b class="lv-pending-key"></b>Pending</span></div>
+      <div class="lv-cal-grid">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<span class="lv-cal-wd">${d}</span>`).join('')}${cells.join('')}</div>${details}</div>`;
+  }
   function leaveContent(data) {
-    return `<section class="panel"><div class="panel-head"><h2>Apply for leave</h2></div><form data-employee-leave><div class="panel-body form-grid"><label class="field">Leave type<select name="typeId" required>${data.balances.map(b => `<option value="${esc(b.typeId)}">${esc(b.name)}</option>`).join('')}</select></label>${field('startDate', 'Start date', 'date', today(), 'required')}${field('startTime', 'Start time', 'time', data.today?.scheduledIn || '09:00', 'required')}${field('endDate', 'End date', 'date', today(), 'required')}${field('endTime', 'End time', 'time', data.today?.scheduledOut || '18:00', 'required')}<p class="field-hint full">For a half day, set the times (e.g. 14:00 to 18:00). About half a workday or less counts as 0.5 day.</p>${reasonPicker(LEAVE_REASONS)}<label class="field">Proof / supporting document<input type="file" name="proofFile" accept="application/pdf,image/png,image/jpeg"><small class="field-hint">Required for leave of 2 days or more (you may also upload it when you return). For shorter leave it is optional unless HR asks.</small></label></div><div class="panel-foot"><button class="primary" ${data.employee.draft || !data.balances.length ? 'disabled' : ''}>Submit leave request</button></div></form></section><section class="panel"><div class="panel-head"><h2>My leave applications</h2>${downloads('my-leaves')}</div>${(() => {
+    return `<section class="lv-card"><form data-employee-leave class="lv-form"><h2 class="lv-title"><span class="lv-title-ico"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg></span>Leave Details</h2><label class="lv-field"><span class="lv-label"><i aria-hidden="true">*</i> Leave Type</span><span class="lv-input"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M8 7v13M16 7v13"/></svg><select name="typeId" required>${data.balances.map(b => `<option value="${esc(b.typeId)}">${esc(b.name)}</option>`).join('')}</select></span></label><div class="lv-row"><label class="lv-field"><span class="lv-label"><i aria-hidden="true">*</i> Start Date</span><span class="lv-input"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/></svg><input type="date" name="startDate" required value="${esc(today())}"></span></label><label class="lv-field"><span class="lv-label"><i aria-hidden="true">*</i> Start Time</span><span class="lv-input"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><input type="time" name="startTime" required value="${esc(data.today?.scheduledIn || '09:00')}"></span></label></div><div class="lv-row"><label class="lv-field"><span class="lv-label"><i aria-hidden="true">*</i> End Date</span><span class="lv-input"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/></svg><input type="date" name="endDate" required value="${esc(today())}"></span></label><label class="lv-field"><span class="lv-label"><i aria-hidden="true">*</i> End Time</span><span class="lv-input"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><input type="time" name="endTime" required value="${esc(data.today?.scheduledOut || '18:00')}"></span></label></div><label class="lv-field"><span class="lv-label"><i aria-hidden="true">*</i> Reason</span><span class="lv-input lv-area"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><textarea name="reason" required minlength="3" maxlength="500" rows="3" placeholder="Enter reason for your leave..." data-lv-reason></textarea></span><small class="lv-count" data-lv-count>0/500</small></label><div class="lv-note"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 10.5v6M12 7.5v.01" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg><div><strong>Note</strong><p>For a half day, set the times (e.g. 14:00 to 18:00). About half a workday or less counts as 0.5 day.</p></div></div><div class="lv-actions"><button type="button" class="lv-cancel" data-lv-cancel>Cancel</button><button type="submit" class="lv-submit" ${data.employee.draft || !data.balances.length ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg><span>Submit</span></button></div></form></section><section class="panel"><div class="panel-head"><h2>My leave applications</h2>${downloads('my-leaves')}</div>${leaveCalendar(data)}${(() => {
       // Dates · time · type of leave · days · status (newest first); HR remarks under the status, proof / cancel at the end.
       const nice = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
       const STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
@@ -282,16 +317,18 @@ export function createPortal(ctx) {
     if (tab === 'dashboard') ctx.portalHr?.celebrations(app.querySelector('.employee-main'));
     ctx.portalHr?.compliance(app, tab === 'dashboard');
     bindReasonPickers(app);
+    app.querySelectorAll('[data-lv-reason]').forEach(area => { const count = area.closest('.lv-field')?.querySelector('[data-lv-count]'); area.addEventListener('input', () => { if (count) count.textContent = `${area.value.length}/500`; }); });
+    app.querySelectorAll('[data-lv-cancel]').forEach(b => { b.onclick = () => { const f = b.closest('form'); f.reset(); f.querySelector('[data-lv-count]').textContent = '0/500'; dirty = false; }; });
     app.querySelectorAll('form').forEach(form => { form.oninput = () => { dirty = true; }; form.onchange = () => { dirty = true; }; form.onsubmit = submitForm; });
     app.querySelector('[data-reason-select]')?.addEventListener('change', event => { const other = app.querySelector('[data-reason-other]'); const show = event.target.value === 'Other'; other.classList.toggle('hidden', !show); other.querySelector('input').required = show; });
     async function submitForm(event) {
-      event.preventDefault(); const form = event.target, b = form.querySelector('button'); b.disabled = true;
+      event.preventDefault(); const form = event.target, b = form.querySelector('button:not([type="button"])') || form.querySelector('button'); b.disabled = true;
       let confirmation = null;
       try {
         const values = Object.fromEntries(new FormData(form));
         if (form.hasAttribute('data-employee-leave')) {
           const file = form.elements.proofFile?.files[0]; delete values.proofFile;
-          values.reason = readReason(values); delete values.reasonChoice; delete values.reasonOther; delete values.reasonDetails;
+          values.reason = String(values.reason || '').trim() || readReason(values); delete values.reasonChoice; delete values.reasonOther; delete values.reasonDetails;
           if (file) values.documentId = (await uploadProof(file)).id;
           await api('/me/leaves', values);
           const typeName = data.balances?.find(x => x.typeId === values.typeId)?.name || 'Leave';
@@ -604,6 +641,8 @@ export function createPortal(ctx) {
       tab = section ? 'attendance' : target; dirty = false; render(); window.scrollTo({ top: 0 });
     }
     if (button.dataset.calNav) { const [y, m] = (calMonth || today().slice(0, 7)).split('-').map(Number), d = new Date(Date.UTC(y, m - 1 + Number(button.dataset.calNav), 1)); calMonth = d.toISOString().slice(0, 7); calDay = ''; render(); return; }
+    if (button.dataset.lvNav) { const [y, m] = (lvMonth || today().slice(0, 7)).split('-').map(Number), d = new Date(Date.UTC(y, m - 1 + Number(button.dataset.lvNav), 1)); lvMonth = d.toISOString().slice(0, 7); lvDay = ''; render(); return; }
+    if (button.dataset.lvDay) { lvDay = lvDay === button.dataset.lvDay ? '' : button.dataset.lvDay; render(); app.querySelector('.lv-cal')?.scrollIntoView({ block: 'nearest' }); return; }
     if (button.dataset.calDay) { calDay = button.dataset.calDay; render(); return; }
     if (button.dataset.attendanceView) { attendanceView = button.dataset.attendanceView; dirty = false; render(); }
     if (button.dataset.attendanceJump) { attendanceView = button.dataset.attendanceJump; dirty = false; render(); }
