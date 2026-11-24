@@ -287,7 +287,10 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       // Home screen order (Nov 24, 2026): welcome, clock, attendance, quick actions, then greetings.
       box.firstElementChild.querySelector('[data-cg-toggle]')?.addEventListener('click', e => { const sec = e.currentTarget.closest('.cg'), open = sec.classList.toggle('cg-open'); e.currentTarget.setAttribute('aria-expanded', String(open)); });
       const section = box.firstElementChild, anchor = main.querySelector('#portal-content') || main.querySelector('.employee-welcome');
-      if (anchor?.id === 'portal-content') anchor.before(section); else if (anchor) anchor.after(section); else main.prepend(section);
+      // Home screen: right after Today's attendance, inside the same block, so the second screen shows My attendance,
+      // Today's attendance and the celebrations together (Nov 24, 2026).
+      const block = main.querySelector('.clock-block');
+      if (block) block.append(section); else if (anchor?.id === 'portal-content') anchor.before(section); else if (anchor) anchor.after(section); else main.prepend(section);
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }

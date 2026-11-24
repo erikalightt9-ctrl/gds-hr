@@ -2525,3 +2525,31 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-leave b { color: #141418; }
 .theme-scarlet .pm-attend .sc-loc-in h3 { color: #3a3a44; }
 .theme-scarlet .sc-bar { height: 80px !important; }
+/* Second screen: My attendance, Today's attendance and celebrations fit one phone screen (Nov 24, 2026). */
+@media (max-width: 900px) {
+  .theme-scarlet .clock-block > * + * { margin-top: 10px !important; }
+  .theme-scarlet .sc-stats { padding: 10px 12px !important; }
+  .theme-scarlet .sc-stats-head { margin-bottom: 6px; }
+  .theme-scarlet .sc-kpi { padding: 6px 4px; border-radius: 12px; }
+  .theme-scarlet .sc-kpi span { font-size: 10px; }
+  .theme-scarlet .sc-kpi strong { font-size: 16px; }
+  .theme-scarlet .sc-bars-title { margin: 8px 0 2px; font-size: 11.5px; }
+  .theme-scarlet .sc-bars { height: 62px; padding-bottom: 14px; }
+  .theme-scarlet .sc-bar { height: 48px !important; }
+  .theme-scarlet .sc-bar em { bottom: -14px; font-size: 9px; }
+  .theme-scarlet .sc-bars-ref { bottom: calc(14px + 48px * var(--r)); }
+  .theme-scarlet .sc-leave { margin-top: 6px; font-size: 11.5px; }
+  .theme-scarlet .pm-attend { padding: 10px 12px !important; }
+  .theme-scarlet .pm-attend .pm-alert { margin-top: 6px !important; padding: 7px 10px !important; }
+  .theme-scarlet .pm-attend .pm-alert strong { font-size: 12.5px !important; }
+  .theme-scarlet .pm-attend .pm-alert small { font-size: 11px !important; line-height: 1.3; }
+  .theme-scarlet .pm-attend .pm-tiles { margin-top: 6px !important; gap: 6px !important; }
+  .theme-scarlet .pm-attend .pm-tile { padding: 6px 8px !important; }
+  .theme-scarlet .pm-attend .sc-tile-ico .sc-ico { width: 20px !important; height: 20px !important; }
+  .theme-scarlet .pm-attend .sc-tile-text span { font-size: 10.5px !important; }
+  .theme-scarlet .pm-attend .sc-tile-text strong { font-size: 15px !important; }
+  .theme-scarlet .pm-attend .sc-loc-in { margin-top: 6px !important; padding-top: 4px !important; }
+  .theme-scarlet .pm-attend .sc-loc-in h3 { font-size: 11.5px !important; margin-bottom: 0 !important; }
+  .theme-scarlet .pm-attend .pm-loc-row { padding: 3px 0 !important; }
+  .theme-scarlet .clock-block > .cg { padding: 10px 12px !important; }
+}
