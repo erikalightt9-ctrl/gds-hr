@@ -17,7 +17,7 @@ test('salary: no direct edits; a change needs a reason, an effective date and a 
     assert.throws(() => requestSalaryChange(store, hr, { employeeId: e.id, monthlySalary: 40000, effectiveDate: '2026-12-01', reason: 'short' }), /reason/);
     const c = requestSalaryChange(store, hr, { employeeId: e.id, monthlySalary: 40000, effectiveDate: '2026-01-01', reason: 'Regularization after probation' });
     assert.throws(() => requestSalaryChange(store, hr, { employeeId: e.id, monthlySalary: 41000, effectiveDate: '2026-01-01', reason: 'Another change meanwhile' }), /already waiting/);
-    assert.throws(() => decideSalaryChange(store, hr, c.id, { decision: 'approve' }), /permission/i, 'HR cannot approve');
+    assert.throws(() => decideSalaryChange(store, hr, c.id, { decision: 'approve' }), /second person/, 'the requester cannot approve (a Company Admin may approve requests of others, Nov 24, 2026)');
     const applied = decideSalaryChange(store, payroll, c.id, { decision: 'approve' });
     assert.equal(applied.status, 'applied', 'effective date reached: applied at once');
     assert.equal(store.read().employees[0].monthlySalary, 40000);

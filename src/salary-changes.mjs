@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { AppError, permit, saveRecord } from './service.mjs';
 import { saveProfile } from './profiles.mjs';
 
-const REQUESTERS = ['admin', 'hr', 'payroll'], APPROVERS = ['admin', 'payroll'];
+const REQUESTERS = ['admin', 'hr', 'payroll'], APPROVERS = ['admin', 'hr', 'payroll'];   // Company Admin approves compensation (Nov 24, 2026)
 const manilaToday = (now = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
 export const ensureSalaryChanges = db => db.exec('CREATE TABLE IF NOT EXISTS salary_changes (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL)');
 const all = (store, employeeId = null) => { ensureSalaryChanges(store.db); return (employeeId ? store.db.prepare('SELECT data FROM salary_changes WHERE employee_id=? ORDER BY rowid DESC').all(employeeId) : store.db.prepare('SELECT data FROM salary_changes ORDER BY rowid DESC').all()).map(r => JSON.parse(r.data)); };

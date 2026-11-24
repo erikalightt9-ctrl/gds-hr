@@ -139,3 +139,25 @@ test('HR Reset password also emails the link to the registered email; the employ
     assert.match(f.token, /^[a-f0-9]{64}$/);
   } finally { store.close(); }
 });
+
+test('logins sharing one email get one message with a link for each; each link resets its own login', async () => {
+  const { store, admin, employee } = await fixture();
+  try {
+    const mailer = fakeMailer();
+    const staff = await addUser(store, { username: 'company.admin', password: 'initial-password-123', role: 'admin', email: 'same@gds.example' }, admin);
+    setUserEmail(store, admin, employee.id, 'Same@GDS.example');
+    assert.equal(await requestRecovery(store, 'same@gds.example', { mailer, origin: 'https://hr.example.com' }).delivery, true);
+    assert.equal(mailer.sent.length, 1, 'one message');
+    const tokens = [...mailer.sent[0].text.matchAll(/#reset=([a-f0-9]{64})/g)].map(m => m[1]);
+    assert.equal(tokens.length, 2);
+    assert.match(mailer.sent[0].text, /company\.admin:/); assert.match(mailer.sent[0].text, /EMP-001:/);
+    await redeemPasswordReset(store, tokens[mailer.sent[0].text.indexOf('company.admin') < mailer.sent[0].text.indexOf('EMP-001') ? 0 : 1], 'admin-new-pass-9');
+    await login(store, 'company.admin', 'admin-new-pass-9', 'test');
+    await login(store, 'EMP-001', 'employee-password-1', 'test');   // the other login is unchanged
+    assert.ok(staff);
+    // By username only that login gets a link.
+    mailer.sent.length = 0; store.db.prepare('DELETE FROM password_resets').run();
+    await requestRecovery(store, 'EMP-001', { mailer, origin: 'https://hr.example.com' }).delivery;
+    assert.equal([...mailer.sent[0].text.matchAll(/#reset=/g)].length, 1);
+  } finally { store.close(); }
+});

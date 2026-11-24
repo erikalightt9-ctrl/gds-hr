@@ -78,6 +78,7 @@ test('Add user stores the registered email used by Forgot password; invalid or d
     assert.equal(hr.email, 'hr.one@example.com');
     assert.equal(registeredEmail(db, db.db.prepare('SELECT * FROM users WHERE id=?').get(hr.id)), 'hr.one@example.com');
     await assert.rejects(() => addUser(db, { username: 'hr.two', password: 'initial-password-123', role: 'viewer', email: 'not an email' }, actor), /valid email/);
-    await assert.rejects(() => addUser(db, { username: 'hr.three', password: 'initial-password-123', role: 'viewer', email: 'HR.ONE@example.com' }, actor), /already uses this email/);
+    const shared = await addUser(db, { username: 'hr.three', password: 'initial-password-123', role: 'viewer', email: 'HR.ONE@example.com' }, actor);
+    assert.equal(shared.email, 'HR.ONE@example.com', 'one email may serve several logins (Nov 24, 2026)');
   } finally { db.close(); }
 });

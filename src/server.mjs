@@ -46,7 +46,7 @@ import { confirmRunPayment, confirmLoanPayment } from './payment-tracking.mjs';
 import { setAccountScope, scopeOf, canSeePay, canSeeSensitive, PAY_PATHS, stripForPermissions } from './account-scope.mjs';
 import { permissionContext } from './company-scope.mjs';
 import { scopeContext, companyScope, filterPayload, refusedSingle, recordOwner, namedEmployees, REFUSED } from './company-scope.mjs';
-import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
+import { addUser, setDisplayName, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
 import { leaveBalance } from './engine.mjs';
 import { payrollWorkbook } from './export.mjs';
@@ -488,11 +488,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (proofReview && req.method === 'POST') { send(200, reviewLeaveProof(store, auth.user, proofReview[1], await readBody(req))); return; }
       const proofRequest = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/request-proof$/);
       if (proofRequest && req.method === 'POST') { send(200, requestLeaveProof(store, auth.user, proofRequest[1], await readBody(req))); return; }
-      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete|scope)$/);
+      const userAction = pathname.match(/^\/api\/users\/([a-f0-9-]+)\/(reset|access|email|delete|scope|name)$/);
       if (userAction && req.method === 'POST') {
         permit(auth.user, ['admin']); const body = await readBody(req);
         if (userAction[2] === 'reset') { const v = z.object({ resetMfa: z.boolean().default(false) }).strict().parse(body); const r = issuePasswordReset(store, auth.user, userAction[1], v.resetMfa, { mailer, origin }); const emailed = await r.delivery; send(200, { token: r.token, expires: r.expires, message: r.message, sentTo: emailed ? r.sentTo : null, emailFailed: !!r.sentTo && !emailed }); }
         else if (userAction[2] === 'delete') { const v = z.object({ confirm: z.string().max(80) }).strict().parse(body); send(200, deleteUser(store, auth.user, userAction[1], v.confirm)); }
+        else if (userAction[2] === 'name') { const v = z.object({ name: z.string().max(200) }).strict().parse(body); send(200, setDisplayName(store, auth.user, userAction[1], v.name)); }
         else if (userAction[2] === 'scope') { const companies = [...new Set([...readSettings(store).departments, ...store.read().employees.map(e => e.department).filter(Boolean)])]; send(200, setAccountScope(store, auth.user, userAction[1], body, companies)); }
         else if (userAction[2] === 'email') { const v = z.object({ email: z.string().max(254) }).strict().parse(body); send(200, setUserEmail(store, auth.user, userAction[1], v.email)); }
         else { const v = z.object({ disabled: z.boolean() }).strict().parse(body); setDisabled(store, auth.user, userAction[1], v.disabled); send(200, { ok: true }); } return;
@@ -548,7 +549,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       if (resetUser && req.method === 'POST') { send(200, resetDevices(store, auth.user, resetUser[1])); return; }
       if (pathname === '/api/users') {
         permit(auth.user, ['admin']);
-        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, scope: scopeOf(u), signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
+        if (req.method === 'GET') { const people = new Map(store.read().employees.map(e => [e.id, e])); send(200, store.db.prepare('SELECT * FROM users ORDER BY username').all().map(u => ({ id: u.id, username: u.username, role: u.role, scope: scopeOf(u), signedIn: activeSessionUsers(store).has(u.id), employeeId: u.employee_id, name: people.get(u.employee_id)?.name || u.display_name || null, displayName: u.display_name || null, employeeNumber: people.get(u.employee_id) ? people.get(u.employee_id).employeeNumber || u.employee_id : null, disabled: u.disabled, mfaEnabled: u.mfa_secret ? 1 : 0, email: u.email || null, resetEmail: registeredEmail(store, u) }))); return; }
         if (req.method === 'POST') { send(201, { user: await addUser(store, await readBody(req), auth.user) }); return; }
       }
       if (pathname.startsWith('/api/records/')) {
