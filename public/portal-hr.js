@@ -32,6 +32,8 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       if (tab === 'overtime201') return overtime(box, await api('/hr/me/overtime'));
       if (tab === 'memos') return notices(box);
       if (tab === 'trainings') return trainings(box, await api('/hr/me/trainings'));
+      // My Benefits (loaded on first use).
+      if (tab === 'benefits') { try { return (await import('./portal-benefits.js')).createPortalBenefits({ api, esc }).fill(box); } catch { box.innerHTML = '<div class="notice">My Benefits will be available after the HR server restarts.</div>'; return; } }
       // Loaded on first use (Notices & due process).
       if (tab === 'cases') { noticeView = 'cases'; return notices(box); }
     } catch (error) { box.innerHTML = `<div class="notice">${esc(error.message)}</div>`; }
@@ -294,5 +296,5 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }
-  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile &amp; 201 file', '👤'], ['loans201', 'My loans', '💳'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Official notices', '📝'], ['trainings', 'Trainings', '🎓']], showProfile, showMemos: () => { noticeView = 'memos'; }, showCases: () => { noticeView = 'cases'; }, showDocuments: () => { fileView = 'documents'; } };
+  return { fill, celebrations, compliance, tabs: [['profile201', 'My profile &amp; 201 file', '👤'], ['loans201', 'My loans', '💳'], ['benefits', 'My benefits', '🎁'], ['overtime201', 'My overtime', '⏱️'], ['memos', 'Official notices', '📝'], ['trainings', 'Trainings', '🎓']], showProfile, showMemos: () => { noticeView = 'memos'; }, showCases: () => { noticeView = 'cases'; }, showDocuments: () => { fileView = 'documents'; } };
 }

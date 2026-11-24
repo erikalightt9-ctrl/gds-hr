@@ -141,6 +141,7 @@ const LEGACY = ['admin', 'hr', 'payroll', 'viewer'], HR_TEAM = ['admin', 'hr', '
 Object.assign(navigationIcons, {
   dashboard: navigationIcons.overview,
   files: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  benefits: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
   datasheets: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
   memos: '<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
   trainings: '<path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',
@@ -150,7 +151,7 @@ Object.assign(navigationIcons, {
 const PAY_GROUP = { id: 'payroll-attendance', label: 'Payroll & Attendance', icon: 'payroll' };
 function navGroups() {
   const role = auth.user.role, legacy = LEGACY.includes(role);
-  const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['bir1601c', 'BIR 1601-C'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
+  const payItems = legacy ? [['attendance', 'Attendance'], ['leave', 'Leave Management'], ['payroll', 'Payroll & 13th Month'], ['loans', 'Employee Loans'], ...(['admin', 'hr', 'payroll'].includes(role) ? [['contributions', 'Government Contributions']] : []), ['benefits', 'Benefits'], ['bir1601c', 'BIR 1601-C'], ['holidays', 'Holiday Calendar'], ['rules', 'Rules & Rates']] : [];
   return [
     ['', [['dashboard', 'Dashboard'], ...(['admin', 'hr', 'hr_staff', 'maker', 'dept_manager'].includes(role) ? [['myapprovals', 'My approvals']] : [])]],
     ['HR Management', [['files', 'Employee 201 Files'], ...(HR_TEAM.includes(role) ? [['datasheets', 'Data Sheet Submissions']] : []), ['memos', 'Memos'], ...(['admin', 'hr', 'viewer'].includes(role) ? [['discipline', 'Due Process & Discipline']] : []), ...(['admin', 'hr', 'hr_staff', 'payroll', 'viewer'].includes(role) ? [['movements', 'Movements & clearance']] : []), ['trainings', 'Trainings']]],
@@ -298,7 +299,8 @@ const loadClockRecords = async () => clockRecordsUi || (clockRecordsUi = (await 
 const overtimeUi = createOvertimeUi({ api, esc, toast, openDialog, dialog, badge, canDecide: () => ['admin', 'hr'].includes(auth.user.role), employees: () => state.employees, onChanged: () => refresh() });
 const contributionsUi = createContributionsPage({ ...hrCtx, ratesPanel: () => (latestRules() ? contributionsSection(latestRules(), { esc, table, badge }) : ''), editContribution: (id, onSaved) => contributionEditor.open(id, { onSaved }), employees: () => state.employees, canAdd: () => ['admin', 'hr'].includes(auth.user.role) });
 // Loaded on first use, so the rest of the app never depends on these files being served (e.g. before a restart).
-let birUi = null, disciplineUi = null, reportLibrary = null;
+let birUi = null, disciplineUi = null, reportLibrary = null, benefitsUi = null;
+const loadBenefits = async () => benefitsUi || (benefitsUi = (await import('./benefits-ui.js')).createBenefitsPage({ ...hrCtx }));
 const loadBir = async () => birUi || (birUi = (await import('./bir-ui.js')).createBirPage({ ...hrCtx, employees: () => state.employees }));
 const loadDiscipline = async () => disciplineUi || (disciplineUi = (await import('./discipline-ui.js')).createDisciplinePage({ ...hrCtx, employees: () => state.employees }));
 const loadReportLibrary = async () => reportLibrary || (reportLibrary = (await import('./report-library-ui.js')).createReportLibrary(hrCtx));
@@ -759,7 +761,7 @@ function render() {
   if (page === 'employees') page = 'files';
   if (page === 'bir') page = 'bir1601c';   // #/bir is a short link to BIR 1601-C
   if (!LEGACY.includes(auth.user.role) && !['dashboard', 'files', 'employee201', 'datasheets', 'memos', 'trainings', 'reports', ...(auth.user.role === 'maker' ? ['audit'] : []), 'approvals', 'movements'].includes(page)) page = 'dashboard';
-  const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), bir1601c: async () => (await loadBir()).render(), discipline: async () => { const ui = await loadDiscipline(); const o = renderOptions; renderOptions = {}; return ui.render(o.caseId || null, o.employeeId !== undefined ? { employeeId: o.employeeId } : {}); }, loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
+  const hrPages = { annual: () => { const y = annualYear; annualYear = null; return thirteenthUi.open(y); }, contributions: () => contributionsUi.render(), benefits: async () => { try { return (await loadBenefits()).render(); } catch { shell(heading('Benefits', '') + '<div class="notice">Benefits will be available after the HR server restarts.</div>'); } }, bir1601c: async () => (await loadBir()).render(), discipline: async () => { const ui = await loadDiscipline(); const o = renderOptions; renderOptions = {}; return ui.render(o.caseId || null, o.employeeId !== undefined ? { employeeId: o.employeeId } : {}); }, loans: () => loansUi.render(), dashboard: () => hrDashboard.render(), files: () => files.directory(), employee201: () => files.drawProfile(), datasheets: () => hrAdmin.datasheets(), memos: () => memos.render(), trainings: () => trainings.render(), settings: () => hrAdmin.settingsPage() };
   if (hrPages[page]) { hrPages[page]().catch(e => { shell(`<div class="notice">${esc(e.message)}</div>`); }); return; }
   if (page === 'live') page = 'attendance';   // Live attendance is part of the Attendance page
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }

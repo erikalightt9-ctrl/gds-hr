@@ -2562,3 +2562,40 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .theme-scarlet .clock-block > * { margin-top: 0 !important; margin-bottom: 0 !important; }
 }
 .theme-scarlet .sc-q-benefits { background: linear-gradient(160deg, #fff, #fff1d6) !important; } .theme-scarlet .sc-q-benefits .sc-quick-ico .em-ico { color: #d98a00 !important; }
+
+/* ===== My Benefits (employee) and Benefits (HR) (Nov 24, 2026) ===== */
+.theme-scarlet .sc-q-benefits { background: linear-gradient(160deg, #fff, #fff1d6) !important; } .theme-scarlet .sc-q-benefits .sc-quick-ico .em-ico { color: #d98a00 !important; }
+.bn-page { display: grid; gap: 12px; }
+.bn-tabs { margin-bottom: 2px; }
+.bn-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bn-totals > div { display: grid; gap: 2px; padding: 10px; border-radius: 14px; background: #fff; border: 1px solid #fbe3e3; text-align: center; }
+.bn-totals span, .bn-totals small { font-size: 11px; color: #5a5a64; }
+.bn-totals strong { font-size: 15px; color: #141418; }
+.bn-card { padding: 12px 14px; border-radius: 18px; background: #fff; border: 1px solid #fbe3e3; box-shadow: 0 6px 18px rgb(200 16 46 / .06); display: grid; gap: 8px; }
+.bn-card h3 { margin: 0; font-size: 15px; font-weight: 800; color: #c8102e; }
+.bn-card h4 { margin: 4px 0 0; font-size: 12.5px; color: #3a3a44; }
+.bn-line { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid #f6e3e3; }
+.bn-card h3 + .bn-line { border-top: 0; padding-top: 0; }
+.bn-line-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+.bn-kv { display: grid; gap: 1px; min-width: 0; }
+.bn-kv span { font-size: 11px; color: #6a6a74; }
+.bn-kv strong { font-size: 13.5px; color: #141418; overflow-wrap: anywhere; }
+.bn-chip { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.bn-ok { background: #dff5e6; color: #138a3e; } .bn-wait { background: #fff1d6; color: #8a5a00; } .bn-off { background: #eee; color: #55555f; }
+.bn-proof { font-size: 12.5px; color: #b3121a; font-weight: 600; }
+.bn-text { margin: 0; font-size: 13px; color: #2b2b33; display: grid; gap: 2px; } .bn-text span { font-size: 11px; color: #6a6a74; }
+.bn-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.bn-list li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f6e3e3; } .bn-list li span { color: #5a5a64; text-align: right; }
+.bn-meta, .bn-note { margin: 0; font-size: 11.5px; color: #6a6a74; }
+.bn-empty { padding: 16px; text-align: center; }
+.bn-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.bn-timeline li { padding: 10px 12px; border-radius: 14px; background: #fff; border: 1px solid #fbe3e3; display: grid; gap: 3px; }
+.bn-timeline p { margin: 0; font-size: 13px; color: #1f1f24; } .bn-timeline small { font-size: 11px; color: #6a6a74; }
+.bn-tag { justify-self: start; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: #fdecec; color: #b3121a; }
+.bn-tag-hmo { background: #e0ecff; color: #2350a8; } .bn-tag-allowance { background: #d9f4f1; color: #0b6f66; }
+.bn-admin { display: grid; gap: 14px; }
+.bn-admin-block h3 { margin: 0 0 6px; font-size: 15px; }
+.bn-admin-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bn-admin-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #eee; }
+.bn-admin-actions { display: flex; gap: 6px; flex-wrap: wrap; }

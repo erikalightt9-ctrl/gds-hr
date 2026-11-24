@@ -47,7 +47,7 @@ const PAY_ROLES_BEFORE = ['admin', 'hr', 'payroll', 'viewer'], SENSITIVE_ROLES_B
 export const canSeePay = actor => (PAY_ROLES_BEFORE.includes(actor?.role) ? actor.permissions?.salary !== false : !!actor?.permissions?.salary && actor?.role !== 'employee');
 export const canSeeSensitive = actor => (SENSITIVE_ROLES_BEFORE.includes(actor?.role) ? actor.permissions?.sensitive !== false : !!actor?.permissions?.sensitive && actor?.role !== 'employee');
 // Pay modules a login without the Salary permission cannot open (pages, lists, PDFs and downloads).
-export const PAY_PATHS = /^\/api\/(runs|payroll|payroll-inputs|contributions|bir|thirteenth|final-pay|loans?|loan-applications|salary|salary-changes|adjustments|prior-earnings|records\/(loans|adjustments|deductions))(\/|$|\.)|^\/api\/employees\/[^/]+\/contributions|^\/api\/reports\/(payroll|payslips|loans|adjustments|thirteenth|contributions|bir|discipline-pay)/;
+export const PAY_PATHS = /^\/api\/(benefits|runs|payroll|payroll-inputs|contributions|bir|thirteenth|final-pay|loans?|loan-applications|salary|salary-changes|adjustments|prior-earnings|records\/(loans|adjustments|deductions))(\/|$|\.)|^\/api\/employees\/[^/]+\/contributions|^\/api\/reports\/(payroll|payslips|loans|adjustments|thirteenth|contributions|bir|discipline-pay)/;
 const PAY_KEYS = new Set(['monthlySalary', 'dailyRate', 'hourlyRate', 'compensation', 'salaryHistory', 'finalPay', 'runs', 'loans', 'adjustments', 'payrollInputs', 'priorEarnings', 'thirteenthOverrides', 'thirteenthAdjustments', 'thirteenthPayslips', 'contributionChanges']);
 const SENSITIVE_KEYS = new Set(['bank', 'accountNumber', 'accountName']);
 const ID_KEYS = new Set(['tin', 'sss', 'philHealth', 'pagIbig']);
