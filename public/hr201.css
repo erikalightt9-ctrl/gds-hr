@@ -2255,3 +2255,24 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .pm-attend .sc-office { margin: 14px 0 0 !important; }
 .theme-scarlet .sc-punch-top { margin: 0 0 14px !important; padding: 0 !important; border: 0 !important; }
 .theme-scarlet .sc-punch-top { margin: 0 0 14px !important; padding: 0 !important; border: 0 !important; }
+/* Today's attendance: compact details (Nov 24, 2026). */
+.theme-scarlet .pm-attend { padding: 14px !important; }
+.theme-scarlet .pm-attend-head h2 { font-size: 16px !important; gap: 8px !important; margin: 0 !important; }
+.theme-scarlet .pm-attend-head .sc-title-ico .sc-ico { width: 22px; height: 22px; }
+.theme-scarlet .pm-attend-head p { font-size: 12.5px; margin: 2px 0 0; }
+.theme-scarlet .pm-attend-head .pm-chip { font-size: 11.5px; padding: 3px 10px !important; }
+.theme-scarlet .pm-attend .pm-alert { padding: 10px 12px !important; gap: 10px; margin-top: 10px; }
+.theme-scarlet .pm-attend .pm-alert strong { font-size: 14px; }
+.theme-scarlet .pm-attend .pm-alert small { font-size: 12px; }
+.theme-scarlet .pm-attend .pm-alert .pm-link { font-size: 13px; }
+.theme-scarlet .pm-attend .pm-alert-ico { width: 22px; height: 22px; }
+.theme-scarlet .pm-attend .pm-tiles { gap: 8px !important; margin-top: 10px; }
+.theme-scarlet .pm-attend .pm-tile { padding: 9px 10px !important; gap: 8px; border-radius: 12px !important; }
+.theme-scarlet .pm-attend .sc-tile-ico .sc-ico { width: 24px; height: 24px; }
+.theme-scarlet .pm-attend .sc-tile-text span { font-size: 11.5px; }
+.theme-scarlet .pm-attend .sc-tile-text strong { font-size: 16px !important; }
+.theme-scarlet .pm-attend .sc-loc-in { margin-top: 10px; padding-top: 8px; }
+.theme-scarlet .pm-attend .sc-loc-in h3 { font-size: 13px; margin-bottom: 4px; }
+.theme-scarlet .pm-attend .pm-loc-row { font-size: 13px; padding: 6px 0 !important; }
+.theme-scarlet .pm-attend .pm-loc-row small, .theme-scarlet .pm-attend .pm-loc-row code { font-size: 11px; }
+.theme-scarlet .pm-attend .pm-loc-row strong { font-size: 14px; }

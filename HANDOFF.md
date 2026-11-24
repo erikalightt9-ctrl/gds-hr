@@ -273,3 +273,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Quick Actions (Nov 24, 2026, HR; portal.js quickCards / QUICK_LABEL): every employee menu section is a card on the home screen, in menu order (My Profile, Attendance, My Overtime, My Leave, My Payslips, My Loans, Notices, Trainings; 4 x 2 on phones); 'See All' removed.
 - Employee home (Nov 24, 2026, HR): Today's location records (time in / out with GPS coordinates) moved inside the Today's attendance card, under the tiles; no separate card.
 - Employee home (Nov 24, 2026, HR): the Time in / Time out buttons sit just above the Today's attendance card, below the clock (no card of their own); the status chip wraps under the title on narrow phones instead of overflowing.
+- Employee home (Nov 24, 2026, HR): Today's attendance card made compact (smaller title, chip, alert, tiles and location rows; hr201.css 'compact details').
