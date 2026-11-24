@@ -2349,3 +2349,5 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .employee-main { margin-top: -10px !important; padding-top: 6px !important; }
 .theme-scarlet .sc-welcome { cursor: pointer; }
 .theme-scarlet .sc-welcome:focus-visible { outline: 3px solid #f3a6a6; outline-offset: 2px; }
+/* No menu button in the phone header: Quick Actions and More cover it (Nov 24, 2026). */
+@media (max-width: 900px) { .theme-scarlet .employee-top .employee-menu-button { display: none !important; } .theme-scarlet .employee-top { justify-content: flex-end !important; } }
