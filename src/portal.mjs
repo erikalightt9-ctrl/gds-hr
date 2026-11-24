@@ -139,10 +139,10 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
       if (latest?.kind === 'in' && !staleOpen(latest, day, now)) throw new AppError('You already have an open time-in. Time out or contact HR.');
       const dayRecord = state.attendance.find(a => a.employeeId === employee.id && a.date === day);
       if (history.some(e => e.workDate === day && e.kind === 'in') || dayRecord) {
-        // Extra work outside after the day's time out (e.g. to offset lateness): an additional off-site session that
-        // extends the same day's record; the gap between the sessions is unpaid. HR reviews it (record not approved).
+        // Another session after the day's time out (Nov 24, 2026: office or off-site): it extends the same day's record;
+        // the gap between the sessions is unpaid. HR reviews it (record not approved).
         const after = dayRecord?.timeIn && dayRecord.timeOut && !dayRecord.endNextDay && local(now).slice(11, 16) > dayRecord.timeOut;
-        if (value.mode !== 'outside' || !after || latest?.kind === 'in') throw new AppError(value.mode === 'outside' ? 'Attendance already exists for today. Ask HR for a correction.' : 'Attendance already exists for today. For extra work outside the office (e.g. an offset), use Off-site work time in.');
+        if (!after) throw new AppError('Attendance already exists for today and cannot be extended from this screen. Ask HR for a correction (Attendance → Requests).');
         additional = true;
       }
       if (state.leaves.some(l => l.employeeId === employee.id && l.status === 'approved' && (l.countedDates || []).includes(day) && !(l.partialDates || []).includes(day))) throw new AppError('You are on approved leave today. Ask HR to review before clocking in.');
@@ -165,7 +165,8 @@ export function punch(store, actor, input, now = new Date(), { ip = '', userAgen
       addressCorrected: value.mode === 'outside' && !!detected && !!value.address && normal(value.address) !== normal(detected.formatted),
       ...(additional || clockIn?.additionalSession ? { additionalSession: true } : {}),
       ...(value.mode === 'office' && network.configured && !network.office ? { officeBy: 'gps' } : value.mode === 'office' && network.office ? { officeBy: 'wifi' } : {}),
-      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...[officeClaimFlag(value.mode, value.reason)].filter(Boolean), ...(additional ? ['Additional off-site session after the day\u2019s time out (e.g. offset): review the hours'] : []), ...(value.mode === 'office' && network.configured && !network.office ? ['Office Wi-Fi not verified: accepted by the office GPS area'] : [])] };
+      flags: [...clockFlags(value, { limit, detected, previous: clockIn || null, now }), ...[officeClaimFlag(value.mode, value.reason)].filter(Boolean), ...(additional ? [`Additional ${value.mode === 'outside' ? 'off-site' : 'office'} session after the day\u2019s time out: review the hours`] : []), ...(value.mode === 'office' && network.configured && !network.office ? ['Office Wi-Fi not verified: accepted by the office GPS area'] : [])] };
+    event.status = event.attendanceType === 'office' && network.office && !event.flags.length ? 'Verified' : 'For HR verification';
     if (clockIn?.additionalSession) {
       // Closing an additional session: the day's record now ends at this time out; the gap is an unpaid break.
       const record = state.attendance.find(a => a.employeeId === employee.id && a.date === workDate);
@@ -237,7 +238,8 @@ export function todayAttendance(store, employee, now = new Date()) {
   const autoPresent = !record && !actualIn && ['Awaiting time in', 'No time in'].includes(status) && !!autoPresentRecord(employee, profileOf(state, employee.id, 'attendance'), workDate, ruleOn(state, day));
   if (autoPresent) status = 'Present';
   const exceptions = events.filter(e => ['Outside', 'Uncertain'].includes(e.geofence.status) || e.geofence.poorAccuracy).map(e => `${e.kind === 'in' ? 'Time in' : 'Time out'}: ${e.geofence.status}, accuracy ±${e.accuracy} m`);
-  return { date: workDate, status, autoPresent, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
+  const last = events[0] || null, lastEvent = last ? { kind: last.kind, time: last.time, workDate: last.workDate, type: last.attendanceType || (last.outOfOffice ? 'offsite' : 'office'), wifi: !!last.network?.verified || !!last.onOfficeNetwork, address: last.address || '', status: last.status || '' } : null;
+  return { date: workDate, lastEvent, sessions: events.filter(e => e.kind === 'in').length, status, autoPresent, scheduledIn, scheduledOut, arrangement: schedule.arrangement, actualIn, actualOut, hours, late: graceLate ? 0 : late, graceLate, offsetUntil: graceLate && scheduledOut ? fromMinutes(hhmm(scheduledOut) + graceLate) : '', undertime, clockIn, clockOut, open: !!open, exceptions, needsApproval: !!record && !record.approved, breakNotice: record?.breaks.length ? 'Exact unpaid breaks deducted' : 'Before HR review of unpaid breaks', recordId: record?.id || null };
 }
 function validateAttachment(store, actor, id) { if (id) { const doc = getDocument(store, actor, id); if (doc.employeeId !== actor.employeeId || doc.uploadedBy !== actor.username || doc.type !== 'Leave Supporting' || doc.status !== 'Active') throw new AppError('Use your own active supporting document.', 403); } }
 export function applyLeave(store, actor, input) {

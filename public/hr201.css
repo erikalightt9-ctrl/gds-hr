@@ -2215,14 +2215,19 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 
 @media (max-width: 480px) { .theme-scarlet .cg .cg-word { display: none; } .theme-scarlet .cg .cg-head h2 { font-size: 14.5px !important; } }
 
-/* Off-site work as a clickable row inside the time-in card (Nov 24, 2026). */
-.theme-scarlet .sc-office .att-offsite { border-top: 0 !important; padding-top: 0 !important; margin-top: 12px !important; }
-.theme-scarlet .sc-offsite { display: flex !important; align-items: center; gap: 12px; width: 100% !important; padding: 12px 14px !important; border-radius: 16px !important; background: linear-gradient(135deg, #fff5f4, #ffecea) !important; border: 1px solid var(--sc-line) !important; box-shadow: 0 4px 12px rgb(139 0 0 / .06) !important; color: #1f1f24 !important; text-align: left; cursor: pointer; }
-.theme-scarlet .sc-offsite:hover { border-color: var(--sc) !important; }
-.theme-scarlet .sc-offsite:disabled { opacity: .55; cursor: not-allowed; }
-.theme-scarlet .sc-offsite-ico { color: var(--sc); display: inline-flex; flex: 0 0 auto; }
-.theme-scarlet .sc-offsite-ico svg { width: 30px; height: 30px; }
-.theme-scarlet .sc-offsite-text { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
-.theme-scarlet .sc-offsite-text strong { font-size: 16px; color: #141418; }
-.theme-scarlet .sc-offsite-text small { font-size: 12.5px; color: #5a5a64; line-height: 1.35; }
-.theme-scarlet .sc-offsite .sc-chev { color: var(--sc-deep); flex: 0 0 auto; }
+/* Time in / out always clickable, office or off-site chosen automatically (Nov 24, 2026). */
+.theme-scarlet .sc-mode { margin: 4px 0 12px; padding: 8px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.4; }
+.theme-scarlet .sc-mode.is-office { background: #e7f6ec; color: #157a3a; }
+.theme-scarlet .sc-mode.is-offsite { background: var(--sc-tint); color: var(--sc-deep); }
+.theme-scarlet .sc-punch { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.theme-scarlet .sc-punch-btn { position: relative; display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 92px; width: 100% !important; border-radius: 18px !important; font-size: 17px; font-weight: 800; }
+.theme-scarlet .sc-punch-btn svg { width: 30px; height: 30px; }
+.theme-scarlet .sc-punch-btn.is-other { background: #fff !important; color: var(--sc-deep) !important; border: 1.5px solid var(--sc-line) !important; box-shadow: none !important; }
+.theme-scarlet .sc-punch-btn.is-next { box-shadow: 0 8px 18px rgb(139 0 0 / .28) !important; }
+.theme-scarlet .sc-punch-btn em { position: absolute; top: 8px; right: 10px; font-style: normal; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: rgb(255 255 255 / .22); padding: 2px 8px; border-radius: 999px; }
+.theme-scarlet .sc-last { display: grid; gap: 2px; margin: 12px 0 6px; padding: 10px 12px; border: 1px solid var(--sc-line); border-radius: 12px; background: #fffafa; }
+.theme-scarlet .sc-last span { font-size: 12px; color: #5a5a64; text-transform: uppercase; letter-spacing: .05em; }
+.theme-scarlet .sc-last strong { font-size: 15px; color: #141418; }
+.theme-scarlet .sc-last small { font-size: 12.5px; color: #5a5a64; }
+.theme-scarlet .sc-recheck { margin: 4px 0 6px; }
+.theme-scarlet .sc-punch-note { display: block; color: #5a5a64; font-size: 12.5px; }
