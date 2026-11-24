@@ -2374,7 +2374,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 @media (max-width: 900px) {
   .theme-scarlet .employee-top { z-index: auto !important; }
   .theme-scarlet .employee-main { position: relative; z-index: 1; }
-  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: -12px !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: -12px !important; }
 }
 .theme-scarlet .sc-quick-wrap { margin: 4px 0 14px !important; }
 @media (max-width: 900px) { .theme-scarlet .employee-top { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; } }
@@ -2401,7 +2401,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 @media (max-width: 900px) {
   .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 60px !important; padding-bottom: 0 !important; background: linear-gradient(180deg, #a10c12 0%, #c8102e 100%) !important; }
   .theme-scarlet:has(.sc-welcome) .employee-top::after { display: none !important; }
-  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: 0 !important; padding-top: 4px !important;
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: 0 !important; padding-top: 4px !important;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 40V26C110 6 250 0 400 14v26z' fill='%23fff6f6'/%3E%3C/svg%3E") no-repeat 0 150px / 100% 40px,
                 linear-gradient(180deg, #c8102e 0, #d81c24 120px, #c8102e 189px, transparent 189px) !important; }
 }
@@ -2465,7 +2465,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 /* Welcome card higher, smaller red area (Nov 24, 2026). */
 @media (max-width: 900px) {
   .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 56px !important; }
-  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: -30px !important; padding-top: 0 !important;
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: -30px !important; padding-top: 0 !important;
     background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 400 40%27 preserveAspectRatio=%27none%27%3E%3Cpath d=%27M0 40V26C110 6 250 0 400 14v26z%27 fill=%27%23fff6f6%27/%3E%3C/svg%3E") no-repeat 0 104px / 100% 34px,
                 linear-gradient(180deg, #c8102e 0, #d81c24 80px, #c8102e 137px, transparent 137px) !important; }
 }
@@ -2479,14 +2479,24 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .theme-scarlet .employee-top .employee-bell > .portal-bell { display: none !important; }
   .theme-scarlet .bell-menu { top: auto !important; bottom: calc(96px + env(safe-area-inset-bottom)) !important; left: 12px !important; right: 12px !important; max-height: 65vh; overflow: auto; }
   .theme-scarlet:has(.sc-welcome) .employee-top { min-height: 16px !important; padding: 0 !important; }
-  .theme-scarlet .employee-main:has(> .sc-welcome) { margin-top: 0 !important; padding-top: 10px !important;
+  .theme-scarlet .employee-main:has(> .sc-first) { margin-top: 0 !important; padding-top: 10px !important;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 40V26C110 6 250 0 400 14v26z' fill='%23fff6f6'/%3E%3C/svg%3E") no-repeat 0 136px / 100% 34px,
                 linear-gradient(180deg, #c8102e 0, #d81c24 90px, #c8102e 169px, transparent 169px) !important; }
 }
 /* Welcome card fully inside the red frame (Nov 24, 2026). */
 @media (max-width: 900px) {
-  .theme-scarlet .employee-main > .sc-welcome { margin-top: 0 !important; }
-  .theme-scarlet .employee-main:has(> .sc-welcome) { background-position: 0 146px, 0 0 !important; background-size: 100% 34px, 100% 180px !important; background-repeat: no-repeat, no-repeat !important; }
+  .theme-scarlet .employee-main .sc-first > .sc-welcome { margin-top: 0 !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { background-position: 0 146px, 0 0 !important; background-size: 100% 34px, 100% 180px !important; background-repeat: no-repeat, no-repeat !important; }
 }
 /* Philippine Time card lower, clear of the red wave (Nov 24, 2026). */
-.theme-scarlet .employee-main > .sc-welcome + .sc-clock { margin-top: 48px !important; }
+.theme-scarlet .employee-main .sc-first > .sc-welcome + .sc-clock { margin-top: 48px !important; }
+
+/* First screen fills the phone: Welcome, clock, Time In row and My Workspace spread evenly; Today's attendance starts below
+   the fold (Nov 24, 2026). */
+.theme-scarlet .sc-first { display: flex; flex-direction: column; }
+@media (max-width: 900px) {
+  .theme-scarlet .sc-first { box-sizing: border-box; min-height: calc(100dvh - 40px); padding-bottom: 104px; justify-content: space-between; gap: 14px; }
+  .theme-scarlet .sc-first > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+  .theme-scarlet .sc-first > .sc-welcome + .sc-clock { margin-top: 18px !important; }
+  .theme-scarlet .clock-block > .pm-attend { margin-top: 14px; }
+}
