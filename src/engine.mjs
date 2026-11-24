@@ -619,7 +619,7 @@ export function calculatePayroll(state, start, end, pay13th = false, employeeIds
       add(deductions, 'other', d.amount, d.name, { id: d.id, sourceKind: 'deductions' }, end);
     }
     // A loan with a balance keeps being deducted after its planned last date (e.g. after skipped cutoffs).
-    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && round(l.balance + (l.interestBalance || 0)) > 0 && l.startDate <= end)) {
+    for (const loan of state.loans.filter(l => l.employeeId === e.id && l.authorized && !l.awaitingRelease && round(l.balance + (l.interestBalance || 0)) > 0 && l.startDate <= end)) {
       // Loans deducted only in the 1st-15th cutoff (paid on the 22nd) or only in the 16th-end cutoff.
       if ((loan.deductOn === 'first' && !start.endsWith('-01')) || (loan.deductOn === 'second' && !start.endsWith('-16'))) {
         trace.push({ component: 'loans', side: 'deductions', amount: 0, formula: `${loan.type} ${loan.reference}: deducted only in the ${loan.deductOn === 'first' ? '1st-15th' : '16th-end'} cutoff`, sourceKind: 'loans', sourceId: loan.id, date: end });

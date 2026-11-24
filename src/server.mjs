@@ -24,7 +24,7 @@ import { LEGACY_WORKSPACE } from './roles.mjs';
 import { inspectImport, previewImport, commitImport } from './attendance-import.mjs';
 import { contributionReview, submitContributionChange, reviewContributionChange, calculateContributions } from './contribution-basis.mjs';
 import { saveRecord, deleteRecord, preview, postPayroll, AppError, permit, entityRoles, reviewLeave, reversePayroll, releasePayslips } from './service.mjs';
-import { decideLoanApplication, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
+import { decideLoanApplication, releaseLoan, loanDashboard, setLoanSkips, setLoanSchedule, loanApplicationRecord } from './loans.mjs';
 import { renderLoanApplicationPdf } from './loan-pdf.mjs';
 import { overtimeQueue, decideOvertime, fileOvertime } from './overtime.mjs';
 import { renderFinalPayPdf } from './final-pay-pdf.mjs';
@@ -248,7 +248,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         }
       }
       // The service account (integrations such as the AI assistant) reads only: changes and approvals need a named person.
-      if (auth.user.finance && mutation && !['/api/logout', '/api/password', '/api/me/mfa'].includes(pathname) && !pathname.startsWith('/api/me/')) throw new AppError('The Finance / Releasing Officer role reads payroll and loans; recording releases is not available yet.', 403);
+      if (auth.user.finance && mutation && !['/api/logout', '/api/password', '/api/me/mfa'].includes(pathname) && !pathname.startsWith('/api/me/') && !/\/release$|\/settle$/.test(pathname)) throw new AppError('The Finance / Releasing Officer records releases and payment references; other changes are made by HR or Payroll.', 403);
       if (auth.user.service && mutation && !['/api/logout', '/api/password'].includes(pathname)) throw new AppError('The service account is read-only. Changes and approvals must be made with a named person\'s account.', 403);
       if (auth.user.role === 'employee' && req.method === 'POST') selfNotice = { pathname, employeeId: auth.user.employeeId };
       // A default password must be replaced before anything else can be used.
@@ -450,6 +450,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
         res.end(renderLoanApplicationPdf(application, { employee, loan, designation: designationOf(store, application.employeeId), decidedBy: application.decidedBy ? fullNameOf(store, application.decidedBy) : '', company: c.name || 'GDS CAPITAL INC.', verified: { name: c.leaveVerifiedName, title: c.leaveVerifiedTitle }, approved: { name: c.leaveApprovedName, title: c.leaveApprovedTitle } })); return;
       }
       const loanDecision = pathname.match(/^\/api\/loan-applications\/([a-f0-9-]+)\/decision$/);
+      const loanRelease = pathname.match(/^\/api\/loans\/([a-zA-Z0-9_-]+)\/release$/);
+      if (loanRelease && req.method === 'POST') { send(200, releaseLoan(store, auth.user, loanRelease[1], await readBody(req))); return; }
       if (loanDecision && req.method === 'POST') { send(200, decideLoanApplication(store, auth.user, loanDecision[1], await readBody(req))); return; }
       if (pathname === '/api/office-networks/suggestions' && req.method === 'GET') { send(200, suggestedOfficeAddresses(store, auth.user)); return; }
       { const m = pathname.match(/^\/api\/clock\/([A-Za-z0-9-]+)\/resolve-flag$/); if (m && req.method === 'POST') { send(200, resolveClockFlag(store, auth.user, m[1], await readBody(req))); return; } }
