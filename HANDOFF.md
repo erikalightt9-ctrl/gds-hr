@@ -279,3 +279,4 @@ The current user is continuing work on the GDS CAPITAL INC. HR application in th
 - Employee header on phones (Nov 24, 2026, HR): the ☰ menu button is removed again; only the bell stays (Quick Actions and More in the bottom bar open everything).
 - Employee bottom bar (Nov 24, 2026, HR): Home replaced by Account (shield icon, opens Account & Security); the header bell is larger (52 px button, 34 px icon). The home screen is reached from the name at the top of the More menu.
 - Employee home (Nov 24, 2026, HR): the Office attendance (Wi-Fi) card is removed; Quick Actions follow Today's attendance. Office / off-site routing on Time In / Out is unchanged.
+- Employee home (Nov 24, 2026, HR): the 'Quick Actions' heading reads 'My Workspace'.
