@@ -2343,3 +2343,7 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .theme-scarlet .sc-wifi-note b { font-weight: 700; }
 .theme-scarlet .sc-wifi-note.ok, .theme-scarlet .sc-wifi-note.ok svg { color: #138a3e; }
 .theme-scarlet .sc-wifi-note > span { font-weight: 400; }
+/* Welcome card closer to the header (Nov 24, 2026). */
+.theme-scarlet .employee-top { min-height: 74px !important; padding-bottom: 22px !important; }
+.theme-scarlet .employee-top::after { height: 24px; }
+.theme-scarlet .employee-main { margin-top: -10px !important; padding-top: 6px !important; }
