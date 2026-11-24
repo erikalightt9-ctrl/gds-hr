@@ -9,6 +9,7 @@ import { leaveBalance, leaveFraction } from './engine.mjs';
 import { assertMakerCanChange, lockedFields } from './field-locks.mjs';
 import { scheduleOf, applyScheduleFromForm } from './work-schedule.mjs';
 import { disableLoginsFor } from './offboarding.mjs';
+import { canSeePay, canSeeSensitive } from './account-scope.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
@@ -217,7 +218,7 @@ export function employeeForm(store, actor, id) {
   const p = profileOf(store, id, 'personal'), j = profileOf(store, id, 'employment'), m = profileOf(store, id, 'emergency'), g = profileOf(store, id, 'government');
   // Employees see their own numbers in full; other roles without ID access see them masked.
   const own = actor.role === 'employee' && actor.employeeId === id;
-  const showIds = SENSITIVE_IDS.includes(actor.role) || own, mask = v => (v ? (showIds ? v : `•••• ${String(v).slice(-3)}`) : '');
+  const showIds = (SENSITIVE_IDS.includes(actor.role) && canSeeSensitive(actor)) || (actor.permissions?.sensitive && actor.role !== 'employee') || own, mask = v => (v ? (showIds ? v : `•••• ${String(v).slice(-3)}`) : '');
   const hrView = HR_TEAM.includes(actor.role) || (actor.role === 'employee' && actor.employeeId === id);   // employees: their own record only
   return {
     id, schedule: scheduleOf(store, e), locked: actor.role === 'maker' ? lockedFields(store, id) : [], number: displayNumber(e), name: e.name, draft: e.archived ? false : !!e.draft, archived: !!e.archived, activity: activity(e, j), canEdit: HR_TEAM.includes(actor.role), sensitiveIds: showIds,
@@ -233,7 +234,6 @@ export function employeeForm(store, actor, id) {
   };
 }
 // Extra profile tabs: family, education, previous employment and (for pay roles) compensation.
-const PAY_ROLES = ['admin', 'hr', 'payroll'];
 export function profileExtras(store, actor, id) {
   assertCanView(store, actor, id);
   const e = store.read().employees.find(x => x.id === id);
@@ -243,9 +243,9 @@ export function profileExtras(store, actor, id) {
     family: hrView ? { spouse: { name: '', occupation: '', contact: '' }, father: { name: '', occupation: '' }, mother: { name: '', occupation: '' }, children: [], ...profileOf(store, id, 'family') } : null,
     education: hrView ? { entries: [], ...profileOf(store, id, 'education') } : null,
     history: hrView ? { entries: [], ...profileOf(store, id, 'history') } : null,
-    compensation: PAY_ROLES.includes(actor.role) ? { monthlySalary: e.monthlySalary, basis: pay.basis || 'monthly', dailyRate: pay.dailyRate ?? null, hourlyRate: pay.hourlyRate ?? null, frequency: pay.frequency || '', status: pay.status || 'Active', withholdingTax: pay.withholdingTax === 'exempt' ? 'exempt' : 'withhold', coveredOT: e.coveredOT, coveredNSD: e.coveredNSD, coveredHoliday: e.coveredHoliday, covered13th: e.covered13th, deductions: (store.read().deductions || []).filter(d => d.employeeId === id && d.active).map(d => ({ name: d.name, amount: d.amount, schedule: d.schedule })) } : null,
+    compensation: canSeePay(actor) && actor.role !== 'viewer' ? { monthlySalary: e.monthlySalary, basis: pay.basis || 'monthly', dailyRate: pay.dailyRate ?? null, hourlyRate: pay.hourlyRate ?? null, frequency: pay.frequency || '', status: pay.status || 'Active', withholdingTax: pay.withholdingTax === 'exempt' ? 'exempt' : 'withhold', coveredOT: e.coveredOT, coveredNSD: e.coveredNSD, coveredHoliday: e.coveredHoliday, covered13th: e.covered13th, deductions: (store.read().deductions || []).filter(d => d.employeeId === id && d.active).map(d => ({ name: d.name, amount: d.amount, schedule: d.schedule })) } : null,
     // Final pay computations of this employee with their release status (Payroll & 13th Month → Final pay).
-    finalPay: PAY_ROLES.includes(actor.role) && store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='final_pay'").get() ? store.db.prepare('SELECT data FROM final_pay WHERE employee_id=? ORDER BY rowid DESC').all(id).map(r => JSON.parse(r.data)).map(r => ({ id: r.id, separationDate: r.separationDate, net: r.net, releaseDue: r.releaseDue, computedBy: r.computedBy, computedAt: r.computedAt, release: r.release || null })) : null,
+    finalPay: canSeePay(actor) && actor.role !== 'viewer' && store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='final_pay'").get() ? store.db.prepare('SELECT data FROM final_pay WHERE employee_id=? ORDER BY rowid DESC').all(id).map(r => JSON.parse(r.data)).map(r => ({ id: r.id, separationDate: r.separationDate, net: r.net, releaseDue: r.releaseDue, computedBy: r.computedBy, computedAt: r.computedAt, release: r.release || null })) : null,
     canEdit: hrView, canEditPay: ['admin', 'hr'].includes(actor.role),
   };
 }

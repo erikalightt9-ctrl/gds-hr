@@ -41,7 +41,8 @@ import { saveMonthEdit } from './contribution-month.mjs';
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
 import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
-import { setAccountScope, scopeOf } from './account-scope.mjs';
+import { setAccountScope, scopeOf, canSeePay, canSeeSensitive, PAY_PATHS, stripForPermissions } from './account-scope.mjs';
+import { permissionContext } from './company-scope.mjs';
 import { scopeContext, companyScope, filterPayload, refusedSingle, recordOwner, namedEmployees, REFUSED } from './company-scope.mjs';
 import { addUser, login, issueSession, session, checkLimit, changePassword, requestRecovery, issuePasswordReset, setUserEmail, registeredEmail, redeemPasswordReset, setDisabled, deleteUser, configureMfa, createEmployeeAccounts, signOutEverywhere, activeSessionUsers, myAccount, linkMyAccount } from './auth.mjs';
 import { previewSchema, postSchema } from './schema.mjs';
@@ -114,6 +115,8 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
     let selfNotice = null;   // set for an employee's own submissions; recorded in their notification bell
     const send = (status, data) => {
       if (selfNotice && status < 300) { try { const text = employeeNotice(selfNotice.pathname, data); if (text) store.notify(selfNotice.employeeId, text); } catch { /* a notice never blocks the submission */ } }
+      const perms = permissionContext.getStore();
+      if (perms && status < 300) data = stripForPermissions(data, perms);
       const limited = scopeContext.getStore();
       if (limited && status < 300) {
         if (refusedSingle(data, limited.scope)) { res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: REFUSED })); return; }
@@ -225,6 +228,12 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const auth = session(store, req.headers.cookie);
       if (!auth) throw new AppError('Please sign in.', 401);
       if (mutation && !constantEqual(String(req.headers['x-csrf-token'] || ''), auth.csrf)) throw new AppError('Your session token is invalid. Reload and try again.', 403);
+      // Salary and sensitive-file permissions (Account & access → Access): pay modules closed, values stripped.
+      if (auth.user.role !== 'employee' && !pathname.startsWith('/api/me/') && !pathname.startsWith('/api/hr/me/')) {
+        const pay = canSeePay(auth.user), sensitive = canSeeSensitive(auth.user);
+        if (!pay && PAY_PATHS.test(pathname)) throw new AppError('Salary and compensation records need the Salary permission (Account & access → Access).', 403);
+        if (!pay || !sensitive) permissionContext.enterWith({ pay, sensitive });
+      }
       // Company separation for a company-limited login (src/company-scope.mjs): every read, reply and named record.
       {
         const full = store.read(), scope = companyScope(full, auth.user);

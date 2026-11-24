@@ -79,3 +79,23 @@ test('payroll preview by a company-limited login covers only its company', async
   assert.deepEqual(run.rows.map(r => r.employeeId), ['EMP-001']);
   assert.deepEqual(run.employeeIds, ['EMP-001'], 'the run itself is limited, so totals and posting cover only this company');
 });
+
+test('an administrator without the Salary permission cannot open pay modules or see salaries', async t => {
+  const store = new Store(':memory:');
+  const app = createApp({ store, origin: 'http://127.0.0.1:3400', setupToken: 'test-only-setup-code' });
+  await new Promise(r => app.listen(0, '127.0.0.1', r));
+  t.after(async () => { await new Promise(r => app.close(r)); store.close(); });
+  const base = `http://127.0.0.1:${app.address().port}`;
+  const call = (path, body, cookie = '', csrf = '') => fetch(`${base}${path}`, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:3400', Cookie: cookie, 'X-CSRF-Token': csrf }, body: body ? JSON.stringify(body) : undefined });
+  await call('/api/setup', { token: 'test-only-setup-code', username: 'admin', password: 'strong-test-password' });
+  const a = await call('/api/login', { username: 'admin', password: 'strong-test-password' }), ac = a.headers.get('set-cookie').split(';')[0], acsrf = (await a.json()).csrf;
+  store.write(state());
+  const u = await (await call('/api/users', { username: 'tech.admin', password: 'strong-tech-password', role: 'admin' }, ac, acsrf)).json();
+  await call(`/api/users/${u.user.id}/scope`, { companies: [], salary: false, sensitive: false }, ac, acsrf);
+  const tc = (await call('/api/login', { username: 'tech.admin', password: 'strong-tech-password' })).headers.get('set-cookie').split(';')[0];
+  for (const path of ['/api/runs', '/api/loans', '/api/contributions', '/api/final-pay']) assert.equal((await call(path, null, tc)).status, 403, path);
+  const st = (await (await call('/api/state', null, tc)).json()).state;
+  assert.ok(st.employees.length === 2 && st.employees.every(e => e.monthlySalary === null), 'salaries hidden');
+  assert.deepEqual([st.loans, st.runs], [[], []]);
+  assert.ok((await (await call('/api/state', null, ac)).json()).state.employees.some(e => e.monthlySalary === 30000), 'the owner admin still sees pay');
+});

@@ -11,6 +11,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 export const scopeContext = new AsyncLocalStorage();
+// Salary / sensitive-file permissions of the current request (src/account-scope.mjs stripForPermissions).
+export const permissionContext = new AsyncLocalStorage();
 export const REFUSED = 'This record belongs to a company outside your access.';
 
 // The scope of a login: null = every company; otherwise the allowed employee ids and the other employees' names / ids.

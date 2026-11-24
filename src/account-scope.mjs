@@ -39,3 +39,28 @@ export function setAccountScope(store, actor, userId, input, knownCompanies = []
     return { companies, permissions: { salary: v.salary, sensitive: v.sensitive } };
   });
 }
+
+// Enforcement of the two permissions. A login without them keeps its role, minus pay or sensitive files; a role that
+// never saw pay (HR Maker) gains the 201 Compensation tab with the Salary permission. Actors without a permissions
+// object (internal calls, tests) keep the role's previous access.
+const PAY_ROLES_BEFORE = ['admin', 'hr', 'payroll', 'viewer'], SENSITIVE_ROLES_BEFORE = ['admin', 'hr', 'payroll', 'maker'];
+export const canSeePay = actor => (PAY_ROLES_BEFORE.includes(actor?.role) ? actor.permissions?.salary !== false : !!actor?.permissions?.salary && actor?.role !== 'employee');
+export const canSeeSensitive = actor => (SENSITIVE_ROLES_BEFORE.includes(actor?.role) ? actor.permissions?.sensitive !== false : !!actor?.permissions?.sensitive && actor?.role !== 'employee');
+// Pay modules a login without the Salary permission cannot open (pages, lists, PDFs and downloads).
+export const PAY_PATHS = /^\/api\/(runs|payroll|payroll-inputs|contributions|bir|thirteenth|final-pay|loans?|loan-applications|salary|salary-changes|adjustments|prior-earnings|records\/(loans|adjustments|deductions))(\/|$|\.)|^\/api\/employees\/[^/]+\/contributions|^\/api\/reports\/(payroll|payslips|loans|adjustments|thirteenth|contributions|bir|discipline-pay)/;
+const PAY_KEYS = new Set(['monthlySalary', 'dailyRate', 'hourlyRate', 'compensation', 'salaryHistory', 'finalPay', 'runs', 'loans', 'adjustments', 'payrollInputs', 'priorEarnings', 'thirteenthOverrides', 'thirteenthAdjustments', 'thirteenthPayslips', 'contributionChanges']);
+const SENSITIVE_KEYS = new Set(['bank', 'accountNumber', 'accountName']);
+const ID_KEYS = new Set(['tin', 'sss', 'philHealth', 'pagIbig']);
+// Strips pay values (no Salary permission) and bank details / full government numbers (no Sensitive permission).
+export function stripForPermissions(value, { pay, sensitive }) {
+  if (Array.isArray(value)) return value.filter(v => !(v && typeof v === 'object' && !pay && v.section && ['payroll', 'contributions'].includes(v.section))).map(v => stripForPermissions(v, { pay, sensitive }));
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (!pay && PAY_KEYS.has(k)) { out[k] = Array.isArray(v) ? [] : null; continue; }
+    if (!sensitive && SENSITIVE_KEYS.has(k)) { out[k] = typeof v === 'string' && v ? `•••• ${v.slice(-3)}` : (v && typeof v === 'object' ? {} : v); continue; }
+    if (!sensitive && ID_KEYS.has(k) && typeof v === 'string' && v.length > 4) { out[k] = `•••• ${v.slice(-3)}`; continue; }
+    out[k] = stripForPermissions(v, { pay, sensitive });
+  }
+  return out;
+}

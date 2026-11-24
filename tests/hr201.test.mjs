@@ -54,10 +54,13 @@ test('uploading and verifying a required document updates completion and the das
     const before = documentSummary(store, hr);
     const list = employeeChecklist(store, hr, id), required = list.requiredCount;
     assert.equal(list.items.find(i => i.requirement.id === 'contract').status, 'Missing');
-    const doc = upload201(store, staff, id, { requirementId: 'contract', name: 'contract.pdf', mime: 'application/pdf', data: PDF });
+    // The contract carries salary: HR Staff files it only with the Salary permission (Nov 24, 2026).
+    const payStaff = { ...staff, permissions: { salary: true, sensitive: false } };
+    assert.throws(() => upload201(store, staff, id, { requirementId: 'contract', name: 'contract.pdf', mime: 'application/pdf', data: PDF }), /restricted/);
+    const doc = upload201(store, payStaff, id, { requirementId: 'contract', name: 'contract.pdf', mime: 'application/pdf', data: PDF });
     assert.equal(employeeChecklist(store, hr, id).items.find(i => i.requirement.id === 'contract').status, 'Submitted');
     assert.equal(employeeChecklist(store, hr, id).completeCount, 0, 'unreviewed documents are not complete');
-    reviewDocument(store, staff, doc.id, { decision: 'Verified' });
+    reviewDocument(store, payStaff, doc.id, { decision: 'Verified' });
     const after = employeeChecklist(store, hr, id);
     assert.equal(after.completeCount, 1); assert.equal(after.percent, Math.round(100 / required));
     assert.equal(documentSummary(store, hr).missingDocuments, before.missingDocuments - 1);

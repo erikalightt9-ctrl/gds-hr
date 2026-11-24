@@ -34,3 +34,16 @@ test('account scope: companies and separate salary / sensitive permissions, admi
     assert.ok(store.db.prepare("SELECT 1 FROM audit WHERE action='set-account-scope'").get());
   } finally { store.close(); }
 });
+
+test('salary and sensitive permissions: pay modules closed, values stripped, 201 tabs follow them', async () => {
+  const { canSeePay, canSeeSensitive, stripForPermissions, PAY_PATHS } = await import('../src/account-scope.mjs');
+  assert.equal(canSeePay({ role: 'admin', permissions: { salary: false, sensitive: true } }), false, 'an administrator without the Salary permission');
+  assert.equal(canSeePay({ role: 'admin' }), true, 'internal calls keep the role access');
+  assert.equal(canSeePay({ role: 'maker', permissions: { salary: true, sensitive: true } }), true, 'HR Maker granted salary access');
+  assert.equal(canSeeSensitive({ role: 'hr_staff', permissions: { salary: false, sensitive: false } }), false);
+  assert.equal(canSeePay({ role: 'employee', permissions: { salary: true } }), false);
+  for (const p of ['/api/runs', '/api/payroll/preview', '/api/loans', '/api/final-pay/x.pdf', '/api/contributions', '/api/thirteenth']) assert.ok(PAY_PATHS.test(p), p);
+  assert.ok(!PAY_PATHS.test('/api/state') && !PAY_PATHS.test('/api/hr/employees'));
+  const out = stripForPermissions({ employees: [{ id: 'E', monthlySalary: 30000, name: 'X' }], runs: [{ id: 'r' }], government: { tin: '123456789', sss: '' }, bank: { accountNumber: '0011223344' } }, { pay: false, sensitive: false });
+  assert.deepEqual(out, { employees: [{ id: 'E', monthlySalary: null, name: 'X' }], runs: [], government: { tin: '•••• 789', sss: '' }, bank: {} });
+});
