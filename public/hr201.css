@@ -2500,3 +2500,28 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
   .theme-scarlet .sc-first > .sc-welcome + .sc-clock { margin-top: 18px !important; }
   .theme-scarlet .clock-block > .pm-attend { margin-top: 14px; }
 }
+
+/* My attendance analytics (Nov 24, 2026). */
+.theme-scarlet .sc-stats { margin-top: 14px; padding: 14px !important; border: 1px solid #fbe3e3 !important; background: linear-gradient(180deg, #fff 0%, #fff7f8 100%) !important; box-shadow: 0 10px 26px rgb(200 16 46 / .08) !important; }
+.theme-scarlet .sc-stats-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.theme-scarlet .sc-stats-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 800; color: #c8102e; }
+.theme-scarlet .sc-stats-head .sc-ico { width: 22px; height: 22px; }
+.theme-scarlet .sc-stats-head > span { font-size: 12px; color: #5a5a64; }
+.theme-scarlet .sc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.theme-scarlet .sc-kpi { display: grid; gap: 2px; padding: 10px 6px; border-radius: 14px; background: #fff; border: 1px solid #fbe3e3; text-align: center; }
+.theme-scarlet .sc-kpi span { font-size: 11px; color: #5a5a64; line-height: 1.2; }
+.theme-scarlet .sc-kpi strong { font-size: 19px; font-weight: 800; color: #141418; }
+.theme-scarlet .sc-bars-title { margin: 14px 0 6px; font-size: 12.5px; font-weight: 700; color: #3a3a44; }
+.theme-scarlet .sc-bars { position: relative; display: flex; align-items: flex-end; gap: 3px; height: 96px; padding-bottom: 16px; border-bottom: 1px solid #f0d2d2; }
+.theme-scarlet .sc-bar { position: relative; flex: 1 1 0; min-width: 4px; max-width: 18px; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+.theme-scarlet .sc-bar i { display: block; width: 100%; height: var(--bar); background: #e0262b; border-radius: 4px 4px 0 0; }
+.theme-scarlet .sc-bar.open i { background: repeating-linear-gradient(135deg, #f3a6a6 0 3px, #fff 3px 6px); }
+.theme-scarlet .sc-bar:hover i { background: #9c0c12; }
+.theme-scarlet .sc-bar em { position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 9.5px; color: #8a8a94; }
+.theme-scarlet .sc-bars-ref { position: absolute; left: 0; right: 0; bottom: calc(16px + 80px * var(--r)); border-top: 1px dashed #b8b8c0; pointer-events: none; }
+.theme-scarlet .sc-bars-ref small { position: absolute; right: 0; top: -14px; font-size: 9.5px; color: #8a8a94; font-weight: 600; }
+.theme-scarlet .sc-bars-empty { margin: 4px 0 0; font-size: 12.5px; }
+.theme-scarlet .sc-leave { margin: 12px 0 0; font-size: 12.5px; color: #3a3a44; }
+.theme-scarlet .sc-leave b { color: #141418; }
+.theme-scarlet .pm-attend .sc-loc-in h3 { color: #3a3a44; }
+.theme-scarlet .sc-bar { height: 80px !important; }
