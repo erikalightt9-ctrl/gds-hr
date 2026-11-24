@@ -8,6 +8,7 @@ import { personalNames, titleCase } from './names.mjs';
 import { leaveBalance, leaveFraction } from './engine.mjs';
 import { assertMakerCanChange, lockedFields } from './field-locks.mjs';
 import { scheduleOf, applyScheduleFromForm } from './work-schedule.mjs';
+import { disableLoginsFor } from './offboarding.mjs';
 
 // ---------- Settings ----------
 // Documents the company prepares and files itself; employees are not asked to upload them.
@@ -265,6 +266,7 @@ export function archiveEmployee(store, actor, id, input) {
     const job = profileOf(store, id, 'employment');
     if (job.position) saveProfile(store, actor, id, 'employment', { ...job, employeeStatus: 'Inactive' });
     store.log(actor, 'archive', 'employees', id, null, { reason, endDate: end });
+    disableLoginsFor(store, actor, id, `201 file archived (${reason})`);
     return { id, archived: true };
   });
 }
