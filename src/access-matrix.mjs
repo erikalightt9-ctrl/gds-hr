@@ -32,9 +32,14 @@ export function approvalMatrix(store, actor) {
 }
 export function usersAndRoles(store, actor) {
   permit(actor, ['admin']);
-  const users = store.db.prepare('SELECT role, mfa_secret, disabled, employee_id, display_name FROM users').all();
+  const users = store.db.prepare('SELECT username, role, mfa_secret, disabled, employee_id, display_name FROM users ORDER BY username').all();
+  const names = new Map(store.read().employees.map(e => [e.id, e.name]));
+  // "Last, First Middle" → "First Middle Last" for the list of people per role.
+  const readable = n => (n && n.includes(',') ? `${n.split(',').slice(1).join(',').trim()} ${n.split(',')[0].trim()}` : n || '');
   return Object.keys(ROLE_LABELS).map(role => {
     const mine = users.filter(u => u.role === role && !u.disabled);
-    return { role, label: ROLE_LABELS[role], scope: ROLE_SCOPE[role] || '', accounts: mine.length, withMfa: mine.filter(u => u.mfa_secret).length, mfaRequired: MFA_REQUIRED_ROLES.includes(role), unnamed: ['admin', 'hr', 'payroll', 'viewer'].includes(role) ? mine.filter(u => !u.employee_id && !u.display_name).length : 0 };
+    return { role, label: ROLE_LABELS[role], scope: ROLE_SCOPE[role] || '', accounts: mine.length, withMfa: mine.filter(u => u.mfa_secret).length, mfaRequired: MFA_REQUIRED_ROLES.includes(role), unnamed: ['admin', 'hr', 'payroll', 'viewer'].includes(role) ? mine.filter(u => !u.employee_id && !u.display_name).length : 0,
+      // Who holds the role (Users & roles: click the Accounts number).
+      people: mine.map(u => ({ username: u.username, name: u.display_name || readable(names.get(u.employee_id)) || '', twoFactor: !!u.mfa_secret })) };
   });
 }

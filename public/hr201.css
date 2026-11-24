@@ -2017,3 +2017,10 @@ button.ln-title-card.active { background: #fff0c4; border-color: #d9b85c; }
 .dp-toolbar .search{margin-left:0;flex:0 1 340px;min-width:220px}
 .dp-toolbar .download-links{margin-left:auto}
 .ml-card-ico.ml-minus { background: #eceef2; color: #5a6270; }
+
+/* Users & roles: click the Accounts number to list the people (Nov 24, 2026). */
+.role-people summary{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:30px;padding:2px 10px;border:1px solid #ead9b0;border-radius:999px;background:#fffaf0;font-weight:700;color:#7a1720;list-style:none}
+.role-people summary::-webkit-details-marker{display:none}
+.role-people[open] summary{background:#7a1720;color:#fff;border-color:#7a1720}
+.role-people ul{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px;min-width:200px}
+.role-people li{font-size:12.5px;line-height:1.35}
