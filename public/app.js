@@ -830,7 +830,7 @@ function render() {
   if (page === 'profile') { profiles.redraw().catch(e => toast(e.message)); return; }
   const views = { overview, employees: employeesPage, attendance: attendancePage, leave: leavePage, payroll: payrollPage, loans: loansPage, deductions: deductionsPage, holidays: holidaysPage, rules: rulesPage };
   if (page === 'audit') { auditPage().catch(e => toast(e.message)); return; }
-  if (page === 'movements') { shell(heading('Movements & clearance', 'Promotions, transfers, regularizations, separations and offboarding clearance.') + '<div data-mv-page></div>'); import('./movements-ui.js').then(m => m.mountMovements(document.querySelector('[data-mv-page]'), { api, esc, badge, toast, openDialog, dialog, today })).catch(e => toast(e.message)); return; }
+  if (page === 'movements') { shell('<div data-mv-page><div class="loading">Loading…</div></div>'); import('./movements-ui.js').then(m => m.mountMovements(document.querySelector('[data-mv-page]'), { api, esc, badge, toast, openDialog, dialog, today })).catch(e => toast(e.message)); return; }
   if (page === 'myapprovals') { import('./approvals-inbox.js').then(m => m.inboxPage({ api, esc, shell, heading, table, badge, toast })).catch(e => toast(e.message)); return; }
   if (page === 'approvals' || page === 'users') { import('./access-ui.js').then(m => m[page === 'users' ? 'usersPage' : 'approvalsPage']({ api, esc, shell, heading, table, badge, account: () => account() })).catch(e => toast(e.message)); return; }
   if (page === 'reports') { reportsPage().catch(e => toast(e.message)); return; }
