@@ -5,7 +5,7 @@ import { createCaseView } from './discipline-case.js';
 
 export function createDisciplinePage(ctx) {
   const { api, esc, table, badge, toast, openDialog, dialog, shell, heading, today } = ctx;
-  let view = 'open', options = null, cases = [], search = '', employeeFilter = '';
+  let view = 'open', options = null, cases = [], search = '', employeeFilter = '', recordCount = null;
   const caseView = createCaseView({ ...ctx, back: () => render(), options: () => options, fmtDate, fmtDateTime, readFile, who });
   const KIND = { pending: 'neutral', investigation: 'pending', awaiting: 'pending', evaluation: 'pending', resolved: '', closed: 'neutral' };
   const TABS = [['open', 'Open cases'], ['pending', 'Pending'], ['investigation', 'Under Investigation'], ['awaiting', 'Awaiting Explanation'], ['evaluation', 'For Evaluation'], ['resolved', 'Resolved'], ['closed', 'Closed'], ['records', 'Disciplinary records']];
@@ -13,25 +13,42 @@ export function createDisciplinePage(ctx) {
   async function render(openId = null, filter = {}) {
     if (filter.employeeId !== undefined) { employeeFilter = filter.employeeId; view = filter.employeeId ? 'records' : view; }
     shell(heading('Due Process & Discipline', 'Loading…') + '<div class="loading">Loading…</div>');
-    try { [options, cases] = await Promise.all([api('/discipline/options'), api('/discipline/cases')]); } catch (error) { shell(heading('Due Process & Discipline', '') + `<div class="notice">${esc(error.message)}</div>`); return; }
+    try { let records; [options, cases, records] = await Promise.all([api('/discipline/options'), api('/discipline/cases'), api('/discipline/records').catch(() => null)]); recordCount = Array.isArray(records) ? records.length : null; } catch (error) { shell(heading('Due Process & Discipline', '') + `<div class="notice">${esc(error.message)}</div>`); return; }
     if (openId) return caseView.open(openId);
     return draw();
   }
   const people = () => (ctx.employees() || []).filter(e => !e.archived).sort((a, b) => a.name.localeCompare(b.name));
+  // Nov 25, 2026 design: red hero with gavel, status tiles (the lists), search panel, table, empty state.
+  const ic = d => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const TILE = {
+    open: ['amber', ic('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 10h18l-2 9H5z"/>')],
+    pending: ['rose', ic('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6M12 2v3"/>')],
+    investigation: ['blue', ic('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>')],
+    awaiting: ['violet', ic('<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9"/>')],
+    evaluation: ['orange', ic('<path d="M12 3v18M7 21h10M5 7h14M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z"/>')],
+    resolved: ['green', ic('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>')],
+    closed: ['grey', ic('<rect x="3.5" y="4" width="17" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>')],
+    records: ['lilac', ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>')],
+    settings: ['grey', ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.8 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 14.1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>')],
+  };
+  const GAVEL = '<svg viewBox="0 0 140 110" aria-hidden="true"><defs><linearGradient id="dpWood" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#b5683a"/><stop offset="1" stop-color="#5e2c12"/></linearGradient><linearGradient id="dpGold" x1="0" x2="1"><stop offset="0" stop-color="#f6d58a"/><stop offset="1" stop-color="#b98a2c"/></linearGradient></defs><ellipse cx="78" cy="98" rx="46" ry="8" fill="#5e2c12" opacity=".25"/><rect x="40" y="80" width="76" height="14" rx="4" fill="url(#dpWood)"/><rect x="48" y="72" width="60" height="10" rx="3" fill="#8a4720"/><rect x="48" y="76" width="60" height="3" fill="url(#dpGold)"/><g transform="rotate(-32 58 40)"><rect x="54" y="32" width="70" height="9" rx="4" fill="url(#dpWood)"/><rect x="20" y="14" width="40" height="44" rx="8" fill="url(#dpWood)"/><rect x="18" y="20" width="44" height="6" rx="2" fill="url(#dpGold)"/><rect x="18" y="46" width="44" height="6" rx="2" fill="url(#dpGold)"/></g></svg>';
+  const EMPTY = '<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M14 30a6 6 0 0 1 6-6h24l8 8h44a6 6 0 0 1 6 6v6H14z" fill="#a9bde8"/><path d="M10 44h92l-8 40a6 6 0 0 1-6 5H22a6 6 0 0 1-6-5z" fill="#c9d7f3"/><circle cx="78" cy="64" r="14" fill="#fff" stroke="#4867b8" stroke-width="5"/><path d="m88 74 14 14" stroke="#4867b8" stroke-width="7" stroke-linecap="round"/></svg>';
   async function draw() {
-    const count = id => (id === 'open' ? cases.filter(c => c.status !== 'closed').length : cases.filter(c => c.status === id).length);
+    const count = id => (id === 'records' ? recordCount : id === 'open' ? cases.filter(c => c.status !== 'closed').length : cases.filter(c => c.status === id).length);
     const tabs = [...TABS, ...(options.canSettings ? [['settings', 'Settings']] : [])];
-    const actions = options.canManage ? '<button class="primary" data-dp-new>＋ New case</button>' : '';
     let body;
     if (view === 'records') body = await recordsView();
     else if (view === 'settings') body = settingsView(await api('/discipline/settings'));
     else {
       const q = search.toLowerCase(), list = cases.filter(c => (view === 'open' ? c.status !== 'closed' : c.status === view) && (!q || JSON.stringify(c).toLowerCase().includes(q)));
-      body = `<section class="panel"><div class="toolbar dp-toolbar"><label class="search">Search cases<input type="search" data-dp-search value="${esc(search)}" placeholder="Reference, employee, offense…"></label><span class="download-links"><a class="small download-link" href="/api/reports/discipline-cases.xlsx${view !== 'open' ? `?caseStatus=${view}` : ''}" download>Excel</a></span></div>
-        ${table(['Reference', 'Employee', 'Incident', 'Offense', 'Status', 'Explanation due', 'Decision', ''], list.map(c => [esc(c.reference), `<span class="name">${esc(c.employeeName)}</span><small>${esc(c.position || '')}${c.department ? ` · ${esc(c.department)}` : ''}</small>`, fmtDate(c.incidentDate), `${esc(c.offense)}${c.severity ? `<br><small>${esc(c.severity)}</small>` : ''}`, badge(c.statusLabel, KIND[c.status]), c.deadline ? fmtDate(c.deadline) : '—', c.sanction ? `${esc(c.sanction)}<br><small>${esc({ draft: 'Draft', 'for-approval': 'For approval', approved: 'Approved', returned: 'Returned', issued: 'Issued' }[c.decisionStatus] || '')}</small>` : '—', `<button class="small" data-dp-open="${c.id}">Open</button>`]), 'No cases in this list.')}</section>`;
+      body = `<section class="dp-panel"><label class="dp-search-label" for="dp-search">Search Cases</label><div class="dp-tools"><span class="dp-search">${ic('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>')}<input id="dp-search" type="search" data-dp-search value="${esc(search)}" placeholder="Reference, employee, offense…"></span><a class="dp-excel" href="/api/reports/discipline-cases.xlsx${view !== 'open' ? `?caseStatus=${view}` : ''}" download>${ic('<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>')}Excel</a></div>
+        <div class="dp-table"><table><thead><tr><th>Reference</th><th>Employee</th><th>Incident</th><th>Offense</th><th>Status</th><th>Explanation due</th><th>Decision</th><th></th></tr></thead><tbody>
+        ${list.length ? list.map(c => `<tr><td><button class="link-button" data-dp-open="${c.id}">${esc(c.reference)}</button></td><td><span class="name">${esc(c.employeeName)}</span><small>${esc(c.position || '')}${c.department ? ` · ${esc(c.department)}` : ''}</small></td><td>${fmtDate(c.incidentDate)}</td><td>${esc(c.offense)}${c.severity ? `<br><small>${esc(c.severity)}</small>` : ''}</td><td>${badge(c.statusLabel, KIND[c.status])}</td><td>${c.deadline ? fmtDate(c.deadline) : '—'}</td><td>${c.sanction ? `${esc(c.sanction)}<br><small>${esc({ draft: 'Draft', 'for-approval': 'For approval', approved: 'Approved', returned: 'Returned', issued: 'Issued' }[c.decisionStatus] || '')}</small>` : '—'}</td><td><button class="small dp-open" data-dp-open="${c.id}">Open</button></td></tr>`).join('') : ''}
+        </tbody></table>${list.length ? '' : `<div class="dp-empty">${EMPTY}<strong>Nothing here yet</strong><span>${search ? 'No cases match this search.' : 'No cases in this list.'}</span></div>`}</div></section>`;
     }
-    shell(heading('Due Process & Discipline', 'Incident reports, Notices to Explain, hearings, decisions and disciplinary records. Confidential: authorized HR personnel and management only.', actions) +
-      `<div class="tabs rect-tabs dp-tabs">${tabs.map(([id, label]) => `<button data-dp-view="${id}" class="${id === view ? 'active' : ''}" aria-pressed="${id === view}">${esc(label)}${id !== 'records' && id !== 'settings' ? ` <span class="rect-count">${count(id)}</span>` : ''}</button>`).join('')}</div>${body}`);
+    shell(`<div class="dp"><section class="dp-hero"><span class="dp-gavel">${GAVEL}</span><div class="dp-hello"><span>People Operations</span><h1>Due Process &amp; Discipline</h1><p>Incident reports, Notices to Explain, hearings, decisions and disciplinary records.<br>Confidential: authorized HR personnel and management only.</p></div>${options.canManage ? `<button class="dp-new" data-dp-new>${ic('<path d="M12 5v14M5 12h14"/>')}New Case</button>` : ''}</section>
+      <div class="dp-tiles" role="tablist">${tabs.map(([id, label]) => { const [tone, icon] = TILE[id] || TILE.closed; const n = id === 'settings' ? null : count(id); return `<button role="tab" class="dp-tile dp-${tone}${id === view ? ' on' : ''}" data-dp-view="${id}" aria-selected="${id === view}"><i>${icon}</i><span>${esc(label === 'Open cases' ? 'Open Cases' : label === 'Disciplinary records' ? 'Disciplinary Records' : label)}</span>${n === null ? '' : `<strong>${n ?? '—'}</strong>`}</button>`; }).join('')}</div>
+      ${body}</div>`);
     bind();
   }
   async function recordsView() {

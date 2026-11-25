@@ -6,15 +6,92 @@ export function createAdmin(ctx) {
   const SHEET = { submitted: ['Submitted', 'pending'], 'under-review': ['Under review', 'pending'], approved: ['Approved', ''], returned: ['Returned for correction', 'neutral'], rejected: ['Rejected', 'rejected'], draft: ['Draft', 'neutral'] };
   const LABELS = { firstName: 'First name', middleName: 'Middle name', lastName: 'Last name', suffix: 'Suffix', preferredName: 'Preferred name', sex: 'Sex', birthDate: 'Date of birth', birthPlace: 'Place of birth', civilStatus: 'Civil status', nationality: 'Nationality', personalEmail: 'Personal email', mobile: 'Mobile', currentAddress: 'Current address', permanentAddress: 'Permanent address', name: 'Contact person', relationship: 'Relationship', contact: 'Contact number', tin: 'TIN', sss: 'SSS', philHealth: 'PhilHealth', pagIbig: 'Pag-IBIG' };
 
-  // ---------- Data sheet submissions ----------
+  // ---------- Data sheet submissions (Nov 25, 2026 design) ----------
+  const DS_PAGE = 10;
+  const dsIco = d => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const DSI = {
+    doc: dsIco('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+    people: dsIco('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'),
+    check: dsIco('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'),
+    clock: dsIco('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    issue: dsIco('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 12h6M9 16h6"/>'),
+    arrow: dsIco('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    history: dsIco('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'),
+    search: dsIco('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
+    filter: dsIco('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
+    export: dsIco('<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>'),
+    dept: dsIco('<rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>'),
+    more: dsIco('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
+    prev: dsIco('<path d="m14 6-6 6 6 6"/>'), next: dsIco('<path d="m10 6 6 6-6 6"/>'),
+  };
+  const DS_TONES = ['blue', 'green', 'violet', 'teal', 'orange'];
+  const OPEN = s => ['submitted', 'under-review'].includes(s.status);
+  const ISSUE = s => ['returned', 'rejected'].includes(s.status);
+  const thisMonth = s => (s.submittedAt || '').slice(0, 7) === new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 7);
+  const dsWhen = iso => (iso ? `${esc(new Date(iso).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' }))}<small>${esc(new Date(iso).toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }))}</small>` : '—');
+  const dsView = { tab: 'open', q: '', status: '', dept: '', kpi: '', page: 1 };
+  let dsList = [], dsPeople = new Map();
+
   async function datasheets() {
-    shell(heading('Data Sheet Submissions', 'Loading…') + '<div class="loading">Loading…</div>');
-    const list = await api('/hr/datasheets'), open = list.filter(s => ['submitted', 'under-review'].includes(s.status));
-    shell(heading('Data Sheet Submissions', 'Employees submit their information from their own account. Nothing changes in the employee record until HR approves it.') +
-      `<section class="panel"><div class="panel-head"><h2>Waiting for review (${open.length})</h2></div>${table(['Employee', 'Department', 'Submitted', 'Status', ''], open.map(s => [esc(s.name), esc(s.department || '—'), fmtDateTime(s.submittedAt), badge(...SHEET[s.status]), `<button class="small primary" data-sheet="${s.id}">Review</button>`]), 'No data sheets waiting for review.')}</section>
-      <section class="panel"><div class="panel-head"><h2>History</h2></div>${table(['Employee', 'Submitted', 'Decision', 'By', 'When', ''], list.filter(s => !open.includes(s)).map(s => [esc(s.name), fmtDateTime(s.submittedAt), badge(...SHEET[s.status]), esc(who(s.reviewedBy) || '—'), fmtDateTime(s.reviewedAt), `<button class="small" data-sheet="${s.id}">View</button>`]), 'No decisions yet.')}</section>
-      <p class="legend">Employees open <strong>My data sheet</strong> in their portal. New hires need an employee login first (Account &amp; access).</p>`);
-    document.querySelector('.content').addEventListener('click', event => { const b = event.target.closest('[data-sheet]'); if (b) sheet(b.dataset.sheet); });
+    shell('<div class="loading">Loading…</div>');
+    const [list, people] = await Promise.all([api('/hr/datasheets'), api('/hr/employees').catch(() => [])]);
+    dsList = list; dsPeople = new Map((Array.isArray(people) ? people : []).map(p => [p.id, p]));
+    drawSheets();
+  }
+  function sheetRows() {
+    const q = dsView.q.trim().toLowerCase();
+    return dsList.filter(s => dsView.kpi === 'month' || (dsView.tab === 'open' ? OPEN(s) : !OPEN(s)))
+      .filter(s => !dsView.kpi || (dsView.kpi === 'month' ? thisMonth(s) : dsView.kpi === 'issues' ? ISSUE(s) : dsView.kpi === 'approved' ? s.status === 'approved' : true))
+      .filter(s => !dsView.status || s.status === dsView.status)
+      .filter(s => !dsView.dept || (s.department || '') === dsView.dept)
+      .filter(s => !q || `${s.name} ${dsPeople.get(s.employeeId)?.number || s.employeeId}`.toLowerCase().includes(q));
+  }
+  function drawSheets() {
+    const open = dsList.filter(OPEN), rows = sheetRows(), pages = Math.max(1, Math.ceil(rows.length / DS_PAGE));
+    dsView.page = Math.min(dsView.page, pages);
+    const shown = rows.slice((dsView.page - 1) * DS_PAGE, dsView.page * DS_PAGE);
+    const depts = [...new Set(dsList.map(s => s.department).filter(Boolean))].sort();
+    const kpi = (key, tone, icon, value, label) => `<button class="ds-kpi ds-${tone}${dsView.kpi === key ? ' on' : ''}" data-ds-kpi="${key}"><span class="ds-kpi-ico">${icon}</span><span><strong>${value}</strong><small>${label}</small></span><i>${DSI.arrow}</i></button>`;
+    const avatar = s => { const ini = String(s.name).split(',').reverse().join(' ').trim().split(/\s+/).filter(Boolean).map(x => x[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase(); return `<span class="ds-av"><span>${esc(ini)}</span><img src="/api/hr/employees/${encodeURIComponent(s.employeeId)}/photo" alt="" data-ds-photo></span>`; };
+    const tone = d => DS_TONES[[...String(d)].reduce((n, c) => n + c.charCodeAt(0), 0) % DS_TONES.length];
+    const decision = s => `<span class="ds-badge ds-b-${esc(s.status)}">${s.status === 'approved' ? DSI.check : DSI.clock}${esc(SHEET[s.status]?.[0] || s.status)}</span>`;
+    const pageBtns = Array.from({ length: pages }, (_, i) => i + 1).filter(n => pages <= 7 || Math.abs(n - dsView.page) <= 2 || n === 1 || n === pages);
+    shell(`<div class="ds">
+      <section class="ds-hero"><span class="ds-hero-ico">${DSI.doc}</span><div><h1>Data Sheet Submissions</h1><p>Employees submit their information from their own account.<br>Nothing changes in the employee record until HR approves it.</p></div><p class="ds-motto">“Build on Trust,<br>Backed by Expertise”</p></section>
+      <div class="ds-kpis">${kpi('', 'blue', DSI.people, open.length, 'Pending Review')}${kpi('approved', 'green', DSI.check, dsList.filter(s => s.status === 'approved').length, 'Approved')}${kpi('month', 'orange', DSI.clock, dsList.filter(thisMonth).length, 'This Month')}${kpi('issues', 'violet', DSI.issue, dsList.filter(ISSUE).length, 'With Issues')}</div>
+      <div class="ds-bar"><div class="ds-tabs" role="tablist"><button role="tab" aria-selected="${dsView.tab === 'open'}" class="${dsView.tab === 'open' ? 'on' : ''}" data-ds-tab="open">${DSI.clock}Waiting for Review (${open.length})</button><button role="tab" aria-selected="${dsView.tab === 'history'}" class="${dsView.tab === 'history' ? 'on' : ''}" data-ds-tab="history">${DSI.history}History</button></div>
+        <label class="ds-search">${DSI.search}<input type="search" data-ds-q value="${esc(dsView.q)}" placeholder="Search by employee name…" aria-label="Search by employee name or ID"></label>
+        <details class="ds-filter"><summary>${DSI.filter}Filter${dsView.status || dsView.dept ? ' •' : ''}</summary><div class="ds-pop"><label>Decision<select data-ds-status><option value="">All</option>${Object.entries(SHEET).filter(([k]) => k !== 'draft').map(([k, [l]]) => `<option value="${k}" ${dsView.status === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label><label>Department<select data-ds-dept><option value="">All</option>${depts.map(d => `<option ${dsView.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label><button class="small" data-ds-clear>Clear filters</button></div></details>
+        <button class="ds-export" data-ds-export>${DSI.export}Export</button></div>
+      <section class="ds-table"><table><thead><tr><th>Employee</th><th>Department</th><th>Submitted On</th><th>Decision</th><th>By</th><th>When</th><th class="ds-act">Action</th></tr></thead><tbody>
+        ${shown.length ? shown.map(s => `<tr><td><span class="ds-emp">${avatar(s)}<span><strong>${esc(s.name)}</strong><small>${esc(dsPeople.get(s.employeeId)?.number || s.employeeId)}</small></span></span></td><td>${s.department ? `<span class="ds-dept"><i class="ds-t-${tone(s.department)}">${DSI.dept}</i>${esc(s.department)}</span>` : '—'}</td><td class="ds-when">${dsWhen(s.submittedAt)}</td><td>${decision(s)}</td><td>${esc(who(s.reviewedBy) || '—')}</td><td class="ds-when">${dsWhen(s.reviewedAt)}</td><td class="ds-act"><button class="ds-view" data-sheet="${esc(s.id)}">${OPEN(s) ? 'Review' : 'View'}</button><details class="ds-more"><summary aria-label="More actions">${DSI.more}</summary><div class="ds-pop"><button data-ds-file="${esc(s.employeeId)}">Open 201 file</button><button data-sheet="${esc(s.id)}">Open data sheet</button></div></details></td></tr>`).join('') : `<tr><td colspan="7" class="ds-empty">${dsView.tab === 'open' ? 'No data sheets waiting for review.' : 'No decisions yet.'}</td></tr>`}
+      </tbody></table>
+      <div class="ds-foot"><strong>${rows.length ? `Showing ${(dsView.page - 1) * DS_PAGE + 1}–${(dsView.page - 1) * DS_PAGE + shown.length} of ${rows.length} submission${rows.length === 1 ? '' : 's'}` : 'Showing 0 submissions'}</strong>
+        <nav class="ds-pages" aria-label="Pages"><button data-ds-page="${dsView.page - 1}" ${dsView.page <= 1 ? 'disabled' : ''} aria-label="Previous page">${DSI.prev}</button>${pageBtns.map(n => `<button data-ds-page="${n}" class="${n === dsView.page ? 'on' : ''}" ${n === dsView.page ? 'aria-current="page"' : ''}>${n}</button>`).join('')}<button data-ds-page="${dsView.page + 1}" ${dsView.page >= pages ? 'disabled' : ''} aria-label="Next page">${DSI.next}</button></nav></div></section>
+      <p class="legend">Employees can no longer edit their profile in the portal (Nov 24, 2026); earlier submissions stay here for review and history.</p></div>`);
+    const root = document.querySelector('.content');
+    root.querySelectorAll('[data-ds-photo]').forEach(img => { img.addEventListener('error', () => img.remove()); img.addEventListener('load', () => { if (img.naturalWidth) img.closest('.ds-av').classList.add('has-photo'); else img.remove(); }); });
+    const q = root.querySelector('[data-ds-q]');
+    q.addEventListener('input', () => { dsView.q = q.value; dsView.page = 1; const pos = q.selectionStart; drawSheets(); const again = document.querySelector('[data-ds-q]'); again.focus(); again.setSelectionRange(pos, pos); });
+    root.querySelector('[data-ds-status]').addEventListener('change', e => { dsView.status = e.target.value; dsView.page = 1; drawSheets(); });
+    root.querySelector('[data-ds-dept]').addEventListener('change', e => { dsView.dept = e.target.value; dsView.page = 1; drawSheets(); });
+    root.onclick = event => {
+      const t = event.target;
+      const b = t.closest('[data-sheet]'); if (b) { sheet(b.dataset.sheet); return; }
+      const f = t.closest('[data-ds-file]'); if (f) { ctx.go({ page: 'employee201', id: f.dataset.dsFile }); return; }
+      const tab = t.closest('[data-ds-tab]'); if (tab) { dsView.tab = tab.dataset.dsTab; dsView.page = 1; dsView.kpi = ''; drawSheets(); return; }
+      const k = t.closest('[data-ds-kpi]'); if (k) { dsView.kpi = k.dataset.dsKpi; if (k.dataset.dsKpi !== 'month') dsView.tab = k.dataset.dsKpi ? 'history' : 'open'; dsView.page = 1; drawSheets(); return; }
+      const p = t.closest('[data-ds-page]'); if (p && !p.disabled) { dsView.page = Number(p.dataset.dsPage); drawSheets(); return; }
+      if (t.closest('[data-ds-clear]')) { dsView.status = ''; dsView.dept = ''; dsView.page = 1; drawSheets(); return; }
+      if (t.closest('[data-ds-export]')) { exportSheets(rows); return; }
+      root.querySelectorAll('.ds details[open]').forEach(d => { if (!d.contains(t)) d.open = false; });
+    };
+  }
+  function exportSheets(rows) {
+    const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const line = r => r.map(cell).join(',');
+    const csv = [line(['Employee', 'Employee ID', 'Department', 'Submitted on', 'Decision', 'By', 'When'])].concat(rows.map(s => line([s.name, dsPeople.get(s.employeeId)?.number || s.employeeId, s.department, s.submittedAt ? fmtDateTime(s.submittedAt) : '', SHEET[s.status]?.[0] || s.status, who(s.reviewedBy) || '', s.reviewedAt ? fmtDateTime(s.reviewedAt) : '']))).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `data-sheet-submissions-${dsView.tab}.csv`; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
   async function sheet(id) {
     try {

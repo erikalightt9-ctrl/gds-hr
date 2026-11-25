@@ -1,5 +1,5 @@
 // Memos: drafts, issuing to all / departments / named employees, revisions, archive, and acknowledgement tracking.
-import { fmtDate, fmtDateTime, readFile } from './hr-common.js';
+import { fmtDate, fmtDateTime, readFile, who } from './hr-common.js';
 // Loaded on demand, never at start-up: if the file cannot be loaded the rest of the app keeps working.
 let viewer = null;
 const loadViewer = () => (viewer ? Promise.resolve(viewer) : import('./memo-viewer.js').then(m => (viewer = m)).catch(() => null));
@@ -10,7 +10,7 @@ const COMPANIES = ['GDS CAPITAL INC.', 'Philippine Dragon Media Network', 'PDMN 
 
 export function createMemos(ctx) {
   const { api, esc, table, badge, toast, openDialog, dialog, shell, heading } = ctx;
-  let view = 'issued', memos = [], people = [];
+  let view = 'all', memos = [], people = [];
   const STATUS = { draft: ['Draft', 'neutral'], published: ['Issued', ''], archived: ['Archived', 'neutral'] };
 
   async function render(openId = null) {
@@ -25,18 +25,122 @@ export function createMemos(ctx) {
     draw();
     if (openId) detail(openId);
   }
+  // Memos list (Nov 25, 2026 design): red hero, KPI cards with monthly trend, search + filters, tabs, table, pages.
+  const PER_PAGE = 10;
+  const ico = d => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const MI = {
+    people: ico('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'),
+    check: ico('<path d="m6 12.5 4 4 8-9"/>'),
+    draft: ico('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+    archive: ico('<rect x="3.5" y="4" width="17" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'),
+    search: ico('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
+    cal: ico('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'),
+    filter: ico('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
+    export: ico('<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>'),
+    eye: ico('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
+    pen: ico('<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>'),
+    more: ico('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
+    prev: ico('<path d="m14 6-6 6 6 6"/>'), next: ico('<path d="m10 6 6 6-6 6"/>'),
+    dept: ico('<circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.3"/><circle cx="19" cy="10" r="2.3"/><path d="M7.5 20c0-2.8 2-4.8 4.5-4.8s4.5 2 4.5 4.8M1.5 19c0-2.2 1.5-3.8 3.5-3.8M22.5 19c0-2.2-1.5-3.8-3.5-3.8"/>'),
+    person: ico('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'),
+    megaphone: ico('<path d="M3 10v4h3l7 5V5L6 10H3Z"/><path d="M17 8a5 5 0 0 1 0 8"/>'),
+    info: ico('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/>'),
+    bell: ico('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
+    lock: ico('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'),
+    plus: ico('<path d="M12 5v14M5 12h14"/>'),
+  };
+  // Category → icon and tone.
+  const CAT = c => (/announce/i.test(c) ? ['megaphone', 'red'] : /policy|guideline/i.test(c) ? ['info', 'blue'] : /office|schedule/i.test(c) ? ['cal', 'orange'] : /confidential/i.test(c) ? ['lock', 'violet'] : /advisory|reminder/i.test(c) ? ['bell', 'green'] : ['draft', 'blue']);
+  const BUCKET = m => (m.status === 'published' ? 'published' : m.status === 'draft' ? 'draft' : 'archived');
+  const memoDate = m => m.publishedAt || m.issueDate || m.updatedAt || '';
+  const ui = { q: '', status: '', dept: '', category: '', from: '', to: '', page: 1 };
+  const manila = (iso, opts) => new Date(iso.length === 10 ? `${iso}T00:00:00+08:00` : iso).toLocaleString('en-US', { timeZone: 'Asia/Manila', ...opts });
+  const initials = name => String(name || '?').split(/\s+/).filter(Boolean).map(x => x[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase();
+  const whoName = u => who(u) || u || '';
+
+  // Six months of counts for a KPI card: trend line and the change this month against last month.
+  function trend(list) {
+    const now = new Date(Date.now() + 8 * 3600000), months = Array.from({ length: 6 }, (_, i) => { const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + i, 1)); return d.toISOString().slice(0, 7); });
+    const counts = months.map(mo => list.filter(m => (memoDate(m) ? manila(memoDate(m), { year: 'numeric', month: '2-digit' }).replace(/(\d+)\/(\d+)/, '$2-$1') : '') === mo).length);
+    const [prev, cur] = counts.slice(-2), change = prev ? Math.round((cur - prev) / prev * 100) : null;
+    const max = Math.max(1, ...counts), pts = counts.map((c, i) => `${(i * 120 / 5).toFixed(1)},${(34 - c / max * 28).toFixed(1)}`).join(' ');
+    return { change, line: `<svg class="mm-spark" viewBox="0 0 120 38" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,38 ${pts} 120,38" class="mm-area"/><polyline points="${pts}" class="mm-line"/></svg>` };
+  }
+  function filtered() {
+    const q = ui.q.trim().toLowerCase();
+    return memos.filter(m => view === 'all' || BUCKET(m) === view)
+      .filter(m => !ui.status || BUCKET(m) === ui.status)
+      .filter(m => !ui.category || m.category === ui.category)
+      .filter(m => !ui.dept || (ui.dept === '__all' ? (m.recipientMode || 'all') === 'all' : (m.departments || []).includes(ui.dept)))
+      .filter(m => { const d = (m.issueDate || memoDate(m)).slice(0, 10); return (!ui.from || d >= ui.from) && (!ui.to || d <= ui.to); })
+      .filter(m => !q || `${m.title} ${m.excerpt || ''} ${m.reference || ''} ${whoName(m.author)} ${m.category || ''}`.toLowerCase().includes(q))
+      .sort((a, b) => memoDate(b).localeCompare(memoDate(a)));
+  }
+  function audience(m) {
+    const mode = m.recipientMode || (m.recipientNames?.length === 1 ? 'employees' : 'all');
+    if (mode === 'departments' && m.departments?.length) return [MI.dept, m.departments.length === 1 ? m.departments[0] : `${m.departments.length} departments`, 'blue'];
+    if (mode === 'employees') return [MI.person, m.recipientNames?.length === 1 ? m.recipientNames[0] : `${m.recipients || m.recipientNames?.length || 0} employees`, 'violet'];
+    return [MI.dept, 'All employees', 'blue'];
+  }
   function draw() {
-    const can = ctx.context().can, list = memos.filter(m => (view === 'issued' ? m.status === 'published' : m.status === view));
-    shell(heading('Memos', 'Issue memos to everyone, a department or chosen employees, and track who has acknowledged receipt.', can.manage ? '<button class="primary" data-new>＋ Create memo</button>' : '') +
-      `<div class="tabs rect-tabs">${['issued', ...(can.manage ? ['draft'] : []), 'archived'].map(v => `<button data-view="${v}" class="${v === view ? 'active' : ''}" aria-pressed="${v === view}"><svg class="rect-tab-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${{ issued: '<path d="M21 3 3 10.5l7 2.5 2.5 7L21 3Z"/><path d="m10 13 4.5-4.5"/>', draft: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>', archived: '<rect x="3.5" y="4" width="17" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>' }[v]}</svg>${{ issued: 'Issued', draft: 'Drafts', archived: 'Archived' }[v]} <span>${memos.filter(m => (v === 'issued' ? m.status === 'published' : m.status === v)).length}</span></button>`).join('')}</div>
-      <section class="panel">${table(['Reference', 'Employee', 'Title', 'Category', 'Issued', 'Recipients', 'Acknowledged', 'Deadline', ''], list.map(m => [esc(m.reference || '—'), recipientCell(m), `<button class="link-button" data-open="${m.id}" title="Open the official PDF">${esc(m.title)}</button>${m.revisionInProgress ? '<small>revision in progress</small>' : ''}`, esc(m.category || '—'), fmtDate(m.issueDate), m.recipients || '—', m.status === 'draft' ? '—' : m.ackRequired ? `${m.acknowledged} / ${m.recipients}${m.pending ? ` · <button class="badge-button" data-open="${m.id}" data-filter="open" title="Show who still has to act">${badge(`${m.pending} pending`, 'pending')}</button>` : ''}${m.overdue ? ` ${badge(`⚠️ ${m.overdue} overdue`, 'rejected')}` : ''}${m.clarifications ? ` ${badge(`❓ ${m.clarifications}`, 'pending')}` : ''}` : 'Not required', m.ackDeadline ? fmtDate(m.ackDeadline) : '—', `<button class="small" data-open="${m.id}">Open</button>`]), view === 'draft' ? 'No drafts.' : 'No memos here yet.')}</section>`);
-    document.querySelector('.content').addEventListener('click', onClick);
+    if (!['all', 'published', 'draft', 'archived'].includes(view)) view = 'all';
+    const can = ctx.context().can, rows = filtered(), pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+    ui.page = Math.min(ui.page, pages);
+    const start = (ui.page - 1) * PER_PAGE, shown = rows.slice(start, start + PER_PAGE);
+    const count = b => memos.filter(m => BUCKET(m) === b).length;
+    const kpi = (tone, icon, list, label, tab) => { const t = trend(list); return `<button class="mm-kpi mm-${tone}" data-view="${tab}"><span class="mm-kpi-ico">${icon}</span><span class="mm-kpi-text"><strong>${list.length}</strong><small>${label}</small></span><em class="${t.change > 0 ? 'up' : t.change < 0 ? 'down' : ''}" title="This month against last month">${t.change === null ? '—' : `${t.change > 0 ? '↑ +' : t.change < 0 ? '↓ ' : '— '}${t.change}%`}</em>${t.line}</button>`; };
+    const tabs = [['all', 'All Memos', memos.length], ['published', 'Published', count('published')], ...(can.manage ? [['draft', 'Draft', count('draft')]] : []), ['archived', 'Archived', count('archived')]];
+    const status = m => { const b = BUCKET(m); return `<span class="mm-badge mm-b-${b}">${b === 'published' ? MI.check : b === 'draft' ? MI.pen : MI.archive}${{ published: 'Published', draft: 'Draft', archived: 'Archived' }[b]}</span>${m.status === 'published' && m.ackRequired ? `<button class="mm-ack" data-open="${m.id}" data-filter="open" title="Recipients and acknowledgements">${m.acknowledged} / ${m.recipients} acknowledged${m.overdue ? ` · ${m.overdue} overdue` : ''}${m.clarifications ? ` · ${m.clarifications} ❓` : ''}</button>` : ''}`; };
+    const pageBtns = Array.from({ length: pages }, (_, i) => i + 1).filter(n => pages <= 7 || n === 1 || n === pages || Math.abs(n - ui.page) <= 1);
+    const cats = [...new Set(memos.map(m => m.category).filter(Boolean))].sort();
+    shell(`<div class="mm">
+      <section class="mm-hero"><span class="mm-horn" aria-hidden="true"><svg viewBox="0 0 120 120"><defs><linearGradient id="mmRed" x1="0" x2="1"><stop offset="0" stop-color="#ff4b3e"/><stop offset="1" stop-color="#b3121f"/></linearGradient></defs><path d="M22 52h18l46-26v68L40 68H22a8 8 0 0 1-8-8v0a8 8 0 0 1 8-8Z" fill="#fff" stroke="#d7141a" stroke-width="5" stroke-linejoin="round"/><path d="M86 26c10 6 14 20 14 34s-4 28-14 34Z" fill="url(#mmRed)"/><path d="M30 68l8 30a6 6 0 0 0 11-3l-4-27" fill="#c8102e"/><rect x="14" y="52" width="14" height="16" rx="4" fill="#d7141a"/><path d="M104 44l10-6M106 60h12M104 76l10 6" stroke="#d7141a" stroke-width="4" stroke-linecap="round"/></svg></span>
+        <div class="mm-hello"><span>Communication Hub</span><h1>Memos</h1><p>View and manage company memos, announcements,<br>and important communications.</p></div>
+        <p class="mm-motto">“Keep everyone informed,<br>stay connected.”</p>${can.manage ? `<button class="mm-create" data-new>${MI.pen}Create Memo</button>` : ''}</section>
+      <div class="mm-kpis">${kpi('navy', MI.people, memos, 'Total Memos', 'all')}${kpi('green', MI.check, memos.filter(m => BUCKET(m) === 'published'), 'Published', 'published')}${can.manage ? kpi('orange', MI.draft, memos.filter(m => BUCKET(m) === 'draft'), 'Draft', 'draft') : ''}${kpi('violet', MI.archive, memos.filter(m => BUCKET(m) === 'archived'), 'Archived', 'archived')}</div>
+      <div class="mm-tools">
+        <label class="mm-search">${MI.search}<input type="search" data-mm-q value="${esc(ui.q)}" placeholder="Search memo title, content, or author…" aria-label="Search memo title, content, or author"></label>
+        <select class="mm-select" data-mm-status aria-label="Status"><option value="">All Status</option>${[['published', 'Published'], ...(can.manage ? [['draft', 'Draft']] : []), ['archived', 'Archived']].map(([v, l]) => `<option value="${v}" ${ui.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <select class="mm-select" data-mm-dept aria-label="Department"><option value="">All Departments</option><option value="__all" ${ui.dept === '__all' ? 'selected' : ''}>Sent to all employees</option>${(ctx.context().departments || []).map(d => `<option ${ui.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select>
+        <details class="mm-pop-wrap"><summary class="mm-select mm-range">${ui.from || ui.to ? esc(`${ui.from ? fmtDate(ui.from) : '…'} – ${ui.to ? fmtDate(ui.to) : '…'}`) : 'Date Range'}${MI.cal}</summary><div class="mm-pop"><label>From<input type="date" data-mm-from value="${esc(ui.from)}"></label><label>To<input type="date" data-mm-to value="${esc(ui.to)}"></label><button class="small" data-mm-range-clear>Clear dates</button></div></details>
+        <details class="mm-pop-wrap"><summary class="mm-btn">${MI.filter}Filter${ui.category ? ' •' : ''}</summary><div class="mm-pop"><label>Category<select data-mm-cat><option value="">All categories</option>${cats.map(c => `<option ${ui.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label><button class="small" data-mm-clear>Clear all filters</button></div></details>
+        <button class="mm-btn" data-mm-export>${MI.export}Export</button></div>
+      <div class="mm-tabs" role="tablist">${tabs.map(([v, l, n]) => `<button role="tab" data-view="${v}" class="${v === view ? 'on' : ''}" aria-selected="${v === view}">${l} (${n})</button>`).join('')}</div>
+      <section class="mm-table"><table><thead><tr><th>#</th><th>Title</th><th>Author</th><th>Department</th><th>Publication Date</th><th>Status</th><th class="mm-act">Actions</th></tr></thead><tbody>
+        ${shown.length ? shown.map((m, i) => { const [ic, tone] = CAT(m.category || ''), [aIco, aText, aTone] = audience(m), d = memoDate(m), by = whoName(m.author) || '—'; return `<tr>
+          <td class="mm-n">${start + i + 1}</td>
+          <td><span class="mm-title"><i class="mm-t-${tone}">${MI[ic]}</i><span><button class="link-button" data-open="${m.id}" title="Open">${esc(m.title)}</button><small>${esc(m.excerpt || [m.reference, m.category].filter(Boolean).join(' · '))}</small>${m.revisionInProgress ? '<small class="mm-rev">Revision in progress</small>' : ''}</span></span></td>
+          <td><span class="mm-author"><span class="mm-av">${esc(initials(by))}</span><span><strong>${esc(by)}</strong><small>${esc(m.approvedBy && m.approvedBy !== m.author ? `Approved by ${whoName(m.approvedBy)}` : m.category || '')}</small></span></span></td>
+          <td><span class="mm-dept"><i class="mm-t-${aTone}">${aIco}</i>${esc(aText)}</span></td>
+          <td class="mm-when">${d ? `${esc(manila(d, { month: 'short', day: 'numeric', year: 'numeric' }))}${d.length > 10 ? `<small>${esc(manila(d, { hour: '2-digit', minute: '2-digit' }))}</small>` : ''}` : '—'}</td>
+          <td>${status(m)}</td>
+          <td class="mm-act"><button class="mm-view" data-open="${m.id}">${m.status === 'draft' ? `${MI.pen}Edit` : `${MI.eye}View`}</button><details class="mm-more"><summary aria-label="More actions">${MI.more}</summary><div class="mm-pop"><button data-open="${m.id}">Open details</button>${m.status !== 'draft' ? `<button data-open="${m.id}" data-filter="open">Recipients &amp; acknowledgements</button><a href="/api/hr/memos/${encodeURIComponent(m.id)}.pdf" target="_blank" rel="noopener">Open PDF</a>` : ''}</div></details></td></tr>`; }).join('') : `<tr><td colspan="7" class="mm-empty">${[ui.q, ui.status, ui.dept, ui.category, ui.from, ui.to].some(Boolean) ? 'No memos match these filters.' : view === 'draft' ? 'No drafts.' : 'No memos here yet.'}</td></tr>`}
+      </tbody></table>
+      <div class="mm-foot"><span>${rows.length ? `Showing ${start + 1}–${start + shown.length} of ${rows.length} memo${rows.length === 1 ? '' : 's'}` : 'Showing 0 memos'}</span><nav class="mm-pages" aria-label="Pages"><button data-mm-page="${ui.page - 1}" ${ui.page <= 1 ? 'disabled' : ''} aria-label="Previous page">${MI.prev}</button>${pageBtns.map((n, i) => `${i && n - pageBtns[i - 1] > 1 ? '<span>…</span>' : ''}<button data-mm-page="${n}" class="${n === ui.page ? 'on' : ''}" ${n === ui.page ? 'aria-current="page"' : ''}>${n}</button>`).join('')}<button data-mm-page="${ui.page + 1}" ${ui.page >= pages ? 'disabled' : ''} aria-label="Next page">${MI.next}</button></nav></div></section></div>`);
+    const root = document.querySelector('.content');
+    const q = root.querySelector('[data-mm-q]');
+    q.addEventListener('input', () => { ui.q = q.value; ui.page = 1; const pos = q.selectionStart; draw(); const again = document.querySelector('[data-mm-q]'); again.focus(); again.setSelectionRange(pos, pos); });
+    const bind = (sel, key) => root.querySelector(sel)?.addEventListener('change', e => { ui[key] = e.target.value; ui.page = 1; draw(); });
+    bind('[data-mm-status]', 'status'); bind('[data-mm-dept]', 'dept'); bind('[data-mm-cat]', 'category'); bind('[data-mm-from]', 'from'); bind('[data-mm-to]', 'to');
+    root.addEventListener('click', onClick);
+  }
+  function exportMemos() {
+    const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`, line = r => r.map(cell).join(',');
+    const csv = [line(['Reference', 'Title', 'Category', 'Author', 'Audience', 'Publication date', 'Status', 'Recipients', 'Acknowledged', 'Acknowledge by'])]
+      .concat(filtered().map(m => line([m.reference, m.title, m.category, whoName(m.author), audience(m)[1], memoDate(m) ? manila(memoDate(m), { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '', BUCKET(m), m.recipients, m.ackRequired ? m.acknowledged : 'Not required', m.ackDeadline || '']))).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'memos.csv'; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
   async function onClick(event) {
-    const b = event.target.closest('button'); if (!b) return;
-    if (b.dataset.view) { view = b.dataset.view; draw(); }
+    const t = event.target;
+    t.closest('.mm') && document.querySelectorAll('.mm details[open]').forEach(d => { if (!d.contains(t)) d.open = false; });
+    const b = t.closest('button'); if (!b) return;
+    if (b.dataset.view) { view = b.dataset.view; ui.page = 1; ui.status = ''; draw(); return; }
+    if (b.dataset.mmPage && !b.disabled) { ui.page = Number(b.dataset.mmPage); draw(); return; }
+    if (b.hasAttribute('data-mm-range-clear')) { ui.from = ''; ui.to = ''; ui.page = 1; draw(); return; }
+    if (b.hasAttribute('data-mm-clear')) { Object.assign(ui, { q: '', status: '', dept: '', category: '', from: '', to: '', page: 1 }); draw(); return; }
+    if (b.hasAttribute('data-mm-export')) { exportMemos(); return; }
     if (b.hasAttribute('data-new')) editor(null);
-    if (b.dataset.open) detail(b.dataset.open, b.dataset.filter || 'all');
+    if (b.dataset.open) { b.closest('details')?.removeAttribute('open'); detail(b.dataset.open, b.dataset.filter || 'all'); }
   }
   function editor(memo, { revision = false } = {}) {
     const d = memo?.draft || { title: '', category: 'General Announcement', reference: '', issueDate: ctx.today(), body: '', recipients: { mode: 'all', departments: [], employees: [] }, ackRequired: true, ackDeadline: '', effectiveDate: '', company: COMPANIES[0] };
@@ -112,11 +216,4 @@ export function createMemos(ctx) {
   return { render, create: () => { if (!people.length) api('/hr/employees').then(p => { people = p; editor(null); }).catch(e => toast(e.message)); else editor(null); } };
 }
 
-// Memo list: the recipient's name (one employee) or the count (who still has to acknowledge is in the Acknowledged column and the memo details).
-function recipientCell(m) {
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const names = m.recipientNames || [];
-  if (!names.length) return '—';
-  if (names.length === 1) return `<span class="memo-who">${esc(names[0])}</span>`;
-  return `<span class="memo-who">${names.length} employees</span>`;
-}
+
