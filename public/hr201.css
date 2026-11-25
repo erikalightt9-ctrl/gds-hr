@@ -3935,3 +3935,20 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 .bir-edit { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px !important; border-radius: 10px !important; border: 1.5px solid #f0b6ba !important; background: #fff !important; color: #d7141a !important; font-weight: 700; font-size: 13px; }
 @media (max-width: 1300px) { .bir-hero-tools { position: static; margin-left: auto; flex-wrap: wrap; } .bir-hero { flex-wrap: wrap; } .bir-cards { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 760px) { .bir-hero-art { width: 70px; height: 70px; } }
+
+/* ---- Contributions summary boxes (Nov 25, 2026 design): icon per line, coloured total bar ---- */
+.sum-panel { border-radius: 18px !important; border: 1px solid #efe6d6 !important; background: linear-gradient(180deg, #fffdf9, #fbf6ee) !important; box-shadow: 0 10px 24px rgb(80 50 10 / .08); color: #13265c; }
+.sum-panel .panel-head { border-bottom: 1px solid #eadfcb; }
+.sum-title { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 800; color: #13265c; }
+.sum-head { width: 40px; height: 40px; display: grid; font-style: normal; color: #d7141a; } .sum-head svg { width: 100%; height: 100%; }
+.sum-meta { color: #263460; font-size: 13.5px; }
+.sum-list { display: grid; gap: 0; margin: 0; }
+.sum-list > div { display: flex; align-items: center; gap: 14px; padding: 12px 6px; border-bottom: 1px solid #e6e2da; }
+.sum-list dt { flex: 1; font-size: 16px; font-weight: 700; color: #13265c; } .sum-list dd { margin: 0; font-size: 17px; font-weight: 700; color: #13265c; font-variant-numeric: tabular-nums; }
+.sum-ico { flex: none; width: 30px; height: 30px; display: grid; font-style: normal; } .sum-ico svg { width: 100%; height: 100%; }
+.sum-blue { color: #2659e6; } .sum-green { color: #16a34a; } .sum-amber { color: #ea8f12; } .sum-violet { color: #7b3fe0; } .sum-rose { color: #d7141a; } .sum-grey { color: #4b557a; }
+.sum-list .sum-total { margin-top: 12px; padding: 10px 10px 10px 16px; border: 0; border-radius: 12px; }
+.sum-list .sum-total dt { font-size: 19px; font-weight: 800; }
+.sum-list .sum-total dd { padding: 8px 20px; border-radius: 10px; color: #fff; font-size: 21px; font-weight: 800; }
+.sum-total-red { background: #fde8ea; } .sum-total-red .sum-ico, .sum-total-red dt { color: #c3121f; } .sum-total-red dd { background: linear-gradient(180deg, #d7141a, #a50e17); }
+.sum-total-gold { background: #faefd8; } .sum-total-gold .sum-ico { color: #c98a12; } .sum-total-gold dd { background: linear-gradient(180deg, #b8862b, #8a5f12); }
