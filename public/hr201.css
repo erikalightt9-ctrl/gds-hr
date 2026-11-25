@@ -4020,3 +4020,22 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 @media (max-width: 1300px) { .rr-top { grid-template-columns: 1fr 1fr; } .rr-grid { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .rr-hero-art { width: 70px; height: 64px; } }
 .rr-table.scroll-table { max-height: none; }
+
+/* ---- Settings (Nov 25, 2026 design): hero with admin chip, tab bar with icons, soft blue panels ---- */
+.st-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin-bottom: 14px; color: var(--dp-ink); }
+.st-hero-art { flex: none; width: 96px; height: 96px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.st-hero .dp-hello h1 { font-size: 38px; }
+.st-admin-hero { position: absolute; right: 18px; bottom: 16px; background: #fff; border: 1px solid #f0b6ba; color: #d7141a; box-shadow: 0 6px 14px -8px rgb(20 40 100 / .3); }
+.st-tabbar { display: flex; flex-wrap: wrap; gap: 0; padding: 6px; border: 1px solid #e1e6f2 !important; border-radius: 14px; background: #fff; box-shadow: 0 6px 16px rgb(20 40 100 / .06); }
+.st-tabbar button { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 14px !important; border: 0 !important; border-radius: 10px !important; background: none !important; color: #13265c !important; font-weight: 600; font-size: 14px; white-space: nowrap; }
+.st-tabbar button + button { border-left: 1px solid #e1e6f2 !important; border-radius: 0 !important; }
+.st-tabbar button.active { background: linear-gradient(180deg, #e3262b, #a50e17) !important; color: #fff !important; border-radius: 10px !important; box-shadow: 0 6px 12px -6px rgb(160 0 10 / .6); }
+.st-tab-ico { width: 19px; height: 19px; flex: none; }
+.st-panel { border: 1px solid #e1e6f2 !important; background: linear-gradient(180deg, #fbfcff, #f4f6fb) !important; box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: #13265c; }
+.st-head { border-bottom: 1px solid #e1e6f2; background: linear-gradient(180deg, #f3f6fd, #eaf0fb); border-radius: 14px 14px 0 0; }
+.st-head h2 { color: #13265c; font-weight: 800; }
+.st-panel input, .st-panel select, .st-panel textarea { border-radius: 10px; border-color: #cfd8ec; }
+.st-panel table thead th { background: #e3eafa; color: #13265c; }
+.st-panel button.primary { background: linear-gradient(180deg, #e3262b, #a50e17); border: 0; border-radius: 10px; }
+@media (max-width: 1200px) { .st-admin-hero { position: static; margin-left: auto; } .st-hero { flex-wrap: wrap; } .st-tabbar button + button { border-left: 0 !important; } }
+@media (max-width: 760px) { .st-hero-art { width: 66px; height: 66px; } }
