@@ -4185,3 +4185,24 @@ dialog.rrd-dialog { width: min(1240px, calc(100vw - 32px)); background: linear-g
 .profile-card:has(.lc-type) td { text-align: center; } .profile-card:has(.lc-type) td:first-child, .profile-card:has(.lc-type) th:first-child { text-align: left; }
 .tabs.profile-tab-grid button { padding: 8px 12px !important; font-size: 13px; }
 .tabs.profile-tab-grid button { flex: 0 0 auto !important; }
+
+/* ---- 201 profile, latest design (Nov 25, 2026): light pink card headers, leave list, attendance history band ---- */
+.profile-card-head { margin: 0 !important; padding: 14px 18px !important; border-radius: 0 !important; background: linear-gradient(90deg, #fff1f3, #fffaf9) !important; border-bottom: 1px solid #f6d6da !important; }
+.profile-card-head h3 { color: #13265c !important; font-size: 20px; }
+.profile-card-head h3 > span { color: #d7141a; }
+.profile-card-head button, .profile-card-head .small { border-color: #e04a50 !important; }
+.lc-list { display: grid; grid-template-columns: 1fr 1fr; padding: 6px 14px 12px; }
+.lc-list ul { list-style: none; margin: 0; padding: 0 12px; } .lc-list ul + ul { border-left: 1px solid #f0dfd8; }
+.lc-item { display: flex; align-items: center; gap: 14px; padding: 10px 4px; border-bottom: 1px solid #f3e6e2; }
+.lc-item:last-child { border-bottom: 0; }
+.lc-item .lc-ico { font-size: 22px; width: 30px; }
+.lc-name { flex: 1; display: grid; } .lc-name strong { font-weight: 600; color: #13265c; font-size: 16px; } .lc-name small { color: #4b557a; font-size: 12px; }
+.lc-name .lc-used { font-size: 12px; padding: 0; }
+.lc-zero { background: #fdecee; color: #13265c; }
+.lc-days { min-width: 96px; font-size: 14.5px; }
+.profile-card .att-tools { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin: 12px 14px; padding: 12px 18px; border-radius: 12px; border: 1px solid #f3d79c; background: linear-gradient(90deg, #fff6e6, #fdf2e4); }
+.profile-card .att-tools .field { font-weight: 600; } .profile-card .att-tools select { border-radius: 10px; font-weight: 700; color: #13265c; }
+.profile-card .att-tools .legend { color: #13265c; font-size: 13.5px; }
+.profile-card:has(.att-tools) table thead th { background: #fde3ea !important; color: #b3121f !important; font-weight: 800; text-transform: uppercase; font-size: 12.5px; }
+.profile-card:has(.att-tools) table td { text-align: center; } .profile-card:has(.att-tools) table td:first-child { text-align: left; } .profile-card:has(.att-tools) table td:last-child { text-align: left; }
+@media (max-width: 900px) { .lc-list { grid-template-columns: 1fr; } .lc-list ul + ul { border-left: 0; } }
