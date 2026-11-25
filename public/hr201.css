@@ -2770,3 +2770,5 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 @media (min-width: 901px) { #login-form .login-tiles .fingerprint-login { font-size: 14px !important; white-space: nowrap; padding: 14px 4px !important; min-height: 100px; } #login-form .login-tiles .fp-ico { width: 38px; height: 38px; } #login-form .login-user input { font-size: 16px !important; } }
 /* Logo lower, clear of the red swooshes (Nov 25, 2026). */
 @media (max-width: 900px) { #login-form .login-card-logo { margin-top: 34px !important; } }
+/* Celebrations card: no "N celebrations" chip (Nov 25, 2026). */
+.theme-scarlet .cg .cg-toggle { display: none !important; }
