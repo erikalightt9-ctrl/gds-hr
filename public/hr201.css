@@ -4069,3 +4069,5 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 .st-next2 small { display: flex; align-items: center; gap: 8px; color: #13265c; font-size: 13.5px; } .st-next2 small .st-aa-ico { color: #ea8f12; width: 18px; height: 18px; }
 @media (max-width: 1200px) { .st-aa, .st-num2 { grid-template-columns: 1fr; gap: 18px; } .st-aa-col { padding: 0; } .st-aa-col + .st-aa-col { border-left: 0; padding-top: 16px; border-top: 1px solid #eadfcb; } .st-next2 { padding-left: 0; border-left: 0; } }
 @media (max-width: 760px) { .st-aa-pair { grid-template-columns: 1fr; } .st-logo2 { flex-wrap: wrap; } }
+/* New Case / Add Training sit at the top right of the banner (Nov 25, 2026, HR) */
+.dp-hero .dp-new { top: 18px !important; transform: none !important; }
