@@ -4214,3 +4214,16 @@ dialog.rrd-dialog { width: min(1240px, calc(100vw - 32px)); background: linear-g
 .profile-card:has(.lc-type) table th + th, .profile-card:has(.lc-type) table td + td { border-left: 1px solid #f3e1dc; }
 .profile-card:has(.lc-type) table td { font-size: 15px; } .lc-type { font-weight: 700; font-size: 16px; }
 .profile-card:has(.lc-type) table th { text-align: center; font-size: 14px !important; text-transform: none !important; } .profile-card:has(.lc-type) table th:first-child { text-align: left; padding-left: 24px; }
+/* 201 profile, Nov 25, 2026 final mock-up: every card has the red title bar and red table headers */
+.profile-card .profile-card-head { margin: 12px 12px 6px !important; padding: 10px 16px !important; border-radius: 12px !important; border: 0 !important; background: linear-gradient(90deg, #a50e17, #c3121f 60%, #e2575e) !important; }
+.profile-card .profile-card-head h3, .profile-card .profile-card-head h3 > span { color: #fff !important; }
+.profile-card .profile-card-head button, .profile-card .profile-card-head .small, .profile-card .profile-card-head select { background: #fff !important; color: #b3121f !important; border: 0 !important; border-radius: 10px !important; font-weight: 700; }
+.profile-card table thead th, .profile-card:has(.att-tools) table thead th, .profile-card:has(.lc-type) table thead th { background: linear-gradient(180deg, #b3121f, #8a0f18) !important; color: #fff !important; }
+.profile-card .scroll-table, .profile-card .table-wrap { margin: 6px 12px 14px; border: 1px solid #f0dfd8; border-radius: 12px; overflow: auto; }
+.profile-card table td { border-bottom: 1px solid #f3e6e2; }
+.checklist-panel { border-radius: 16px !important; border: 1px solid #f0dfd8 !important; background: linear-gradient(180deg, #fffdfb, #fdf6f3) !important; box-shadow: 0 8px 18px rgb(120 20 20 / .05); }
+.checklist-panel > .panel-head { margin: 12px 12px 6px; padding: 10px 16px; border-radius: 12px; border: 0; background: linear-gradient(90deg, #a50e17, #c3121f 60%, #e2575e); }
+.checklist-panel > .panel-head h2, .checklist-panel > .panel-head p, .checklist-panel > .panel-head span, .checklist-panel > .panel-head .legend { color: #fff !important; }
+.checklist-panel table thead th { background: linear-gradient(180deg, #b3121f, #8a0f18) !important; color: #fff !important; }
+.checklist-panel button.small { border-radius: 10px; border-color: #f0b6ba; color: #b3121f; }
+.checklist-panel button.small.primary, .profile-card button.small.primary { color: #fff !important; }
