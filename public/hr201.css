@@ -4227,3 +4227,47 @@ dialog.rrd-dialog { width: min(1240px, calc(100vw - 32px)); background: linear-g
 .checklist-panel table thead th { background: linear-gradient(180deg, #b3121f, #8a0f18) !important; color: #fff !important; }
 .checklist-panel button.small { border-radius: 10px; border-color: #f0b6ba; color: #b3121f; }
 .checklist-panel button.small.primary, .profile-card button.small.primary { color: #fff !important; }
+
+/* ---- Audit Trail (Nov 25, 2026 design): hero, four cards, filters, Excel / PDF, table with chips ---- */
+.au-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin-bottom: 16px; color: var(--dp-ink); }
+.au-hero-art { flex: none; width: 104px; height: 104px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.au-hero .dp-hello h1 { font-size: 40px; }
+.au-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; color: #13265c; }
+.au-card { display: flex; align-items: center; gap: 16px; padding: 16px 18px; border-radius: 16px; border: 1px solid #e1e6f2; background: linear-gradient(180deg, #fbfcff, #eef3fb); box-shadow: 0 8px 18px rgb(20 40 100 / .07); }
+.au-card > span { flex: none; width: 58px; height: 58px; padding: 14px; border-radius: 50%; background: #fff; color: #1f48c0; box-shadow: 0 4px 10px rgb(20 40 100 / .1); }
+.au-card svg { width: 100%; height: 100%; }
+.au-card strong { display: block; font-size: 28px; font-weight: 800; line-height: 1.1; } .au-card small { font-size: 15px; } .au-card em { display: block; font-style: normal; font-size: 13px; color: #263460; }
+.au-panel { padding: 16px 18px 12px; border-radius: 16px; border: 1px solid #e1e6f2; background: linear-gradient(180deg, #fbfcff, #f4f6fb); box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: #13265c; }
+.au-panel svg { width: 100%; height: 100%; }
+.au-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; } .au-head h2 { display: flex; align-items: center; gap: 12px; margin: 0; font-size: 22px; font-weight: 800; color: #13265c; } .au-head h2 svg { width: 30px; height: 30px; color: #13265c; }
+.au-files { margin-left: auto; display: flex; align-items: center; gap: 10px; } .au-files small { color: #263460; }
+.au-files .download-link { display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 10px; font-weight: 700; text-decoration: none; }
+.au-files .download-link:first-child { border: 1.5px solid #8fd6a8; background: #effaf3; color: #168a43; }
+.au-files .download-link:last-child { border: 1.5px solid #f0b6ba; background: #fff; color: #c3202c; }
+.au-tools { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.au-search { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 14px; background: #fff; border: 1px solid #cfd8ec; border-radius: 12px; }
+.au-search svg { width: 20px; height: 20px; flex: none; } .au-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0; padding: 0; background: transparent; box-shadow: none !important; }
+.au-tools .field { font-weight: 700; font-size: 12.5px; } .au-tools select, .au-tools input[type=date] { height: 42px; border-radius: 12px; border-color: #cfd8ec; min-width: 170px; }
+.au-reset { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px !important; border-radius: 12px !important; border: 1.5px solid #f0b6ba !important; background: #fff !important; color: #c3202c !important; font-weight: 700; }
+.au-reset svg { width: 18px; height: 18px; }
+.au-table { border-radius: 12px; overflow: auto; border: 1px solid #e1e6f2; background: #fff; max-height: 640px; }
+.au-table table { width: 100%; border-collapse: collapse; }
+.au-table thead th { position: sticky; top: 0; z-index: 1; background: #e3eafa; color: #13265c; font-size: 15px; font-weight: 800; text-transform: none; letter-spacing: 0; padding: 12px 16px; text-align: left; }
+.au-table td { padding: 9px 16px; border-bottom: 1px solid #edf0f7; font-size: 13.5px; }
+.au-table tbody tr:first-child { background: #fdeef0; }
+.au-time { display: flex; align-items: center; gap: 10px; white-space: nowrap; } .au-time svg { width: 18px; height: 18px; color: #4b557a; }
+.au-actor { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; } .au-actor i { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 11.5px; background: #fff1dc; color: #a86d06; }
+.au-chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 14px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.au-chip svg { width: 17px; height: 17px; }
+.au-blue { background: #e4ecfd; color: #1f48c0; } .au-violet { background: #efe6fd; color: #6d2fd0; } .au-green { background: #e2f6ea; color: #168a43; } .au-red { background: #fdecee; color: #c3202c; }
+.au-rec strong { display: block; } .au-rec small { color: #4b557a; font-size: 12px; word-break: break-all; }
+.au-act { text-align: right; } .au-inspect { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px !important; border-radius: 10px !important; border: 1.5px solid #f0b6ba !important; background: #fff !important; color: #c3202c !important; font-weight: 700; white-space: nowrap; }
+.au-inspect svg { width: 17px; height: 17px; }
+.au-empty { text-align: center; padding: 30px !important; color: #4b557a; }
+.au-foot { margin: 10px 4px 0; font-size: 13px; color: #263460; }
+@media (max-width: 1100px) { .au-cards { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) { .au-hero-art { width: 70px; height: 70px; } .au-table table { min-width: 820px; } }
+.au-rec { max-width: 300px; } .au-rec small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-tools select { min-width: 150px !important; } .au-tools input[type=date] { min-width: 140px !important; }
+.au-table td, .au-table th { padding-left: 12px !important; padding-right: 12px !important; }
+.au-actor { white-space: normal !important; } .au-rec { max-width: 230px !important; } .au-chip { white-space: normal; }

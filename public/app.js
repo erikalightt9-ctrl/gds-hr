@@ -810,10 +810,44 @@ async function reportsPage() {
     form.closest('li').querySelectorAll('[data-report-link]').forEach(a => { a.href = `/api/reports/${a.dataset.reportLink}.${a.dataset.format}${params ? `?${params}` : ''}`; });
   });
 }
+// Audit Trail (Nov 25, 2026 design): hero, four summary cards, search + action / actor / date filters, Excel / PDF,
+// table with initials, action chips (icon by kind of action) and Inspect Change. The list is the latest 1,000 events.
+let auditFilter = { q: '', action: '', actor: '', from: '', to: '' };
 async function auditPage() {
   const entries = await api('/audit');
-  shell(heading('Audit trail', 'Who changed what, when, and why. Payroll snapshots preserve their original records.') + `<section class="panel"><div class="panel-head"><h2>Recent activity</h2>${downloads('audit')}<span class="legend">Latest 1,000 events</span></div>${table(['Time', 'Actor', 'Action', 'Record', ''], entries.map((e, i) => [esc(new Date(e.at).toLocaleString()), esc(who(e.actor)), badge(e.action, 'neutral'), `${esc(e.kind)}<br><small>${esc(e.recordId)}</small>`, `<button class="small" data-audit-index="${i}">Inspect change</button>`]))}</section>`);
-  document.querySelectorAll('[data-audit-index]').forEach(b => b.onclick = () => showObject('Audit event', entries[Number(b.dataset.auditIndex)]));
+  const ai = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const AI = { doc: ai('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/>'), person: ai('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'), gear: ai('<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/>'), cal: ai('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'), clock: ai('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), search: ai('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'), reset: ai('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'), eye: ai('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'), db: ai('<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/>') };
+  const ACT = [[/delete|remove|reject|cancel|disable|revers/i, 'red', ai('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>')], [/import|upload/i, 'blue', ai('<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>')], [/fingerprint|passkey|sign-in|login|feishu/i, 'violet', ai('<path d="M12 11v3a6 6 0 0 1-2 4.5M8 11a4 4 0 0 1 8 0v2M5 11a7 7 0 0 1 14 0v1"/>')], [/approve|verify|confirm|post|release|issue|publish/i, 'green', ai('<path d="m6 12.5 4 4 8-9"/>')], [/add|create|apply|request|file/i, 'blue', ai('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>')], [/./, 'green', ai('<path d="M5 4h11l3 3v13H5Z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>')]];
+  const chip = action => { const [, tone, icon] = ACT.find(([re]) => re.test(action)); return `<span class="au-chip au-${tone}">${icon}${esc(String(action).replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</span>`; };
+  const ini = n => String(n || '?').split(/[\s.]+/).filter(Boolean).map(x => x[0]).filter((_, i, arr) => i === 0 || i === arr.length - 1).join('').toUpperCase();
+  const stamp = iso => new Date(iso).toLocaleString('en-US', { timeZone: 'Asia/Manila', month: '2-digit', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  const actions = [...new Set(entries.map(e => e.action))].sort(), actors = [...new Set(entries.map(e => e.actor))].sort((x, y) => who(x).localeCompare(who(y)));
+  const latest = entries[0], latestDay = latest ? new Date(latest.at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) : '';
+  const draw = () => {
+    const f = auditFilter, q = f.q.trim().toLowerCase();
+    const list = entries.map((e, i) => ({ e, i })).filter(({ e }) => (!f.action || e.action === f.action) && (!f.actor || e.actor === f.actor))
+      .filter(({ e }) => { const d = new Date(e.at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }); return (!f.from || d >= f.from) && (!f.to || d <= f.to); })
+      .filter(({ e }) => !q || `${who(e.actor)} ${e.actor} ${e.action} ${e.kind} ${e.recordId}`.toLowerCase().includes(q));
+    const card = (tone, icon, value, label, sub = '') => `<div class="au-card au-c-${tone}"><span>${icon}</span><div><strong>${value}</strong><small>${label}</small>${sub ? `<em>${sub}</em>` : ''}</div></div>`;
+    shell(`<section class="dp-hero au-hero"><span class="au-hero-art" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#fff" opacity=".85"/><rect x="24" y="16" width="44" height="58" rx="8" fill="#2f6df0"/><path d="M32 30h20M32 40h28M32 50h16" stroke="#fff" stroke-width="5" stroke-linecap="round"/><circle cx="64" cy="62" r="13" fill="#fff" stroke="#14306e" stroke-width="6"/><path d="m73 71 11 11" stroke="#14306e" stroke-width="8" stroke-linecap="round"/></svg></span><div class="dp-hello"><span>People Operations</span><h1>Audit Trail</h1><p>Track who changed what, when, and why. Payroll snapshots preserve their original records.</p></div></section>
+      <div class="au-cards">${card('blue', AI.doc, entries.length.toLocaleString(), 'Total Events')}${card('blue', AI.person, actors.length, 'Unique Actors')}${card('blue', AI.gear, actions.length, 'Action Types')}${card('blue', AI.cal, latest ? (latestDay === today() ? 'Today' : esc(new Date(latest.at).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' }))) : '—', 'Latest Activity', latest ? esc(new Date(latest.at).toLocaleString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })) : '')}</div>
+      <section class="au-panel"><div class="au-head"><h2>${AI.clock}Recent Activity</h2><span class="au-files">${downloads('audit')}<small>Last 1,000 events</small></span></div>
+        <div class="au-tools"><label class="au-search">${AI.search}<input type="search" data-au="q" value="${esc(f.q)}" placeholder="Search by actor, action, or record…" aria-label="Search by actor, action, or record"></label>
+          <label class="field">Action Type<select data-au="action"><option value="">All Actions</option>${actions.map(x => `<option value="${esc(x)}" ${f.action === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+          <label class="field">Actor<select data-au="actor"><option value="">All Actors</option>${actors.map(x => `<option value="${esc(x)}" ${f.actor === x ? 'selected' : ''}>${esc(who(x))}</option>`).join('')}</select></label>
+          <label class="field">From<input type="date" data-au="from" value="${esc(f.from)}"></label><label class="field">To<input type="date" data-au="to" value="${esc(f.to)}"></label>
+          <button class="au-reset" data-au-reset>${AI.reset}Reset Filters</button></div>
+        <div class="au-table"><table><thead><tr><th>Time ↓</th><th>Actor</th><th>Action</th><th>Record</th><th></th></tr></thead><tbody>
+          ${list.length ? list.map(({ e, i }) => `<tr><td class="au-time">${AI.cal}${esc(stamp(e.at))}</td><td><span class="au-actor"><i>${esc(ini(who(e.actor)))}</i>${esc(who(e.actor))}</span></td><td>${chip(e.action)}</td><td class="au-rec"><strong>${esc(e.kind)}</strong><small>${esc(e.recordId)}</small></td><td class="au-act"><button class="au-inspect" data-audit-index="${i}">${AI.eye}Inspect Change</button></td></tr>`).join('') : '<tr><td colspan="5" class="au-empty">No events match these filters.</td></tr>'}
+        </tbody></table></div><p class="au-foot">Showing ${list.length.toLocaleString()} of ${entries.length.toLocaleString()} events</p></section>`);
+    const root = document.querySelector('.content');
+    root.querySelectorAll('[data-audit-index]').forEach(b => b.onclick = () => showObject('Audit event', entries[Number(b.dataset.auditIndex)]));
+    const qbox = root.querySelector('[data-au="q"]');
+    qbox.oninput = () => { auditFilter.q = qbox.value; const pos = qbox.selectionStart; draw(); const again = document.querySelector('[data-au="q"]'); again.focus(); again.setSelectionRange(pos, pos); };
+    root.querySelectorAll('select[data-au], input[type=date][data-au]').forEach(el => { el.onchange = () => { auditFilter[el.dataset.au] = el.value; draw(); }; });
+    root.querySelector('[data-au-reset]').onclick = () => { auditFilter = { q: '', action: '', actor: '', from: '', to: '' }; draw(); };
+  };
+  draw();
 }
 // Two-factor sign-in is required for HR, HR Staff, Payroll and Management accounts (server enforced).
 function renderForcedMfa() {
