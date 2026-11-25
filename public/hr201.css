@@ -3868,3 +3868,40 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 .gc-panel table th { white-space: normal !important; padding: 10px 8px !important; font-size: 11px !important; line-height: 1.3; }
 .gc-panel table td { padding: 9px 8px !important; font-size: 13px; }
 .cs-table table { white-space: normal !important; } .cs-table td, .cs-table th { padding: 10px 10px !important; font-size: 13px; } .cs-table td:first-child { min-width: 200px; }
+
+/* ---- Benefits (Nov 25, 2026 design): hero, cards + month / Print, payments and employees panels ---- */
+.bn-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin-bottom: 14px; color: var(--dp-ink); }
+.bn-hero-art { flex: none; width: 104px; height: 96px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.bn-hero .dp-hello h1 { font-size: 36px; }
+.bn-top { display: flex; gap: 16px; align-items: stretch; margin-bottom: 16px; color: #13265c; }
+.bn-cards { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.bn-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; border: 1px solid #e1e6f2; box-shadow: 0 6px 16px rgb(20 40 100 / .06); min-width: 0; }
+.bn-card > span { flex: none; width: 52px; height: 52px; padding: 12px; border-radius: 50%; color: #fff; } .bn-card svg, .bn-panel svg, .bn-month svg { width: 100%; height: 100%; }
+.bn-card b { display: block; font-size: 13.5px; } .bn-card strong { display: block; font-size: 24px; font-weight: 800; line-height: 1.15; white-space: nowrap; } .bn-card small { font-size: 12.5px; color: #263460; }
+.bn-blue { background: linear-gradient(180deg, #f1f6fe, #e2ecfc); } .bn-blue > span { background: linear-gradient(145deg, #2f6df0, #1847c4); }
+.bn-green { background: linear-gradient(180deg, #effaf3, #dcf3e4); } .bn-green > span { background: linear-gradient(145deg, #2cc46a, #14934a); }
+.bn-amber { background: linear-gradient(180deg, #fff8ea, #feeccb); } .bn-amber > span { background: linear-gradient(145deg, #ffc44d, #ea8f12); }
+.bn-red { background: linear-gradient(180deg, #fff1f2, #fde0e3); } .bn-red > span { background: linear-gradient(145deg, #f0444a, #c3121f); }
+.bn-month { display: flex; align-items: flex-end; gap: 10px; }
+.bn-month .field { font-weight: 700; } .bn-month input { height: 42px; border-radius: 12px; border: 1px solid #cfd8ec; padding: 0 12px; font-weight: 600; color: #13265c; }
+.bn-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px !important; border-radius: 10px !important; border: 1.5px solid #f0b6ba !important; background: #fff !important; color: #d7141a !important; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.bn-btn svg { width: 17px !important; height: 17px !important; }
+.bn-month .bn-btn { height: 42px; }
+.bn-panel { border-radius: 16px !important; border: 1px solid #e1e6f2 !important; background: linear-gradient(180deg, #fbfcff, #f4f6fb) !important; box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: #13265c; }
+.bn-title { display: flex; align-items: center; gap: 12px; font-weight: 800; color: #13265c; }
+.bn-title-ico { flex: none; width: 42px; height: 42px; padding: 10px; border-radius: 50%; background: linear-gradient(145deg, #2f6df0, #1847c4); color: #fff; }
+.bn-note { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 12px; border: 1px solid #cfdcf6; background: #edf3fd; font-size: 12.5px; }
+.bn-note svg { width: 18px !important; height: 18px !important; flex: none; color: #2659e6; }
+.bn-search { display: flex; align-items: center; gap: 8px; height: 40px; width: min(300px, 100%); padding: 0 14px; border: 1px solid #cfd8ec; border-radius: 12px; background: #fff; }
+.bn-search svg { width: 18px !important; height: 18px !important; flex: none; } .bn-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0; padding: 0; box-shadow: none !important; background: transparent; }
+.bn-panel table thead th { background: #e3eafa; color: #13265c; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.bn-agency { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.bn-ag { flex: none; width: 34px; height: 34px; padding: 8px; border-radius: 50%; color: #fff; display: grid; font-style: normal; }
+.bn-ag.bn-blue { background: linear-gradient(145deg, #2f6df0, #1847c4); } .bn-ag.bn-green { background: linear-gradient(145deg, #2cc46a, #14934a); } .bn-ag.bn-amber { background: linear-gradient(145deg, #ffc44d, #ea8f12); }
+.bn-pill { display: inline-block; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 12.5px; white-space: nowrap; }
+.bn-draft { background: #fff3dc; border: 1px solid #f3d79c; color: #a86d06; } .bn-paid { background: #e3f7ea; color: #16884a; }
+.bn-emp { display: inline-flex; align-items: center; gap: 10px; } .bn-emp > span { display: grid; } .bn-emp .link-button { padding: 0; text-align: left; color: #13265c; } .bn-emp small { color: #4b557a; }
+.bn-av { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 12.5px; }
+.bn-av-green { background: #e2f6ea; color: #168a43; } .bn-av-amber { background: #fff1dc; color: #c4710a; } .bn-av-blue { background: #e4ecfd; color: #2659e6; } .bn-av-violet { background: #efe6fd; color: #7b3fe0; } .bn-av-rose { background: #fdecee; color: #c3202c; }
+@media (max-width: 1300px) { .bn-top { flex-direction: column; } .bn-cards { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) { .bn-hero-art { width: 70px; height: 64px; } }

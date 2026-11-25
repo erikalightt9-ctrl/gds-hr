@@ -21,31 +21,53 @@ export function createBenefitsPage(ctx) {
     try { data = await api(`/benefits?month=${month}`); } catch (error) { shell(heading('Benefits', '') + `<div class="notice">${esc(/not found/i.test(error.message) ? 'Benefits will be available after the HR server restarts.' : error.message)}</div>`); return; }
     draw();
   }
+  // Nov 25, 2026 design: hero, four cards, month + Print, agency icons, initials, outlined buttons.
+  const bi = d => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const BI = {
+    people: bi('<circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.3"/><circle cx="19" cy="10" r="2.3"/><path d="M7.5 20c0-2.8 2-4.8 4.5-4.8s4.5 2 4.5 4.8M1.5 19c0-2.2 1.5-3.8 3.5-3.8M22.5 19c0-2.2-1.5-3.8-3.5-3.8"/>'),
+    shield: bi('<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>'),
+    db: bi('<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/>'),
+    layers: bi('<path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/>'),
+    info: bi('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>'),
+    print: bi('<path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="7" y="14" width="10" height="7" rx="1"/>'),
+    receipt: bi('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>'),
+    folder: bi('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 10h18l-2 9H5z"/>'),
+    search: bi('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
+    sss: bi('<path d="M4 15c4-1 6-6 12-8M6 19c4-1 7-6 13-9M3 11c4-1 5-5 10-7"/>'),
+    philhealth: bi('<circle cx="9" cy="6" r="2"/><circle cx="15" cy="6" r="2"/><path d="M7 21v-9h4v9M13 21v-9h4v9"/>'),
+    pagibig: bi('<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><circle cx="12" cy="14" r="2.5"/>'),
+  };
+  const AG_TONE = { sss: 'blue', philhealth: 'green', pagibig: 'amber' };
+  const bnIni = n => { const [last, first] = String(n).split(',').map(x => x.trim()); return `${(first || last || '?')[0]}${first ? (last || '')[0] : ''}`.toUpperCase(); };
+  const bnTone = n => ['green', 'rose', 'blue', 'amber', 'violet'][[...String(n)].reduce((a, c) => a + c.charCodeAt(0), 0) % 5];
   function remittanceTable() {
-    return `<div class="table-wrap"><table><thead><tr><th>Agency</th><th class="num">Employee share</th><th class="num">Employer share</th><th class="num">Total</th><th>Status</th><th>Payment date</th><th>Reference no.</th><th>Proof</th><th>Recorded</th><th></th></tr></thead><tbody>${data.remittances.map(r => {
+    return `<div class="table-wrap"><table><thead><tr><th>Agency</th><th class="num">Employee share</th><th class="num">Employer share</th><th class="num">Total</th><th>Status</th><th>Payment date</th><th>Reference no.</th><th>Proof</th><th>Recorded</th><th>Action</th></tr></thead><tbody>${data.remittances.map(r => {
       const p = r.payment;
-      return `<tr><td><strong>${esc(r.agencyName)}</strong></td><td class="num">${money(r.employeeShare)}</td><td class="num">${money(r.employerShare)}</td><td class="num"><strong>${money(r.total)}</strong></td>
-        <td>${p ? badge(p.status === 'verified' ? 'Verified' : 'Paid', '') : badge(data.draft ? 'Draft month' : 'Not recorded', 'pending')}</td><td>${esc(p?.paymentDate || '—')}</td><td>${esc(p?.reference || '—')}</td>
+      return `<tr><td><span class="bn-agency"><i class="bn-ag bn-${AG_TONE[r.agency] || 'blue'}">${BI[r.agency] || BI.db}</i><strong>${esc(r.agencyName)}</strong></span></td><td class="num">${money(r.employeeShare)}</td><td class="num">${money(r.employerShare)}</td><td class="num"><strong>${money(r.total)}</strong></td>
+        <td>${p ? `<span class="bn-pill bn-paid">${p.status === 'verified' ? 'Verified' : 'Paid'}</span>` : `<span class="bn-pill bn-draft">${data.draft ? 'Draft Month' : 'Not recorded'}</span>`}</td><td>${esc(p?.paymentDate || '—')}</td><td>${esc(p?.reference || '—')}</td>
         <td>${p?.proof ? `<a href="/api/benefits/files/${esc(p.proof.id)}" target="_blank" rel="noopener">${esc(p.proof.name)}</a>` : '—'}</td>
         <td><small>${p ? `${esc(p.updatedBy)} · ${esc(stamp(p.updatedAt))}${p.verifiedBy ? `<br>Verified by ${esc(p.verifiedBy)}` : ''}` : ''}</small></td>
-        <td>${data.canRecordPayments ? `<button class="small" data-bn-remit="${r.agency}">${p ? 'Edit' : 'Record payment'}</button>` : ''}</td></tr>`;
+        <td>${data.canRecordPayments ? `<button class="bn-btn" data-bn-remit="${r.agency}">${BI.receipt}${p ? 'Edit' : 'Record Payment'}</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
   function peopleTable() {
     const q = search.trim().toLowerCase(), people = data.people.filter(p => !q || `${p.name} ${p.employeeId} ${p.department}`.toLowerCase().includes(q));
-    return `<div class="table-wrap"><table><thead><tr><th>Employee</th><th>HMO</th><th>Allowances</th><th class="num">SSS (EE / ER)</th><th class="num">PhilHealth (EE / ER)</th><th class="num">Pag-IBIG (EE / ER)</th><th></th></tr></thead><tbody>${people.map(p => {
+    return `<div class="table-wrap"><table><thead><tr><th>Employee</th><th>HMO</th><th>Allowances</th><th class="num">SSS (EE / ER)</th><th class="num">PhilHealth (EE / ER)</th><th class="num">Pag-IBIG (EE / ER)</th><th>Action</th></tr></thead><tbody>${people.map(p => {
       const c = p.contributions, pair = k => (c ? `${money(c[k][0])} / ${money(c[k][1])}` : '—');
-      return `<tr><td><button class="link-button" data-bn-open="${esc(p.employeeId)}"><strong>${esc(p.name)}</strong></button><br><small>${esc(p.employeeId)}${p.department ? ` · ${esc(p.department)}` : ''}</small></td>
+      return `<tr><td><span class="bn-emp"><i class="bn-av bn-av-${bnTone(p.name)}">${esc(bnIni(p.name))}</i><span><button class="link-button" data-bn-open="${esc(p.employeeId)}"><strong>${esc(p.name)}</strong></button><small>${esc(p.employeeId)}${p.department ? ` · ${esc(p.department)}` : ''}</small></span></span></td>
         <td>${p.hmo ? `${esc(p.hmo.provider)} · ${esc(p.hmo.plan)}<br>${badge(p.hmo.status, STATUS_BADGE[p.hmo.status] || 'neutral')}${p.hmo.endDate ? ` <small>until ${esc(p.hmo.endDate)}</small>` : ''}` : '<span class="muted">None</span>'}</td>
         <td>${p.allowances.length ? p.allowances.map(a => `${esc(a.type)}: ${money(a.amount)} <small>${esc(a.frequency.toLowerCase())}</small>`).join('<br>') : '<span class="muted">None</span>'}</td>
         <td class="num">${pair('sss')}</td><td class="num">${pair('philhealth')}</td><td class="num">${pair('pagibig')}</td>
-        <td><button class="small" data-bn-open="${esc(p.employeeId)}">Open</button></td></tr>`;
+        <td><button class="bn-btn" data-bn-open="${esc(p.employeeId)}">${BI.folder}Open</button></td></tr>`;
     }).join('') || '<tr><td colspan="7" class="muted">No employees match.</td></tr>'}</tbody></table></div>`;
   }
   function draw() {
-    shell(`${heading('Benefits', 'Government contributions, HMO and allowances', `<label class="field inline">Month<input type="month" value="${esc(month)}" data-bn-month></label><button class="small" data-bn-print>Print</button>`)}
-      <section class="panel"><div class="panel-head"><h2>Contribution payments · ${esc(new Date(`${month}-15T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' }))}</h2><span class="legend">${data.draft ? 'Payroll for this month is not final yet: amounts can still change. ' : ''}${data.canRecordPayments ? 'Record each agency’s payment after remitting.' : 'Finance records the payments.'}</span></div>${remittanceTable()}</section>
-      <section class="panel"><div class="panel-head"><h2>Employees</h2><input type="search" placeholder="Search name, ID or company" value="${esc(search)}" data-bn-search aria-label="Search employees"></div>${peopleTable()}</section>`);
+    const sum = k => data.remittances.reduce((n, r) => n + (r[k] || 0), 0), monthName = new Date(`${month}-15T00:00:00Z`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const bnCard = (tone, icon, label, value, foot) => `<div class="bn-card bn-${tone}"><span>${icon}</span><div><b>${label}</b><strong>${value}</strong><small>${foot}</small></div></div>`;
+    shell(`<section class="dp-hero bn-hero"><span class="bn-hero-art" aria-hidden="true"><svg viewBox="0 0 110 100"><path d="M55 46c-12-14-30-6-26 8 3 10 26 26 26 26s23-16 26-26c4-14-14-22-26-8Z" fill="#e3262b"/><path d="M10 50c6 0 12 8 18 18l14 14c3 3 8 3 10 0" fill="none" stroke="#2f6df0" stroke-width="10" stroke-linecap="round"/><path d="M100 50c-6 0-12 8-18 18L68 82c-3 3-8 3-10 0" fill="none" stroke="#2f6df0" stroke-width="10" stroke-linecap="round"/></svg></span><div class="dp-hello"><span>Payroll &amp; Attendance</span><h1>Benefits</h1><p>Government contributions, HMO and allowances.</p></div></section>
+      <div class="bn-top"><div class="bn-cards">${bnCard('blue', BI.people, 'Total Employees', data.people.length, 'Covered this month')}${bnCard('green', BI.shield, 'Total Employer Share', money(sum('employerShare')), 'All agencies')}${bnCard('amber', BI.people, 'Total Employee Share', money(sum('employeeShare')), 'All agencies')}${bnCard('red', BI.db, 'Total Contribution', money(sum('total')), 'Employer + Employee Share')}</div><div class="bn-month"><label class="field">Month<input type="month" value="${esc(month)}" data-bn-month></label><button class="bn-btn" data-bn-print>${BI.print}Print</button></div></div>
+      <section class="panel bn-panel"><div class="panel-head"><h2 class="bn-title"><span class="bn-title-ico">${BI.layers}</span>Contribution Payments – ${esc(monthName)}</h2><span class="bn-note">${BI.info}${data.draft ? 'Payroll for this month is not final yet; amounts can still change. ' : ''}${data.canRecordPayments ? 'Record each agency’s payment after remitting.' : 'Finance records the payments.'}</span></div>${remittanceTable()}</section>
+      <section class="panel bn-panel"><div class="panel-head"><h2 class="bn-title"><span class="bn-title-ico">${BI.people}</span>Employees</h2><label class="bn-search">${BI.search}<input type="search" placeholder="Search name, ID or company…" value="${esc(search)}" data-bn-search aria-label="Search employees"></label></div>${peopleTable()}</section>`);
     bind();
   }
   function bind() {
