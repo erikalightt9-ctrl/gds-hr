@@ -3582,3 +3582,32 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 @media (max-width: 1200px) { .lv .lv-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } .lv .lv-filters { grid-template-columns: 1fr 1fr 1fr; } }
 @media (max-width: 640px) { .lv .lv-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lv .lv-filters { grid-template-columns: 1fr 1fr; } .at-hero-art { width: 66px; height: 66px; } }
 .lv .lv-table thead th:last-child { text-align: center; }
+
+/* ---- Leave Management (Nov 25, 2026 design): hero, tinted cards, red tabs, soft panel, blue table header, empty state ---- */
+.lm-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin-bottom: 16px; color: var(--dp-ink); }
+.lm-hero-art { flex: none; width: 96px; height: 96px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.lm-hero .dp-hello h1 { font-size: 36px; }
+.lm-cards .lm-card { align-items: center; border: 1px solid #e1e6f2; box-shadow: 0 6px 16px rgb(20 40 100 / .06); color: #13265c; }
+.lm-cards .lm-card-ico { width: 54px; height: 54px; }
+.lm-cards .lm-card-ico .lm-ico { width: 26px; height: 26px; }
+.lm-cards .lm-card span { color: #13265c; font-weight: 600; } .lm-cards .lm-card strong { color: #13265c; margin: 2px 0; } .lm-cards .lm-card small { color: #13265c; }
+.lm-cards .lm-card:nth-child(1) { background: linear-gradient(180deg, #fff2f5, #fde3ea); } .lm-cards .lm-card:nth-child(1) .lm-card-ico { background: #fbd5de; color: #c3202c; }
+.lm-cards .lm-card:nth-child(2) { background: linear-gradient(180deg, #effaf3, #dcf3e4); } .lm-cards .lm-card:nth-child(2) .lm-card-ico { background: #2cc46a; color: #fff; }
+.lm-cards .lm-card:nth-child(3) { background: linear-gradient(180deg, #fff1f0, #fde0dc); } .lm-cards .lm-card:nth-child(3) .lm-card-ico { background: #fbd0cc; color: #d7141a; }
+.lm-cards .lm-card:nth-child(4) { background: linear-gradient(180deg, #f1f6fe, #e2ecfc); } .lm-cards .lm-card:nth-child(4) .lm-card-ico { background: #cfe0fb; color: #2659e6; }
+.lm-tabs { border-bottom-color: #e1e6f2; }
+.lm-tabs button { color: #13265c; font-size: 15px; }
+.lm-tabs button.active { color: #d7141a; box-shadow: inset 0 -3px 0 #d7141a; }
+.lm-count { background: #fde0e3; color: #d7141a; padding: 0 7px; }
+.lm-panel { border-color: #e1e6f2; background: linear-gradient(180deg, #fbfcff, #f4f6fb); box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: #13265c; }
+.lm-panel-title { display: flex; align-items: center; gap: 14px; }
+.lm-panel-ico { flex: none; width: 50px; height: 50px; display: grid; place-items: center; border-radius: 50%; background: #fde3ea; color: #d7141a; }
+.lm-panel-ico .lm-ico { width: 24px; height: 24px; }
+.lm-panel-head h2 { color: #13265c; font-weight: 800; } .lm-panel-head p { color: #263460; }
+.lm-search input { border-color: #cfd8ec; border-radius: 10px; background: #fff; }
+.lm-table-wrap { margin: 0 14px; border-radius: 12px; background: #fff; border: 1px solid #e1e6f2; }
+.lm-table thead th { background: #e3eafa; color: #13265c; font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.lm-empty { padding: 26px 12px 32px; background: none; } .lm-empty svg { width: 96px; height: 82px; } .lm-empty strong { font-size: 19px; color: #13265c; }
+.lm-foot { padding: 10px 20px; }
+.lm-note { margin: 4px 14px 14px; border-radius: 12px; border: 1px solid #c8e8d2; background: #e9f7ee; color: #13265c; }
+@media (max-width: 760px) { .lm-hero-art { width: 66px; height: 66px; } .lm-table-wrap { margin: 0 8px; } }
