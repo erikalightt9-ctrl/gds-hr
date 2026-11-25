@@ -4206,3 +4206,11 @@ dialog.rrd-dialog { width: min(1240px, calc(100vw - 32px)); background: linear-g
 .profile-card:has(.att-tools) table thead th { background: #fde3ea !important; color: #b3121f !important; font-weight: 800; text-transform: uppercase; font-size: 12.5px; }
 .profile-card:has(.att-tools) table td { text-align: center; } .profile-card:has(.att-tools) table td:first-child { text-align: left; } .profile-card:has(.att-tools) table td:last-child { text-align: left; }
 @media (max-width: 900px) { .lc-list { grid-template-columns: 1fr; } .lc-list ul + ul { border-left: 0; } }
+/* Leave Credits card (Nov 25, 2026 latest): red title bar with a white Edit button, bordered table */
+.profile-card:has(.lc-type) .profile-card-head { margin: 12px 12px 6px !important; border-radius: 12px !important; border: 0 !important; background: linear-gradient(90deg, #a50e17, #c3121f 60%, #e2575e) !important; }
+.profile-card:has(.lc-type) .profile-card-head h3 { color: #fff !important; font-size: 22px; } .profile-card:has(.lc-type) .profile-card-head h3 > span { color: #fff; }
+.profile-card:has(.lc-type) .profile-card-head button { border: 0 !important; }
+.profile-card:has(.lc-type) .scroll-table { margin: 6px 12px 14px; border: 1px solid #f0dfd8; border-radius: 12px; overflow: hidden; }
+.profile-card:has(.lc-type) table th + th, .profile-card:has(.lc-type) table td + td { border-left: 1px solid #f3e1dc; }
+.profile-card:has(.lc-type) table td { font-size: 15px; } .lc-type { font-weight: 700; font-size: 16px; }
+.profile-card:has(.lc-type) table th { text-align: center; font-size: 14px !important; text-transform: none !important; } .profile-card:has(.lc-type) table th:first-child { text-align: left; padding-left: 24px; }
