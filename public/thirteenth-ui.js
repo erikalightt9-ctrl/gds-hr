@@ -1,7 +1,7 @@
 // 13th Month Pay page: the annual ledger (posted payroll + salary encoded for months before the system),
 // the encoding grid for those earlier months, and the final pay computation for separated employees.
 import { who } from './hr-common.js';
-export function createThirteenthPage({ api, esc, money, table, badge = (t, c = '') => `<span class="badge ${c}">${t}</span>`, toast, openDialog, dialog, shell, heading, today, getState = () => null, context = () => null }) {
+export function createThirteenthPage({ api, esc, money, table, toast, openDialog, dialog, shell, heading, today, getState = () => null, context = () => null }) {
   // Grid filters (Company / Status), kept while the page is open. Rows are only hidden, so saving still covers every employee.
   let thCompany = '', thStatus = 'active';
   const empInfo = id => { const e = (getState()?.employees || []).find(x => x.id === id); return { company: e?.department || '', active: !!e && !e.archived && e.active !== false }; };
@@ -222,26 +222,52 @@ export function createThirteenthPage({ api, esc, money, table, badge = (t, c = '
     };
   }
 
+  // Final pay (Nov 25, 2026 design): banner, two-column form with field icons, red Compute button, table with chips.
+  const fpI = d => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const FP = {
+    person: fpI('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'),
+    cal: fpI('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01"/>'),
+    scale: fpI('<path d="M12 3v18M7 21h10M5 7h14M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z"/>'),
+    note: fpI('<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>'),
+    doc: fpI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+    chat: fpI('<path d="M4 5h16v11H9l-5 4z"/>'),
+    case: fpI('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18"/>'),
+    coins: fpI('<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 10v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/>'),
+    minus: fpI('<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>'),
+    pct: fpI('<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>'),
+    calc: fpI('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h4"/>'),
+    info: fpI('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>'),
+    clip: fpI('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 11h6M9 15h6"/>'),
+    check: fpI('<path d="m6 12.5 4 4 8-9"/>'),
+  };
+  const fpRow = (icon, inner) => `<div class="fp-row"><span class="fp-ico">${icon}</span>${inner}</div>`;
+  const fpPeso = (name, attrs) => `<span class="fp-peso"><i>₱</i><input type="number" name="${name}" ${attrs}></span>`;
+  const fpInitials = name => { const [last, first] = String(name).split(',').map(x => x.trim()); return `${(first || last || '?')[0]}${first ? (last || '')[0] : ''}`.toUpperCase(); };
   function finalPanel() {
     if (!finalData) return '';
     const emps = data.ledger.slice().sort((a, b) => a.name.localeCompare(b.name));
-    return `<section class="panel"><div class="panel-head"><h2>Final pay</h2><span class="legend">Labor Advisory 06-2020: release within 30 days of separation; Certificate of Employment within 3 days of request.</span></div>
-      <form id="fp-form" class="panel-body form-grid">
-        <label class="field">Employee<select name="employeeId" required data-searchable data-search-placeholder="Search employee name or ID" data-required-message="Choose the employee."><option value="">Choose…</option>${emps.map(e => `<option value="${esc(e.employeeId)}" data-end="${esc(e.endDate || '')}">${esc(e.name)}</option>`).join('')}</select></label>
-        <label class="field">Last day / separation date<input type="date" name="separationDate" required value="${today()}"></label>
-        <label class="field">Unpaid days worked (optional)<input type="number" name="unpaidDays" min="0" step="0.5"><small>Blank: scheduled workdays after the last paid cutoff up to the last day.</small></label>
-        <label class="field">Separation pay<select name="separationCause"><option value="none">None (resignation, end of contract, just cause)</option><option value="redundancy">Redundancy / labor-saving devices (1 month per year)</option><option value="retrenchment">Retrenchment / closure / disease (½ month per year)</option></select></label>
-        <div class="field full"><span>Convert unused leave to cash</span>${finalData.leaveTypes.length ? `<details class="leave-dropdown"><summary data-leave-summary>${esc(finalData.leaveTypes.filter(t => /service incentive|\bsil\b/i.test(t.name)).map(t => t.name).join(', ') || 'None')}</summary><div class="leave-options">${finalData.leaveTypes.map(t => `<label class="check"><input type="checkbox" name="convertLeave" value="${esc(t.id)}" data-leave-name="${esc(t.name)}"${/service incentive|\bsil\b/i.test(t.name) ? ' checked' : ''}> ${esc(t.name)}</label>`).join('')}</div></details>` : '<small>No leave types configured.</small>'}<small>Service Incentive Leave is convertible by law; other leave only if company policy says so.</small></div>
-        <label class="check"><input type="checkbox" name="deductLoans" checked> Deduct outstanding loans</label>
-        <label class="field">Other earnings<input type="number" name="otherEarnings" min="0" step="0.01" value="0"></label>
-        <label class="field">Other earnings note<input name="otherEarningsNote" maxlength="500"></label>
-        <label class="field">Other deductions / accountabilities<input type="number" name="otherDeductions" min="0" step="0.01" value="0"></label>
-        <label class="field">Deductions note<input name="otherDeductionsNote" maxlength="500"></label>
-        <label class="field">Tax adjustment (+ due, − refund)<input type="number" name="taxAdjustment" step="0.01" value="0"></label>
-        <label class="field">Notes<input name="notes" maxlength="2000"></label>
-        <div class="full"><button class="primary">Compute final pay</button></div>
-      </form><div id="fp-result"></div>
-      ${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by', 'Status'], finalData.records.map(r => [`<a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a>`, fmt(r.separationDate), `<strong>${money(r.net)}</strong>`, fmt(r.releaseDue), esc(who(r.computedBy)), (r.stage === 'released' ? `${badge('Released')}<br><small class="muted">${fmt(r.release.releasedOn)}${r.release.reference ? ` · ${esc(r.release.reference)}` : ''}</small>` : r.stage === 'approved' ? `${badge('Approved', 'pending')}${finalData.canSettle ? ` <button class="small primary" data-fp-settle="${esc(r.id)}" data-name="${esc(r.name)}">Record settlement</button>` : '<br><small class="muted">Awaiting Finance</small>'}` : `${badge('Prepared', 'neutral')}${finalData.canApprove ? ` <button class="small primary" data-fp-approve="${esc(r.id)}">Approve</button>` : '<br><small class="muted">Awaiting approval</small>'}`)]), 'No saved final pay computations yet.')}</section>`;
+    const leaveField = finalData.leaveTypes.length ? `<details class="leave-dropdown"><summary data-leave-summary>${esc(finalData.leaveTypes.filter(t => /service incentive|\bsil\b/i.test(t.name)).map(t => t.name).join(', ') || 'None')}</summary><div class="leave-options">${finalData.leaveTypes.map(t => `<label class="check"><input type="checkbox" name="convertLeave" value="${esc(t.id)}" data-leave-name="${esc(t.name)}"${/service incentive|\bsil\b/i.test(t.name) ? ' checked' : ''}> ${esc(t.name)}</label>`).join('')}</div></details>` : '<small>No leave types configured.</small>';
+    const status = r => (r.stage === 'released' ? `<span class="fp-status fp-released">${FP.check}Released</span><small class="muted">${fmt(r.release.releasedOn)}${r.release.reference ? ` · ${esc(r.release.reference)}` : ''}</small>` : r.stage === 'approved' ? `<span class="fp-status fp-approved">${FP.check}Approved</span>` : '<span class="fp-status fp-prepared">Prepared</span>');
+    const action = r => (r.stage === 'approved' ? (finalData.canSettle ? `<button class="fp-act" data-fp-settle="${esc(r.id)}" data-name="${esc(r.name)}">${FP.doc}Record Settlement</button>` : '<small class="muted">Awaiting Finance</small>') : r.stage === 'prepared' || !r.stage ? (finalData.canApprove ? `<button class="fp-act" data-fp-approve="${esc(r.id)}">${FP.check}Approve</button>` : '<small class="muted">Awaiting approval</small>') : '<span class="muted">—</span>');
+    return `<section class="dp-hero fp-hero"><span class="fp-hero-art" aria-hidden="true"><svg viewBox="0 0 110 100"><rect x="8" y="6" width="62" height="80" rx="12" fill="#1f4fc8" transform="rotate(-10 39 46)"/><rect x="18" y="14" width="42" height="16" rx="4" fill="#cfe0fb" transform="rotate(-10 39 46)"/><g fill="#fff" transform="rotate(-10 39 46)"><rect x="18" y="38" width="10" height="9" rx="2"/><rect x="34" y="38" width="10" height="9" rx="2"/><rect x="50" y="38" width="10" height="9" rx="2"/><rect x="18" y="53" width="10" height="9" rx="2"/><rect x="34" y="53" width="10" height="9" rx="2"/><rect x="50" y="53" width="10" height="9" rx="2"/></g><g fill="#f2b33d" stroke="#c98a12" stroke-width="2"><ellipse cx="82" cy="88" rx="20" ry="7"/><ellipse cx="82" cy="80" rx="20" ry="7"/><ellipse cx="82" cy="72" rx="20" ry="7"/><ellipse cx="86" cy="60" rx="16" ry="6"/></g></svg></span><div class="dp-hello"><span>Payroll</span><h1>Final Pay</h1><p>Compute an employee’s final pay, including separation and last earnings.</p></div></section>
+    <section class="panel fp-panel"><div class="fp-head"><span class="fp-head-ico">${FP.clip}</span><h2>Final Pay Computation</h2><span class="fp-advisory">${FP.info}Labor Advisory 06-2020: release within 30 days of separation. Certificate of Employment within 3 days of request.</span></div>
+      <form id="fp-form" class="fp-form"><div class="fp-col">
+        ${fpRow(FP.person, `<label class="field"><span>Employee <b>*</b></span><select name="employeeId" required data-searchable data-search-placeholder="Search employee name or ID" data-required-message="Choose the employee."><option value="">Choose employee…</option>${emps.map(e => `<option value="${esc(e.employeeId)}" data-end="${esc(e.endDate || '')}">${esc(e.name)}</option>`).join('')}</select></label>`)}
+        ${fpRow(FP.cal, '<label class="field">Unpaid days worked (optional)<input type="number" name="unpaidDays" min="0" step="0.5"><small>Blank = scheduled workdays after the last paid cutoff up to the last day.</small></label>')}
+        ${fpRow(FP.scale, `<div class="field"><span>Convert unused leave to cash</span>${leaveField}<small>Service Incentive Leave is convertible by law, other leave only if company policy says so.</small></div>`)}
+        <label class="check fp-check"><input type="checkbox" name="deductLoans" checked> Deduct outstanding loans</label>
+        ${fpRow(FP.note, '<label class="field">Other earnings note<input name="otherEarningsNote" maxlength="500" placeholder="Enter other earnings (e.g., bonus, allowance)…"></label>')}
+        ${fpRow(FP.doc, '<label class="field">Deductions note<input name="otherDeductionsNote" maxlength="500" placeholder="Enter deductions (e.g., advances, loans)…"></label>')}
+        ${fpRow(FP.chat, '<label class="field">Notes<input name="notes" maxlength="2000" placeholder="Add additional notes…"></label>')}
+      </div><div class="fp-col">
+        ${fpRow(FP.cal, `<label class="field"><span>Last day / separation date <b>*</b></span><input type="date" name="separationDate" required value="${today()}"></label>`)}
+        ${fpRow(FP.case, '<label class="field">Separation pay<select name="separationCause"><option value="none">None (resignation, end of contract, just cause)</option><option value="redundancy">Redundancy / labor-saving devices (1 month per year)</option><option value="retrenchment">Retrenchment / closure / disease (½ month per year)</option></select></label>')}
+        ${fpRow(FP.coins, `<label class="field">Other earnings${fpPeso('otherEarnings', 'min="0" step="0.01" value="0"')}</label>`)}
+        ${fpRow(FP.minus, `<label class="field">Other deductions / accountabilities${fpPeso('otherDeductions', 'min="0" step="0.01" value="0"')}</label>`)}
+        ${fpRow(FP.pct, `<label class="field">Tax adjustment (+ due, − refund)${fpPeso('taxAdjustment', 'step="0.01" value="0"')}</label>`)}
+        <div class="fp-submit"><button class="primary fp-compute">${FP.calc}Compute Final Pay</button></div>
+      </div></form><div id="fp-result"></div>
+      <div class="fp-table">${table(['Employee', 'Separation', 'Net final pay', 'Release due', 'Computed by', 'Status', 'Action'], finalData.records.map(r => [`<span class="fp-emp"><i>${esc(fpInitials(r.name))}</i><a class="employee-link" href="/api/final-pay/${esc(r.id)}.pdf" target="_blank" rel="noopener" title="Open the final pay PDF">${esc(r.name)}</a></span>`, `<span class="fp-date">${FP.cal}${fmt(r.separationDate)}</span>`, `<span class="fp-net">${money(r.net)}</span>`, `<span class="fp-date">${FP.cal}${fmt(r.releaseDue)}</span>`, `<span class="fp-by">${FP.person}${esc(who(r.computedBy))}</span>`, status(r), action(r)]), 'No saved final pay computations yet.')}</div></section>`;
   }
 
   const resultHtml = r => `<div class="panel-body"><h3>${esc(r.name)} · final pay as of ${fmt(r.separationDate)}</h3><p class="legend">Daily rate ${money(r.dailyRate)} · monthly ${money(r.monthlySalary)} · ${r.yearsOfService} year${r.yearsOfService === 1 ? '' : 's'} of service (counted) · release due ${fmt(r.releaseDue)}</p>
