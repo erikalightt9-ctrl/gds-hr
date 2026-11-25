@@ -68,6 +68,15 @@ test('My approvals lists what waits for each person\'s step', async () => {
   } finally { store.close(); }
 });
 
+test('My approvals: with no Supervisor account for the team, the request waits for the next step (not the Supervisor)', async () => {
+  const { inbox } = await import('../src/approval-chain.mjs');
+  const store = await fixture({ supervisor: false });
+  try {
+    assert.deepEqual(inbox(store, head).map(i => [i.stage, i.stageLabel, i.ownStep]), [['verify', 'HR verification', true]]);
+    assert.deepEqual(inbox(store, staff).map(i => i.stage), ['verify']);
+  } finally { store.close(); }
+});
+
 test('overtime: the Supervisor approves the work, then HR decides the hours', async () => {
   const { fileOvertime, decideOvertime } = await import('../src/overtime.mjs');
   const store = await fixture();

@@ -61,24 +61,13 @@ test('overtime approved before its cutoff is posted is paid there, marked Paid, 
   } finally { store.close(); }
 });
 
-test('unfiled overtime becomes Pending Overtime at posting and is carried until filed and approved', () => {
+test('overtime nobody filed is not recorded at posting and is not paid (no filing, no overtime)', () => {
   const store = fixture(s => late(s, '2026-09-09', '17:40'));
   try {
     const a = post(store, A);
     assert.equal(a.rows[0].earnings.regularOT, 0, 'unfiled: not paid');
-    const carried = filingOf(store, '2026-09-09');
-    assert.equal(carried.status, 'pending'); assert.equal(carried.source, 'carryover');
-    assert.deepEqual([carried.startTime, carried.endTime, carried.hours], ['16:00', '17:40', 1.67], 'actual overtime kept');
-    assert.ok(carried.history.some(h => h.action === 'carried-over'));
-    assert.ok(store.db.prepare('SELECT message FROM notifications WHERE employee_id IS NULL').all().some(n => /carried over as Pending Overtime/.test(n.message)));
-    // Still pending at the next cutoff: nothing paid, no blocker; it waits.
+    assert.equal(store.db.prepare("SELECT COUNT(*) n FROM overtime_requests").get().n, 0, 'no Pending Overtime created');
     assert.equal(run(store, B).rows[0].carriedOvertime.length, 0);
-    decideOvertime(store, admin, carried.id, { decision: 'approve' });
-    const b = run(store, B).rows[0];
-    assert.equal(b.carriedOvertime.length, 1, 'paid once approved (1.67 h worked → 1.5 h in 30-minute blocks)');
-    assert.equal(b.carriedOvertime[0].amount, Math.round(1.5 * (30000 / 22 / 8) * 1.25 * 100) / 100);
-    // Posting A again is impossible (same fingerprint returns the same run), and a second posting creates no duplicate.
-    assert.equal(store.db.prepare("SELECT COUNT(*) n FROM overtime_requests WHERE date='2026-09-09'").get().n, 1);
   } finally { store.close(); }
 });
 

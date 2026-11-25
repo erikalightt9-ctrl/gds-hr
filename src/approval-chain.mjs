@@ -62,6 +62,13 @@ export function decide(store, actor, kind, record, { decision, note = '' }) {
   const stage = stageOf(kind, { approvals });
   return { approvals, final: stage ? null : 'approved', stage };
 }
+// The step actually waiting: a Supervisor step with no Supervisor account for the team is passed over (it is recorded
+// as skipped when the request is decided), so the request waits for the next step instead.
+function liveStage(kind, record, store) {
+  const stage = stageOf(kind, record);
+  if (stage !== 'supervisor' || supervisorsFor(store, record.employeeId).length) return stage;
+  return stageOf(kind, { approvals: [...(record.approvals || []), { step: 'supervisor' }] });
+}
 export const stageLabel = (kind, record) => { const s = record.status === 'pending' ? stageOf(kind, record) : null; return s ? `Waiting for ${STEP_LABELS[s]}` : ''; };
 
 // My approvals: pending requests whose current step this person owns (or, for a Company Admin / System
@@ -70,13 +77,13 @@ export function inbox(store, actor) {
   const state = store.read(), types = new Map(state.leaveTypes.map(t => [t.id, t.name])), names = new Map(state.employees.map(e => [e.id, e.name]));
   const items = [];
   for (const l of state.leaves.filter(x => x.status === 'pending')) {
-    const stage = stageOf('leave', l); if (!stage) continue;
+    const stage = liveStage('leave', l, store); if (!stage) continue;
     const mine = canTake(actor, stage, l, store) || (stage === 'supervisor' && OVERRIDERS.includes(actor.role));
     if (!mine || l.employeeId === actor.employeeId) continue;
     items.push({ kind: 'leave', id: l.id, reference: l.reference || '', employeeId: l.employeeId, employeeName: names.get(l.employeeId) || l.employeeId, what: `${types.get(l.typeId) || l.typeId} · ${l.days} day${l.days === 1 ? '' : 's'}`, dates: l.startDate === l.endDate ? l.startDate : `${l.startDate} to ${l.endDate}`, reason: l.reason || '', stage, stageLabel: STEP_LABELS[stage], ownStep: canTake(actor, stage, l, store), history: l.approvals || [] });
   }
   for (const o of store.db.prepare("SELECT data FROM overtime_requests WHERE status='pending'").all().map(r => JSON.parse(r.data))) {
-    const stage = stageOf('overtime', o); if (!stage) continue;
+    const stage = liveStage('overtime', o, store); if (!stage) continue;
     const own = canTake(actor, stage, o, store), mine = own || (stage === 'supervisor' && OVERRIDERS.includes(actor.role));
     if (!mine || o.employeeId === actor.employeeId) continue;
     items.push({ kind: 'overtime', id: o.id, reference: '', employeeId: o.employeeId, employeeName: names.get(o.employeeId) || o.employeeId, what: `Overtime · ${o.hours} h${o.startTime ? ` (${o.startTime}–${o.endTime})` : ''}`, dates: o.date, reason: o.reason || '', stage, stageLabel: STEP_LABELS[stage], ownStep: own, history: o.approvals || [] });

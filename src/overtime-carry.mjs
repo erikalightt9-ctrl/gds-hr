@@ -1,11 +1,9 @@
-// Overtime carryover (Nov 20, 2026). A cutoff can be posted while overtime is still waiting: pending filings, and
-// overtime worked past the scheduled time out that nobody filed, stay "Pending Overtime" and move forward with each
-// cutoff until HR decides. Once HR approves, the next payroll pays it at the rates of the original date (holiday, rest
+// Overtime carryover (Nov 20, 2026). A cutoff can be posted while overtime is still waiting: pending filings stay
+// "Pending Overtime" and move forward with each cutoff until HR decides (overtime nobody filed is not recorded). Once HR approves, the next payroll pays it at the rates of the original date (holiday, rest
 // day, night) and rules, keeping the original date, hours, reason and history. Posting marks every filing it paid as
 // Paid (paidRunId), so nothing is paid twice; reversing that payroll clears the mark.
-import { randomUUID } from 'node:crypto';
 import { payDateFor } from './paydays.mjs';
-import { scheduleOn, isRest, round, OT_BLOCK } from './engine.mjs';
+import { round } from './engine.mjs';
 
 // Earnings an overtime filing can change (overtime, premiums, night differential).
 export const CARRY_COMPONENTS = ['regularOT', 'restDay', 'restOT', 'nsd', 'specialHoliday', 'specialOT', 'regularHoliday', 'regularHolidayOT', 'otherHoliday', 'otherOT'];
@@ -64,28 +62,4 @@ export function unmarkOvertimePaid(store, runId) {
     void paidRunId; void paidAt; void carriedAmount;
     update.run(JSON.stringify({ ...rest, history: [...(o.history || []), { at, by: 'system', action: 'unpaid', note: `Payroll ${paidCutoff} reversed` }] }), o.id);
   }
-}
-
-// At posting: overtime worked past the scheduled time out (one 30-minute block or more) on a day with no filing at all
-// becomes a pending application ("Pending Overtime", source 'carryover'). The employee may add the reason (edit) and HR
-// approves or rejects it like any filing; until then it simply waits.
-export function carryUnfiledOvertime(store, run, state) {
-  const at = new Date().toISOString(), created = [];
-  const hm = t => { const [h, m] = String(t || '').split(':').map(Number); return h * 60 + (m || 0); };
-  for (const row of run.rows) {
-    const e = state.employees.find(x => x.id === row.employeeId);
-    if (!e?.coveredOT) continue;
-    const profile = (state.employeeProfiles || []).find(p => p.employeeId === e.id && p.section === 'attendance') || {};
-    const filed = new Set(store.db.prepare('SELECT date FROM overtime_requests WHERE employee_id=? AND date BETWEEN ? AND ?').all(e.id, run.start, run.end).map(r => r.date));
-    for (const a of state.attendance.filter(x => x.employeeId === e.id && x.status === 'present' && x.date >= run.start && x.date <= run.end && x.timeOut && !filed.has(x.date))) {
-      const sched = scheduleOn(e, profile, a.date, state.rules[0]);
-      if (!sched.end || sched.flexible || isRest(e, a.date)) continue;
-      const out = hm(a.timeOut) + (a.endNextDay ? 1440 : 0), end = hm(sched.end) + (hm(sched.end) <= hm(sched.start) ? 1440 : 0), minutes = out - end;
-      if (minutes < OT_BLOCK) continue;
-      const value = { id: randomUUID(), employeeId: e.id, date: a.date, startTime: sched.end, endTime: a.timeOut, breakMinutes: 0, nightHours: 0, hours: round(minutes / 60), reason: 'Pending Overtime: worked after the scheduled time out, not yet filed (carried over automatically)', status: 'pending', source: 'carryover', createdBy: 'system', createdAt: at, history: [{ at, by: 'system', action: 'carried-over', note: `Not filed by the ${run.start} to ${run.end} payroll; carried to the next cutoff until filed and approved` }] };
-      store.db.prepare('INSERT INTO overtime_requests(id,employee_id,date,status,data) VALUES(?,?,?,?,?)').run(value.id, e.id, a.date, 'pending', JSON.stringify(value));
-      created.push(value);
-    }
-  }
-  return created;
 }
