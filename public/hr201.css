@@ -2981,3 +2981,11 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
   .ta-card::after { height: 30px; }
 }
 @media (max-width: 700px) { .ma-head h2 { white-space: nowrap; font-size: 16px !important; } .ma-month { padding: 0 8px; gap: 4px; } }
+/* No bouncing (Nov 25, 2026): no scroll snapping, and the home screens use the small (stable) viewport height, which does
+   not change when the phone browser bar hides or shows while scrolling. */
+@media (max-width: 900px) {
+  html:has(.sc-first) { scroll-snap-type: none !important; }
+  .theme-scarlet .sc-first { min-height: calc(100svh - 26px) !important; scroll-snap-align: none !important; }
+  .theme-scarlet .clock-block { min-height: 100svh !important; scroll-snap-align: none !important; }
+  html, body { overscroll-behavior-y: none; }
+}
