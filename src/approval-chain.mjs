@@ -90,3 +90,17 @@ export function inbox(store, actor) {
   }
   return items.sort((a, b) => b.dates.localeCompare(a.dates));
 }
+
+// My approvals summary (Nov 25, 2026): leave and overtime requests on which this person recorded a step.
+// Approved = an approving step (endorsed / verified / approved / overridden); Rejected = a rejection.
+export function myDecisions(store, actor) {
+  const leaves = store.read().leaves || [];
+  const overtime = store.db.prepare('SELECT data FROM overtime_requests').all().map(r => JSON.parse(r.data));
+  let approved = 0, rejected = 0;
+  for (const r of [...leaves, ...overtime]) {
+    const mine = (r.approvals || []).filter(a => a.by === actor.username);
+    if (mine.some(a => a.decision === 'rejected')) rejected += 1;
+    else if (mine.some(a => ['endorsed', 'verified', 'approved', 'overridden'].includes(a.decision))) approved += 1;
+  }
+  return { approved, rejected };
+}

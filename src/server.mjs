@@ -44,7 +44,7 @@ import { myBenefits, employeeBenefits, benefitsOverview, recordRemittance, saveH
 import { connectFeishu, feishuStatus, saveFeishu, sendFeishuTest } from './feishu.mjs';
 import { feishuLoginStatus, saveFeishuLogin, feishuLoginAvailable, startFeishu, finishFeishu, myFeishu, unlinkFeishu } from './feishu-login.mjs';
 import { phoneCheck, setPhoneCheck, loginGate, finishPasskeyLogin, passkeyOptions, registerPasskey, myDevices, rememberDevice, fingerprintOptions, fingerprintSignIn, removePasskey, resetDevices, deviceHash, deviceTokenFromCookie, newDeviceToken } from './devices.mjs';
-import { inbox as approvalInbox } from './approval-chain.mjs';
+import { inbox as approvalInbox, myDecisions } from './approval-chain.mjs';
 import { confirmRunPayment, confirmLoanPayment } from './payment-tracking.mjs';
 import { setAccountScope, scopeOf, canSeePay, canSeeSensitive, PAY_PATHS, stripForPermissions } from './account-scope.mjs';
 import { permissionContext } from './company-scope.mjs';
@@ -490,6 +490,7 @@ export function createApp({ store, origin, setupToken, demo = false, mailer = nu
       const reverseRun = pathname.match(/^\/api\/runs\/([a-f0-9-]+)\/reverse$/);
       if (reverseRun && req.method === 'POST') { send(200, reversePayroll(store, auth.user, reverseRun[1], await readBody(req))); return; }
       if (pathname === '/api/backups/status' && req.method === 'GET') { permit(auth.user, ['admin']); send(200, backupStatus(store)); return; }
+      if (pathname === '/api/approvals/summary' && req.method === 'GET') { permit(auth.user, ['admin', 'hr', 'hr_staff', 'maker', 'dept_manager']); send(200, myDecisions(store, auth.user)); return; }
       if (pathname === '/api/approvals/inbox' && req.method === 'GET') { permit(auth.user, ['admin', 'hr', 'hr_staff', 'maker', 'dept_manager']); send(200, approvalInbox(store, auth.user)); return; }
       const leaveDecision = pathname.match(/^\/api\/leaves\/([a-zA-Z0-9_-]+)\/decision$/);
       if (leaveDecision && req.method === 'POST') { send(200, reviewLeave(store, auth.user, leaveDecision[1], await readBody(req))); return; }
