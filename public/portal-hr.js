@@ -295,8 +295,9 @@ export function createPortalHr({ api, esc, table, toast, confirm = (title, messa
       const section = box.firstElementChild, anchor = main.querySelector('#portal-content') || main.querySelector('.employee-welcome');
       // Home screen: right after Today's attendance, inside the same block, so the second screen shows My attendance,
       // Today's attendance and the celebrations together (Nov 24, 2026).
-      const block = main.querySelector('.clock-block');
-      if (block) block.append(section); else if (anchor?.id === 'portal-content') anchor.before(section); else if (anchor) anchor.after(section); else main.prepend(section);
+      // Home screen: right under the Welcome card (Nov 25, 2026).
+      const block = main.querySelector('.clock-block'), welcome = main.querySelector('.sc-welcome');
+      if (welcome) welcome.after(section); else if (block) block.append(section); else if (anchor?.id === 'portal-content') anchor.before(section); else if (anchor) anchor.after(section); else main.prepend(section);
       bindCelebrationPhotos(section);
     } catch { /* greetings are optional */ }
   }

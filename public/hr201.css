@@ -2772,3 +2772,6 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 @media (max-width: 900px) { #login-form .login-card-logo { margin-top: 34px !important; } }
 /* Celebrations card: no "N celebrations" chip (Nov 25, 2026). */
 .theme-scarlet .cg .cg-toggle { display: none !important; }
+/* Congratulations card under the Welcome card (Nov 25, 2026). */
+.theme-scarlet .sc-welcome + .cg { margin: 12px 0 0 !important; }
+@media (max-width: 900px) { .theme-scarlet .sc-first > .sc-welcome + .cg { margin-top: 30px !important; } .theme-scarlet .sc-first > .cg + .sc-clock { margin-top: 0 !important; } }
