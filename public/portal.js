@@ -29,6 +29,28 @@ export function createPortal(ctx) {
   const { api, esc, money, toast, openDialog, dialog, refresh, render, app, today } = ctx;
   const table = (headers, rows, empty = 'Nothing to show yet.') => ctx.table(headers, rows, empty);
   let attendanceView = 'history', calMonth = '', calDay = '', lvMonth = '', lvDay = '';
+  // Home screen paging on phones (Nov 25, 2026): after the finger lifts and scrolling stops between the first and second
+  // screen, the page glides to the screen the scroll was heading for (second screen lined up exactly at the top). It never
+  // pulls while the finger is down, and below the second screen the page scrolls freely.
+  let pagingReady = false;
+  function setupHomePaging() {
+    if (pagingReady) return; pagingReady = true;
+    let touching = false, startY = 0, timer = null, gliding = false;
+    const page2 = () => { const el = app.querySelector('.clock-block'); return el && matchMedia('(max-width: 900px)').matches ? Math.round(el.getBoundingClientRect().top + window.scrollY) : null; };
+    const settle = () => {
+      const top = page2(); if (top === null || touching || gliding) return;
+      const y = window.scrollY; if (y <= 2 || Math.abs(y - top) <= 2 || y > top) return;
+      const down = y > startY, target = down ? (y > 24 ? top : 0) : (y < top - 24 ? 0 : top);
+      // Own ease-out glide (350 ms): browser smooth scrolling is not reliable on every phone.
+      gliding = true; const from = y, t0 = performance.now();
+      const step = now => { const k = Math.min(1, (now - t0) / 350), e = 1 - Math.pow(1 - k, 3); window.scrollTo(0, Math.round(from + (target - from) * e)); if (k < 1 && !touching) requestAnimationFrame(step); else setTimeout(() => { gliding = false; startY = window.scrollY; }, 80); };
+      requestAnimationFrame(step);
+    };
+    const later = () => { clearTimeout(timer); timer = setTimeout(settle, 140); };
+    window.addEventListener('touchstart', () => { touching = true; startY = window.scrollY; clearTimeout(timer); }, { passive: true });
+    window.addEventListener('touchend', () => { touching = false; later(); }, { passive: true });
+    window.addEventListener('scroll', () => { if (!touching && !gliding) later(); }, { passive: true });
+  }
   let explanationList = [];
   let tab = 'dashboard', currentPayslip = null, dirty = false, liveFilter = 'All', pendingClock = null, historyOverride = null, historyEnd = false;
   let clockTimer;
@@ -290,6 +312,7 @@ export function createPortal(ctx) {
       sync(); new MutationObserver(sync).observe(headBell, { childList: true });
     }
     loadAttendanceSummary();
+    setupHomePaging();
     // Analytics bar heights (the page's security policy blocks inline style attributes; CSSOM is allowed).
     app.querySelectorAll('.sc-bar[data-bar]').forEach(el => el.style.setProperty('--bar', `${el.dataset.bar}%`));
     app.querySelectorAll('.sc-bars-ref[data-ref]').forEach(el => el.style.setProperty('--r', el.dataset.ref));
