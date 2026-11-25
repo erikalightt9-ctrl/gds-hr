@@ -4071,3 +4071,6 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 @media (max-width: 760px) { .st-aa-pair { grid-template-columns: 1fr; } .st-logo2 { flex-wrap: wrap; } }
 /* New Case / Add Training sit at the top right of the banner (Nov 25, 2026, HR) */
 .dp-hero .dp-new { top: 18px !important; transform: none !important; }
+.rr-panel .rr-foot svg, .rr-panel .rr-link svg { width: 20px !important; height: 20px !important; flex: none; }
+.rr-panel .rr-edit svg { width: 15px !important; height: 15px !important; }
+.rr-panel .rr-cat .rr-ic svg { width: 100%; height: 100%; }
