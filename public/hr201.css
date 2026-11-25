@@ -4408,3 +4408,36 @@ dialog.dsh-dialog { width: min(1000px, calc(100vw - 32px)); background: linear-g
 @media (max-width: 760px) { .ax-search { width: 100%; } .ax-filters { flex-direction: column; } .ax-filters select { min-width: 0; } .ax-table table { min-width: 860px; } }
 .ax { min-width: 0; } .ax-card > div { min-width: 0; } .ax-panel { min-width: 0; } .ax-table { max-width: 100%; }
 .ax-table td { white-space: normal; } .ax-who, .ax-rule, .ax-action { display: flex; }
+
+/* ---- Account & Access window (Nov 25, 2026 design): red title bar, cards, left menu, right panel, cream tables ---- */
+dialog.acx-dialog { width: min(1300px, calc(100vw - 32px)); background: linear-gradient(180deg, #fffdfb, #fdf6f2); color: #13265c; }
+.acx-dialog .dialog-head { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 60' preserveAspectRatio='none'%3E%3Cpath d='M150 60C210 40 250 20 300 0V60Z' fill='%23e2b13c' opacity='.5'/%3E%3C/svg%3E") no-repeat right / 50% 100%, linear-gradient(90deg, #8a0f18, #c3121f 60%, #a50e17) !important; border-bottom: 0; }
+.acx-dialog .dialog-head h2 { color: #fff; font-size: 28px; font-weight: 800; }
+.acx-dialog .dialog-head [data-close] { background: transparent; color: #fff; border: 1.5px solid rgb(255 255 255 / .7); border-radius: 10px; }
+.acx-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.acx-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; border: 1px solid #f0dfd8; box-shadow: 0 6px 14px rgb(120 20 20 / .05); }
+.acx-card > span { flex: none; width: 50px; height: 50px; padding: 12px; border-radius: 50%; } .acx-card svg { width: 100%; height: 100%; }
+.acx-card strong { display: block; font-size: 26px; font-weight: 800; line-height: 1.1; } .acx-card small { font-size: 14px; }
+.acx-red { background: linear-gradient(180deg, #fff4f5, #fde6e8); } .acx-red > span { background: #fbd5da; color: #a50e17; } .acx-red strong { color: #a50e17; }
+.acx-green { background: linear-gradient(180deg, #f2fbf5, #dff4e7); } .acx-green > span { background: #c9efd7; color: #16884a; } .acx-green strong { color: #14632f; }
+.acx-amber { background: linear-gradient(180deg, #fffaf0, #fdf0d6); } .acx-amber > span { background: #fde3b0; color: #c4710a; } .acx-amber strong { color: #8a0f18; }
+.acc-boxes.acx { display: grid !important; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+.acx-nav { display: grid; gap: 10px; padding: 10px; border-radius: 16px; border: 1px solid #f0dfd8; background: #fff; box-shadow: 0 8px 18px rgb(120 20 20 / .05); position: sticky; top: 76px; }
+.acx-nav button { display: flex; align-items: center; gap: 12px; padding: 12px 14px !important; border-radius: 12px !important; border: 1px solid #f0dfd8 !important; background: #fffaf7 !important; color: #13265c !important; text-align: left; }
+.acx-nav button .acc-icon { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; background: #fdf0d6; font-size: 20px; }
+.acx-nav button strong { display: block; font-size: 15.5px; } .acx-nav button small { display: block; font-size: 12px; color: #4b557a; font-weight: 400; }
+.acx-nav button i { margin-left: auto; width: 18px; height: 18px; flex: none; color: #8a0f18; } .acx-nav button i svg { width: 100%; height: 100%; }
+.acx-nav button.on { background: linear-gradient(180deg, #e3262b, #a50e17) !important; color: #fff !important; border-color: transparent !important; box-shadow: 0 8px 16px -8px rgb(160 0 10 / .6); }
+.acx-nav button.on small, .acx-nav button.on i { color: #fff; } .acx-nav button.on .acc-icon { background: rgb(255 255 255 / .2); }
+.acx-right { display: grid; gap: 16px; min-width: 0; }
+.acx-box { border-radius: 16px !important; border: 1px solid #f0dfd8 !important; background: #fff !important; box-shadow: 0 8px 18px rgb(120 20 20 / .05); overflow: hidden; }
+.acx-box > summary { pointer-events: none; list-style: none; display: flex; align-items: center; gap: 14px; padding: 14px 18px !important; background: linear-gradient(90deg, #fff1f3, #fffaf9); border-bottom: 1px solid #f6d6da; }
+.acx-box > summary::-webkit-details-marker { display: none; }
+.acx-box > summary .acc-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px; background: #fde8ea; font-size: 22px; }
+.acx-box > summary strong { display: block; font-size: 20px; color: #a50e17; } .acx-box > summary small { display: block; color: #263460; }
+.acx-box > :not(summary) { padding: 14px 18px; }
+.acx-box .field { font-weight: 700; color: #13265c; } .acx-box input, .acx-box select { border-radius: 10px; border-color: #e3d6d2; }
+.acx-box button.primary { background: linear-gradient(180deg, #e3262b, #a50e17); border: 0; border-radius: 12px; min-height: 44px; padding: 0 22px; }
+.acx-box table thead th { background: #fbe7d6; color: #8a0f18; font-weight: 800; }
+.acx-box .acc-actions button { border-radius: 10px; border-color: #f0b6ba; color: #b3121f; }
+@media (max-width: 1000px) { .acc-boxes.acx { grid-template-columns: 1fr; } .acx-nav { position: static; } .acx-cards { grid-template-columns: 1fr 1fr; } }
