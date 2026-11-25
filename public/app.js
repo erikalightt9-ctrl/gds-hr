@@ -1233,12 +1233,49 @@ function formField(f, values, existing) {
   else control = `<input name="${f.key}" id="${id}" type="${type.replace('optional-', '')}" value="${esc(value)}" ${type === 'number' ? 'min="0" step="any"' : ''} ${type.startsWith('optional') ? '' : 'required'} ${existing && f.key === 'id' ? 'readonly' : ''}>`;
   return `<label class="field ${type.includes('textarea') || type === 'multi' ? 'full' : ''}" for="${id}">${f.title}${control}${f.hint ? `<small>${f.hint}</small>` : ''}</label>`;
 }
+// Payroll rules version window (Nov 25, 2026 design): the same fields grouped into titled cards with a left menu;
+// the contribution tables become SSS / PhilHealth / Pag-IBIG / Withholding Tax tabs. Field names and saving unchanged.
+function rulesLayout(dlg) {
+  const grid = dlg.querySelector('#record-form .dialog-body > .form-grid'); if (!grid) return;
+  const ic = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const ICONS = { basic: ic('<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/>'), wage: ic('<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 10v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4M5 14v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/>'), holiday: ic('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'), time: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), tables: ic('<circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.3"/><circle cx="19" cy="10" r="2.3"/><path d="M7.5 20c0-2.8 2-4.8 4.5-4.8s4.5 2 4.5 4.8M1.5 19c0-2.2 1.5-3.8 3.5-3.8M22.5 19c0-2.2-1.5-3.8-3.5-3.8"/>'), other: ic('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>') };
+  const iconFor = t => (/wage/i.test(t) ? ICONS.wage : /holiday/i.test(t) ? ICONS.holiday : /time|cutoff/i.test(t) ? ICONS.time : /contribution|withholding/i.test(t) ? ICONS.tables : /basic/i.test(t) ? ICONS.basic : ICONS.other);
+  const groups = [{ title: 'Basic Settings', nodes: [] }];
+  [...grid.children].forEach(el => { if (el.matches('h3.form-section')) groups.push({ title: el.textContent.trim(), nodes: [] }); else groups.at(-1).nodes.push(el); });
+  const title = t => t.replace(/\b\w/g, c => c.toUpperCase()).replace(/ & /g, ' & ');
+  const wrap = document.createElement('div'); wrap.className = 'rrd';
+  const nav = document.createElement('nav'); nav.className = 'rrd-nav'; nav.setAttribute('aria-label', 'Sections');
+  const cards = document.createElement('div'); cards.className = 'rrd-cards';
+  groups.filter(g => g.nodes.length).forEach((g, i) => {
+    const card = document.createElement('section'); card.className = 'rrd-card'; card.id = `rrd-${i}`;
+    card.innerHTML = `<h3 class="rrd-title"><span>${iconFor(g.title)}</span>${esc(title(g.title))}</h3><div class="form-grid rrd-grid"></div>`;
+    g.nodes.forEach(n => card.querySelector('.rrd-grid').append(n));
+    cards.append(card);
+    nav.insertAdjacentHTML('beforeend', `<button type="button" class="${i ? '' : 'on'}" data-rrd-go="rrd-${i}"><span>${iconFor(g.title)}</span>${esc(title(g.title))}</button>`);
+    // Contribution tables as tabs.
+    const tables = [...card.querySelectorAll('.field')].filter(f => f.querySelector('table[data-type="brackets"]'));
+    if (tables.length > 1) {
+      const names = tables.map(f => { const t = (f.querySelector('table')?.dataset.label || f.firstChild?.textContent || f.textContent).slice(0, 80); return /^s*PhilHealth/.test(t) ? 'PhilHealth' : /^s*Pag-IBIG/.test(t) ? 'Pag-IBIG' : /withholding/i.test(t) ? 'Withholding Tax' : /^s*SSS/.test(t) ? 'SSS' : 'Table'; });
+      const bar = document.createElement('div'); bar.className = 'rrd-tabs full';
+      bar.innerHTML = names.map((n, k) => `<button type="button" class="${k ? '' : 'on'}" data-rrd-tab="${k}">${esc(n)}</button>`).join('');
+      tables[0].before(bar);
+      tables.forEach((f, k) => { f.classList.add('rrd-table'); f.hidden = k > 0; });
+      bar.onclick = e => { const b = e.target.closest('[data-rrd-tab]'); if (!b) return; bar.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); tables.forEach((f, k) => { f.hidden = String(k) !== b.dataset.rrdTab; }); };
+    }
+  });
+  grid.replaceWith(wrap); wrap.append(nav, cards);
+  dlg.classList.add('rrd-dialog');
+  nav.onclick = e => { const b = e.target.closest('[data-rrd-go]'); if (!b) return; nav.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); dlg.querySelector(`#${b.dataset.rrdGo}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const close = () => { dlg.classList.remove('rrd-dialog'); dlg.removeEventListener('close', close); };
+  dlg.addEventListener('close', close);
+}
 function edit(kind, id, preset = {}) {
   const existing = state[kind].find(x => x.id === id), values = structuredClone(existing || { ...defaults(kind), ...preset });
   const fields = definitions(kind), locked = kind === 'rules' && existing?.approvedBy;
   if (kind === 'attendance' && existing) fields.push(field('correctionReason', 'Correction / approval reason', 'textarea', null, 'Required. Original attendance, your changes, reason and approver remain in the audit history.'));
   openDialog(`${existing ? 'Review' : 'New'} ${kind === 'leaveTypes' ? 'leave policy' : kind === 'rules' ? 'payroll rules version' : label(kind).replace(/s$/, '')}`, `<form id="record-form"><div class="dialog-body"><div id="form-error" class="form-error hidden" role="alert"></div>${locked ? '<div class="notice">Approved rules cannot be edited. Close this dialog and create a new rules version.</div>' : ''}<div class="form-grid">${fields.map(f => formField(f, values, !!existing)).join('')}</div></div><div class="dialog-foot">${existing && ['leaves', 'holidays', 'adjustments', 'deductions'].includes(kind) ? '<button type="button" class="danger" id="delete-record">Delete record</button>' : ''}<button type="button" data-close>Cancel</button><button type="submit" class="primary" ${locked ? 'disabled' : ''}>Save ${kind === 'rules' ? 'version' : 'record'}</button></div></form>`);
   const form = dialog.querySelector('form');
+  if (kind === 'rules') rulesLayout(dialog);
   if (kind === 'leaves' && /^[a-f0-9-]{36}$/.test(existing?.documentReference || '')) {
     const attachment = document.createElement('a'); attachment.href = `/api/documents/${existing.documentReference}/content`; attachment.textContent = 'Download supporting document'; attachment.className = 'button'; form.querySelector('.dialog-body').prepend(attachment);
   }

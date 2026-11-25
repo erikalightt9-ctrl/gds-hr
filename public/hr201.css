@@ -4074,3 +4074,32 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 .rr-panel .rr-foot svg, .rr-panel .rr-link svg { width: 20px !important; height: 20px !important; flex: none; }
 .rr-panel .rr-edit svg { width: 15px !important; height: 15px !important; }
 .rr-panel .rr-cat .rr-ic svg { width: 100%; height: 100%; }
+
+/* ---- Payroll rules version window (Nov 25, 2026 design): wide warm window, left menu, titled cards, table tabs ---- */
+dialog.rrd-dialog { width: min(1240px, calc(100vw - 32px)); background: linear-gradient(180deg, #fffdfb, #fdf6f3); color: #13265c; }
+.rrd-dialog .dialog-head { background: #fffaf7; border-bottom: 1px solid #f0dfd8; }
+.rrd-dialog .dialog-head h2 { font-size: 24px; font-weight: 800; color: #13265c; }
+.rrd { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; align-items: start; }
+.rrd svg { width: 100%; height: 100%; }
+.rrd-nav { position: sticky; top: 76px; display: grid; gap: 4px; padding: 10px; border: 1px solid #f0dfd8; border-radius: 16px; background: #fff; box-shadow: 0 8px 18px rgb(120 20 20 / .06); }
+.rrd-nav button { display: flex; align-items: center; gap: 10px; padding: 11px 12px !important; border: 0 !important; border-radius: 12px !important; background: none !important; color: #13265c !important; font-weight: 600; font-size: 13.5px; text-align: left; }
+.rrd-nav button span { flex: none; width: 24px; height: 24px; color: #b3121f; }
+.rrd-nav button.on { background: linear-gradient(180deg, #e3262b, #a50e17) !important; color: #fff !important; box-shadow: 0 6px 12px -6px rgb(160 0 10 / .6); } .rrd-nav button.on span { color: #fff; }
+.rrd-cards { display: grid; gap: 16px; min-width: 0; }
+.rrd-card { border: 1px solid #f0dfd8; border-radius: 16px; background: #fff; box-shadow: 0 8px 18px rgb(120 20 20 / .05); overflow: hidden; scroll-margin-top: 80px; }
+.rrd-title { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px 18px; background: linear-gradient(90deg, #fdecee, #fff6f6); border-bottom: 1px solid #f6d6da; color: #b3121f; font-size: 18px; font-weight: 800; }
+.rrd-title span { flex: none; width: 28px; height: 28px; }
+.rrd-grid { padding: 16px 18px; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 16px; }
+.rrd-grid .field { font-weight: 600; color: #13265c; } .rrd-grid .field.full, .rrd-grid .full { grid-column: 1 / -1; }
+.rrd-grid .field:has(textarea), .rrd-grid .field:has(table) { grid-column: 1 / -1; }
+.rrd-grid input, .rrd-grid select, .rrd-grid textarea { border-radius: 10px; border-color: #e6cfc8; background: #fff; }
+.rrd-grid .field.check { flex-direction: row; align-items: center; gap: 10px; } .rrd-grid .field.check input { accent-color: #d7141a; width: 20px; height: 20px; }
+.rrd-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.rrd-tabs button { padding: 8px 22px !important; border-radius: 10px !important; border: 1px solid #e6cfc8 !important; background: #fff !important; color: #13265c !important; font-weight: 700; }
+.rrd-tabs button.on { background: linear-gradient(180deg, #e3262b, #a50e17) !important; color: #fff !important; border-color: transparent !important; }
+.rrd-table table thead th { background: #fdf1d8; color: #8a5f12; font-size: 11.5px; font-weight: 800; text-transform: uppercase; }
+.rrd-table [data-add-row] { border-radius: 10px; border-color: #f0b6ba; color: #d7141a; font-weight: 700; }
+.rrd-dialog .dialog-foot { background: #fffaf7; border-top: 1px solid #f0dfd8; }
+.rrd-dialog .dialog-foot button[type=submit] { min-width: 180px; height: 48px; border-radius: 12px; background: linear-gradient(180deg, #e3262b, #a50e17); border: 0; font-size: 16px; }
+.rrd-dialog .dialog-foot button[data-close] { min-width: 130px; height: 48px; border-radius: 12px; border-color: #e6cfc8; }
+@media (max-width: 900px) { .rrd { grid-template-columns: 1fr; } .rrd-nav { position: static; grid-template-columns: repeat(2, 1fr); } .rrd-grid { grid-template-columns: 1fr 1fr; } }
