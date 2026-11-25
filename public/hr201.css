@@ -3644,3 +3644,42 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 .pr-summary b { color: #d7141a; }
 @media (max-width: 1200px) { .pr-hero-export { position: static; margin-left: auto; } }
 @media (max-width: 760px) { .pr-hero-art { width: 70px; height: 64px; } .pr-hero { flex-wrap: wrap; } }
+
+/* ---- Payroll History + 13th Month Pay card (Nov 25, 2026 design) ---- */
+.ph-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin: 22px 0 16px; color: var(--dp-ink); }
+.ph-hero-art { flex: none; width: 104px; height: 96px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.ph-hero .dp-hello h1 { font-size: 34px; }
+.ph-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.ph-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; border: 1px solid #e1e6f2; box-shadow: 0 6px 16px rgb(20 40 100 / .06); color: #13265c; min-width: 0; }
+.ph-card > span { flex: none; width: 50px; height: 50px; padding: 12px; border-radius: 50%; color: #fff; display: grid; place-items: center; }
+.ph-card > span .pr-ico { width: 26px; height: 26px; }
+.ph-card > div { min-width: 0; } .ph-card strong { display: block; font-size: 22px; font-weight: 800; line-height: 1.1; white-space: nowrap; } .ph-card b { display: block; font-size: 14px; } .ph-card small { font-size: 12px; color: #263460; }
+.ph-blue { background: linear-gradient(180deg, #f1f6fe, #e2ecfc); } .ph-blue > span { background: linear-gradient(145deg, #2f6df0, #1847c4); }
+.ph-green { background: linear-gradient(180deg, #effaf3, #dcf3e4); } .ph-green > span { background: linear-gradient(145deg, #2cc46a, #14934a); }
+.ph-orange { background: linear-gradient(180deg, #fff6ee, #fde6d2); } .ph-orange > span { background: linear-gradient(145deg, #ffb13c, #ea8f12); }
+.ph-violet { background: linear-gradient(180deg, #f7f2fe, #ebdffb); } .ph-violet > span { background: linear-gradient(145deg, #a067f0, #6d2fd0); }
+.ph-rose { background: linear-gradient(180deg, #fff1f4, #fde0e7); } .ph-rose > span { background: linear-gradient(145deg, #f0567a, #c3204a); }
+.pr-history { border-radius: 16px !important; border: 1px solid #e1e6f2 !important; background: linear-gradient(180deg, #fbfcff, #f4f6fb) !important; box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: #13265c; }
+.pr-history .pr-panel-head h2 { color: #13265c; font-weight: 800; }
+.pr-history .pr-head-ico { width: 48px; height: 48px; padding: 11px; border-radius: 50%; background: linear-gradient(145deg, #23408a, #12286a); color: #fff; }
+.pr-history table thead th { background: #e3eafa; color: #13265c; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.ph-th { display: inline-flex; align-items: center; gap: 6px; } .ph-th .pr-ico { width: 16px; height: 16px; color: #2659e6; }
+.pr-history table td:first-child a { color: #d7141a; }
+.ph-co { display: inline-block; padding: 4px 10px; border-radius: 8px; background: #e4ecfd; color: #1f48c0; font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.ph-co-alt { background: #f3e6fd; color: #8a2fc0; }
+.pr-history .pr-status { border-radius: 8px; padding: 4px 12px; }
+.pr-history .pr-sent { border-radius: 16px; border-color: #cfd8ec; background: #fff; color: #13265c; }
+.pr-13 { border-radius: 16px; background: linear-gradient(180deg, #fbfcff, #f4f6fb); }
+.pr-13-ico { background: #dbe6fd; color: #2659e6; }
+.pr-13-text h2 { color: #13265c; font-weight: 800; }
+.pr-13 .th-year-pick input { border-radius: 10px; border-color: #cfd8ec; height: 42px; }
+.pr-13-open { display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 22px !important; border-radius: 12px !important; background: linear-gradient(180deg, #e3262b, #a50e17) !important; border: 0 !important; box-shadow: 0 8px 16px -8px rgb(160 0 10 / .6); }
+.pr-13-open .pr-ico { width: 20px; height: 20px; color: #fff; }
+@media (max-width: 1200px) { .ph-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .ph-cards { grid-template-columns: 1fr 1fr; } .ph-hero-art { width: 70px; height: 64px; } }
+.pr-history table thead th:first-child { background: #e3eafa !important; }
+.pr-history table tbody td:first-child { background: #fff !important; }
+.pr-history table th, .pr-history table td { padding: 10px 9px !important; }
+.pr-history table th { font-size: 11px !important; }
+.pr-history table td { font-size: 13px; }
+.pr-history .ph-th { gap: 4px; } .pr-history .ph-th .pr-ico { width: 14px; height: 14px; }
