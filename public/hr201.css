@@ -3683,3 +3683,34 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 .pr-history table th { font-size: 11px !important; }
 .pr-history table td { font-size: 13px; }
 .pr-history .ph-th { gap: 4px; } .pr-history .ph-th .pr-ico { width: 14px; height: 14px; }
+
+/* ---- 13th Month Pay page (Nov 25, 2026 design): hero with "13th" calendar, four cards, info bar, filters + Export / Update Data, year band ---- */
+.th-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin-bottom: 16px; color: var(--dp-ink); }
+.th-hero-art { flex: none; width: 98px; height: 98px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.th-hero .dp-hello h1 { font-size: 34px; }
+.th-back { position: absolute; right: 18px; top: 18px; height: 42px; padding: 0 20px !important; border-radius: 12px !important; border: 0 !important; background: #fff !important; color: #d7141a !important; font-weight: 700; box-shadow: 0 8px 18px -8px rgb(20 40 100 / .35); }
+.th-ico { width: 100%; height: 100%; }
+.th-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 14px; }
+.th-card { display: flex; align-items: center; gap: 16px; padding: 16px 18px; border-radius: 14px; border: 1px solid #e1e6f2; box-shadow: 0 6px 16px rgb(20 40 100 / .06); color: #13265c; min-width: 0; }
+.th-card > span { flex: none; width: 54px; height: 54px; padding: 13px; border-radius: 50%; color: #fff; }
+.th-card b { display: block; font-size: 14px; } .th-card strong { display: block; font-size: 26px; font-weight: 800; line-height: 1.15; white-space: nowrap; } .th-card small { font-size: 12.5px; color: #263460; }
+.th-blue { background: linear-gradient(180deg, #f1f6fe, #e2ecfc); } .th-blue > span { background: linear-gradient(145deg, #2f6df0, #1847c4); }
+.th-red { background: linear-gradient(180deg, #fff3f4, #fde3e6); border: 2px solid #e04a50; } .th-red > span { background: linear-gradient(145deg, #f0444a, #c3121f); }
+.th-green { background: linear-gradient(180deg, #effaf3, #dcf3e4); } .th-green > span { background: linear-gradient(145deg, #2cc46a, #14934a); }
+.th-amber { background: linear-gradient(180deg, #fff8ea, #feeccb); } .th-amber > span { background: linear-gradient(145deg, #ffc44d, #ea8f12); }
+.th-info { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 16px; border-radius: 12px; border: 1px solid #cfdcf6; background: #edf3fd; color: #13265c; font-size: 13.5px; }
+.th-info .th-ico { width: 22px; height: 22px; flex: none; color: #2659e6; }
+.th-panel { border-radius: 16px !important; border: 1px solid #e1e6f2 !important; background: linear-gradient(180deg, #fbfcff, #f4f6fb) !important; box-shadow: 0 8px 20px rgb(20 40 100 / .05); }
+.th-panel .th-filters { align-items: flex-end; }
+.th-panel .th-filters select { border-radius: 10px; border-color: #cfd8ec; height: 40px; min-width: 180px; background-color: #fff; }
+.th-tools { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+.th-export, .th-update { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px !important; border-radius: 12px !important; font-weight: 700; }
+.th-export .th-ico, .th-update .th-ico { width: 19px; height: 19px; }
+.th-export { background: #fff !important; border: 1px solid #cfd8ec !important; color: #13265c !important; }
+.th-update { background: linear-gradient(180deg, #e3262b, #a50e17) !important; border: 0 !important; color: #fff !important; box-shadow: 0 8px 16px -8px rgb(160 0 10 / .6); }
+.th-panel .th-year-band { display: flex; align-items: center; justify-content: center; gap: 10px; background: none; color: #d7141a; font-weight: 800; font-size: 17px; }
+.th-panel .th-year-band .th-ico { width: 22px; height: 22px; }
+.th-panel .th-grid thead th { background: #e3eafa; color: #13265c; font-weight: 800; }
+.th-panel .th-grid tbody td:last-child input, .th-panel .th-grid tbody td:last-child .share-input { background: #fdecee; color: #c3202c; font-weight: 700; }
+@media (max-width: 1200px) { .th-cards { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) { .th-hero-art { width: 68px; height: 68px; } .th-back { position: static; margin-left: auto; } .th-hero { flex-wrap: wrap; } .th-tools { margin-left: 0; } }
