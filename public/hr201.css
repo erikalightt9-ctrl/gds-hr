@@ -4271,3 +4271,19 @@ dialog.rrd-dialog { width: min(1240px, calc(100vw - 32px)); background: linear-g
 .au-tools select { min-width: 150px !important; } .au-tools input[type=date] { min-width: 140px !important; }
 .au-table td, .au-table th { padding-left: 12px !important; padding-right: 12px !important; }
 .au-actor { white-space: normal !important; } .au-rec { max-width: 230px !important; } .au-chip { white-space: normal; }
+
+/* ---- Sidebar (Nov 25, 2026 design): logo card, spaced group labels with lines, larger items, red active pill, Sign Out, red wave ---- */
+.shell .sidebar .brand-logo { border-radius: 14px !important; padding: 10px 14px !important; box-shadow: 0 8px 18px rgb(0 0 0 / .25); }
+.shell .sidebar .nav-label { display: flex; align-items: center; gap: 12px; margin: 22px 10px 10px !important; color: rgb(255 255 255 / .8) !important; font-size: 11px !important; letter-spacing: .32em !important; font-weight: 600; }
+.shell .sidebar .nav-label::before, .shell .sidebar .nav-label::after { content: ""; flex: 1; height: 1px; background: rgb(255 255 255 / .22); }
+.shell .sidebar .nav-label::before { flex: 0 0 22px; }
+.shell .sidebar .nav button { font-size: 14.5px !important; padding: 11px 14px !important; border-radius: 12px !important; gap: 14px !important; }
+.shell .sidebar .nav button .symbol svg { width: 22px; height: 22px; }
+.shell .sidebar .nav button.active { border-radius: 14px !important; background: linear-gradient(90deg, #e3262b, #b3121f) !important; }
+.shell .sidebar .nav-signout { margin-top: 6px; color: rgb(255 255 255 / .88) !important; background: transparent !important; border: 0 !important; display: flex; align-items: center; width: 100%; text-align: left; }
+.shell .sidebar .nav-signout:hover { background: rgb(255 255 255 / .08) !important; }
+.shell .sidebar .sb-foot { background-color: transparent; }
+.shell .sidebar { background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 120' preserveAspectRatio='none'%3E%3Cpath d='M0 120V95C90 80 180 105 300 40V120Z' fill='%23c8102e'/%3E%3Cpath d='M0 102C100 86 190 110 300 58V70C190 118 100 96 0 112Z' fill='%23e3262b' opacity='.8'/%3E%3C/svg%3E") no-repeat left bottom / 100% 90px,
+    linear-gradient(180deg, #13255c 0%, #0f1f4f 55%, #0c1940 100%) !important; }
+.shell.collapsed .sidebar .nav-label::before, .shell.collapsed .sidebar .nav-label::after { display: none; }
