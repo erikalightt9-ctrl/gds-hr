@@ -2775,3 +2775,39 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 /* Congratulations card under the Welcome card (Nov 25, 2026). */
 .theme-scarlet .sc-welcome + .cg { margin: 12px 0 0 !important; }
 @media (max-width: 900px) { .theme-scarlet .sc-first > .sc-welcome + .cg { margin-top: 30px !important; } .theme-scarlet .sc-first > .cg + .sc-clock { margin-top: 0 !important; } }
+/* Bigger welcome header, smaller Congratulations card, first screen still one page (Nov 25, 2026). */
+.theme-scarlet .sc-welcome + .cg { padding: 6px 12px !important; border-radius: 16px !important; }
+.theme-scarlet .sc-welcome + .cg .cg-head h2 { font-size: 13px !important; }
+.theme-scarlet .sc-welcome + .cg:not(.cg-open) .cg-list { margin-top: 3px !important; }
+.theme-scarlet .sc-welcome + .cg:not(.cg-open) .cg-item { padding: 1px 10px !important; gap: 7px !important; }
+.theme-scarlet .sc-welcome + .cg:not(.cg-open) .cg-photo { width: 26px !important; height: 26px !important; font-size: 10.5px !important; }
+.theme-scarlet .sc-welcome + .cg:not(.cg-open) .cg-first { font-size: 12.5px !important; }
+.theme-scarlet .sc-welcome + .cg:not(.cg-open) .cg-item em { font-size: 10.5px !important; }
+@media (max-width: 900px) {
+  .theme-scarlet .sc-welcome { padding: 20px 16px !important; }
+  .theme-scarlet .sc-photo { width: 92px !important; height: 92px !important; }
+  .theme-scarlet .sc-photo .sc-ini { font-size: 32px !important; }
+  .theme-scarlet .sc-welcome h1 { font-size: 31px !important; }
+  .theme-scarlet .sc-welcome h1 span { font-size: 20px !important; }
+  .theme-scarlet .sc-namelink { font-size: 15px !important; }
+  .theme-scarlet .sc-welcome .welcome-mascot { width: 100px !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { background-position: 0 168px, 0 0 !important; background-size: 100% 34px, 100% 202px !important; }
+  .theme-scarlet .sc-first { gap: 8px !important; }
+  .theme-scarlet .sc-first > .sc-welcome + .cg { margin-top: 26px !important; }
+}
+/* Fit: bigger header within the one-page budget (Nov 25, 2026). */
+.theme-scarlet .sc-welcome + .cg .cg-head h2 { font-size: 12.5px !important; line-height: 1.2 !important; margin: 0 !important; }
+.theme-scarlet .sc-welcome + .cg .cg-head { min-height: 0 !important; }
+.theme-scarlet .sc-welcome + .cg:not(.cg-open) .cg-item > div { gap: 0 !important; line-height: 1.15; }
+@media (max-width: 900px) {
+  .theme-scarlet .sc-welcome { padding: 14px 14px !important; }
+  .theme-scarlet .sc-photo { width: 86px !important; height: 86px !important; }
+  .theme-scarlet .sc-welcome h1 { font-size: 30px !important; }
+  .theme-scarlet .sc-welcome h1 span { font-size: 19px !important; }
+  .theme-scarlet .sc-welcome .employee-welcome-copy { min-width: 0; }
+  .theme-scarlet .sc-namelink { max-width: 100%; white-space: nowrap; }
+  .theme-scarlet .sc-namelink { overflow: hidden; text-overflow: ellipsis; display: block !important; }
+  .theme-scarlet .sc-welcome .welcome-mascot { width: 92px !important; }
+  .theme-scarlet .employee-main:has(> .sc-first) { background-position: 0 128px, 0 0 !important; background-size: 100% 34px, 100% 162px !important; }
+  .theme-scarlet .sc-first > .sc-welcome + .cg { margin-top: 22px !important; }
+}
