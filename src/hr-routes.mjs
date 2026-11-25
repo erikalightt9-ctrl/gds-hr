@@ -12,6 +12,7 @@ import { listMovements } from './movements.mjs';
 import { recordView, requestClarification, answerClarification, recordPaperAck, ackEvidence, remindNow } from './memo-tracking.mjs';
 import { saveMemoDraft, publishMemo, startRevision, saveRevision, archiveMemo, deleteMemoDraft, addMemoAttachment, memoAttachment, listMemos, memoDetail, myMemos, acknowledgeMemo, memoSummary, memosForEmployee } from './memos.mjs';
 import { saveTraining, deleteTraining, assignParticipants, updateParticipant, listTrainings, trainingDetail, myTrainings, trainingSummary, trainingsForEmployee } from './trainings.mjs';
+import { dashboardOverview } from './dashboard-overview.mjs';
 import { mySheet, listSheets, sheetDetail, reviewSheet, pendingSheets } from './datasheets.mjs';
 import { HR_TEAM, DIRECTORY, DASHBOARD, ROLE_LABELS, SENSITIVE_IDS } from './roles.mjs';
 import { celebrationsOn, celebrationsThisMonth, celebrantPhoto } from './celebrations.mjs';
@@ -98,6 +99,7 @@ export async function handleHrRoutes({ req, res, pathname, url, auth, store, sen
   }
   if (pathname === '/api/hr/settings' && method === 'GET') { permit(actor, ['admin']); send(200, readSettings(store)); return true; }
   if (pathname === '/api/hr/settings' && method === 'POST') { send(200, saveSettings(store, actor, await readBody(req, 512000))); return true; }
+  if (pathname === '/api/hr/dashboard/overview' && method === 'GET') { send(200, dashboardOverview(store, actor)); return true; }
   if (pathname === '/api/hr/dashboard' && method === 'GET') { send(200, dashboard(store, actor, overviewExtras(store, actor))); return true; }
   if (pathname === '/api/hr/notifications' && method === 'GET') {
     permit(actor, DASHBOARD);
