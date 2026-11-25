@@ -3,7 +3,25 @@
 import { DOC_BADGE, fmtDate, fmtDateTime, progress, initials, readFile, openEmployeeForm, fieldBoxes, sectionCard as sharedCard, who, idTypeSelect } from './hr-common.js';
 
 const PAGE_SIZE = 10;
-const TABS = [['overview', 'Overview & personal', '📊'], ['employment', 'Employment', '💼'], ['compensation', 'Compensation', '💰'], ['leave', 'Leave credits', '🌴'], ['attendance', 'Attendance', '🕒'], ['family', 'Family', '👨‍👩‍👧'], ['education', 'Education', '🎓'], ['requirements', 'Government IDs & documents', '✅'], ['memos', 'Memos', '📝'], ['trainings', 'Trainings', '🏅']];
+// Profile icons (Nov 25, 2026 design): red line icons instead of emoji.
+const pIco = p => `<svg class="pf-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const PF = {
+  overview: pIco('<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M7 18c.8-2.4 2.8-3.5 5-3.5s4.2 1.1 5 3.5"/>'),
+  case: pIco('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18"/>'),
+  coins: pIco('<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 10v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4M5 14v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/>'),
+  umbrella: pIco('<path d="M3 12a9 9 0 0 1 18 0Z"/><path d="M12 12v7a2 2 0 0 0 4 0"/>'),
+  clock: pIco('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  family: pIco('<circle cx="8" cy="7" r="3"/><circle cx="17" cy="8" r="2.5"/><path d="M2.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5M14 20c0-2.6 1.3-4.5 3-4.5s3 1.9 3 4.5"/>'),
+  cap: pIco('<path d="m2 9 10-5 10 5-10 5Z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/>'),
+  ids: pIco('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.5 16c.6-1.6 1.9-2.4 3.5-2.4s2.9.8 3.5 2.4M15 10h3M15 13h3"/>'),
+  memo: pIco('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+  medal: pIco('<path d="M7 3h10l-3 6h-4Z"/><circle cx="12" cy="15" r="5"/><path d="m12 13 .9 1.8 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3Z"/>'),
+  cal: pIco('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/>'),
+  chart: pIco('<path d="M4 20h16"/><rect x="6" y="12" width="3" height="6" rx="1"/><rect x="11" y="8" width="3" height="10" rx="1"/><rect x="16" y="4" width="3" height="14" rx="1"/>'),
+  people: pIco('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'),
+  archive: pIco('<rect x="3.5" y="4" width="17" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'),
+};
+const TABS = [['overview', 'Overview & Personal', PF.overview], ['employment', 'Employment', PF.case], ['compensation', 'Compensation', PF.coins], ['leave', 'Leave Credits', PF.umbrella], ['attendance', 'Attendance', PF.clock], ['family', 'Family', PF.family], ['education', 'Education', PF.cap], ['requirements', 'Government IDs & Documents', PF.ids], ['memos', 'Memos', PF.memo], ['trainings', 'Trainings', PF.medal]];
 const EDUCATION_LEVELS = ['Elementary', 'High School', 'Senior High School', 'Vocational', 'College', 'Post-graduate', 'Other'];
 const SCHEDULE_LABEL = { 'every-cutoff': 'Every cutoff', 'second-cutoff': 'Monthly, 2nd cutoff', 'first-cutoff': 'Monthly, 1st cutoff', once: 'One time' };
 function serviceLength(start, today) {
@@ -165,9 +183,9 @@ export function createFiles(ctx) {
     const tabs = TABS.filter(([key]) => (key !== 'compensation' || extras.compensation) && (key !== 'leave' || extras.leave) && (key !== 'attendance' || ctx.getState?.()?.attendance) && (!['family', 'education', 'history'].includes(key) || extras.family));
     if (!tabs.some(([key]) => key === tab)) tab = 'overview';
     const header = `<section class="panel hr-profile-head"><div class="hr-profile-id"><span class="hr-avatar large"><img src="/api/hr/employees/${enc}/photo" alt="" data-photo>${esc(initials(record.name))}</span><div><h1>${esc(record.name)}</h1><p class="sub">${esc(record.number)} · ${esc(f.employment.position || 'No position')} · ${esc(f.employment.department || 'No department')}</p><p>${statusBadge(record.archived ? 'Archived' : record.activity)} ${f.employment.classification ? badge(f.employment.classification, 'neutral') : ''} ${record.draft ? badge('Pay setup incomplete', 'pending') : ''}</p></div></div>
-      <div class="actions"><button class="small" data-back>← All employees</button>${can().approve ? (record.archived ? `<button class="small" data-restore="${esc(id)}">Restore</button>` : `<button class="small ghost-danger" data-archive="${esc(id)}">Archive</button>`) : ''}</div></section>`;
+      <div class="actions pf-actions"><button class="pf-btn" data-back>${PF.people}All Employees</button>${can().approve ? (record.archived ? `<button class="pf-btn" data-restore="${esc(id)}">Restore</button>` : `<button class="pf-btn pf-btn-red" data-archive="${esc(id)}">${PF.archive}Archive</button>`) : ''}</div></section>`;
     const infoCard = (icon, label, value) => `<div class="info-card"><span class="info-icon" aria-hidden="true">${icon}</span><span><small>${esc(label)}</small><strong>${esc(value || '—')}</strong></span></div>`;
-    const info = `<div class="info-cards">${infoCard('📅', 'Years of service', serviceLength(f.employment.dateHired, today))}${infoCard('💼', 'Employment type', f.employment.employmentType || 'Not set')}${infoCard('📈', 'Job level', f.employment.jobLevel || 'Not set')}${infoCard('🗓️', 'Date hired', fmtDate(f.employment.dateHired))}</div>`;
+    const info = `<div class="info-cards">${infoCard(PF.cal, 'Years of Service', serviceLength(f.employment.dateHired, today))}${infoCard(PF.case, 'Employment Type', f.employment.employmentType || 'Not set')}${infoCard(PF.chart, 'Job Level', f.employment.jobLevel || 'Not set')}${infoCard(PF.cal, 'Date Hired', fmtDate(f.employment.dateHired))}</div>`;
     const tabBar = `<section class="panel profile-tabs-panel"><div class="tabs hr-tabs profile-tab-grid" role="tablist">${tabs.map(([key, text, icon]) => `<button role="tab" aria-selected="${key === tab}" class="${key === tab ? 'active' : ''}" data-tab-select="${key}"><span aria-hidden="true">${icon}</span> ${text}</button>`).join('')}</div><div class="hr-tab-body">${safeBody(record, checklist, extra, extras)}</div></section>`;
     shell(header + info + tabBar);
     const root = document.querySelector('.content');
@@ -330,7 +348,7 @@ export function createFiles(ctx) {
     if (tab === 'education') return block('🎓', 'Education', table(['Level', 'School', 'Course / strand', 'Years', 'Honors'], extras.education.entries.map(x => [esc(x.level), esc(x.school), esc(x.course || '—'), esc([x.yearFrom, x.yearTo].filter(Boolean).join('–') || '—'), esc(x.honors || '—')]), 'No education recorded.'), editBtn('education', edit));
     if (tab === 'leave') {
       const L = extras.leave;
-      return block('🌴', `Leave credits · ${L.year}`, table(['Leave type', 'Eligible', 'Credits this year', 'Used leave', 'Available'], L.types.map(t => [esc(t.name), t.eligible ? 'Yes' : 'No', `${t.entitled} day${t.entitled === 1 ? '' : 's'}`, (t.taken || []).length || t.usedBefore ? `<button class="ml-name lc-used" data-leave-dates="${esc(t.typeId)}" title="Show the leave dates">${Math.round(t.used * 100) / 100} day(s)</button>` : `${Math.round(t.used * 100) / 100} day(s)`, `<strong>${t.available} day${t.available === 1 ? '' : 's'}</strong>`]), 'No paid leave types are configured.'), L.canEdit && !record.archived ? ' <button class="small" data-edit-leave>Edit leave credits</button>' : '');
+      return block('🌴', `Leave Credits · ${L.year}`, table(['Leave Type', 'Eligible', 'Credits This Year', 'Used Leave', 'Available'], L.types.map(t => [`<span class="lc-type"><i class="lc-ico" aria-hidden="true">${/vacation/i.test(t.name) ? '🏖️' : /sick/i.test(t.name) ? '🩺' : /emergency/i.test(t.name) ? '🚨' : /bereave/i.test(t.name) ? '🎗️' : /parent|maternity|paternity/i.test(t.name) && !/solo/i.test(t.name) ? '👪' : /service incentive|sil/i.test(t.name) ? '🌟' : /solo/i.test(t.name) ? '🍼' : /women|9710/i.test(t.name) ? '🌸' : '📅'}</i>${esc(t.name)}</span>`, `<span class="lc-pill ${t.eligible ? 'lc-yes' : 'lc-no'}">${t.eligible ? 'Yes' : 'No'}</span>`, `${t.entitled} day${t.entitled === 1 ? '' : 's'}`, (t.taken || []).length || t.usedBefore ? `<button class="ml-name lc-used" data-leave-dates="${esc(t.typeId)}" title="Show the leave dates">${Math.round(t.used * 100) / 100} day(s)</button>` : `${Math.round(t.used * 100) / 100} day(s)`, `<span class="lc-pill lc-days ${t.available > 0 ? 'lc-yes' : 'lc-no'}">${t.available} day${t.available === 1 ? '' : 's'}</span>`]), 'No paid leave types are configured.'), L.canEdit && !record.archived ? ' <button class="small" data-edit-leave>✎ Edit Leave Credits</button>' : '');
     }
     if (tab === 'requirements' || tab === 'documents' || tab === 'government') {
       const files = checklist.items.flatMap(i => i.versions.map(v => ({ ...v, current: i.current?.id === v.id })));

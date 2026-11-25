@@ -4146,3 +4146,42 @@ dialog.rrd-dialog { width: min(1240px, calc(100vw - 32px)); background: linear-g
 @media (max-width: 760px) { .ml-hero-art { width: 66px; height: 66px; } }
 .ml-main .ml-cards { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
 @media (max-width: 900px) { .ml-main .ml-cards { grid-template-columns: 1fr 1fr !important; } }
+
+/* ---- Employee 201 profile (Nov 25, 2026 design): warm header with ribbon, icon cards, icon tabs, red section bars ---- */
+.hr-profile-head { position: relative; overflow: hidden; border-radius: 18px !important; border: 1px solid #f0dfd8 !important; color: #13265c;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 160' preserveAspectRatio='none'%3E%3Cpath d='M220 160C360 140 470 80 600 0V160Z' fill='%23d7141a' opacity='.14'/%3E%3Cpath d='M300 160C420 120 520 60 600 30V60C520 90 440 140 380 160Z' fill='%23e2b13c' opacity='.25'/%3E%3C/svg%3E") no-repeat right / 60% 100%, linear-gradient(100deg, #fffdfb, #fdf1ee) !important; box-shadow: 0 10px 24px rgb(120 20 20 / .07); }
+.hr-profile-head h1 { color: #13265c; font-weight: 800; }
+.hr-profile-head .hr-avatar.large { box-shadow: 0 0 0 4px #fff, 0 0 0 6px #d7141a33; }
+.pf-ico { width: 20px; height: 20px; flex: none; }
+.pf-actions { gap: 12px; }
+.pf-btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px !important; border-radius: 12px !important; border: 1.5px solid #f0b6ba !important; background: #fff !important; color: #b3121f !important; font-weight: 700; font-size: 15px; }
+.pf-btn-red { background: linear-gradient(180deg, #c3121f, #8a0f18) !important; color: #fff !important; border: 0 !important; box-shadow: 0 8px 16px -8px rgb(140 0 10 / .6); }
+.info-cards .info-card { border-radius: 16px; border: 1px solid #f0dfd8; background: linear-gradient(180deg, #fffdfb, #fdf5f2); box-shadow: 0 8px 18px rgb(120 20 20 / .05); color: #13265c; }
+.info-cards .info-icon { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; background: #fde8e6; color: #b3121f; }
+.info-cards .info-icon .pf-ico { width: 28px; height: 28px; }
+.info-cards .info-card strong { font-size: 19px; font-weight: 800; color: #13265c; }
+.profile-tabs-panel { border-radius: 16px !important; border: 1px solid #f0dfd8 !important; background: #fffaf8 !important; }
+.tabs.profile-tab-grid button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #f0dfd8 !important; background: #fff !important; color: #b3121f !important; font-weight: 600; border-radius: 10px !important; }
+.tabs.profile-tab-grid button .pf-ico { width: 18px; height: 18px; }
+.tabs.profile-tab-grid button.active { background: linear-gradient(180deg, #a50e17, #7a0b12) !important; color: #fff !important; border-color: transparent !important; box-shadow: 0 6px 12px -6px rgb(120 0 10 / .6); }
+.profile-card { border-radius: 16px; border: 1px solid #f0dfd8; background: linear-gradient(180deg, #fffdfb, #fdf6f3); box-shadow: 0 8px 18px rgb(120 20 20 / .05); overflow: hidden; color: #13265c; }
+.profile-card-head { margin: 10px 10px 4px; padding: 10px 14px; border-radius: 12px; border-bottom: 0 !important; color: #fff;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 50' preserveAspectRatio='none'%3E%3Cpath d='M120 0C250 20 330 30 400 50V0Z' fill='%23fff' opacity='.12'/%3E%3C/svg%3E") no-repeat right / 70% 100%, linear-gradient(90deg, #a50e17, #c3121f 60%, #e0989c) !important; }
+.profile-card-head h3 { color: #fff !important; font-size: 18px; font-weight: 800; }
+.profile-card-head button, .profile-card-head .small { background: #fff !important; color: #b3121f !important; border: 1.5px solid #f0b6ba !important; border-radius: 10px !important; font-weight: 700; }
+.profile-card .field-box-label { color: #13265c; font-weight: 700; }
+.profile-card .field-box { border-radius: 10px; border: 1px solid #ead8d2; background: #fff; color: #13265c; }
+.profile-card .field-box.empty { color: #8a8fa6; }
+.profile-card table thead th { background: linear-gradient(180deg, #b3121f, #8a0f18); color: #fff; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.profile-card table thead th:first-child { border-radius: 10px 0 0 10px; } .profile-card table thead th:last-child { border-radius: 0 10px 10px 0; }
+.profile-card td.empty, .profile-card .empty { color: #4b557a; }
+.tabs.profile-tab-grid { display: flex !important; flex-wrap: wrap; gap: 8px; }
+.tabs.profile-tab-grid button { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+/* Leave Credits tab (Nov 25, 2026 design): leave icons, Yes / No and days as pills, lighter pink header */
+.profile-card:has(.lc-type) table thead th { background: #fde8ea !important; color: #b3121f !important; font-weight: 800; }
+.lc-type { display: inline-flex; align-items: center; gap: 12px; font-weight: 600; color: #13265c; } .lc-ico { font-style: normal; font-size: 20px; width: 26px; text-align: center; }
+.lc-pill { display: inline-block; min-width: 48px; padding: 4px 14px; border-radius: 14px; text-align: center; font-weight: 700; font-size: 13.5px; }
+.lc-no { background: #eceef3; color: #4b557a; } .lc-yes { background: #dff5e7; color: #16884a; } .lc-days { min-width: 90px; }
+.profile-card:has(.lc-type) td { text-align: center; } .profile-card:has(.lc-type) td:first-child, .profile-card:has(.lc-type) th:first-child { text-align: left; }
+.tabs.profile-tab-grid button { padding: 8px 12px !important; font-size: 13px; }
+.tabs.profile-tab-grid button { flex: 0 0 auto !important; }
