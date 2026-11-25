@@ -3755,3 +3755,49 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 .fp-act svg { width: 17px; height: 17px; }
 @media (max-width: 900px) { .fp-form { grid-template-columns: 1fr; } .fp-advisory { margin-left: 0; } }
 .fp-row .leave-dropdown { width: 100%; } .fp-status + small { display: block; margin-top: 4px; }
+
+/* ---- Employee Loans (Nov 25, 2026 design): hero with Record a Loan, tinted cards, panels, coloured tab pills, chips ---- */
+.ln-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin-bottom: 16px; color: var(--dp-ink); }
+.ln-hero-art { flex: none; width: 104px; height: 96px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.ln-hero .dp-hello h1 { font-size: 36px; }
+.ln-hero-btn { position: absolute; right: 18px; top: 22px; display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 22px !important; border-radius: 12px !important; border: 0 !important; background: #fff !important; color: #d7141a !important; font-weight: 700; font-size: 15px; box-shadow: 0 8px 18px -8px rgb(20 40 100 / .35); }
+.ln-hero-btn .ln-ico { width: 20px; height: 20px; }
+.ln-cards .ln-card { align-items: center; border: 1px solid #e1e6f2; border-radius: 14px; box-shadow: 0 6px 16px rgb(20 40 100 / .06); color: #13265c; }
+.ln-cards .ln-card-ico { width: 58px; height: 58px; padding: 14px; border-radius: 50%; color: #fff; display: grid; place-items: center; flex: none; }
+.ln-cards .ln-card-ico .ln-ico { width: 28px; height: 28px; }
+.ln-cards .ln-card span { color: #13265c; font-weight: 700; } .ln-cards .ln-card strong { color: #13265c; font-size: 27px; font-weight: 800; } .ln-cards .ln-card small { color: #263460; }
+.ln-cards .ln-card:nth-child(1) { background: linear-gradient(180deg, #f1f6fe, #e2ecfc); } .ln-cards .ln-card:nth-child(1) .ln-card-ico { background: linear-gradient(145deg, #2f6df0, #1847c4); }
+.ln-cards .ln-card:nth-child(2) { background: linear-gradient(180deg, #fff8ea, #feeccb); } .ln-cards .ln-card:nth-child(2) .ln-card-ico { background: linear-gradient(145deg, #ffc44d, #ea8f12); }
+.ln-cards .ln-card:nth-child(3) { background: linear-gradient(180deg, #fff1f4, #fde0e7); } .ln-cards .ln-card:nth-child(3) .ln-card-ico { background: linear-gradient(145deg, #f0567a, #c3204a); }
+.ln-cards .ln-card:nth-child(4) { background: linear-gradient(180deg, #effaf3, #dcf3e4); } .ln-cards .ln-card:nth-child(4) .ln-card-ico { background: linear-gradient(145deg, #2cc46a, #14934a); }
+.ln-panel { border-radius: 16px !important; border: 1px solid #e1e6f2 !important; background: linear-gradient(180deg, #fbfcff, #f4f6fb) !important; box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: #13265c; }
+.ln-apps-title { display: flex; align-items: center; gap: 12px; color: #13265c; font-weight: 800; }
+.ln-apps-ico { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(145deg, #2f6df0, #1847c4); color: #fff; } .ln-apps-ico .ln-ico { width: 20px; height: 20px; }
+.ln-panel .ln-count { background: #eef2fb; color: #13265c; border-radius: 12px; padding: 2px 10px; }
+.ln-panel .ln-table thead th { background: #e3eafa; color: #13265c; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.ln-panel .ln-table-wrap { background: #fff; border-radius: 12px; }
+.ln-panel .ln-empty-ico { width: 84px; height: 84px; background: none; color: #2659e6; } .ln-panel .ln-empty-ico .ln-ico { width: 72px; height: 72px; stroke-width: 1.3; }
+.ln-panel .ln-empty strong { font-size: 19px; color: #13265c; }
+button.ln-title-card { border-radius: 10px; border: 1.5px solid #e04a50; background: #fff1f2; color: #c3121f; }
+button.ln-title-card strong { background: #d7141a; color: #fff; border-radius: 8px; padding: 1px 9px; }
+button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
+.ln-tabs button { border-radius: 10px !important; font-size: 13px; font-weight: 700; padding: 8px 14px; }
+.ln-tabs button:nth-child(1) { background: #e9f8ef; border: 1.5px solid #8fd6a8; color: #168a43; } .ln-tabs button:nth-child(1) span { background: #c9efd7; color: #168a43; }
+.ln-tabs button:nth-child(2) { background: #fff1f2; border: 1.5px solid #f0b6ba; color: #c3202c; } .ln-tabs button:nth-child(2) span { background: #fde0e3; color: #c3202c; }
+.ln-tabs button:nth-child(3) { background: #f5effe; border: 1.5px solid #cdb3f5; color: #6d2fd0; } .ln-tabs button:nth-child(3) span { background: #e9dcfb; color: #6d2fd0; }
+.ln-tabs button.active { box-shadow: 0 0 0 3px rgb(20 40 100 / .12); }
+.ln-emp { display: inline-flex; align-items: center; gap: 10px; }
+.ln-av { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 13px; }
+.ln-av-rose { background: #fde3ea; color: #c3204a; } .ln-av-green { background: #e2f6ea; color: #168a43; } .ln-av-blue { background: #e4ecfd; color: #2659e6; } .ln-av-violet { background: #efe6fd; color: #7b3fe0; } .ln-av-amber { background: #fff1dc; color: #c4710a; }
+.ln-date { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; } .ln-date .ln-ico { width: 16px; height: 16px; color: #1f48c0; }
+.ln-out { display: inline-block; padding: 5px 12px; border-radius: 10px; background: #fde3ea; color: #c3121f; font-weight: 800; white-space: nowrap; }
+.ln-panel .ln-table .badge { background: #fff3dc; color: #a86d06; border: 1px solid #f3d79c; }
+.ln-panel .ln-icon-btn { border: 1.5px solid #f0b6ba; background: #fff; color: #d7141a; border-radius: 10px; }
+.ln-panel .ln-btn { border-radius: 10px; border-color: #cfd8ec; background: #fff; color: #13265c; font-weight: 700; }
+@media (max-width: 1100px) { .ln-hero-btn { position: static; margin-left: auto; } .ln-hero { flex-wrap: wrap; } }
+@media (max-width: 760px) { .ln-hero-art { width: 70px; height: 64px; } }
+.ln-panel button.ln-title-card, .ln-panel button.ln-title-card.active { border: 1.5px solid #e04a50 !important; background: #fff1f2 !important; color: #c3121f !important; }
+.ln-panel button.ln-title-card .ln-ico { color: #d7141a; }
+.ln-panel .ln-table th, .ln-panel .ln-table td { padding: 10px 9px !important; }
+.ln-panel .ln-table th { font-size: 11px !important; }
+.ln-panel .ln-table td { font-size: 13px; }
