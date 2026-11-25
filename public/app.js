@@ -164,6 +164,66 @@ let payGroupOpen = (() => { try { return localStorage.getItem('hr-nav-pay') === 
 let mobileDrawer = false;
 let sidebarCollapsed = (() => { try { return localStorage.getItem('hr-sidebar') === 'collapsed'; } catch { return false; } })();
 function applyTheme(theme) { document.documentElement.dataset.theme = theme === 'forest' ? 'forest' : 'gds'; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'forest' ? '#0f3a26' : '#161616'); }
+// Top bar (Nov 25, 2026 design): icons, live Philippine date / time, global search (Ctrl + K).
+const tbSvg = d => `<svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const TB = {
+  menu: tbSvg('<path d="M4 6.5h16M4 12h16M4 17.5h16"/>'),
+  search: tbSvg('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
+  cal: tbSvg('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01M16 17h.01"/>'),
+  pin: tbSvg('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/>'),
+  chev: '<svg class="tb2-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg>',
+  back: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg>',
+};
+const tbFmt = opts => new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila', ...opts });
+const tbDate = () => tbFmt({ month: 'short', day: 'numeric', year: 'numeric' });
+const tbTime = () => `${tbFmt({ weekday: 'short' })}, ${tbFmt({ hour: 'numeric', minute: '2-digit' })}`;
+const tbLong = () => tbFmt({ weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+let tbClock = null, tbPeople = null;
+function tbTick() {
+  const set = (sel, text) => document.querySelectorAll(sel).forEach(el => { if (el.textContent !== text) el.textContent = text; });
+  set('[data-tb-date]', tbDate()); set('[data-tb-time]', tbTime()); set('[data-tb-long]', tbLong());
+}
+function searchItems(q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean), hit = text => words.every(w => text.toLowerCase().includes(w));
+  const modules = navGroups().flatMap(([label, items, group]) => items.map(([id, name]) => ({ kind: 'Module', id, name, sub: group?.label || label || 'Menu' })))
+    .filter(m => hit(`${m.name} ${m.sub}`));
+  const people = (tbPeople || []).filter(p => !p.archived && hit(`${p.name} ${p.number || ''} ${p.id} ${p.position || ''} ${p.department || ''}`))
+    .slice(0, 6).map(p => ({ kind: 'Employee', id: p.id, name: p.name, sub: [p.number || p.id, p.position, p.department].filter(Boolean).join(' · ') }));
+  const reports = modules.filter(m => /report|contribution|1601|13th|payslip|payroll/i.test(m.name)).map(m => ({ ...m, kind: 'Report' }));
+  return [...people, ...modules.filter(m => !reports.some(r => r.id === m.id)).slice(0, 6), ...reports.slice(0, 4)];
+}
+function mountTopbar() {
+  if (!tbClock) tbClock = setInterval(tbTick, 15000);
+  const box = document.querySelector('[data-global-search]'), list = document.querySelector('[data-search-results]');
+  if (!box || !list) return;
+  let items = [], active = 0;
+  const close = () => { list.classList.add('hidden'); box.setAttribute('aria-expanded', 'false'); };
+  const draw = () => {
+    const q = box.value.trim();
+    if (!q) { close(); return; }
+    items = searchItems(q); active = 0;
+    list.innerHTML = items.length ? items.map((it, i) => `<button type="button" role="option" class="tb2-hit${i === active ? ' active' : ''}" data-hit="${i}"><em>${esc(it.kind)}</em><span><strong>${esc(it.name)}</strong><small>${esc(it.sub)}</small></span></button>`).join('') : '<p class="tb2-none">No match. Try a name, Employee ID or a module such as Leave or Payroll.</p>';
+    list.classList.remove('hidden'); box.setAttribute('aria-expanded', 'true');
+  };
+  const pick = i => { const it = items[i]; if (!it) return; box.value = ''; close(); mobileDrawer = false; goTo(it.kind === 'Employee' ? { page: 'employee201', id: it.id } : { page: it.id }); };
+  box.addEventListener('focus', () => { if (tbPeople === null) { tbPeople = []; api('/hr/employees').then(p => { tbPeople = Array.isArray(p) ? p : []; if (box.value.trim()) draw(); }).catch(() => { tbPeople = []; }); } });
+  box.addEventListener('input', draw);
+  box.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { box.value = ''; close(); box.blur(); return; }
+    if (!items.length || list.classList.contains('hidden')) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); active = (active + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; list.querySelectorAll('.tb2-hit').forEach((el, i) => el.classList.toggle('active', i === active)); }
+    if (e.key === 'Enter') { e.preventDefault(); pick(active); }
+  });
+  list.addEventListener('mousedown', e => { const h = e.target.closest('[data-hit]'); if (h) { e.preventDefault(); pick(Number(h.dataset.hit)); } });
+  box.addEventListener('blur', () => setTimeout(close, 120));
+}
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { const box = document.querySelector('[data-global-search]'); if (box) { e.preventDefault(); box.focus(); box.select(); } }
+});
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-go-back]')) { history.length > 1 ? history.back() : goTo({ page: 'dashboard' }); return; }
+  document.querySelectorAll('.tb2-pill[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.tb2-pop [data-nav]')) d.open = false; });
+});
 function shell(content) {
   if (auth.demo) content = '<div class="notice">Preview workspace · Payroll settings and figures are sample data. Changes here do not update the live HR database.</div>' + content;
   const groups = navGroups(), parent = groupOf(page);
@@ -178,11 +238,14 @@ function shell(content) {
       return `<div class="nav-group ${payGroupOpen ? 'open' : ''}"><button class="nav-parent ${childActive ? 'has-active' : ''}" data-nav-group="${group.id}" aria-expanded="${payGroupOpen}" aria-controls="nav-${group.id}" title="${esc(group.label)}">${icon(group.icon)}<span class="nav-text">${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true"></span></button><div class="nav-sub" id="nav-${group.id}" role="group" aria-label="${esc(group.label)}"><div class="nav-sub-inner">${items.map(i => item(i, true)).join('')}</div></div></div>`;
     }).join('')}</nav>
     <div class="sidebar-bottom sb-foot"><button class="sb-icon" data-toggle-sidebar title="Collapse menu" aria-label="Collapse menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></svg></button></div></aside>
-    <main class="main"><header class="topbar"><span class="topbar-title"><button class="small icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">☰</button><button class="small icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">☰</button><span><strong>${esc(company.systemTitle)}</strong></span></span>
-      <span class="topbar-user"><span class="tb-pill optional"><span class="tb-when"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/><circle cx="8.5" cy="14" r=".6" fill="currentColor"/><circle cx="12" cy="14" r=".6" fill="currentColor"/><circle cx="15.5" cy="14" r=".6" fill="currentColor"/><circle cx="8.5" cy="17" r=".6" fill="currentColor"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>${esc(new Date(`${today()}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }))}</span><span class="tb-div" aria-hidden="true"></span><span class="tb-when"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5s1.1-6.1 3.5-8.5Z"/></svg>Asia/Manila</span></span>${messagesButton()}<span class="bell-wrap"><button class="small icon-button tb-btn tb-bell" data-bell aria-label="Notifications" aria-haspopup="true"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg><span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
-      <span class="topbar-divider" aria-hidden="true"></span><details class="tb-account"><summary title="Account" aria-label="Account menu"><span class="tb-avatar">${esc((who(auth.user.username).match(/\b\w/g) || ['?']).slice(0, 2).join('').toUpperCase())}</span><span class="user-meta"><strong>${esc(who(auth.user.username))}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span><svg class="tb-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></summary><div class="tb-menu" role="menu"><button role="menuitem" data-my-account>My account</button>${auth.user.role === 'admin' ? '<button role="menuitem" data-account>Account &amp; access</button>' : ''}<button role="menuitem" data-signout>Sign out</button></div></details></span></header>
+    <main class="main"><header class="topbar tb2"><span class="tb2-menu"><button class="icon-button" data-toggle-sidebar aria-controls="main-menu" aria-label="${sidebarCollapsed ? 'Expand' : 'Collapse'} menu" aria-expanded="${!sidebarCollapsed}">${TB.menu}</button><button class="icon-button drawer-toggle" data-open-drawer aria-controls="main-menu" aria-label="Open menu" aria-expanded="${mobileDrawer}">${TB.menu}</button></span>
+      <div class="tb2-search" role="search">${TB.search}<input type="search" data-global-search placeholder="Search employees, modules, or reports…" aria-label="Search employees, modules, or reports" autocomplete="off" aria-controls="tb2-results"><kbd aria-hidden="true">Ctrl + K</kbd><div class="tb2-results hidden" id="tb2-results" data-search-results role="listbox"></div></div>
+      <span class="topbar-user"><details class="tb2-pill optional"><summary aria-label="Date and time">${TB.cal}<span class="tb2-two"><strong data-tb-date>${esc(tbDate())}</strong><small data-tb-time>${esc(tbTime())}</small></span>${TB.chev}</summary><div class="tb2-pop"><strong data-tb-long>${esc(tbLong())}</strong><p>Philippine Time. Attendance is timed by the server.</p>${navGroups().some(g => g[1].some(([k]) => k === 'holidays')) ? '<button class="small" data-nav="holidays">Open holiday calendar</button>' : ''}</div></details><details class="tb2-pill optional"><summary aria-label="Time zone">${TB.pin}<span class="tb2-two"><strong>Asia/Manila</strong><small>GMT +8</small></span>${TB.chev}</summary><div class="tb2-pop"><strong>Asia/Manila (GMT +8)</strong><p>Every date and time in TimeHub uses Philippine Time, whatever the time zone of this device.</p></div></details><span class="tb2-sep" aria-hidden="true"></span>${messagesButton()}<span class="bell-wrap"><button class="small icon-button tb-btn tb-bell" data-bell aria-label="Notifications" aria-haspopup="true"><svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg><span class="bell-count hidden" data-bell-count></span></button><div class="bell-menu hidden" data-bell-menu role="menu"></div></span>
+      <span class="tb2-sep" aria-hidden="true"></span><details class="tb-account"><summary title="Account" aria-label="Account menu"><span class="tb-avatar">${esc((who(auth.user.username).match(/\b\w/g) || ['?']).slice(0, 2).join('').toUpperCase())}</span><span class="user-meta"><strong>${esc(who(auth.user.username))}</strong><small>${esc(hrContext?.roleLabel || auth.user.role)}</small></span>${TB.chev}</summary><div class="tb-menu" role="menu"><button role="menuitem" data-my-account>My account</button>${auth.user.role === 'admin' ? '<button role="menuitem" data-account>Account &amp; access</button>' : ''}<button role="menuitem" data-signout>Sign out</button></div></details></span>
+      <button class="tb2-swoosh" data-go-back aria-label="Go back" title="Go back">${TB.back}</button></header>
     <div class="content">${content}</div></main></div>`;
   loadBell();
+  mountTopbar();
   syncRoute();
 }
 let bellItems = [];
