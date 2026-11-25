@@ -39,8 +39,8 @@ export function createPortal(ctx) {
     const page2 = () => { const el = app.querySelector('.clock-block'); return el && matchMedia('(max-width: 900px)').matches ? Math.round(el.getBoundingClientRect().top + window.scrollY) : null; };
     const settle = () => {
       const top = page2(); if (top === null || touching || gliding) return;
-      const y = window.scrollY; if (y <= 2 || Math.abs(y - top) <= 2 || y > top) return;
-      const down = y > startY, target = down ? (y > 24 ? top : 0) : (y < top - 24 ? 0 : top);
+      const y = window.scrollY; if (y <= 2 || Math.abs(y - top) <= 2 || y > top + window.innerHeight * 0.6) return;
+      const down = y > startY, target = y > top ? top : down ? (y > 24 ? top : 0) : (y < top - 24 ? 0 : top);
       // Own ease-out glide (350 ms): browser smooth scrolling is not reliable on every phone.
       gliding = true; const from = y, t0 = performance.now();
       const step = now => { const k = Math.min(1, (now - t0) / 350), e = 1 - Math.pow(1 - k, 3); window.scrollTo(0, Math.round(from + (target - from) * e)); if (k < 1 && !touching) requestAnimationFrame(step); else setTimeout(() => { gliding = false; startY = window.scrollY; }, 80); };
@@ -268,10 +268,21 @@ export function createPortal(ctx) {
   // day-by-day statuses HR and payroll use). portal-attendance-stats.js draws it.
   let maMonth = '';
   const attendanceStats = () => '<section class="pm-card ma-card" data-att-summary><div class="loading">Loading your attendance…</div></section>';
+  function fitSecondScreen() {
+    const block = app.querySelector('.clock-block'), cards = [...(block?.querySelectorAll(':scope > .ta-card, :scope > .ma-card') || [])];
+    if (!block || !cards.length) return;
+    cards.forEach(c => { c.style.zoom = ''; });
+    if (!matchMedia('(max-width: 900px)').matches) return;
+    const bar = app.querySelector('.sc-bottom'), barSpace = bar ? window.innerHeight - bar.getBoundingClientRect().top + 8 : 0;
+    const avail = window.innerHeight - barSpace - 12 - 10 * (cards.length - 1) - 4, need = cards.reduce((n, c) => n + c.getBoundingClientRect().height, 0);
+    if (need > avail) { const z = Math.max(0.6, Math.floor(avail / need * 1000) / 1000); cards.forEach(c => { c.style.zoom = String(z); }); }
+  }
+  window.addEventListener('resize', () => fitSecondScreen());
   async function loadAttendanceSummary() {
     const box = app.querySelector('[data-att-summary]'); if (!box) return;
     try {
       const [{ renderAttendanceSummary }, summary] = await Promise.all([import('./portal-attendance-stats.js'), api(`/me/attendance-summary${maMonth ? `?month=${maMonth}` : ''}`)]);
+      setTimeout(fitSecondScreen, 0);
       renderAttendanceSummary(box, summary, { esc, onMonth: m => { maMonth = m; loadAttendanceSummary(); }, onRefresh: () => loadAttendanceSummary(), onLeave: () => { tab = 'leave'; dirty = false; render(); window.scrollTo({ top: 0 }); } });
     } catch (error) { box.innerHTML = `<div class="notice">${esc(/not found|import|module|fetch/i.test(error.message) ? 'Attendance analytics will appear after the HR server restarts.' : error.message)}</div>`; }
   }
