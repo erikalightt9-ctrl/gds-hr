@@ -590,7 +590,7 @@ export function createPortal(ctx) {
     doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 2.4L17.6 8H14ZM8 12h8v1.6H8Zm0 3.4h8V17H8Z"/>',
     search: '<path d="M10 3a7 7 0 1 0 4.2 12.6l5.1 5.1 1.4-1.4-5.1-5.1A7 7 0 0 0 10 3Zm0 2a5 5 0 1 1-5 5 5 5 0 0 1 5-5Z"/>',
     export: '<path d="M12 3 7 8l1.4 1.4L11 6.8V15h2V6.8l2.6 2.6L17 8Zm-7 13v4h14v-4h-2v2H7v-2Z"/>',
-    dots: '<circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>',
+    dots: '<circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>',
   };
   const icon = (name, cls = '') => `<svg class="lv-ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${SVG[name]}</svg>`;
   const STATUS_LOOK = { Present: ['present', 'check'], Late: ['late', 'late'], Absent: ['absent', 'absent'], 'No time in': ['absent', 'absent'], 'Awaiting time in': ['idle', 'late'], 'On leave': ['leave', 'leave'], 'Missing time out': ['missing', 'missing'] };
@@ -604,6 +604,8 @@ export function createPortal(ctx) {
     for (const r of panel.querySelectorAll('[data-lv-row]')) { const ok = (!q || r.dataset.name.includes(q)) && (!st || r.dataset.status === st) && (!loc || r.dataset.loc === loc) && (!co || r.dataset.company === co); r.hidden = !ok; if (ok) shown++; }
     panel.querySelector('[data-lv-count]').textContent = `${shown} employee${shown === 1 ? '' : 's'} total`;
   };
+  // Live attendance ⋯ menus close when anything else (or one of their items) is clicked.
+  document.addEventListener('click', e => { document.querySelectorAll('.lv-more[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.lv-more-menu button')) d.open = false; }); });
   for (const type of ['input', 'change']) document.addEventListener(type, e => { const panel = e.target.closest?.('.lv'); if (panel && e.target.matches('[data-lv-search], [data-lv-status], [data-lv-loc], [data-lv-company]')) filterLive(panel); });
   // Live attendance → Reason: today's out-of-office, late explanation, leave and overtime reasons for one employee,
   // each with its explanation, attachment and leave proof.
@@ -631,12 +633,12 @@ export function createPortal(ctx) {
         <td><button class="lv-emp" data-profile="${esc(e.employeeId)}" title="Open 201 profile"><span class="lv-avatar lv-${look}">${esc(initialsOf(e.name))}</span><span><strong>${esc(e.name)}</strong><small>${esc(e.employeeId)}</small></span></button></td>
         <td><span class="lv-pill lv-${look}">${icon(pill)}${esc(e.status)}</span></td>
         <td class="lv-time">${e.autoPresent ? '<span class="lv-wfh" title="Work from home: present without time in / out">WFH</span>' : esc(e.actualIn || '—')}</td><td class="lv-time">${e.autoPresent ? '<span class="lv-muted">—</span>' : esc(e.actualOut || '—')}</td>
-        <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}" title="${esc(ev.place || 'View location')}">${icon('pin')}<span>${esc(ev.atOffice ? 'Office' : ev.place ? ev.place.split(',').slice(0, 2).join(',') : 'View location')}</span></button>` : '<span class="lv-muted">No location</span>'}</td>
+        <td>${located(e) ? `<button class="lv-loc" data-location="${esc(ev.id)}" title="${esc(ev.atOffice ? 'Office' : ev.place || 'View location')}">${icon('pin')}<span>View Location</span></button>` : '<span class="lv-muted">No location</span>'}</td>
         <td class="lv-reasons">${(e.reasons || []).length ? `<button class="lv-reason" data-live-reason="${esc(e.employeeId)}" title="View the explanation, attachments and proof">${(e.reasons || []).slice(0, 2).map(r => `<span class="lv-reason-chip lv-reason-${esc(r.kind)}">${esc(r.label)}</span>`).join('')}${e.reasons.length > 2 ? `<span class="lv-reason-more">+${e.reasons.length - 2}</span>` : ''}</button>` : '<span class="lv-muted">—</span>'}</td>
-        <td class="lv-requests" data-lv-req="${esc(e.employeeId)}">${requests.join('') || '<span class="lv-muted">—</span>'}</td></tr>`;
+        <td class="lv-requests" data-lv-req="${esc(e.employeeId)}"><details class="lv-more"><summary aria-label="Actions for ${esc(e.name)}">${icon('dots')}</summary><div class="lv-more-menu">${requests.join('')}<button data-profile="${esc(e.employeeId)}">Open 201 file</button>${located(e) ? `<button data-location="${esc(ev.id)}">View location</button>` : ''}${(e.reasons || []).length ? `<button data-live-reason="${esc(e.employeeId)}">View reasons</button>` : ''}</div></details></td></tr>`;
     };
     const html = `<section class="panel live-panel lv">
-      <div class="lv-head"><div><h2>Live attendance</h2><p>Today's employee attendance</p></div><div class="lv-head-tools"><span class="lv-live"><i></i>Live</span><a class="lv-btn" href="/api/reports/daily-attendance.pdf?date=${esc(data.employees[0]?.date || '')}&view=1" target="_blank" rel="noopener">${icon('export')}Export</a></div></div>
+      <div class="lv-head"><div class="lv-title"><i class="lv-ring" aria-hidden="true"></i><div><h2>Live Attendance</h2><p>Today's employee attendance</p></div></div><div class="lv-head-tools"><span class="lv-live"><i></i>Live</span><a class="lv-btn" href="/api/reports/daily-attendance.pdf?date=${esc(data.employees[0]?.date || '')}&view=1" target="_blank" rel="noopener">${icon('export')}Export</a></div></div>
       <div class="lv-cards">${statuses.map(s => `<button data-live-filter="${s}" class="lv-card${s === liveFilter ? ' active' : ''}"><span class="lv-card-ico lv-${CARD[s][0]}">${icon(CARD[s][0])}</span><span><strong>${count(s)}</strong><small>${CARD[s][1]}</small></span></button>`).join('')}</div>
       <div class="lv-filters"><label class="lv-search">${icon('search')}<input type="search" data-lv-search placeholder="Search name or employee ID" aria-label="Search name or employee ID"></label>
         <select data-lv-company aria-label="Subsidiary"><option value="">All subsidiaries</option>${[...new Set([...(data.companies || []), ...data.employees.map(e => e.department)].filter(Boolean))].sort().map(c => `<option>${esc(c)}</option>`).join('')}</select>

@@ -3539,3 +3539,46 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 .ap-empty { text-align: center; padding: 40px !important; color: #4b557a; }
 @media (max-width: 1000px) { .ap-kpis { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 760px) { .ap-hero-art { width: 70px; height: 70px; } .ap-tools > select.ap-select { flex: 1 1 140px; width: auto; } .ap-export { margin-left: 0; } .ap-table table { min-width: 960px; } .ap-kpi { padding: 10px 12px; gap: 10px; } .ap-kpi > span { width: 40px; height: 40px; padding: 10px; } .ap-kpi strong { font-size: 22px; } }
+
+/* ---- Attendance page + Live Attendance (Nov 25, 2026 design): hero, soft panel, coloured tiles, blue table header, ⋯ menu ---- */
+.at-hero { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; margin-bottom: 16px; color: var(--dp-ink); }
+.at-hero-art { flex: none; width: 96px; height: 96px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.at-hero .dp-hello h1 { font-size: 36px; }
+.lv { --lv-ink: #13265c; border-radius: 16px !important; border: 1px solid #e1e6f2 !important; background: linear-gradient(180deg, #fbfcff, #f2f5fb) !important; box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: var(--lv-ink); }
+.lv-title { display: flex; align-items: center; gap: 12px; }
+.lv-ring { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 5px solid #22b45a; box-shadow: 0 0 0 3px #22b45a22; }
+.lv .lv-head h2 { font-size: 22px; color: var(--lv-ink); } .lv .lv-head p { color: var(--lv-ink); font-size: 13px; }
+.lv .lv-live { padding: 6px 12px; border-radius: 16px; background: #fff; border: 1px solid #dfe4f0; font-weight: 600; }
+.lv .lv-btn { border-radius: 18px; border: 1.5px solid #e88a8f; color: #d7141a; }
+.lv .lv-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.lv .lv-card { border-radius: 14px; border: 1px solid #dfe4f0; box-shadow: 0 6px 14px rgb(20 40 100 / .06); }
+.lv .lv-card strong { color: var(--lv-ink); font-size: 24px; } .lv .lv-card small { color: var(--lv-ink); font-weight: 500; }
+.lv .lv-card-ico { color: #fff !important; }
+.lv .lv-card:has(.lv-all) { background: linear-gradient(180deg, #fff1f2, #fde0e3); } .lv .lv-card-ico.lv-all { background: linear-gradient(145deg, #f0444a, #c3121f); }
+.lv .lv-card:has(.lv-present) { background: linear-gradient(180deg, #effaf3, #dcf3e4); } .lv .lv-card-ico.lv-present { background: linear-gradient(145deg, #2cc46a, #14934a); }
+.lv .lv-card:has(.lv-late) { background: linear-gradient(180deg, #fff8ea, #feeccb); } .lv .lv-card-ico.lv-late { background: linear-gradient(145deg, #ffc44d, #ea8f12); }
+.lv .lv-card:has(.lv-absent) { background: linear-gradient(180deg, #f6f7fa, #e7eaf1); } .lv .lv-card-ico.lv-absent { background: #e1e5ee; color: #4b557a !important; }
+.lv .lv-card:has(.lv-leave) { background: linear-gradient(180deg, #f1f6fe, #e2ecfc); } .lv .lv-card-ico.lv-leave { background: linear-gradient(145deg, #2f6df0, #1847c4); }
+.lv .lv-card:has(.lv-missing) { background: linear-gradient(180deg, #f7f2fe, #ebdffb); } .lv .lv-card-ico.lv-missing { background: linear-gradient(145deg, #a067f0, #6d2fd0); }
+.lv .lv-card:last-child { background: linear-gradient(180deg, #fff2f8, #fbdeee); } .lv .lv-card:last-child .lv-card-ico { background: linear-gradient(145deg, #ec4f9b, #c21f73); }
+.lv .lv-card.active { border: 2px solid #e04a50; box-shadow: 0 0 0 3px rgb(215 20 26 / .1); }
+.lv .lv-filters { grid-template-columns: minmax(220px, 1fr) 180px 180px 180px; }
+.lv .lv-search input, .lv .lv-filters select { border-radius: 21px; border-color: #cfd8ec; height: 42px; padding-top: 0; padding-bottom: 0; }
+.lv .lv-table-wrap { border: 1px solid #dfe4f0; border-radius: 14px; background: #fff; }
+.lv .lv-table thead th { background: #e3eafa; color: var(--lv-ink); font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; padding: 13px 16px; }
+.lv .lv-table td { border-bottom: 1px solid #edf0f7; padding: 10px 16px; }
+.lv .lv-emp strong { color: var(--lv-ink); }
+.lv .lv-pill { border-radius: 14px; padding: 5px 12px; }
+.lv .lv-loc { color: #d7141a; }
+.lv-more { position: relative; display: inline-block; }
+.lv-more > summary { list-style: none; width: 38px; height: 30px; display: grid; place-items: center; border-radius: 15px; border: 1px solid #cfd8ec; background: #fff; cursor: pointer; color: var(--lv-ink); }
+.lv-more > summary::-webkit-details-marker { display: none; }
+.lv-more > summary .lv-ico { width: 18px; height: 18px; }
+.lv-more[open] > summary { background: #eef2fb; }
+.lv-more-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 210px; display: grid; gap: 2px; padding: 6px; background: #fff; border: 1px solid #dfe4f0; border-radius: 12px; box-shadow: 0 16px 34px -14px rgb(20 40 100 / .4); }
+.lv-more-menu button { border: 0 !important; background: none !important; text-align: left; padding: 9px 10px !important; border-radius: 8px !important; color: var(--lv-ink) !important; font-weight: 500; white-space: nowrap; }
+.lv-more-menu button:hover { background: #eef2fb !important; }
+.lv .lv-requests { text-align: center; }
+@media (max-width: 1200px) { .lv .lv-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } .lv .lv-filters { grid-template-columns: 1fr 1fr 1fr; } }
+@media (max-width: 640px) { .lv .lv-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lv .lv-filters { grid-template-columns: 1fr 1fr; } .at-hero-art { width: 66px; height: 66px; } }
+.lv .lv-table thead th:last-child { text-align: center; }
