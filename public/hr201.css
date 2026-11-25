@@ -4039,3 +4039,38 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 .st-panel button.primary { background: linear-gradient(180deg, #e3262b, #a50e17); border: 0; border-radius: 10px; }
 @media (max-width: 1200px) { .st-admin-hero { position: static; margin-left: auto; } .st-hero { flex-wrap: wrap; } .st-tabbar button + button { border-left: 0 !important; } }
 @media (max-width: 760px) { .st-hero-art { width: 66px; height: 66px; } }
+
+/* ---- Settings: Approval & Appearance + Employee Numbers (Nov 25, 2026 design): warm cards, red / gold ribbon, icon fields ---- */
+.st-fancy { position: relative; overflow: hidden; border: 1px solid #efe6d6 !important; background: linear-gradient(180deg, #fffdf9, #fdf8f1) !important; box-shadow: 0 10px 24px rgb(80 50 10 / .08); color: #13265c; }
+.st-fancy-head { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #eadfcb;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 70' preserveAspectRatio='none'%3E%3Cpath d='M60 70C150 62 230 40 300 0V70Z' fill='%23c8102e'/%3E%3Cpath d='M20 70C130 60 220 30 300 4V18C230 50 150 66 90 70Z' fill='%23e2b13c'/%3E%3C/svg%3E") no-repeat right bottom / 320px 100%, #fffaf3; }
+.st-fancy-head h2 { margin: 0; font-size: 22px; font-weight: 800; color: #13265c; }
+.st-aa-ico { width: 22px; height: 22px; flex: none; }
+.st-fancy-ico { width: 40px !important; height: 40px !important; color: #d7141a; }
+.st-aa { display: grid; grid-template-columns: 1.25fr 1fr 1fr; padding: 18px 24px 22px; }
+.st-aa-col { padding: 0 24px; min-width: 0; } .st-aa-col:first-child { padding-left: 0; } .st-aa-col + .st-aa-col { border-left: 1px solid #eadfcb; } .st-aa-col:last-child { padding-right: 0; }
+.st-aa-title { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 20px; font-weight: 800; color: #b3121f; }
+.st-aa-title .st-aa-ico { width: 30px; height: 30px; color: #b3121f; }
+.st-aa-plain { color: #13265c; font-size: 16px; }
+.st-aa-sub { margin: 0 0 10px; font-size: 12.5px; color: #4b557a; }
+.st-aa-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+.st-fancy .field { color: #13265c; font-weight: 600; } .st-fancy .field b { color: #d7141a; }
+.st-ifield { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border: 1.5px solid #e6cfa3; border-radius: 12px; background: #fff; color: #b3121f; }
+.st-ifield input, .st-ifield select { flex: 1; min-width: 0; height: 100%; border: 0 !important; box-shadow: none !important; background: transparent; padding: 0; color: #13265c; font-size: 15px; font-weight: 500; }
+.st-theme2 { display: flex; align-items: center; gap: 12px; } .st-theme2 .st-ifield { flex: 1; }
+.st-theme2 .st-swatch { width: 40px; height: 40px; }
+.st-logo2 { display: flex; align-items: center; gap: 16px; } .st-logo2 > span { padding: 10px 14px; border: 1px solid #eadfcb; border-radius: 14px; background: #fff; } .st-logo2 img { width: 200px; }
+.st-num2 { display: grid; grid-template-columns: 1fr 1fr auto 1.1fr; gap: 24px; align-items: end; padding: 18px 24px 22px; }
+.st-num2 .st-ifield { height: 50px; font-size: 17px; } .st-num2 .st-ifield input { font-size: 17px; font-weight: 700; }
+.st-year { align-self: center; margin-top: 22px; font-size: 15px; font-weight: 600; } .st-year input { accent-color: #d7141a; width: 22px; height: 22px; }
+.st-next2 { display: grid; gap: 6px; padding-left: 24px; border-left: 1px solid #eadfcb; background: none; border-radius: 0; }
+.st-next2 > span { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 800; color: #13265c; } .st-next2 > span .st-aa-ico { color: #b3121f; width: 28px; height: 28px; }
+.st-next2 strong { display: block; padding: 10px 16px; border-radius: 12px; border: 1px solid #f3c7cb; background: #fdeeee; color: #8a0f18; text-align: center; font-size: 26px; font-weight: 800; letter-spacing: .02em; }
+.st-next2 small { display: flex; align-items: center; gap: 8px; color: #13265c; font-size: 13.5px; } .st-next2 small .st-aa-ico { color: #ea8f12; width: 18px; height: 18px; }
+@media (max-width: 1200px) { .st-aa, .st-num2 { grid-template-columns: 1fr; gap: 18px; } .st-aa-col { padding: 0; } .st-aa-col + .st-aa-col { border-left: 0; padding-top: 16px; border-top: 1px solid #eadfcb; } .st-next2 { padding-left: 0; border-left: 0; } }
+@media (max-width: 760px) { .st-aa-pair { grid-template-columns: 1fr; } .st-logo2 { flex-wrap: wrap; } }
+/* New Case / Add Training sit at the top right of the banner (Nov 25, 2026, HR) */
+.dp-hero .dp-new { top: 18px !important; transform: none !important; }
+.rr-panel .rr-foot svg, .rr-panel .rr-link svg { width: 20px !important; height: 20px !important; flex: none; }
+.rr-panel .rr-edit svg { width: 15px !important; height: 15px !important; }
+.rr-panel .rr-cat .rr-ic svg { width: 100%; height: 100%; }
