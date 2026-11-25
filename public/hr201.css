@@ -2763,3 +2763,8 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
   #login-form .login-links { margin-top: 16px !important; }
 }
 @media (min-width: 901px) { #login-form .login-links .login-link { font-size: 13.5px !important; padding: 6px 10px !important; white-space: nowrap; } #login-form .login-links .login-link svg { width: 18px; height: 18px; } #login-form .th-title { font-size: 46px !important; } }
+/* Sign-in card: contents stay inside the card at every width (Nov 25, 2026). */
+#login-form .th-card { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }
+#login-form .th-card > * { box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; min-width: 0; margin-left: 0 !important; margin-right: 0 !important; }
+#login-form .login-tiles .fingerprint-login { min-width: 0; }
+@media (min-width: 901px) { #login-form .login-tiles .fingerprint-login { font-size: 14px !important; white-space: nowrap; padding: 14px 4px !important; min-height: 100px; } #login-form .login-tiles .fp-ico { width: 38px; height: 38px; } #login-form .login-user input { font-size: 16px !important; } }
