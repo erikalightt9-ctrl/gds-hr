@@ -3801,3 +3801,70 @@ button.ln-title-card.active { box-shadow: 0 0 0 3px rgb(215 20 26 / .12); }
 .ln-panel .ln-table th, .ln-panel .ln-table td { padding: 10px 9px !important; }
 .ln-panel .ln-table th { font-size: 11px !important; }
 .ln-panel .ln-table td { font-size: 13px; }
+
+/* ---- Government Contributions page (Nov 25, 2026 design): hero, tools, cards, per-employee panel, rates section ---- */
+.gc-hero, .cs { --dp-ink: #13265c; --dp-line: #e1e6f2; --dp-red: #d7141a; color: var(--dp-ink); }
+.gc-hero { margin-bottom: 14px; }
+.gc-hero-art { flex: none; width: 104px; height: 96px; filter: drop-shadow(0 8px 10px rgb(20 40 100 / .25)); }
+.gc-hero .dp-hello h1 { font-size: 34px; }
+.gc-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.gc-tools input[type=month] { height: 42px; border-radius: 12px; border: 1px solid #cfd8ec; padding: 0 12px; color: #13265c; font-weight: 600; }
+.gc-add { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 20px !important; border-radius: 12px !important; border: 0 !important; background: linear-gradient(180deg, #e3262b, #a50e17) !important; color: #fff !important; font-weight: 700; box-shadow: 0 8px 16px -8px rgb(160 0 10 / .6); }
+.gc-add svg, .gc-file svg, .gc-edit svg { width: 18px; height: 18px; }
+.gc-back { height: 42px; padding: 0 18px !important; border-radius: 12px !important; border: 1.5px solid #f0b6ba !important; background: #fff !important; color: #d7141a !important; font-weight: 700; }
+.gc-files { margin-left: auto; display: flex; gap: 10px; }
+.gc-file { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 12px; border: 1px solid #cfd8ec; background: #fff; color: #13265c; font-weight: 700; text-decoration: none; }
+.gc-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.gc-card { display: flex; align-items: center; gap: 16px; padding: 16px 18px; border-radius: 14px; border: 1px solid #e1e6f2; box-shadow: 0 6px 16px rgb(20 40 100 / .06); color: #13265c; min-width: 0; }
+.gc-card > span { flex: none; width: 54px; height: 54px; padding: 13px; border-radius: 50%; color: #fff; } .gc-card > span svg { width: 100%; height: 100%; }
+.gc-card b { display: block; font-size: 14px; } .gc-card strong { display: block; font-size: 26px; font-weight: 800; line-height: 1.15; white-space: nowrap; } .gc-card small { font-size: 12.5px; color: #263460; }
+.gc-blue { background: linear-gradient(180deg, #f1f6fe, #e2ecfc); } .gc-blue > span { background: linear-gradient(145deg, #2f6df0, #1847c4); }
+.gc-green { background: linear-gradient(180deg, #effaf3, #dcf3e4); } .gc-green > span { background: linear-gradient(145deg, #2cc46a, #14934a); }
+.gc-red { background: linear-gradient(180deg, #fff1f2, #fde0e3); } .gc-red > span { background: linear-gradient(145deg, #f0444a, #c3121f); }
+.gc-amber { background: linear-gradient(180deg, #fff8ea, #feeccb); } .gc-amber > span { background: linear-gradient(145deg, #ffc44d, #ea8f12); }
+.gc-panel { border-radius: 16px !important; border: 1px solid #e1e6f2 !important; background: linear-gradient(180deg, #fbfcff, #f4f6fb) !important; box-shadow: 0 8px 20px rgb(20 40 100 / .05); color: #13265c; }
+.gc-title { display: flex; align-items: center; gap: 12px; font-weight: 800; color: #13265c; }
+.gc-title-ico { flex: none; width: 42px; height: 42px; padding: 10px; border-radius: 50%; background: linear-gradient(145deg, #2f6df0, #1847c4); color: #fff; } .gc-title-ico svg { width: 100%; height: 100%; }
+.gc-panel table thead th { background: #e3eafa; color: #13265c; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.gc-panel .contrib-filters select { border-radius: 10px; border-color: #cfd8ec; }
+.gc-emp { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.gc-av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 12.5px; }
+.gc-av-green { background: #e2f6ea; color: #168a43; } .gc-av-amber { background: #fff1dc; color: #c4710a; } .gc-av-blue { background: #e4ecfd; color: #2659e6; } .gc-av-violet { background: #efe6fd; color: #7b3fe0; } .gc-av-rose { background: #fdecee; color: #c3202c; }
+.gc-edit { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px !important; border-radius: 10px !important; border: 1.5px solid #f0b6ba !important; background: #fff !important; color: #d7141a !important; font-weight: 700; font-size: 13px; }
+.cs { display: grid; gap: 16px; margin-top: 16px; }
+.cs svg { width: 100%; height: 100%; }
+.cs-info { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; border: 1px solid #cfdcf6; background: #edf3fd; font-size: 13.5px; }
+.cs-info > svg { width: 22px; height: 22px; flex: none; color: #2659e6; }
+.cs-agencies { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.cs-agency { display: flex; align-items: center; gap: 16px; padding: 18px 20px !important; border-radius: 14px !important; border: 1px solid #e1e6f2 !important; text-align: left; color: #13265c !important; box-shadow: 0 6px 16px rgb(20 40 100 / .06); }
+.cs-agency > span { flex: 1; display: grid; } .cs-agency strong { font-size: 20px; font-weight: 800; } .cs-agency small { font-size: 13.5px; }
+.cs-agency > svg { width: 22px; height: 22px; flex: none; color: #1f48c0; }
+.cs-card-blue { background: linear-gradient(180deg, #f1f6fe, #e2ecfc) !important; } .cs-card-green { background: linear-gradient(180deg, #effaf3, #dcf3e4) !important; } .cs-card-amber { background: linear-gradient(180deg, #fff8ea, #feeccb) !important; }
+.cs-ag { flex: none; width: 56px; height: 56px; padding: 13px; border-radius: 50%; color: #fff; display: grid; font-style: normal; }
+.cs-blue { background: linear-gradient(145deg, #2f6df0, #1847c4); } .cs-green { background: linear-gradient(145deg, #2cc46a, #14934a); } .cs-amber { background: linear-gradient(145deg, #ffc44d, #ea8f12); }
+.cs-panel { padding: 16px 18px; border-radius: 16px; border: 1px solid #e1e6f2; background: linear-gradient(180deg, #fbfcff, #f4f6fb); box-shadow: 0 8px 20px rgb(20 40 100 / .05); min-width: 0; }
+.cs-title { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; font-size: 19px; font-weight: 800; color: #13265c; }
+.cs-title-ico { flex: none; width: 42px; height: 42px; padding: 10px; border-radius: 50%; background: linear-gradient(145deg, #2f6df0, #1847c4); color: #fff; }
+.cs-table { border-radius: 12px; background: #fff; border: 1px solid #e1e6f2; }
+.cs-table thead th { background: #e3eafa; color: #13265c; font-size: 11.5px; font-weight: 800; text-transform: uppercase; }
+.cs-table td small { display: block; color: #4b557a; }
+.cs-name { display: inline-flex; align-items: center; gap: 10px; } .cs-name .cs-ag { width: 36px; height: 36px; padding: 8px; } .cs-name > span { display: grid; } .cs-name a { font-size: 11.5px; }
+.cs-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cs-sub { margin: -4px 0 12px; color: #263460; font-size: 13.5px; }
+.cs-calc { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.cs-calc .field { flex: 1 1 220px; font-weight: 700; color: #13265c; }
+.cs-peso { display: flex; align-items: center; height: 44px; border: 1px solid #cfd8ec; border-radius: 10px; background: #fff; padding-left: 12px; }
+.cs-peso i { font-style: normal; font-weight: 700; } .cs-peso input { flex: 1; border: 0 !important; box-shadow: none !important; background: transparent; }
+.cs-compute { display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px !important; border-radius: 12px !important; border: 0 !important; background: linear-gradient(180deg, #e3262b, #a50e17) !important; color: #fff !important; font-weight: 700; font-size: 15px; box-shadow: 0 8px 16px -8px rgb(160 0 10 / .6); }
+.cs-compute svg { width: 20px; height: 20px; }
+.cs [data-contribution-result] { margin-top: 12px; }
+.cs-tables { display: grid; gap: 10px; }
+.cs-tables .contribution-table { border: 1px solid #dfe4f0; border-radius: 12px; background: #fff; }
+.cs-tables .contribution-table > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; cursor: pointer; font-weight: 700; color: #13265c; }
+.cs-tables .contribution-table > summary em { font-style: normal; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 10px; background: #e4ecfd; color: #1f48c0; white-space: nowrap; }
+.cs-tables .contribution-table[open] > summary { border-bottom: 1px solid #edf0f7; }
+@media (max-width: 1100px) { .cs-two, .cs-agencies { grid-template-columns: 1fr; } .gc-cards { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) { .gc-hero-art { width: 70px; height: 64px; } .gc-files { margin-left: 0; } }
+.gc-panel table th { white-space: normal !important; padding: 10px 8px !important; font-size: 11px !important; line-height: 1.3; }
+.gc-panel table td { padding: 9px 8px !important; font-size: 13px; }
+.cs-table table { white-space: normal !important; } .cs-table td, .cs-table th { padding: 10px 10px !important; font-size: 13px; } .cs-table td:first-child { min-width: 200px; }

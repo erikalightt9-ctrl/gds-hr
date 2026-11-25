@@ -84,18 +84,37 @@ function bracketTable(mandate, brackets, { table, badge }) {
   return `<div class="scroll-table">${table(head, rows)}</div>`;
 }
 
+// Nov 25, 2026 design: info bar, three agency cards (open their computation table), rules table with agency icons,
+// salary calculator with a Compute button, and the computation tables as a list.
+const csIco = d => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const AGENCY = {
+  SSS: ['blue', csIco('<path d="M4 15c4-1 6-6 12-8M6 19c4-1 7-6 13-9M3 11c4-1 5-5 10-7"/>'), 'Social Security System'],
+  PhilHealth: ['green', csIco('<circle cx="9" cy="6" r="2"/><circle cx="15" cy="6" r="2"/><path d="M7 21v-9h4v9M13 21v-9h4v9"/>'), 'Philippine Health Insurance Corporation'],
+  'Pag-IBIG': ['amber', csIco('<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><circle cx="12" cy="14" r="2.5"/>'), 'Home Development Mutual Fund'],
+};
+const CS = { info: csIco('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>'), people: csIco('<circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.3"/><circle cx="19" cy="10" r="2.3"/><path d="M7.5 20c0-2.8 2-4.8 4.5-4.8s4.5 2 4.5 4.8M1.5 19c0-2.2 1.5-3.8 3.5-3.8M22.5 19c0-2.2-1.5-3.8-3.5-3.8"/>'), calc: csIco('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h4"/>'), list: csIco('<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>'), chev: csIco('<path d="m9 6 6 6-6 6"/>') };
 export function contributionsSection(rule, helpers) {
   const { esc, table } = helpers;
-  const summary = table(['Contribution', 'Basis', 'Total rate', 'Employee', 'Employer', 'Floor', 'Ceiling', 'Max employee / month', 'Legal basis'],
-    MANDATES.map(m => [`<strong>${esc(m.name)}</strong>`, esc(m.basis), esc(m.rate), esc(m.employee), esc(m.employer), esc(m.floor), esc(m.ceiling), peso.format(m.maxEmployee), `<a href="${m.source}" target="_blank" rel="noreferrer">${esc(m.law)} ↗</a>`]));
-  const tables = MANDATES.map(m => `<details class="contribution-table"><summary>${esc(m.name)} computation table · ${rule.contributions[m.key].length} brackets</summary>${bracketTable(m, rule.contributions[m.key], helpers)}</details>`).join('');
+  const agencyIcon = m => { const [tone, icon] = AGENCY[m.key] || ['blue', CS.info]; return `<i class="cs-ag cs-${tone}">${icon}</i>`; };
+  const summary = table(['Contribution', 'Basis', 'Total rate', 'Employee share', 'Employer share', 'Floor / ceiling', 'Max employee / month'],
+    MANDATES.map(m => [`<span class="cs-name">${agencyIcon(m)}<span><strong>${esc(m.name)}</strong><a href="${m.source}" target="_blank" rel="noreferrer">${esc(m.law)} ↗</a></span></span>`, esc(m.basis), esc(m.rate), esc(m.employee), esc(m.employer), `${esc(m.floor)}<small>Ceiling: ${esc(m.ceiling)}</small>`, peso.format(m.maxEmployee)]));
+  const tables = MANDATES.map(m => `<details class="contribution-table" data-cs-table="${esc(m.key)}"><summary><span>${esc(m.name)} Computation Table · ${rule.contributions[m.key].length} Bracket${rule.contributions[m.key].length === 1 ? '' : 's'}</span><em>${rule.contributions[m.key].length} bracket${rule.contributions[m.key].length === 1 ? '' : 's'}</em></summary>${bracketTable(m, rule.contributions[m.key], helpers)}</details>`).join('');
   const factor = rule.cutoff === 'monthly' ? 1 : 0.5;
-  return `<section class="panel contributions-panel" data-contribution-rule="${esc(rule.id)}"><div class="panel-head"><h2>Government contributions</h2></div>
-    <div class="panel-body"><p class="legend">Payroll deducts the employee share each cutoff (monthly share × ${factor}). Employer shares are shown for remittance planning and are not deducted from pay.</p></div>
-    <div class="scroll-table">${summary}</div>
-    <div class="panel-body"><h3>Try a monthly salary</h3><label class="field contribution-calc">Monthly salary (PHP)<input type="number" min="0" step="any" data-contribution-salary placeholder="e.g. 20000"></label><div data-contribution-result></div></div>
-    <div class="panel-body">${tables}</div></section>`;
+  return `<section class="contributions-panel cs" data-contribution-rule="${esc(rule.id)}">
+    <div class="cs-info">${CS.info}<span>Payroll deducts the employee share each cutoff (monthly share × ${factor}). Employer shares are shown for remittance planning and are not deducted from pay.</span></div>
+    <div class="cs-agencies">${MANDATES.map(m => { const [tone, icon, full] = AGENCY[m.key] || ['blue', CS.info, m.name]; return `<button type="button" class="cs-agency cs-card-${tone}" data-cs-open="${esc(m.key)}" title="Open the ${esc(m.name)} computation table"><i class="cs-ag cs-${tone}">${icon}</i><span><strong>${esc(m.name)}</strong><small>${esc(full)}</small></span>${CS.chev}</button>`; }).join('')}</div>
+    <div class="cs-panel"><h2 class="cs-title"><span class="cs-title-ico">${CS.people}</span>Contribution Rules &amp; Rates</h2><div class="scroll-table cs-table">${summary}</div></div>
+    <div class="cs-two"><div class="cs-panel"><h2 class="cs-title"><span class="cs-title-ico">${CS.calc}</span>Try a Monthly Salary</h2><p class="cs-sub">Enter a monthly salary to see the estimated contributions (employee and employer share).</p>
+      <div class="cs-calc"><label class="field contribution-calc">Monthly Salary (PHP)<span class="cs-peso"><i>₱</i><input type="number" min="0" step="any" data-contribution-salary placeholder="e.g. 20,000"></span></label><button type="button" class="cs-compute" data-cs-compute>${CS.calc}Compute</button></div><div data-contribution-result></div></div>
+      <div class="cs-panel"><h2 class="cs-title"><span class="cs-title-ico">${CS.list}</span>Computation Tables</h2><div class="cs-tables">${tables}</div></div></div></section>`;
 }
+// Agency cards open their computation table; Compute runs the calculator (it also updates while typing).
+if (typeof document !== 'undefined') document.addEventListener('click', e => {
+  const open = e.target.closest('[data-cs-open]');
+  if (open) { const d = open.closest('.cs')?.querySelector(`[data-cs-table="${CSS.escape(open.dataset.csOpen)}"]`); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }); } return; }
+  const go = e.target.closest('[data-cs-compute]');
+  if (go) { const input = go.closest('.cs')?.querySelector('[data-contribution-salary]'); if (input) { input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); } }
+});
 
 export function renderCalculation(rule, salary, { table }) {
   if (!(salary >= 0)) return '';
