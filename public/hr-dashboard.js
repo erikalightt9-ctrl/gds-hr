@@ -1,6 +1,7 @@
 // HR / Admin dashboard (Nov 25, 2026 design). Every figure is read on the server from current records
 // (GET /api/hr/dashboard/overview, src/dashboard-overview.mjs; GET /api/hr/dashboard for the subsidiaries list); each
 // card opens the matching page.
+import { who } from './hr-common.js';
 const ico = d => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const I = {
   people: ico('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'),
@@ -52,7 +53,7 @@ export function createDashboard(ctx) {
     let d, o, me;
     try { [d, o, me] = await Promise.all([api('/hr/dashboard'), api('/hr/dashboard/overview'), api('/me/account').catch(() => ({}))]); }
     catch (error) { shell(heading('Dashboard', '') + `<div class="notice">${esc(/not found/i.test(error.message) ? 'The new dashboard will appear after the HR server restarts.' : error.message)}</div>`); return; }
-    const name = me.employeeName ? (() => { const [last, first] = String(me.employeeName).split(',').map(x => x.trim()); return first ? `${first} ${last}` : me.employeeName; })() : (ctx.who?.(me.username) || me.username || 'there');
+    const name = me.employeeName ? (() => { const [last, first] = String(me.employeeName).split(',').map(x => x.trim()); return first ? `${first} ${last}` : me.employeeName; })() : (who(me.username) || 'there');
     const ini = name.split(/\s+/).filter(Boolean).map(x => x[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase();
     const t = o.today, nav = x => esc(JSON.stringify(x));
     const kpi = (tone, icon, label, value, chip, go) => `<button class="hd-kpi hd-${tone}" data-go="${nav(go)}"><span class="hd-kpi-ico">${icon}</span><span class="hd-kpi-text"><span>${label}</span><strong>${value}</strong></span>${chip ? `<em>${chip}</em>` : ''}<span class="hd-kpi-art">${icon}</span></button>`;
@@ -85,6 +86,8 @@ export function createDashboard(ctx) {
     // Sizes / colours set from script (the page's security policy blocks style attributes).
     root.querySelectorAll('[data-hd-w]').forEach(el => { el.style.width = `${Math.max(0, Math.min(100, Number(el.dataset.hdW)))}%`; });
     root.querySelectorAll('[data-hd-color]').forEach(el => { el.style.background = el.dataset.hdColor; });
+    const fitLists = () => root.querySelectorAll('.hd-acts, .hd-events').forEach(list => { const panel = list.closest('.hd-panel'); [...list.children].forEach(li => { li.hidden = false; }); const limit = Math.min(panel.getBoundingClientRect().bottom - 10, list.getBoundingClientRect().bottom + 1); [...list.children].forEach(li => { if (li.getBoundingClientRect().bottom > limit) li.hidden = true; }); });
+    fitLists(); window.addEventListener('resize', fitLists);
     root.onclick = event => {
       const b = event.target.closest('[data-go]'); if (!b) return;
       const go = JSON.parse(b.dataset.go);

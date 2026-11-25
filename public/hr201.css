@@ -3099,3 +3099,41 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
 .hd-comp ul { min-width: 0; flex: 1 1 120px; } .hd-comp li span { min-width: 0; overflow-wrap: anywhere; }
 .hd .hd-clip { width: 64px; height: 78px; padding: 8px; } .hd-clip i { right: -4px; bottom: -4px; width: 28px; height: 28px; padding: 5px; }
 @media (max-width: 1500px) { .hd-compliance { gap: 8px; } .hd-big { font-size: 48px; } }
+/* Dashboard fits one screen on computers (Nov 25, 2026): banner and KPI cards shorter, the two card rows share the rest
+   of the window, the chart and lists shrink with them. */
+@media (min-width: 1101px) and (min-height: 640px) {
+  .hd { height: calc(100vh - 162px); grid-template-rows: auto auto minmax(0, 1fr) minmax(0, .9fr); gap: 12px; }
+  .hd-hero { min-height: 0; padding: 10px 22px; }
+  .hd-photo { width: 76px; height: 76px; border-width: 4px; } .hd-photo > span { font-size: 26px; } .hd-photo i { width: 14px; height: 14px; right: 2px; bottom: 4px; }
+  .hd-hello span { font-size: 16px; } .hd-hello h1 { font-size: 28px; margin: 0 0 2px; } .hd-hello p { font-size: 13px; }
+  .hd-motto { font-size: 16px; }
+  .hd-kpi { min-height: 0; padding: 10px 14px !important; } .hd-kpi-ico { width: 42px; height: 42px; } .hd-kpi-text strong { font-size: 26px; }
+  .hd-row3, .hd-row3b { min-height: 0; gap: 12px; }
+  .hd-panel { min-height: 0; padding: 12px 16px; gap: 6px; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  .hd-panel > .hd-line { width: 100%; height: 100%; min-height: 0; }
+  .hd .hd-donut { width: min(150px, 100%) !important; height: auto !important; max-height: 100%; }
+  .hd-comp { min-height: 0; align-content: center; }
+  .hd-quicks { align-self: stretch; } .hd-quick { padding: 8px 4px !important; } .hd-quick span { width: 28px; height: 28px; } .hd-quick strong { font-size: 22px; }
+  .hd-acts, .hd-events { min-height: 0; overflow: hidden; gap: 7px; }
+  .hd-big { font-size: 48px; }
+}
+@media (min-width: 1101px) and (min-height: 640px) {
+  .hd-comp { flex-wrap: nowrap !important; height: 100%; justify-content: flex-start; gap: 14px; }
+  .hd .hd-donut { height: 100% !important; width: auto !important; max-width: 48%; max-height: 170px; aspect-ratio: 1 / 1; }
+  .hd-compliance { min-height: 0; }
+}
+@media (min-width: 1101px) and (min-height: 640px) and (max-height: 900px) {
+  .hd { gap: 10px; }
+  .hd-hero { padding: 6px 18px; } .hd-photo { width: 58px; height: 58px; border-width: 3px; } .hd-photo > span { font-size: 20px; }
+  .hd-hello span { font-size: 13px; } .hd-hello h1 { font-size: 22px; } .hd-hello p { font-size: 12px; } .hd-motto { font-size: 13px; }
+  .hd-kpi { padding: 8px 12px !important; gap: 2px 10px !important; } .hd-kpi-ico { width: 36px; height: 36px; border-radius: 11px; } .hd-kpi-ico svg { width: 20px; height: 20px; }
+  .hd-kpi-text span { font-size: 12px; } .hd-kpi-text strong { font-size: 21px; } .hd-kpi em { font-size: 10.5px; padding: 2px 7px; }
+  .hd-panel { padding: 8px 12px; gap: 4px; } .hd-panel-head h3 { font-size: 14px; } .hd-panel-ico { width: 20px; height: 20px; } .hd-legend { display: none; } .hd-panel:has(> .hd-line) { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .hd-comp li { font-size: 12px; } .hd-comp li small { font-size: 11px; } .hd-comp ul { gap: 5px; }
+  .hd-big { font-size: 36px; } .hd-big small { font-size: 22px; } .hd-compliance > div > span { font-size: 13px; } .hd .hd-clip { display: none; } .hd-compliance p { font-size: 11px; }
+  .hd-quick { padding: 5px 3px !important; gap: 2px; } .hd-quick span { width: 22px; height: 22px; } .hd-quick strong { font-size: 18px; } .hd-quick small { font-size: 10.5px; }
+  .hd-acts small, .hd-events small { font-size: 10.5px; } .hd-acts strong, .hd-events strong { font-size: 12px; }
+  .hd-date { width: 38px; } .hd-date strong { font-size: 15px; } .hd-ev-ico { width: 28px; height: 28px; padding: 6px; }
+  .hd-foot { font-size: 11px; }
+}
+.hd-acts > li[hidden], .hd-events > li[hidden] { display: none !important; }
