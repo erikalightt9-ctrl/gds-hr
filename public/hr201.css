@@ -3196,3 +3196,4 @@ b.lv-pending-key { background: #fff !important; border: 2px dashed #8a8a94; }
   .tb2 .bell-wrap .tb-bell, .tb2 .msg-wrap .tb-btn { width: 42px; height: 42px; } .tb2 .tb-avatar { width: 40px; height: 40px; font-size: 14px; }
   .tb2 .tb-account .tb2-chev { display: none; }
 }
+.tb2 .tb2-search { margin-left: 4px; }
