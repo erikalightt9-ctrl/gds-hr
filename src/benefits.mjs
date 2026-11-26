@@ -106,9 +106,16 @@ export function contributionHistory(store, employeeId) {
 
 // ---------- HMO (HR) ----------
 const dependentSchema = z.object({ name: text(160, 1), relationship: text(60, 1), memberNo: text(60).default(''), birthDate: optDate }).strict();
+// Provider billing details (Nov 26, 2026, from the Maxicare enrolment sheet): company account, plan ID, rank, months
+// billed, premium, VAT, total gross, movement type, invoice no. / date and the shared benefit limit (e.g. MBL 70,000).
+// Premium, VAT, total gross, invoice and the company account are company costs: HR / Finance only (see EMPLOYEE_HIDDEN).
+const peso = z.union([z.number().min(0).max(100000000), z.literal('')]).default('');
 const hmoSchema = z.object({
   employeeId: text(40, 1), provider: text(120, 1), memberNo: text(60, 1), plan: text(120, 1), coverage: text(1000).default(''),
   startDate: date, endDate: optDate, status: z.enum(HMO_STATUSES), dependents: z.array(dependentSchema).max(12).default([]), note: text(500).default(''),
+  account: text(160).default(''), planId: text(60).default(''), rank: text(80).default(''), months: z.union([z.number().int().min(0).max(36), z.literal('')]).default(''),
+  premium: peso, vat: peso, totalGross: peso, movementType: text(60).default(''), invoiceNo: text(60).default(''), invoiceDate: optDate,
+  benefitLimit: peso, benefitType: text(40).default(''),
 }).strict().refine(v => !v.endDate || v.endDate >= v.startDate, 'The expiration date cannot be before the start date.');
 export function hmoOf(store, employeeId) {
   ensure(store);
@@ -199,9 +206,12 @@ export function benefitsOf(store, employeeId, today = new Intl.DateTimeFormat('e
   const allowances = allowancesOf(store, employeeId).map(a => ({ ...a, status: a.status === 'Active' && a.endDate && a.endDate < today ? 'Ended' : a.status, payments: (a.payments || []).map(p => ({ ...p, by: fullNameOf(store, p.by, names) })), updatedBy: fullNameOf(store, a.updatedBy, names) }));
   return { employeeId, contributions, hmo: hmo ? { ...hmo, updatedBy: fullNameOf(store, hmo.updatedBy, names) } : null, allowances, history: auditHistory(store, employeeId, new Set(contributions.map(c => c.month))) };
 }
+const EMPLOYEE_HIDDEN = ['account', 'premium', 'vat', 'totalGross', 'invoiceNo', 'invoiceDate', 'months', 'movementType', 'note'];
 export function myBenefits(store, actor) {
   if (actor?.role !== 'employee' || !actor.employeeId) throw new AppError('Only employees have a My Benefits page.', 403);
-  return benefitsOf(store, actor.employeeId);
+  const data = benefitsOf(store, actor.employeeId);
+  // The employee sees their coverage (provider, plan, plan ID, rank, member no., dates, benefit limit) but not what it costs the company.
+  return data.hmo ? { ...data, hmo: Object.fromEntries(Object.entries(data.hmo).filter(([k]) => !EMPLOYEE_HIDDEN.includes(k))) } : data;
 }
 export function employeeBenefits(store, actor, employeeId) {
   if (!STAFF_VIEW.includes(actor?.role)) throw new AppError('You do not have permission for this action.', 403);

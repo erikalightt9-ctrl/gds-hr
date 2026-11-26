@@ -25,7 +25,7 @@ export function createPortalBenefits({ api, esc }) {
   function hmo(h) {
     if (!h) return '<p class="muted bn-empty">No HMO coverage on record. HR records your HMO membership here once it is enrolled.</p>';
     return `<section class="bn-card"><div class="bn-line-head"><h3>${esc(h.provider)}</h3>${chip(h.status)}</div>
-      <div class="bn-grid">${row('Membership no.', esc(h.memberNo))}${row('Plan', esc(h.plan))}${row('Coverage start', esc(day(h.startDate)))}${row('Expiration', esc(day(h.endDate)))}</div>
+      <div class="bn-grid">${row('Membership no.', esc(h.memberNo))}${row('Plan', esc(h.plan))}${h.planId ? row('Plan ID', esc(h.planId)) : ''}${h.rank ? row('Rank classification', esc(h.rank)) : ''}${h.benefitLimit !== undefined && h.benefitLimit !== '' ? row(`${esc(h.benefitType || 'Benefit')} limit`, peso(h.benefitLimit)) : ''}${row('Coverage start', esc(day(h.startDate)))}${row('Expiration', esc(day(h.endDate)))}</div>
       ${h.coverage ? `<p class="bn-text"><span>Coverage details</span>${esc(h.coverage)}</p>` : ''}
       <h4>Covered dependents</h4>${h.dependents?.length ? `<ul class="bn-list">${h.dependents.map(d => `<li><strong>${esc(d.name)}</strong><span>${esc(d.relationship)}${d.memberNo ? ` · ${esc(d.memberNo)}` : ''}</span></li>`).join('')}</ul>` : '<p class="muted">None.</p>'}
       <p class="bn-meta">Last updated ${esc(stamp(h.updatedAt))} by ${esc(h.updatedBy)}</p></section>`;

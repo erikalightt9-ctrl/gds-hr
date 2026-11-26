@@ -103,3 +103,20 @@ test('views: employees use only their own page; staff (HR, Payroll, Finance, Man
     assert.equal(report.people.length, 2);
   } finally { store.close(); }
 });
+
+test('HMO billing from the provider sheet: HR / Finance see premium, VAT, invoice and account; the employee sees coverage only', () => {
+  const store = fixture();
+  try {
+    const hmo = { employeeId: 'EMP-001', provider: 'Maxicare Healthcare Corporation', memberNo: '9700783986_XX000001', plan: 'Bronze', startDate: '2026-02-14', endDate: '2027-02-13', status: 'Active',
+      account: '9700788655 - SAMPLE CORP.', planId: '20115909000040', rank: 'RANK AND FILE', months: 12, premium: 12527.68, vat: 1503.32, totalGross: 14031, movementType: 'Renewal', invoiceNo: 'BS-1', invoiceDate: '2026-03-16', benefitLimit: 70000, benefitType: 'MBL' };
+    assert.throws(() => saveHmo(store, hr, { ...hmo, premium: -1 }), /./, 'negative amounts are refused');
+    saveHmo(store, hr, hmo);
+    const staff = employeeBenefits(store, hr, 'EMP-001').hmo;
+    assert.equal(staff.premium, 12527.68); assert.equal(staff.invoiceNo, 'BS-1'); assert.equal(staff.account, '9700788655 - SAMPLE CORP.');
+    const mine = myBenefits(store, employee).hmo;
+    assert.equal(mine.planId, '20115909000040'); assert.equal(mine.rank, 'RANK AND FILE'); assert.equal(mine.benefitLimit, 70000); assert.equal(mine.benefitType, 'MBL');
+    for (const k of ['premium', 'vat', 'totalGross', 'invoiceNo', 'invoiceDate', 'account', 'months', 'movementType']) assert.equal(mine[k], undefined, `${k} is not sent to the employee`);
+    const old = { employeeId: 'EMP-002', provider: 'Maxicare', memberNo: 'MX-2', plan: 'Gold', startDate: '2026-01-01', status: 'Active' };
+    assert.equal(saveHmo(store, hr, old).premium, '', 'records without billing still save');
+  } finally { store.close(); }
+});
