@@ -681,10 +681,10 @@ export function createPortal(ctx) {
       return `<section class="rv"><header class="rv-head"><span class="rv-head-ico">${svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 13l2 2 4-4"/>')}</span><div><h2>Reviewed</h2><p>Late arrival explanations HR has approved or rejected.</p></div><div class="rv-total"><span>${svg('<path d="m6 12.5 4 4 8-9"/>')}</span><div><strong>${reviewed.length}</strong><small>Total Reviewed</small></div></div></header>
         ${groups.map(([id, list]) => `<section class="rv-emp"><div class="rv-who"><i>${esc(initials(name(id)))}</i><div><strong>${esc(name(id))}</strong><small>${esc(id)}</small></div></div>${list.map(item).join('')}</section>`).join('') || '<p class="rv-empty">Nothing to show yet.</p>'}</section>`;
     }
-    return `<section class="panel" data-expl-review><div class="panel-head"><div><h2>To review</h2><p class="legend">Explanations submitted by employees.</p></div><span class="badge pending">${byStatus('pending').length}</span></div>
+    return `<section class="panel nv-panel nv-i-clip nv-expl" data-expl-review><div class="panel-head"><div><h2>To review</h2><p class="legend">Explanations submitted by employees.</p></div><span class="badge pending">${byStatus('pending').length}</span></div>
         <div class="panel-body expl-list">${byStatus('pending').map(e => card(e, `<button class="primary small" data-review-explanation="${esc(e.id)}">Review</button>`)).join('') || '<p class="muted">Nothing to review.</p>'}</div></section>
       ${waitingFor(data, day)}
-      ${byStatus('returned').length ? `<section class="panel"><div class="panel-head"><h2>Sent back to the employee</h2></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}`;
+      ${byStatus('returned').length ? `<section class="panel nv-panel nv-i-reply nv-expl"><div class="panel-head"><div><h2>Sent back to the employee</h2><p class="legend">Waiting for the employee's reply.</p></div></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}`;
   }
   // Opens the leave form with a type chosen, e.g. the dashboard's unpaid leave / absence shortcut.
   function preselectLeave(typeId, attempts = 20) {
