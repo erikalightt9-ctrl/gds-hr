@@ -521,7 +521,7 @@ function balanceMatrix() {
     const text = ids.includes('unpaid') ? `${used}` : `${sum('entitled') + sum('carry')}/${used}`;
     return `<button class="link-cell bal-cell" data-leave-balance="${esc(e.id)}" data-leave-types="${esc(ids.join(','))}" title="Entitled / used · click for details">${text}</button>`;
   };
-  return `<section class="panel"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}</div>${searchToolbar(filters)}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
+  return `<section class="panel nv-panel nv-i-cal"><div class="panel-head"><h2>Annual balances</h2>${downloads('leave-balances')}</div>${searchToolbar(filters)}${table(['Employee', ...BALANCE_COLUMNS.map(([label]) => label)], people.map(e => [`<button class="link-cell" data-leave-balance="${esc(e.id)}" title="All leave balances">${esc(e.name)}</button>`, ...BALANCE_COLUMNS.map(([, ids]) => cell(e, ids))]), 'No employees match.')}</section>`;
 }
 function leaveBalanceDialog(employeeId, typeIds = null) {
   const person = state.employees.find(e => e.id === employeeId), year = today().slice(0, 4);
@@ -554,7 +554,7 @@ function leavePage() {
   let content = `<section class="dp-hero lm-hero"><span class="lm-hero-art" aria-hidden="true"><svg viewBox="0 0 100 100"><rect x="8" y="16" width="74" height="70" rx="12" fill="#1f4fc8"/><rect x="8" y="16" width="74" height="20" rx="12" fill="#14306e"/><rect x="22" y="8" width="8" height="18" rx="4" fill="#14306e"/><rect x="58" y="8" width="8" height="18" rx="4" fill="#14306e"/><g fill="#fff"><rect x="18" y="44" width="12" height="10" rx="2"/><rect x="38" y="44" width="12" height="10" rx="2"/><rect x="58" y="44" width="12" height="10" rx="2"/><rect x="18" y="62" width="12" height="10" rx="2"/><rect x="38" y="62" width="12" height="10" rx="2"/></g><circle cx="76" cy="76" r="19" fill="#f47b20" stroke="#fff" stroke-width="4"/><circle cx="76" cy="71" r="6" fill="#fff"/><path d="M65 87c1-7 5-10 11-10s10 3 11 10" fill="#fff"/></svg></span><div class="dp-hello"><span>Payroll &amp; Attendance</span><h1>Leave Management</h1><p>Manage employee leave requests, approvals, and leave balances.</p></div></section>` + `<div class="lm-cards">${lmCard('doc', 'Pending Requests', pending, 'Waiting for approval')}${lmCard('check', 'Approved Requests', inFolder('approved'), 'Completed &amp; recorded')}${lmCard('x', 'Rejected Requests', inFolder('rejected'), 'Not approved')}${lmCard('people', 'Leave Users', leaveUsers, 'Employees with leave benefits')}</div>
     <div class="lm-tabs">${LEAVE_FOLDERS.map(([tab, s, label]) => `<button data-tab="${tab}" class="${subtab === tab ? 'active' : ''}">${label}${s === 'pending' ? ` <span class="lm-count">${pending}</span>` : ''}</button>`).join('')}<button data-tab="balances" class="${subtab === 'balances' ? 'active' : ''}">Balances</button><button data-tab="types" class="${subtab === 'types' ? 'active' : ''}">Leave policies</button></div>`;
   if (subtab === 'balances') content += balanceMatrix();
-  else if (subtab === 'types') content += `<section class="panel"><div class="panel-head"><div><h2>Leave type configuration</h2><p>Statutory classification alone does not establish an employee’s entitlement.</p></div>${addButton('leaveTypes', 'Add leave type')}</div>${table(['Leave type', 'Category', 'Pay', 'Entitlement', 'Accrual', ''], state.leaveTypes.map(t => [esc(t.name), badge(t.category, 'neutral'), t.paid ? 'Paid' : 'Unpaid', `${t.entitledDays} days`, esc(t.accrual), editButton('leaveTypes', t.id)]))}</section>`;
+  else if (subtab === 'types') content += `<section class="panel nv-panel nv-i-gear"><div class="panel-head"><div><h2>Leave type configuration</h2><p>Statutory classification alone does not establish an employee’s entitlement.</p></div>${addButton('leaveTypes', 'Add leave type')}</div>${table(['Leave type', 'Category', 'Pay', 'Entitlement', 'Accrual', ''], state.leaveTypes.map(t => [esc(t.name), badge(t.category, 'neutral'), t.paid ? 'Paid' : 'Unpaid', `${t.entitledDays} days`, esc(t.accrual), editButton('leaveTypes', t.id)]))}</section>`;
   else {
     const [, status, folderLabel] = LEAVE_FOLDERS.find(([tab]) => tab === subtab) || LEAVE_FOLDERS[0], decided = status !== 'pending';
     const canDecide = ['admin', 'hr'].includes(auth.user.role);
@@ -858,7 +858,7 @@ async function auditPage() {
 }
 // Two-factor sign-in is required for HR, HR Staff, Payroll and Management accounts (server enforced).
 function renderForcedMfa() {
-  app.innerHTML = `<main class="login-shell forced-password"><section class="panel login-card"><div class="panel-body"><h1>Set up two-factor sign-in</h1><p class="sub">Signed in as ${esc(auth.user.username)}. HR, Payroll and Management accounts must use an authenticator app (Google Authenticator, Microsoft Authenticator…) before continuing.</p>
+  app.innerHTML = `<main class="login-shell forced-password nv-auth"><section class="panel login-card nv-auth-card nv-auth-mfa"><div class="nv-auth-band"><span class="nv-auth-ico"></span><span>Account security</span></div><div class="panel-body"><h1>Set up two-factor sign-in</h1><p class="sub">Signed in as ${esc(auth.user.username)}. HR, Payroll and Management accounts must use an authenticator app (Google Authenticator, Microsoft Authenticator…) before continuing.</p>
     <form id="forced-mfa" class="form-grid one"><input type="hidden" name="action" value="begin"><label class="field">Your password<input type="password" name="password" required autocomplete="current-password"></label><div data-mfa-step></div>
     <div class="actions"><button class="primary">Get setup key</button><button type="button" data-signout>Sign out</button></div></form></div></section></main>`;
   const form = app.querySelector('#forced-mfa');
@@ -872,7 +872,7 @@ function renderForcedMfa() {
   };
 }
 function renderForcedPassword() {
-  app.innerHTML = `<main class="login-shell forced-password"><section class="panel login-card"><div class="panel-body"><h1>Choose your own password</h1><p class="sub">Signed in as ${esc(auth.user.username)}. Your account was created with a default password; set your own before continuing.</p>
+  app.innerHTML = `<main class="login-shell forced-password nv-auth"><section class="panel login-card nv-auth-card nv-auth-key"><div class="nv-auth-band"><span class="nv-auth-ico"></span><span>First sign-in</span></div><div class="panel-body"><h1>Choose your own password</h1><p class="sub">Signed in as ${esc(auth.user.username)}. Your account was created with a default password; set your own before continuing.</p>
     <form id="forced-password" class="form-grid one"><label class="field">Default / current password<input type="password" name="currentPassword" required autocomplete="current-password"></label>
     <label class="field">New password (at least 9 characters)<input type="password" name="newPassword" required minlength="9" maxlength="200" autocomplete="new-password"></label>
     <label class="field">Confirm new password<input type="password" name="confirm" required minlength="9" maxlength="200" autocomplete="new-password"></label>
@@ -1602,7 +1602,9 @@ document.addEventListener('click', async event => {
     if (b.dataset.nav && updateReady && safeToReload()) { location.hash = `#/${b.dataset.nav}`; location.reload(); return; }
     if (b.dataset.nav) { page = b.dataset.nav; filter = ''; mobileDrawer = false; render(); }
     if (b.dataset.contribMonth) { contributionsUi.setMonth(b.dataset.contribMonth); page = 'contributions'; render(); return; }
-    if (b.dataset.profile) { page = 'profile'; await profiles.open(b.dataset.profile, 'personal'); }
+    // Employee name buttons (Live attendance, Daily records, anniversaries) open the current 201 profile; the older
+    // attendance / leave / pay view stays reachable from it ('Attendance, leave & pay').
+    if (b.dataset.profile) { await goTo({ page: 'employee201', id: b.dataset.profile }); }
     if (b.dataset.tab) { subtab = b.dataset.tab; filter = ''; render(); }
     if (b.hasAttribute('data-attendance-import')) { attendanceImport.open(); return; }
     if (b.dataset.attendanceView) { attendanceView = b.dataset.attendanceView; render(); }
