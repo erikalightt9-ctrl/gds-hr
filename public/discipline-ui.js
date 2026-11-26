@@ -129,14 +129,22 @@ export function createDisciplinePage(ctx) {
     caseView.incidentForm(null, async ({ evidenceFiles = [], ...value }) => { const c = await api('/discipline/cases', value); for (const f of evidenceFiles) await api(`/discipline/cases/${c.id}/files`, f); toast(`Case ${c.reference} opened${evidenceFiles.length ? ` with ${evidenceFiles.length} evidence file${evidenceFiles.length === 1 ? '' : 's'}` : ''}.`); dialog.close(); await render(c.id); });
   }
   function priorAction() {
-    openDialog('Record an earlier disciplinary action', `<form id="dp-prior"><div class="dialog-body"><div id="dp-prior-error" class="form-error hidden" role="alert"></div><p class="sub">For actions taken before the system (paper memos in the 201 folder). New actions are recorded by closing a case.</p><div class="form-grid">
-      <label class="field full">Employee<select name="employeeId" required><option value="">Choose…</option>${people().map(e => `<option value="${esc(e.id)}">${esc(e.name)} (${esc(e.id)})</option>`).join('')}</select></label>
-      <label class="field">Action<select name="type">${options.sanctions.filter(x => x !== 'No disciplinary action').map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
-      <label class="field">Date<input type="date" name="date" required max="${today()}"></label>
-      <label class="field">Offense<input name="offense" required maxlength="200"></label><label class="field">Memo / reference no.<input name="reference" maxlength="80"></label>
-      <label class="field">Suspension days<input type="number" name="suspensionDays" min="0" max="30" value="0"></label>
-      <label class="field full">Source and remarks<textarea name="remarks" rows="3" required maxlength="2000" placeholder="e.g. Written warning memo dated … kept in the 201 folder"></textarea></label>
-    </div></div><div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div></form>`);
+    // Window (Nov 26, 2026 design): navy title band, info note, icon fields, outlined Cancel and red Save. Same fields.
+    const g = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const I = { person: g('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'), gavel: g('<path d="m14 4 6 6M11 7l6 6M12.5 5.5l-4 4 6 6 4-4ZM9.5 12.5 3 19M4 21h9"/>'), cal: g('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'), shield: g('<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="M12 8v4M12 15v.01"/>'), doc: g('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'), pause: g('<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>'), notes: g('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>'), info: g('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>'), undo: g('<path d="M4 4v6h6"/><path d="M5 10a8 8 0 1 1 1.6 6.4"/>'), save: g('<path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1Z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>') };
+    const req = ' <b class="trf-req">*</b>', box = (icon, html) => `<span class="trf-in">${icon}${html}</span>`;
+    openDialog('Record Disciplinary Action', `<form id="dp-prior"><div class="dialog-body trf dpp"><p class="trf-sub">Document an earlier disciplinary action for an employee.</p><div id="dp-prior-error" class="form-error hidden" role="alert"></div>
+      <p class="dpp-note">${I.info}<span>For actions taken before the system (paper memos in the 201 folder). <em>New actions are recorded by closing a case.</em></span></p>
+      <div class="trf-grid dpp-grid">
+        <label class="trf-field"><span>Employee${req}</span>${box(I.person, `<select name="employeeId" required><option value="">Choose…</option>${people().map(e => `<option value="${esc(e.id)}">${esc(e.name)} (${esc(e.id)})</option>`).join('')}</select>`)}</label><span></span>
+        <label class="trf-field"><span>Action${req}</span>${box(I.gavel, `<select name="type">${options.sanctions.filter(x => x !== 'No disciplinary action').map(x => `<option>${esc(x)}</option>`).join('')}</select>`)}</label>
+        <label class="trf-field"><span>Date${req}</span>${box(I.cal, `<input type="date" name="date" required max="${today()}">`)}</label>
+        <label class="trf-field"><span>Offense${req}</span>${box(I.shield, '<input name="offense" required maxlength="200" placeholder="Enter offense details…">')}</label>
+        <label class="trf-field"><span>Memo / reference no.</span>${box(I.doc, '<input name="reference" maxlength="80" placeholder="e.g. Memo No. 2026-001">')}</label>
+        <label class="trf-field"><span>Suspension days</span>${box(I.pause, '<input type="number" name="suspensionDays" min="0" max="30" value="0">')}</label><span></span>
+        <label class="trf-field dpp-wide"><span>Source and remarks${req}</span><span class="trf-in dpp-area">${I.notes}<textarea name="remarks" rows="3" required maxlength="2000" placeholder="e.g. Written warning memo dated … kept in the 201 folder"></textarea></span></label>
+      </div></div><div class="dialog-foot trf-foot"><button type="button" class="trf-cancel" data-close>${I.undo}Cancel</button><button class="trf-save">${I.save}Save</button></div></form>`);
+    dialog.classList.add('trf-dialog', 'dpp-dialog');
     const form = dialog.querySelector('#dp-prior');
     form.onsubmit = async event => {
       event.preventDefault();
