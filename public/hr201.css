@@ -4441,3 +4441,32 @@ dialog.acx-dialog { width: min(1300px, calc(100vw - 32px)); background: linear-g
 .acx-box table thead th { background: #fbe7d6; color: #8a0f18; font-weight: 800; }
 .acx-box .acc-actions button { border-radius: 10px; border-color: #f0b6ba; color: #b3121f; }
 @media (max-width: 1000px) { .acc-boxes.acx { grid-template-columns: 1fr; } .acx-nav { position: static; } .acx-cards { grid-template-columns: 1fr 1fr; } }
+
+/* ---- Memo acknowledgement records (Nov 25, 2026 design): five count cards, search, numbered warm table, note ---- */
+.mk-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mk-card { display: flex; align-items: center; gap: 12px; padding: 14px !important; border-radius: 16px !important; border: 1px solid #ece3dc !important; text-align: left; color: #13265c !important; box-shadow: 0 6px 14px rgb(120 60 20 / .05); }
+.mk-card > span { flex: none; width: 50px; height: 50px; padding: 12px; border-radius: 50%; } .mk-card svg, .mk-panel svg { width: 100%; height: 100%; }
+.mk-card strong { display: block; font-size: 28px; font-weight: 800; line-height: 1.1; } .mk-card small { font-size: 14px; }
+.mk-card.on { box-shadow: 0 0 0 2px currentColor, 0 8px 16px rgb(120 60 20 / .1); }
+.mk-grey { background: linear-gradient(180deg, #fafafa, #f0f1f4) !important; } .mk-grey > span { background: #e3e6ec; color: #4b557a; }
+.mk-green { background: linear-gradient(180deg, #f2fbf5, #e2f5e9) !important; } .mk-green > span { background: #cdeed9; color: #16884a; } .mk-green strong { color: #14632f; }
+.mk-amber { background: linear-gradient(180deg, #fffaf0, #fdf0d6) !important; } .mk-amber > span { background: #fde3b0; color: #c4710a; } .mk-amber strong { color: #a8640c; }
+.mk-red { background: linear-gradient(180deg, #fff4f5, #fde6e8) !important; } .mk-red > span { background: #fbd5da; color: #c3121f; } .mk-red strong { color: #c3121f; }
+.mk-violet { background: linear-gradient(180deg, #f8f4fe, #ece3fb) !important; } .mk-violet > span { background: #e1d3fa; color: #6d2fd0; } .mk-violet strong { color: #5a2bb5; }
+.mk-panel { padding: 14px; border-radius: 18px; border: 1px solid #ece3dc; background: #fffdfb; }
+.mk-search { display: flex; align-items: center; gap: 10px; max-width: 520px; height: 44px; margin-bottom: 12px; padding: 0 14px; border: 1px solid #ddd2ca; border-radius: 12px; background: #fff; }
+.mk-search svg { width: 20px; height: 20px; flex: none; } .mk-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0; padding: 0; box-shadow: none !important; background: transparent; }
+.mk-table { border-radius: 12px; overflow: auto; border: 1px solid #ece3dc; }
+.mk-table table { width: 100%; border-collapse: collapse; }
+.mk-table thead th { background: #fbe7cf; color: #13265c; font-weight: 800; font-size: 14px; text-transform: none; letter-spacing: 0; padding: 12px; text-align: left; white-space: nowrap; }
+.mk-table td { padding: 11px 12px; border-bottom: 1px solid #f3ebe4; font-size: 14px; vertical-align: middle; }
+.mk-table tr[hidden] { display: none; }
+.mk-num { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #fdf0d6; font-weight: 800; }
+.mk-ic { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; } .mk-ic svg { width: 18px; height: 18px; flex: none; color: #c3121f; } .mk-bell svg { color: #e2a21b; }
+.mk-pill { display: inline-block; padding: 4px 12px; border-radius: 12px; background: #f5eee6; color: #6b5a3e; font-size: 12.5px; }
+.mk-table .memo-status { border-radius: 12px; padding: 5px 12px; }
+.mk-empty { text-align: center; padding: 26px !important; color: #4b557a; }
+.mk-note { display: flex; gap: 12px; align-items: flex-start; margin: 12px 0 0; padding: 12px 16px; border-radius: 12px; border: 1px solid #f3d79c; background: #fff8ea; color: #13265c; font-size: 13.5px; }
+.mk-note > svg { width: 24px; height: 24px; flex: none; color: #ea8f12; }
+@media (max-width: 1000px) { .mk-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .mk-cards { grid-template-columns: 1fr 1fr; } .mk-table table { min-width: 980px; } }
