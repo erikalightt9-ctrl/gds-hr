@@ -56,17 +56,25 @@ export function createDisciplinePage(ctx) {
     return `<section class="panel"><div class="toolbar"><label class="field">Employee<select data-dp-employee><option value="">All employees</option>${people().map(e => `<option value="${esc(e.id)}" ${e.id === employeeFilter ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label>${options.canManage ? '<button class="small" data-dp-prior>＋ Record earlier action (paper files)</button>' : ''}<span class="download-links"><a class="small download-link" href="/api/reports/discipline-records.xlsx" download>Excel</a></span></div>
       ${table(['Employee', 'Action', 'Date', 'Offense', 'Reference', 'Suspension', 'Source', 'Remarks'], rows.map(r => [esc(r.employeeName), badge(r.type, ['Dismissal', 'Suspension', 'Final written warning'].includes(r.type) ? 'rejected' : 'pending'), fmtDate(r.date), esc(r.offense), r.caseId ? `<button class="link-button" data-dp-open="${r.caseId}">${esc(r.reference)}</button>` : esc(r.reference || '—'), r.suspensionDays ? `${r.suspensionDays} day(s)${r.effectiveFrom ? `<br><small>${fmtDate(r.effectiveFrom)} – ${fmtDate(r.effectiveTo)}</small>` : ''}` : '—', r.source === 'case' ? 'Due process case' : 'Encoded from paper files', esc(r.remarks || '')]), 'No disciplinary actions on record.')}</section>`;
   }
+  // Settings (Nov 26, 2026 design): numbered cards with light-blue headers: general rules, offenses, one card per notice
+  // template (plain text, as printed on the notice) with Preview, and the placeholders as chips that insert into the
+  // template being edited. Cancel reloads the saved settings; Save Templates saves everything (same request as before).
+  const PLACEHOLDERS = ['employeeName', 'position', 'department', 'incidentDate', 'offense', 'allegations', 'rules', 'possibleSanction', 'responseDays', 'deadline', 'nteDate', 'hearingDate', 'hearingPlace', 'findings', 'sanction', 'sanctionDetail', 'reference', 'issuingOfficer'];
   function settingsView(s) {
     const roles = [['admin', 'System Administrator'], ['hr', 'HR Manager'], ['viewer', 'Management']];
-    return `<form id="dp-settings" class="panel"><div class="panel-head"><h2>Due process settings</h2><span class="legend">Defaults follow the twin-notice rule (Labor Code Art. 292(b); DOLE D.O. 147-15)</span></div><div class="panel-body"><div id="dp-settings-error" class="form-error hidden" role="alert"></div><div class="form-grid">
-      <label class="field">Minimum days to answer a Notice to Explain<input type="number" name="minResponseDays" min="5" max="30" value="${s.minResponseDays}"><small>At least five (5) calendar days from receipt.</small></label>
-      <fieldset class="field"><legend>Roles that approve decisions</legend>${roles.map(([id, label]) => `<label class="check"><input type="checkbox" name="approverRoles" value="${id}" ${s.approverRoles.includes(id) ? 'checked' : ''}> ${label}</label>`).join('')}</fieldset>
-      <label class="field check"><input type="checkbox" name="separateApprover" ${s.separateApprover ? 'checked' : ''}> The approver must be someone other than the person who prepared the decision</label>
-      <label class="field check"><input type="checkbox" name="hearingForDismissal" ${s.hearingForDismissal ? 'checked' : ''}> A dismissal needs a hearing or conference on record (held, waived or not attended)</label>
-      <label class="field full">Offenses (one per line: code | name | Minor / Less serious / Serious / Grave)<textarea name="offenses" rows="9">${esc(s.offenses.map(o => `${o.id} | ${o.name} | ${o.severity}`).join('\n'))}</textarea></label>
-      ${Object.entries(s.templates).map(([k, v]) => `<label class="field full">${esc(options.templateTitles[k])} template<textarea name="tpl-${k}" rows="8">${esc(v)}</textarea></label>`).join('')}
-      <p class="legend full">Placeholders: {{employeeName}}, {{position}}, {{department}}, {{incidentDate}}, {{offense}}, {{allegations}}, {{rules}}, {{possibleSanction}}, {{responseDays}}, {{deadline}}, {{nteDate}}, {{hearingDate}}, {{hearingPlace}}, {{findings}}, {{sanction}}, {{sanctionDetail}}, {{reference}}, {{issuingOfficer}}.</p>
-    </div></div><div class="dialog-foot"><button class="primary">Save settings</button></div></form>`;
+    const g = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const EYE = g('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'), INFO = g('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>'), SAVE = g('<path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1Z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>');
+    let n = 0;
+    const card = (title, body, tools = '') => `<section class="dps-card"><header><i>${++n}</i><h3>${title}</h3>${tools}</header><div class="dps-body">${body}</div></section>`;
+    const general = card('Due Process Rules', `<p class="dps-note">Defaults follow the twin-notice rule (Labor Code Art. 292(b); DOLE D.O. 147-15).</p><div class="dps-grid">
+      <label class="dps-field"><span>Minimum days to answer a Notice to Explain</span><input type="number" name="minResponseDays" min="5" max="30" value="${s.minResponseDays}"><small>At least five (5) calendar days from receipt.</small></label>
+      <fieldset class="dps-field dps-roles"><legend>Roles that approve decisions</legend>${roles.map(([id, label]) => `<label class="dps-check"><input type="checkbox" name="approverRoles" value="${id}" ${s.approverRoles.includes(id) ? 'checked' : ''}> ${label}</label>`).join('')}</fieldset>
+      <label class="dps-check dps-wide"><input type="checkbox" name="separateApprover" ${s.separateApprover ? 'checked' : ''}> The approver must be someone other than the person who prepared the decision</label>
+      <label class="dps-check dps-wide"><input type="checkbox" name="hearingForDismissal" ${s.hearingForDismissal ? 'checked' : ''}> A dismissal needs a hearing or conference on record (held, waived or not attended)</label></div>`);
+    const offenses = card('Offenses', `<label class="dps-field"><span>One per line: code | name | Minor / Less serious / Serious / Grave</span><textarea name="offenses" rows="9">${esc(s.offenses.map(o => `${o.id} | ${o.name} | ${o.severity}`).join('\n'))}</textarea></label>`);
+    const templates = Object.entries(s.templates).map(([k, v]) => card(`${esc(options.templateTitles[k])} Template`, `<label class="dps-field"><span>Template Content</span><textarea name="tpl-${k}" rows="7" data-dps-tpl="${k}">${esc(v)}</textarea></label>`, `<button type="button" class="dps-preview" data-dps-preview="${k}">${EYE}Preview</button>`)).join('');
+    const chips = card('Placeholders', `<p class="dps-chips">${INFO}<b>Available placeholders (click to insert into the template you are editing):</b>${PLACEHOLDERS.map(p => `<button type="button" class="dps-chip" data-dps-chip="${p}">{{${p}}}</button>`).join('')}</p>`);
+    return `<form id="dp-settings" class="dps"><div id="dp-settings-error" class="form-error hidden" role="alert"></div>${general}${offenses}${templates}${chips}<div class="dps-foot"><button type="button" class="dps-cancel" data-dps-cancel>Cancel</button><button class="dps-save">${SAVE}Save Templates</button></div></form>`;
   }
   function bind() {
     const content = document.querySelector('.content');
@@ -82,6 +90,17 @@ export function createDisciplinePage(ctx) {
     const e = content.querySelector('[data-dp-employee]');
     if (e) e.onchange = () => { employeeFilter = e.value; draw(); };
     const form = content.querySelector('#dp-settings');
+    if (form) {
+      let lastTpl = form.querySelector('[data-dps-tpl]');
+      form.addEventListener('focusin', e => { if (e.target.matches('[data-dps-tpl]')) lastTpl = e.target; });
+      form.addEventListener('click', e => {
+        const chip = e.target.closest('[data-dps-chip]');
+        if (chip && lastTpl) { const t = `{{${chip.dataset.dpsChip}}}`, at = lastTpl.selectionStart ?? lastTpl.value.length; lastTpl.setRangeText(t, at, lastTpl.selectionEnd ?? at, 'end'); lastTpl.focus(); }
+        const pv = e.target.closest('[data-dps-preview]');
+        if (pv) { const k = pv.dataset.dpsPreview, text = form.elements[`tpl-${k}`].value; ctx.openDialog(`Preview · ${options.templateTitles[k]} template`, `<div class="dialog-body"><p class="legend">Placeholders are filled from the case when the notice is issued.</p><div class="dps-sheet">${esc(text).replace(/\{\{(\w+)\}\}/g, '<mark>{{$1}}</mark>').replace(/\n/g, '<br>')}</div></div>`, '<div class="dialog-foot"><button data-close>Close</button></div>'); }
+        if (e.target.closest('[data-dps-cancel]')) render();
+      });
+    }
     if (form) form.onsubmit = async event => {
       event.preventDefault();
       const f = form.elements, err = form.querySelector('#dp-settings-error');

@@ -5100,3 +5100,29 @@ dialog.trf-dialog { width: min(980px, 96vw); max-width: 980px; border-radius: 22
 .trf-cancel { background: #fff !important; border: 1.5px solid #14306e !important; color: #14306e !important; }
 .trf-save { background: linear-gradient(180deg, #d81f2b, #b3121f) !important; border: 0 !important; color: #fff !important; box-shadow: 0 6px 14px rgb(160 15 25 / .25); }
 @media (max-width: 760px) { .trf-grid, .trf-four { grid-template-columns: 1fr; } .trf-dialog .dialog-head h2 { font-size: 21px; } .trf-foot button { flex: 1; justify-content: center; padding: 0 12px !important; } }
+
+/* ---- Due Process → Settings (Nov 26, 2026 design): numbered cards with light-blue headers, template text boxes with
+   Preview, placeholder chips that insert into the template, Cancel and red Save Templates ---- */
+.dps { display: grid; gap: 16px; color: #13265c; }
+.dps-card { border-radius: 16px; border: 1px solid #dfe6f4; background: #fff; box-shadow: 0 6px 14px rgb(20 40 100 / .05); overflow: hidden; }
+.dps-card > header { display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: linear-gradient(90deg, #e3ecfb, #eef3fd); }
+.dps-card > header i { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #0f2557; color: #fff; font-style: normal; font-weight: 800; }
+.dps-card > header h3 { margin: 0; font-size: 18px; font-weight: 800; color: #0f2557; }
+.dps-preview { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 7px 18px !important; border-radius: 999px !important; border: 1.5px solid #b9c8e8 !important; background: #fff !important; color: #14306e !important; font-weight: 700; } .dps-preview svg { width: 18px; height: 18px; }
+.dps-body { padding: 14px 18px 16px; }
+.dps-note { margin: 0 0 10px; color: #3d4560; font-size: 13.5px; }
+.dps-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 24px; }
+.dps-field { display: grid; gap: 6px; margin: 0; border: 0; padding: 0; } .dps-field > span, .dps-field > legend { font-weight: 700; font-size: 14px; color: #13265c; padding: 0; } .dps-field small { color: #4b557a; }
+.dps-field input[type=number] { height: 42px; max-width: 160px; border-radius: 10px; border: 1px solid #c9d3e8; padding: 0 12px; }
+.dps-field textarea { width: 100%; border-radius: 12px; border: 1px solid #c9d3e8; padding: 12px 14px; font-size: 14px; line-height: 1.55; background: #fff; resize: vertical; }
+.dps-field textarea:focus, .dps-field input:focus { border-color: #2a62d6; box-shadow: 0 0 0 3px rgb(42 98 214 / .12); outline: 0; }
+.dps-roles { display: flex; flex-wrap: wrap; gap: 8px 18px; } .dps-roles legend { width: 100%; margin-bottom: 4px; }
+.dps-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #13265c; } .dps-check input { width: 18px; height: 18px; accent-color: #14306e; } .dps-wide { grid-column: 1 / -1; }
+.dps-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 10px 14px; border-radius: 12px; background: #eef3fd; } .dps-chips > svg { width: 20px; height: 20px; color: #14306e; flex: none; } .dps-chips b { font-size: 13px; margin-right: 4px; }
+.dps-chip { padding: 5px 12px !important; border-radius: 999px !important; border: 1px solid #b9c8e8 !important; background: #fff !important; color: #14306e !important; font-size: 12.5px; font-weight: 700; } .dps-chip:hover { border-color: #14306e !important; }
+.dps-foot { display: flex; justify-content: flex-end; gap: 12px; }
+.dps-foot button { display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px !important; border-radius: 999px !important; font-weight: 800; } .dps-foot svg { width: 20px; height: 20px; }
+.dps-cancel { border: 1.5px solid #14306e !important; background: #fff !important; color: #14306e !important; }
+.dps-save { border: 0 !important; background: linear-gradient(180deg, #d81f2b, #b3121f) !important; color: #fff !important; box-shadow: 0 6px 14px rgb(160 15 25 / .22); }
+.dps-sheet { padding: 18px 22px; border-radius: 12px; border: 1px solid #dfe6f4; background: #fff; font-size: 14.5px; line-height: 1.6; color: #13265c; } .dps-sheet mark { padding: 0 4px; border-radius: 4px; background: #e3ecfb; color: #14306e; font-weight: 700; }
+@media (max-width: 760px) { .dps-grid { grid-template-columns: 1fr; } }
