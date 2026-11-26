@@ -4754,3 +4754,95 @@ td .dr-sub { margin-left: 0; }
 .tc-pill { border-radius: 999px; }
 .tc-add { color: #b3121f; font-weight: 700; }
 @media (max-width: 800px) { .tc-title h2 { font-size: 26px; } .tc-controls select, .tc-controls input { min-width: 0; width: 100%; } .tc-controls label { flex: 1 1 100%; } }
+
+/* ---- Time In / Out Records (Nov 26, 2026 design): blue clock header with skyline, navy / green / red / violet cards, pills, tabs, table, paging ---- */
+.crx { color: #13265c; }
+.crx-hero { position: relative; overflow: hidden; display: flex; align-items: center; gap: 20px; padding: 22px 26px; min-height: 104px; border-radius: 18px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 120' preserveAspectRatio='xMaxYMax slice'%3E%3Cg fill='%2393b1de' opacity='.75'%3E%3Crect x='150' y='50' width='26' height='70'/%3E%3Crect x='182' y='30' width='30' height='90'/%3E%3Crect x='218' y='62' width='22' height='58'/%3E%3Crect x='246' y='14' width='34' height='106'/%3E%3Crect x='286' y='40' width='26' height='80'/%3E%3Crect x='318' y='4' width='40' height='116'/%3E%3Crect x='364' y='28' width='30' height='92'/%3E%3C/g%3E%3Cpath d='M170 120C270 100 340 60 420 18V120Z' fill='%23d7141a'/%3E%3Cpath d='M230 120C300 106 360 80 420 50V120Z' fill='%23a3111e'/%3E%3C/svg%3E") no-repeat right bottom / auto 100%, linear-gradient(90deg, #f5f8fd 45%, #e4ecf8); border: 1px solid #dfe6f2; }
+.crx-hero-ico { width: 76px; height: 76px; flex: none; padding: 16px; border-radius: 18px; background: #dfe8f7; color: #14306e; box-sizing: border-box; } .crx-hero-ico svg { width: 100%; height: 100%; }
+.crx-hero h2 { margin: 0; font-size: 30px; font-weight: 800; color: #0f2557; }
+.crx-hero p { margin: 4px 0 0; max-width: 640px; font-size: 14px; color: #3d4560; position: relative; }
+.crx-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
+.crx-card { position: relative; display: flex; align-items: center; gap: 16px; padding: 18px 20px !important; border-radius: 16px !important; border: 1px solid #e6e9f2 !important; text-align: left; box-shadow: 0 8px 18px rgb(20 40 90 / .06); min-width: 0; }
+.crx-card-ico { width: 58px; height: 58px; flex: none; display: grid; place-items: center; border-radius: 14px; } .crx-card-ico svg { width: 30px; height: 30px; }
+.crx-card-num strong { display: block; font-size: 30px; font-weight: 800; line-height: 1.05; } .crx-card-num small { font-size: 14.5px; }
+.crx-card em { position: absolute; top: 14px; right: 16px; padding: 3px 12px; border-radius: 999px; font-style: normal; font-weight: 700; font-size: 13.5px; }
+.crx-go { position: absolute; top: 14px; right: 16px; width: 30px; height: 30px; padding: 6px; border-radius: 50%; box-sizing: border-box; } .crx-go svg { width: 100%; height: 100%; }
+.crx-all { background: linear-gradient(135deg, #0f2a66, #183c86) !important; color: #fff !important; } .crx-all .crx-card-ico { background: rgb(255 255 255 / .12); color: #fff; } .crx-all .crx-go { background: rgb(255 255 255 / .18); color: #fff; }
+.crx-office { background: linear-gradient(180deg, #f3fbf6, #e6f6ec) !important; color: #13265c !important; } .crx-office .crx-card-ico { background: #1f9a52; color: #fff; border-radius: 50%; } .crx-office em { background: #d3f0dd; color: #14632f; }
+.crx-offsite { background: linear-gradient(180deg, #fff3f4, #fde4e6) !important; color: #13265c !important; } .crx-offsite .crx-card-ico { background: #d7141a; color: #fff; border-radius: 50%; } .crx-offsite em { background: #fbd5d9; color: #b3121f; }
+.crx-flag { background: linear-gradient(180deg, #f7f4fe, #ede7fb) !important; color: #13265c !important; } .crx-flag .crx-card-ico { background: #ddd3f7; color: #5a2bb5; } .crx-flag .crx-go { background: #ddd3f7; color: #5a2bb5; }
+.crx-card.active { outline: 3px solid #d7141a; outline-offset: 2px; }
+.crx-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 16px; }
+.crx-pill { display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 6px 0 16px; border-radius: 999px; border: 1px solid #e2e6ef; background: #fff; box-shadow: 0 3px 8px rgb(20 40 90 / .04); font-size: 14.5px; }
+.crx-pill > svg { width: 20px; height: 20px; color: #14306e; } .crx-pill > span { padding-right: 10px; border-right: 1px solid #e2e6ef; }
+.crx-pill input, .crx-pill select { border: 0 !important; background: transparent !important; box-shadow: none !important; height: 40px; min-width: 170px; font-weight: 600; color: #13265c; }
+.crx-right { margin-left: auto; display: flex; gap: 12px; }
+.crx-filter, .crx-export { display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 24px !important; border-radius: 999px !important; font-weight: 700; font-size: 15px; } .crx-filter svg, .crx-export svg { width: 20px; height: 20px; }
+.crx-filter { background: #0f2a66 !important; color: #fff !important; border: 0 !important; } .crx-filter.on { background: #d7141a !important; }
+.crx-export { background: #fff !important; color: #0f2a66 !important; border: 1px solid #cfd7e6 !important; }
+.crx-panel { border-radius: 18px; border: 1px solid #e6e9f2; background: #fff; box-shadow: 0 8px 18px rgb(20 40 90 / .05); overflow: hidden; }
+.crx-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 0; border-bottom: 1px solid #eceff5; }
+.crx-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px 12px !important; border: 0 !important; background: none !important; color: #3d4560 !important; font-weight: 500; border-radius: 0 !important; } .crx-tabs svg { width: 16px; height: 16px; }
+.crx-tabs button.active { color: #d7141a !important; font-weight: 700; box-shadow: inset 0 -3px 0 #d7141a; } .crx-tabs button.active::before { content: none; }
+.crx-wrap { overflow-x: auto; }
+.crx-table { width: 100%; border-collapse: collapse; }
+.crx-table thead th { background: #eef3fb !important; color: #0f2557 !important; font-size: 14px; font-weight: 700; text-transform: none; letter-spacing: 0; padding: 12px 14px; text-align: left; white-space: nowrap; position: static; }
+.crx-table td { padding: 10px 14px; border-bottom: 1px solid #eef1f6; font-size: 14px; vertical-align: middle; }
+.crx-table th:nth-child(n+3):nth-child(-n+6), .crx-table td:nth-child(n+3):nth-child(-n+6) { text-align: center; }
+.crx-n { color: #3d4560; width: 34px; }
+.crx-emp { display: flex; align-items: center; gap: 12px; } .crx-emp > i { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50%; background: #e4ebf7; color: #14306e; font-style: normal; font-weight: 800; font-size: 14px; }
+.crx-emp strong { display: block; font-weight: 600; color: #0f2557; } .crx-emp small { color: #5a6380; font-size: 12px; }
+.crx-in { color: #1f4fc8; font-weight: 800; } .crx-out { font-weight: 600; }
+.crx-st { display: inline-flex; align-items: center; gap: 7px; padding: 5px 14px; border-radius: 999px; font-weight: 700; font-size: 13.5px; white-space: nowrap; } .crx-st svg { width: 16px; height: 16px; padding: 2px; border-radius: 50%; color: #fff; }
+.crx-st-office { background: #dff4e7; color: #14632f; } .crx-st-office svg { background: #1f9a52; }
+.crx-st-offsite { background: #fdeccd; color: #9a5a00; } .crx-st-offsite svg { background: #f39a1e; }
+.crx-st-correction { background: #eef0f5; color: #3d4560; } .crx-st-correction svg { background: #7a8094; }
+.crx-rem { max-width: 320px; font-size: 13px; color: #1e2740; } .crx-flag, .crx-ok { display: flex; align-items: flex-start; gap: 6px; margin-top: 3px; font-size: 12px; } .crx-rem .crx-flag { color: #b3121f; background: none !important; } .crx-rem .crx-flag svg { width: 14px; height: 14px; flex: none; } .crx-ok { color: #14632f; }
+.crx-act { white-space: nowrap; text-align: center !important; }
+.crx-view { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px !important; border-radius: 999px !important; border: 1px solid #dfe4ee !important; background: #f4f6fa !important; color: #0f2557 !important; font-weight: 600; } .crx-view svg { width: 16px; height: 16px; }
+.crx-more { display: inline-block; position: relative; margin-left: 6px; vertical-align: middle; }
+.crx-more > summary { list-style: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid #dfe4ee; cursor: pointer; } .crx-more > summary::-webkit-details-marker { display: none; } .crx-more > summary svg { width: 18px; height: 18px; }
+.crx-more > div { position: absolute; right: 0; top: 40px; z-index: 5; display: grid; min-width: 210px; padding: 6px; border-radius: 12px; border: 1px solid #e2e6ef; background: #fff; box-shadow: 0 12px 26px rgb(20 40 90 / .15); text-align: left; }
+.crx-more > div > a, .crx-more > div > button { display: block; padding: 9px 12px !important; border: 0 !important; border-radius: 8px !important; background: none !important; color: #0f2557 !important; font-weight: 500; text-decoration: none; text-align: left; } .crx-more > div > :hover { background: #f1f4fa !important; }
+.crx-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; font-size: 14px; }
+.crx-pages { display: flex; align-items: center; gap: 6px; }
+.crx-pages button { width: 38px; height: 38px; padding: 0 !important; display: grid; place-items: center; border-radius: 50% !important; border: 1px solid #dfe4ee !important; background: #fff !important; color: #0f2557 !important; font-weight: 600; } .crx-pages button svg { width: 18px; height: 18px; }
+.crx-pages button.active { background: #0f2a66 !important; color: #fff !important; border-color: transparent !important; } .crx-pages button:disabled { opacity: .45; }
+.crx-next svg { transform: rotate(180deg); } .crx-gap { padding: 0 4px; }
+.loc-net { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 1100px) { .crx-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .crx-cards { grid-template-columns: 1fr; } .crx-right { margin-left: 0; } .crx-pill { width: 100%; } .crx-pill input, .crx-pill select { min-width: 0; flex: 1; } .crx-table { min-width: 860px; } .crx-hero h2 { font-size: 24px; } }
+@media (min-width: 1100px) { .crx-panel, .crx-wrap { overflow: visible; } .crx-table td, .crx-table th { padding-left: 10px; padding-right: 10px; } }
+.crx-rem { max-width: 260px; overflow-wrap: anywhere; } .crx-table th:last-child, .crx-table td:last-child { padding-right: 16px; }
+.crx-hero > div { position: relative; z-index: 1; max-width: 62%; }
+
+/* ---- Overtime Applications (Nov 26, 2026 design): red stopwatch header, five tinted cards, filter row, table (shares the Time In / Out .crx styles) ---- */
+.ota-hero .crx-hero-ico { background: linear-gradient(180deg, #e3262b, #a50e17); color: #fff; }
+.ota-new { position: relative; z-index: 1; margin-left: auto; align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; padding: 12px 24px !important; border-radius: 14px !important; border: 2px solid #fff !important; background: linear-gradient(180deg, #c8141f, #8a0f18) !important; color: #fff !important; font-weight: 800; font-size: 16px; box-shadow: 0 8px 18px rgb(160 15 25 / .3); } .ota-new svg { width: 20px; height: 20px; }
+.ota-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin: 16px 0; }
+.ota-card { position: relative; display: flex; align-items: center; gap: 14px; padding: 16px 18px !important; border-radius: 16px !important; border: 1px solid #e6e9f2 !important; text-align: left; box-shadow: 0 6px 14px rgb(20 40 90 / .05); min-width: 0; }
+.ota-card-ico { width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 14px; } .ota-card-ico svg { width: 28px; height: 28px; }
+.ota-card strong { display: block; font-size: 30px; font-weight: 800; line-height: 1; } .ota-card small { font-size: 14.5px; font-weight: 600; }
+.ota-card > i { margin-left: auto; width: 22px; height: 22px; } .ota-card > i svg { width: 100%; height: 100%; }
+.ota-pending { background: #fff1f2 !important; color: #8a0f18 !important; } .ota-pending .ota-card-ico { background: #e0303b; color: #fff; }
+.ota-review { background: #eef3fd !important; color: #0f2557 !important; } .ota-review .ota-card-ico { background: #2a62d6; color: #fff; }
+.ota-approved { background: #eefaf2 !important; color: #14632f !important; } .ota-approved .ota-card-ico { background: #1f9a52; color: #fff; }
+.ota-rejected { background: #fff5ea !important; color: #b4520a !important; } .ota-rejected .ota-card-ico { background: #f2811d; color: #fff; }
+.ota-cancelled { background: #f5f1fd !important; color: #4a2a8c !important; } .ota-cancelled .ota-card-ico { background: #e4d9fa; color: #5a2bb5; }
+.ota-card.active { outline: 3px solid #d7141a; outline-offset: 2px; }
+.ota-tools { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 16px; }
+.ota-field { display: grid; gap: 6px; font-weight: 600; font-size: 14px; color: #0f2557; }
+.ota-field select { height: 46px; min-width: 240px; border-radius: 12px; border: 1px solid #dfe4ee; background: #fff; padding: 0 14px; }
+.ota-range { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid #dfe4ee; background: #fff; } .ota-range > svg { width: 20px; height: 20px; color: #14306e; }
+.ota-range label { display: flex; align-items: center; gap: 8px; font-weight: 500; } .ota-range input { border: 0 !important; height: 40px; padding: 0 4px; background: transparent; box-shadow: none !important; }
+.ota-when span { display: flex; align-items: center; gap: 8px; text-align: left; } .ota-when span:first-child { font-weight: 700; color: #0f2557; } .ota-when svg { width: 16px; height: 16px; color: #14306e; flex: none; }
+.ota-table td.ota-when { text-align: left !important; }
+.ota-hours strong { display: block; font-size: 17px; font-weight: 800; color: #0f2557; } .ota-hours small { color: #5a6380; font-size: 12px; }
+.ota-rem { max-width: 260px; font-size: 13.5px; color: #1e2740; }
+.ota-state .badge { border-radius: 999px; padding: 5px 14px; font-weight: 700; }
+.ota-flag { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; max-width: 260px; color: #c3121f; font-size: 12.5px; } .ota-flag svg { width: 15px; height: 15px; flex: none; }
+.ota-state small { display: block; color: #5a6380; font-size: 12px; }
+.ota-table th:nth-child(3), .ota-table th:nth-child(5) { text-align: left !important; }
+.ota-table td:nth-child(4), .ota-table th:nth-child(4) { text-align: center; } .ota-table td:nth-child(6) { text-align: center; }
+@media (max-width: 1250px) { .ota-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .ota-cards { grid-template-columns: 1fr 1fr; } .ota-field, .ota-field select { width: 100%; min-width: 0; } .ota-range { flex-wrap: wrap; height: auto; padding: 8px 12px; } .ota-table { min-width: 860px; } .ota-new { margin-left: 0; } .crx-hero.ota-hero { flex-wrap: wrap; } }
