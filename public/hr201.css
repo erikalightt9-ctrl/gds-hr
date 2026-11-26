@@ -4602,3 +4602,29 @@ dialog.ef-dialog { background: linear-gradient(180deg, #fffdfb, #fdf6f2); color:
 .am-sheet .am-top { grid-template-columns: minmax(0, 1fr) 300px; }
 .am-period { grid-template-columns: max-content repeat(3, minmax(0, 1fr)) minmax(0, 1.4fr); } .am-card strong { overflow-wrap: anywhere; }
 @media (max-width: 1300px) { .am-period { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); } }
+
+/* ---- Attendance → Reviewed (Nov 26, 2026 design): clipboard header with total, employee cards, decision chips ---- */
+.rv { position: relative; overflow: hidden; padding: 26px 26px 40px; border-radius: 20px; border: 1px solid #f0e2dc; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'%3E%3Cpath d='M0 40C120 10 260 70 400 20V60H0Z' fill='%23a3111e' opacity='.12'/%3E%3C/svg%3E") no-repeat bottom / 100% 60px, linear-gradient(180deg, #fff, #fdf6f6); color: #13265c; }
+.rv-head { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
+.rv-head-ico { width: 62px; height: 62px; flex: none; color: #9c0f19; } .rv-head-ico svg { width: 100%; height: 100%; }
+.rv-head h2 { margin: 0; font-size: 40px; font-weight: 800; color: #8a0f18; letter-spacing: -.5px; line-height: 1.05; }
+.rv-head p { margin: 4px 0 0; font-size: 17px; color: #3d4560; }
+.rv-total { margin-left: auto; display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-radius: 16px; background: #fff; border: 1px solid #f0e2dc; box-shadow: 0 8px 18px rgb(120 20 20 / .08); }
+.rv-total > span { width: 50px; height: 50px; padding: 11px; border-radius: 50%; background: linear-gradient(180deg, #d01e2a, #9c0f19); color: #fff; box-sizing: border-box; } .rv-total svg { width: 100%; height: 100%; stroke-width: 3; }
+.rv-total strong { display: block; font-size: 30px; font-weight: 800; line-height: 1; } .rv-total small { font-size: 14px; color: #13265c; }
+.rv-emp { margin-bottom: 18px; padding: 18px; border-radius: 16px; border: 1px solid #ecd9d9; background: #fff; box-shadow: 0 6px 14px rgb(120 20 20 / .04); }
+.rv-who { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.rv-who > i { display: grid; place-items: center; width: 56px; height: 56px; flex: none; border-radius: 50%; background: linear-gradient(180deg, #d86670, #b8323f); color: #fff; font-style: normal; font-weight: 800; font-size: 21px; }
+.rv-who strong { display: block; font-size: 21px; font-weight: 800; color: #8a0f18; } .rv-who small { font-size: 15px; color: #3d4560; }
+.rv-item { padding: 14px 18px; border-radius: 14px; border: 1px solid #f0e2dc; background: linear-gradient(180deg, #fffdfd, #fdf7f7); }
+.rv-item + .rv-item { margin-top: 12px; }
+.rv-item header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.rv-date { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; } .rv-date svg { width: 24px; height: 24px; color: #9c0f19; }
+.rv-sep { width: 2px; height: 20px; background: #c3121f; }
+.rv-item header strong { font-size: 18px; font-weight: 800; }
+.rv-chip { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 999px; font-size: 14.5px; font-weight: 600; } .rv-chip svg { width: 20px; height: 20px; }
+.rv-late { background: #fdeeba; color: #8a5a00; } .rv-ok { background: #d9f2e3; color: #14632f; } .rv-no { background: #fde0e3; color: #b3121f; }
+.rv-item > p { margin: 10px 0 0; font-size: 15px; line-height: 1.5; color: #1e2740; }
+.rv-item > p.rv-decision { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: #8a0f18; font-size: 15px; } .rv-decision svg { width: 22px; height: 22px; } .rv-decision small { font-size: 15px; color: #1e2740; }
+.rv-empty { padding: 24px; text-align: center; color: #4b557a; }
+@media (max-width: 700px) { .rv { padding: 18px 14px 34px; } .rv-head { flex-wrap: wrap; } .rv-head h2 { font-size: 30px; } .rv-total { margin-left: 0; } .rv-chip { margin-left: 0; } }
