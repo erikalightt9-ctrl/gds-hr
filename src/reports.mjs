@@ -214,6 +214,10 @@ export function payrollRunPdf(run) {
   const rows = sorted.map(r => { const h = holidaySplit(r); return [r.employeeId, r.employeeName, Number(h.regularDays).toLocaleString('en-US', { maximumFractionDigits: 2 }), String(h.holidayDays), ...values(r).map(peso)]; });
   const sums = sorted.reduce((tot, r) => values(r).map((v, i) => tot[i] + (v || 0)), Array(13).fill(0));
   rows.push(['', 'TOTAL', '', '', ...sums.map(peso)]);
-  return tablePdf({ title: `Payroll register ${run.start} to ${run.end}`, subtitle: `${run.status === 'posted' ? `Posted by ${run.postedBy || ''}` : 'Preview'} - ${run.rows.length} employees`, headers, rows, totalRows: 1,
-    widths: [44, 120, 36, 34, 52, 48, 46, 56, 44, 48, 44, 32, 44, 40, 44, 54, 66], groups: [{ label: 'Deductions', from: 8, to: 14 }], emphasis: [16] });
+  const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const php = n => `PHP ${peso(n)}`;
+  return tablePdf({ title: 'Payroll Register', subtitle: `Payroll register for the period ${run.start} to ${run.end} - ${run.status === 'posted' ? `Posted by ${run.postedBy || ''}` : 'Preview'}`, headers, rows, totalRows: 1,
+    widths: [44, 112, 36, 34, 52, 48, 46, 56, 44, 48, 44, 32, 44, 40, 44, 62, 66], groups: [{ label: 'Deductions', from: 8, to: 14 }], emphasis: [16],
+    theme: 'navy', details: 'Payroll Details', band: [{ label: 'Payroll Period', value: `${day(run.start)} - ${day(run.end)}` }, { label: 'Total Employees', value: String(run.rows.length) }],
+    summary: [{ label: 'Total Gross', value: php(sums[3]) }, { label: 'Total Deductions', value: php(sums[11]) }, { label: 'Net Salary', value: php(sums[12]) }, { label: 'Total Employees', value: String(run.rows.length) }] });
 }

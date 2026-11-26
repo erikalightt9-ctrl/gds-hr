@@ -56,17 +56,31 @@ export function createTrainings(ctx) {
   }
   function editor(t) {
     const v = t || { title: '', description: '', facilitator: '', date: ctx.today(), endDate: '', startTime: '09:00', endTime: '12:00', venue: '', meetingLink: '', required: false, audience: '', status: 'scheduled' };
-    openDialog(t ? 'Edit training' : 'Add training', `<form id="training-form"><div class="dialog-body"><div id="tr-error" class="form-error hidden" role="alert"></div><div class="form-grid">
-      <label class="field full">Title<input name="title" required maxlength="200" value="${esc(v.title)}"></label>
-      <label class="field full">Description<textarea name="description" rows="3" maxlength="5000">${esc(v.description)}</textarea></label>
-      <label class="field">Facilitator<input name="facilitator" maxlength="200" value="${esc(v.facilitator)}"></label>
-      <label class="field">Intended participants<input name="audience" maxlength="300" value="${esc(v.audience)}" placeholder="e.g. All new hires, Admin department"></label>
-      <label class="field">Date<input type="date" name="date" required value="${esc(v.date)}"></label><label class="field">End date (multi-day, optional)<input type="date" name="endDate" value="${esc(v.endDate)}"></label>
-      <label class="field">Start time<input type="time" name="startTime" value="${esc(v.startTime)}"></label><label class="field">End time<input type="time" name="endTime" value="${esc(v.endTime)}"></label>
-      <label class="field">Venue<input name="venue" maxlength="300" value="${esc(v.venue)}"></label><label class="field">Online meeting link<input type="url" name="meetingLink" maxlength="500" value="${esc(v.meetingLink)}" placeholder="https://"></label>
-      <label class="field check"><input type="checkbox" name="required" ${v.required ? 'checked' : ''}> Required training</label>
-      <label class="field">Status<select name="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${k === v.status ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <p class="legend full">Times are in Philippine time (Asia/Manila).</p></div></div><div class="dialog-foot"><button type="button" data-close>Cancel</button><button class="primary">Save training</button></div></form>`);
+    // Training window (Nov 26, 2026 design): navy title band with a graduation cap, 'Training Information' and 'Schedule
+    // Details' cards with light-blue headers, icon inputs, Cancel and red Save Training. Same fields and saving.
+    const g = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const I = { people: g('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'), person: g('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'), cal: g('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01"/>'), clock: g('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), pin: g('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/>'), link: g('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'), flag: g('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>'), info: g('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>'), undo: g('<path d="M4 4v6h6"/><path d="M5 10a8 8 0 1 1 1.6 6.4"/>'), save: g('<path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1Z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>') };
+    const req = ' <b class="trf-req">*</b>', inp = (icon, html) => `<span class="trf-in">${icon}${html}</span>`;
+    openDialog(t ? 'Edit Training' : 'Add Training', `<form id="training-form"><div class="dialog-body trf"><p class="trf-sub">Record employee training and development details. Times are in Philippine time (Asia/Manila).</p><div id="tr-error" class="form-error hidden" role="alert"></div>
+      <section class="trf-card"><h3>${I.people}Training Information</h3><div class="trf-grid">
+        <label class="trf-field"><span>Title${req}</span><input name="title" required maxlength="200" value="${esc(v.title)}" placeholder="Enter training title…"></label>
+        <label class="trf-field trf-tall"><span>Description</span><textarea name="description" rows="3" maxlength="5000" placeholder="Provide a brief description of the training…">${esc(v.description)}</textarea></label>
+        <label class="trf-field"><span>Facilitator</span>${inp(I.person, `<input name="facilitator" maxlength="200" value="${esc(v.facilitator)}" placeholder="Enter facilitator name…">`)}</label>
+        <label class="trf-field"><span>Intended Participants</span>${inp(I.people, `<input name="audience" maxlength="300" value="${esc(v.audience)}" placeholder="e.g. All new hires, Admin department">`)}</label>
+      </div></section>
+      <section class="trf-card"><h3>${I.cal}Schedule Details</h3><div class="trf-grid trf-four">
+        <label class="trf-field"><span>Date${req}</span>${inp(I.cal, `<input type="date" name="date" required value="${esc(v.date)}">`)}</label>
+        <label class="trf-field"><span title="For trainings over several days">End Date (optional)</span>${inp(I.cal, `<input type="date" name="endDate" value="${esc(v.endDate)}">`)}</label>
+        <label class="trf-field"><span>Start Time</span>${inp(I.clock, `<input type="time" name="startTime" value="${esc(v.startTime)}">`)}</label>
+        <label class="trf-field"><span>End Time</span>${inp(I.clock, `<input type="time" name="endTime" value="${esc(v.endTime)}">`)}</label>
+      </div><div class="trf-grid">
+        <label class="trf-field"><span>Venue</span>${inp(I.pin, `<input name="venue" maxlength="300" value="${esc(v.venue)}" placeholder="Enter training venue…">`)}</label>
+        <label class="trf-field"><span>Online Meeting Link (if applicable)</span>${inp(I.link, `<input type="url" name="meetingLink" maxlength="500" value="${esc(v.meetingLink)}" placeholder="https://">`)}</label>
+        <label class="trf-field"><span>Status${req}</span>${inp(I.flag, `<select name="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${k === v.status ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}</label>
+        <label class="trf-check"><input type="checkbox" name="required" ${v.required ? 'checked' : ''}> Required Training <i title="Required trainings are expected of every participant assigned to them.">${I.info}</i></label>
+      </div></section></div>
+      <div class="dialog-foot trf-foot"><button type="button" class="trf-cancel" data-close>${I.undo}Cancel</button><button class="trf-save">${I.save}Save Training</button></div></form>`);
+    dialog.classList.add('trf-dialog');
     const form = dialog.querySelector('#training-form');
     form.onsubmit = async event => {
       event.preventDefault();
