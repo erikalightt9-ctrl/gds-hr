@@ -83,17 +83,29 @@ export function createBenefitsPage(ctx) {
     };
   }
 
+  // Contribution payment window (Nov 26, 2026 design): agency badge and amount due, payment date / status / amount /
+  // reference with icons, dashed receipt upload, notes, Reset / Cancel / Save Payment. Generic agency badges (no logos).
+  const AG_FULL = { sss: 'Social Security System', philhealth: 'Philippine Health Insurance', pagibig: 'Home Development Mutual Fund' };
   function remitDialog(agency) {
     const r = data.remittances.find(x => x.agency === agency), p = r.payment;
-    openDialog(`${AGENCY_SHORT[agency]} payment · ${month}`, `<form class="dialog-body form-grid" id="bn-remit">
-      <p class="full legend">Amount due: <strong>${money(r.total)}</strong> (employee ${money(r.employeeShare)} + employer ${money(r.employerShare)}).</p>
-      <label class="field">Status<select name="status"><option value="paid" ${p?.status !== 'verified' ? 'selected' : ''}>Paid</option><option value="verified" ${p?.status === 'verified' ? 'selected' : ''}>Verified (checked against the agency)</option></select></label>
-      <label class="field">Payment date<input type="date" name="paymentDate" required value="${esc(p?.paymentDate || today())}"></label>
-      <label class="field">Payment reference / transaction no.<input name="reference" required minlength="3" maxlength="80" value="${esc(p?.reference || '')}"></label>
-      <label class="field">Amount paid (₱)<input type="number" name="amountPaid" min="0" step="0.01" value="${p?.amountPaid ?? r.total}"></label>
-      <label class="field full">Official receipt / proof (PDF or image, 5 MB)${p?.proof ? ` <small>current: ${esc(p.proof.name)}</small>` : ''}<input type="file" name="proof" accept="application/pdf,image/jpeg,image/png,image/webp"></label>
-      <label class="field full">Note<textarea name="note" maxlength="500" rows="2">${esc(p?.note || '')}</textarea></label>
-      <p class="full error hidden" data-bn-error></p><button class="primary full">Save payment</button></form>`, '<div class="dialog-foot"><button data-close>Cancel</button></div>');
+    const g = q => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${q}</svg>`;
+    const I = { cal: g('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01"/>'), check: g('<path d="m6 12.5 4 4 8-9"/>'), hash: g('<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/>'), clip: g('<path d="M21 12.5 12.5 21a5 5 0 0 1-7-7L14 5.5a3.3 3.3 0 0 1 4.7 4.7L10.2 18.7a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>'), cloud: g('<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8Z"/><path d="M12 11v7M9 14l3-3 3 3"/>'), doc: g('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'), reset: g('<path d="M4 4v6h6"/><path d="M5 10a8 8 0 1 1 1.6 6.4"/>'), x: g('<path d="M6 6l12 12M18 6 6 18"/>'), save: g('<path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1Z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>') };
+    openDialog(`${AGENCY_SHORT[agency]} Payment – ${month}`, `<form class="dialog-body brm" id="bn-remit">
+      <p class="brm-sub">Record and manage ${AGENCY_SHORT[agency]} contribution payment details.</p>
+      <div class="brm-due"><span class="brm-agency"><i class="bn-ag bn-${AG_TONE[agency] || 'blue'}">${BI[agency] || BI.db}</i><span><strong>${esc(r.agencyName)}</strong><small>${AG_FULL[agency] || ''}</small></span></span><span class="brm-amt"><small>Amount Due</small><strong>${money(r.total)}</strong><em>(Employee: ${money(r.employeeShare)} + Employer: ${money(r.employerShare)})</em></span></div>
+      <div class="brm-grid">
+        <label class="brm-field"><span class="brm-lab">Payment Date <b>*</b></span><span class="brm-in">${I.cal}<input type="date" name="paymentDate" required value="${esc(p?.paymentDate || today())}"></span></label>
+        <label class="brm-field"><span class="brm-lab">Status <b>*</b></span><span class="brm-in brm-status">${I.check}<select name="status"><option value="paid" ${p?.status !== 'verified' ? 'selected' : ''}>Paid</option><option value="verified" ${p?.status === 'verified' ? 'selected' : ''}>Verified (checked against the agency)</option></select></span></label>
+        <label class="brm-field"><span class="brm-lab">Amount Paid (₱)</span><span class="brm-in"><i class="brm-peso">₱</i><input type="number" name="amountPaid" min="0" step="0.01" value="${p?.amountPaid ?? r.total}"></span></label>
+        <label class="brm-field"><span class="brm-lab">Payment Reference / Transaction No. <b>*</b></span><span class="brm-in">${I.hash}<input name="reference" required minlength="3" maxlength="80" placeholder="e.g. PR-2026-111234" value="${esc(p?.reference || '')}"></span></label>
+      </div>
+      <div class="brm-upload"><p>${I.clip}Official Receipt / Proof (PDF or Image, 5 MB)${p?.proof ? ` <small>current: ${esc(p.proof.name)}</small>` : ''}</p><label class="brm-drop"><span class="brm-drop-main">${I.cloud}<span><strong data-brm-file>Click to upload file</strong><small>or drag and drop</small></span></span><span class="brm-drop-types">${I.doc}PDF, JPG, PNG</span><input type="file" name="proof" accept="application/pdf,image/jpeg,image/png,image/webp"></label></div>
+      <label class="brm-notes"><span>${I.doc}Notes</span><textarea name="note" maxlength="500" rows="2" placeholder="Add remarks or additional details…">${esc(p?.note || '')}</textarea></label>
+      <p class="full error hidden" data-bn-error></p></form>`, `<div class="dialog-foot brm-foot"><button type="button" class="brm-reset" data-brm-reset>${I.reset}Reset</button><span><button type="button" class="brm-cancel" data-close>${I.x}Cancel</button><button type="submit" class="brm-save" form="bn-remit">${I.save}Save Payment</button></span></div>`);
+    dialog.classList.add('brm-dialog');
+    const fileIn = dialog.querySelector('#bn-remit [name="proof"]'), fileLabel = dialog.querySelector('[data-brm-file]');
+    fileIn.addEventListener('change', () => { fileLabel.textContent = fileIn.files[0]?.name || 'Click to upload file'; });
+    dialog.querySelector('[data-brm-reset]').addEventListener('click', () => { dialog.querySelector('#bn-remit').reset(); fileLabel.textContent = 'Click to upload file'; });
     const form = dialog.querySelector('#bn-remit');
     form.onsubmit = async event => {
       event.preventDefault();

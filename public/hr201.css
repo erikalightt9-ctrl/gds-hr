@@ -4989,3 +4989,41 @@ dialog.bne-dialog { width: min(1100px, 96vw); max-width: 1100px; border-radius: 
 .bne-foot > span { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; color: #13265c; } .bne-foot > span svg { width: 24px; height: 24px; color: #2a62d6; }
 .bne-close { padding: 12px 30px !important; border-radius: 12px !important; border: 0 !important; background: linear-gradient(180deg, #14306e, #0f2557) !important; color: #fff !important; font-weight: 800; font-size: 17px; }
 @media (max-width: 760px) { .bne-cards { grid-template-columns: 1fr; } .bne-card { flex-wrap: wrap; } .bne-dialog .dialog-head h2 { font-size: 20px; } }
+
+/* ---- Benefits → contribution payment window (Nov 26, 2026 design): navy title with red / navy corner, agency badge
+   with amount due, icon fields, dashed receipt upload, notes, Reset / Cancel / Save Payment ---- */
+dialog.brm-dialog { width: min(640px, 96vw); max-width: 640px; border-radius: 22px; background: #fff; color: #13265c; }
+.brm-dialog .dialog-head { padding: 20px 26px 6px !important; border-bottom: 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 120' preserveAspectRatio='none'%3E%3Cpath d='M150 120 270 0H300V120Z' fill='%2314306e'/%3E%3Cpath d='M118 120 238 0H262L142 120Z' fill='%23d7141a'/%3E%3Cpath d='M96 120 216 0H230L110 120Z' fill='%23c9d6f2'/%3E%3C/svg%3E") no-repeat right top / 40% 100%, linear-gradient(90deg, #fff 55%, #eef1f8) !important; }
+.brm-dialog .dialog-head h2 { color: #13265c; font-size: 24px; font-weight: 800; }
+.brm-dialog .dialog-head [data-close] { position: relative; z-index: 1; width: 44px; height: 44px; border-radius: 50% !important; background: #fff !important; color: #13265c !important; border: 0 !important; box-shadow: 0 4px 10px rgb(0 0 0 / .15); font-size: 20px; }
+.brm { display: grid; gap: 16px; padding: 4px 26px 18px !important; }
+.brm-sub { margin: -4px 0 4px; color: #3d4560; font-size: 14.5px; }
+.brm-due { display: flex; align-items: center; gap: 22px; padding: 18px 22px; border-radius: 16px; border: 1px solid #d7e0f2; background: linear-gradient(90deg, #f3f6fc, #e9eff9); }
+.brm-agency { display: flex; align-items: center; gap: 14px; padding-right: 22px; border-right: 2px solid #c9d6f2; }
+.brm-agency .bn-ag { width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center; } .brm-agency .bn-ag svg { width: 32px; height: 32px; }
+.brm-agency strong { display: block; font-size: 20px; font-weight: 800; color: #13265c; } .brm-agency small { display: block; max-width: 150px; font-size: 12px; color: #3d4560; line-height: 1.3; }
+.brm-amt small { display: block; font-size: 15px; font-weight: 700; color: #13265c; } .brm-amt strong { display: block; font-size: 30px; font-weight: 800; color: #13265c; line-height: 1.15; } .brm-amt em { font-style: normal; font-size: 13px; color: #3d4560; }
+.brm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+.brm-field { display: grid; gap: 6px; font-weight: 700; font-size: 14.5px; color: #13265c; } .brm-field b { color: #d7141a; }
+.brm-in { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 12px; border-radius: 12px; border: 1px solid #cfd8ec; background: #fff; } .brm-in:focus-within { border-color: #2a62d6; box-shadow: 0 0 0 3px rgb(42 98 214 / .12); }
+.brm-in > svg { width: 22px; height: 22px; flex: none; color: #14306e; } .brm-in input, .brm-in select { flex: 1; min-width: 0; height: 42px; border: 0 !important; padding: 0; background: transparent !important; box-shadow: none !important; font-size: 15.5px; color: #13265c; }
+.brm-peso { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 8px; background: #eef1f8; font-style: normal; font-weight: 800; color: #14306e; }
+.brm-status > svg { width: 26px; height: 26px; padding: 4px; border-radius: 50%; background: #1f9a52; color: #fff; box-sizing: border-box; } .brm-status select { color: #14632f; font-weight: 700; }
+.brm-upload { padding: 12px 14px 14px; border-radius: 16px; background: #f1f5fd; }
+.brm-upload > p { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-weight: 700; color: #13265c; } .brm-upload > p svg { width: 22px; height: 22px; color: #2a62d6; } .brm-upload small { font-weight: 500; color: #3d4560; }
+.brm-drop { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 16px; padding: 14px 20px; border-radius: 12px; border: 2px dashed #b7c6e6; background: #fff; cursor: pointer; }
+.brm-drop:hover { border-color: #2a62d6; }
+.brm-drop-main { display: flex; align-items: center; justify-content: center; gap: 14px; padding-right: 16px; border-right: 1px solid #d7e0f2; } .brm-drop-main svg { width: 40px; height: 40px; color: #2a62d6; } .brm-drop-main strong { display: block; color: #14306e; font-size: 15.5px; overflow-wrap: anywhere; } .brm-drop-main small { color: #3d4560; }
+.brm-drop-types { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #13265c; } .brm-drop-types svg { width: 24px; height: 24px; color: #14306e; }
+.brm-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.brm-notes { display: grid; gap: 8px; } .brm-notes > span { display: flex; align-items: center; gap: 10px; font-weight: 700; } .brm-notes svg { width: 22px; height: 22px; color: #14306e; }
+.brm-notes textarea { border-radius: 12px; border: 1px solid #cfd8ec; padding: 12px 14px; font-size: 15px; }
+.brm-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 26px 22px !important; border-top: 0; background: #fff !important; } .brm-foot > span { display: flex; gap: 12px; }
+.brm-foot button { display: inline-flex; align-items: center; gap: 10px; height: 50px; padding: 0 22px !important; border-radius: 12px !important; font-size: 16px; font-weight: 800; } .brm-foot svg { width: 22px; height: 22px; }
+.brm-reset { background: #eef3fd !important; border: 1px solid #c9d6f2 !important; color: #14306e !important; }
+.brm-cancel { background: #fff !important; border: 1.5px solid #14306e !important; color: #13265c !important; }
+.brm-save { background: linear-gradient(180deg, #d01e2a, #9c0f19) !important; border: 0 !important; color: #fff !important; box-shadow: 0 6px 14px rgb(160 15 25 / .25); }
+@media (max-width: 600px) { .brm-grid { grid-template-columns: 1fr; } .brm-due { flex-direction: column; align-items: flex-start; } .brm-agency { border-right: 0; padding-right: 0; } .brm-drop { grid-template-columns: 1fr; } .brm-drop-main { border-right: 0; padding-right: 0; } .brm-foot { flex-wrap: wrap; } }
+dialog.brm-dialog { width: min(700px, 96vw); max-width: 700px; overflow-x: hidden; }
+.brm, .brm * { min-width: 0; box-sizing: border-box; } .brm-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.brm-lab { display: block; } .brm-in { width: 100%; }

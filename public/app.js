@@ -941,7 +941,7 @@ function render() {
     document.querySelector('.content').append(section);
   }
 }
-function openDialog(title, body, footer = '') { dialog.classList.remove('rrd-dialog', 'dsh-dialog', 'acx-dialog', 'nc-dialog', 'ef-dialog', 'wide-dialog', 'bne-dialog'); dialog.innerHTML = `<div class="dialog-head"><h2>${esc(title)}</h2><button class="small" data-close aria-label="Close dialog">✕</button></div>${body}${footer}`; if (!dialog.open) dialog.showModal(); }
+function openDialog(title, body, footer = '') { dialog.classList.remove('rrd-dialog', 'dsh-dialog', 'acx-dialog', 'nc-dialog', 'ef-dialog', 'wide-dialog', 'bne-dialog', 'brm-dialog'); dialog.innerHTML = `<div class="dialog-head"><h2>${esc(title)}</h2><button class="small" data-close aria-label="Close dialog">✕</button></div>${body}${footer}`; if (!dialog.open) dialog.showModal(); }
 function showObject(title, value) {
   const renderValue = v => typeof v === 'object' && v !== null ? `<dl class="details-grid">${Object.entries(v).map(([k, x]) => `<div><dt>${esc(names[k] || label(k))}</dt><dd>${renderValue(x)}</dd></div>`).join('')}</dl>` : esc(String(v ?? '—'));
   openDialog(title, `<div class="dialog-body">${renderValue(value)}</div>`);
