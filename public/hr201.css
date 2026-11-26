@@ -5071,3 +5071,32 @@ dialog.pcd-dialog { width: min(1400px, 97vw); max-width: 1400px; border-radius: 
 .pcd-tools > *, .pcd-tools .computation-tools, .pcd-tools section, .pcd-tools .panel { background: transparent !important; border-color: #e1e6f2 !important; box-shadow: none !important; }
 .pcd-tools { display: grid; gap: 10px; padding: 12px; border-radius: 14px; border: 1px solid #e1e6f2; background: #f7f8fc; }
 .pcd-source table, .pcd-audit table { white-space: normal; } .pcd-source td, .pcd-source .formula { white-space: normal !important; overflow-wrap: anywhere; } .pcd-source td:first-child, .pcd-source td:nth-child(4), .pcd-source td:last-child { white-space: nowrap !important; }
+
+/* ---- Add / Edit Training window (Nov 26, 2026 design): navy band with a graduation cap, two light-blue-headed cards,
+   icon inputs, outlined Cancel and red Save Training ---- */
+dialog.trf-dialog { width: min(980px, 96vw); max-width: 980px; border-radius: 22px; background: #fff; color: #13265c; overflow-x: hidden; }
+.trf-dialog .dialog-head { padding: 20px 26px !important; border-bottom: 0; background: linear-gradient(115deg, transparent 62%, rgb(255 255 255 / .06) 62% 72%, transparent 72%), linear-gradient(90deg, #0f2557, #14306e 60%, #1c3f8a) !important; }
+.trf-dialog .dialog-head h2 { display: flex; align-items: center; gap: 18px; color: #fff; font-size: 27px; font-weight: 800; }
+.trf-dialog .dialog-head h2::before { content: ""; width: 54px; height: 44px; flex: none; background: #fff; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 40'%3E%3Cpath d='M24 2 1 13l23 11 19-9v12h4V13Z'/%3E%3Cpath d='M10 21v8c0 4 6 8 14 8s14-4 14-8v-8l-14 7Z'/%3E%3C/svg%3E") no-repeat center / contain; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 40'%3E%3Cpath d='M24 2 1 13l23 11 19-9v12h4V13Z'/%3E%3Cpath d='M10 21v8c0 4 6 8 14 8s14-4 14-8v-8l-14 7Z'/%3E%3C/svg%3E") no-repeat center / contain; }
+.trf-dialog .dialog-head [data-close] { width: 50px; height: 50px; border-radius: 50% !important; background: #fff !important; color: #0f2557 !important; border: 0 !important; font-size: 22px; }
+.trf { display: grid; gap: 16px; padding: 14px 24px 18px !important; }
+.trf, .trf * { min-width: 0; box-sizing: border-box; }
+.trf-sub { margin: 0; color: #3d4560; font-size: 14px; }
+.trf-card { border-radius: 16px; border: 1px solid #dfe6f4; background: #fbfcff; overflow: hidden; }
+.trf-card h3 { display: flex; align-items: center; gap: 14px; margin: 0; padding: 14px 22px; background: linear-gradient(90deg, #dfe9fb, #eaf1fd); color: #14306e; font-size: 20px; font-weight: 800; } .trf-card h3 svg { width: 30px; height: 30px; }
+.trf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 28px; padding: 16px 22px; }
+.trf-four { grid-template-columns: repeat(4, minmax(0, 1fr)); padding-bottom: 0; gap: 14px 18px; }
+.trf-field { display: grid; gap: 7px; font-weight: 700; font-size: 15px; color: #13265c; } .trf-req { color: #d7141a; }
+.trf-field > input, .trf-field > textarea { width: 100%; border-radius: 12px; border: 1px solid #c9d3e8; padding: 10px 14px; font-size: 15px; background: #fff; }
+.trf-field > input { height: 46px; } .trf-tall { grid-row: span 1; }
+.trf-in { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid #c9d3e8; background: #fff; }
+.trf-in > svg { width: 22px; height: 22px; flex: none; color: #14306e; }
+.trf-in input, .trf-in select { flex: 1; width: 100%; height: 42px; border: 0 !important; padding: 0; background: transparent !important; box-shadow: none !important; font-size: 15px; color: #13265c; }
+.trf-in:focus-within, .trf-field > input:focus, .trf-field > textarea:focus { border-color: #2a62d6; box-shadow: 0 0 0 3px rgb(42 98 214 / .12); outline: 0; }
+.trf-check { display: flex; align-items: center; gap: 12px; align-self: end; height: 46px; font-size: 16px; font-weight: 500; color: #13265c; }
+.trf-check input { width: 22px; height: 22px; accent-color: #14306e; } .trf-check i { width: 22px; height: 22px; color: #14306e; font-style: normal; } .trf-check svg { width: 100%; height: 100%; }
+.trf-foot { display: flex; justify-content: flex-end; gap: 14px; padding: 16px 24px 22px !important; border-top: 1px solid #e1e6f2; background: #fff !important; }
+.trf-foot button { display: inline-flex; align-items: center; gap: 12px; height: 52px; padding: 0 30px !important; border-radius: 12px !important; font-size: 18px; font-weight: 800; } .trf-foot svg { width: 24px; height: 24px; }
+.trf-cancel { background: #fff !important; border: 1.5px solid #14306e !important; color: #14306e !important; }
+.trf-save { background: linear-gradient(180deg, #d81f2b, #b3121f) !important; border: 0 !important; color: #fff !important; box-shadow: 0 6px 14px rgb(160 15 25 / .25); }
+@media (max-width: 760px) { .trf-grid, .trf-four { grid-template-columns: 1fr; } .trf-dialog .dialog-head h2 { font-size: 21px; } .trf-foot button { flex: 1; justify-content: center; padding: 0 12px !important; } }

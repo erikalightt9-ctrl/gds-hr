@@ -118,7 +118,7 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
   const firstIndexOf = index => pages.slice(0, index).reduce((n, pg) => n + pg.length, 0);
   const generated = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
   const sizeOf = i => (emphasis.includes(i) ? size + 1 : size);
-  const place = (text, i, x) => (right[i] ? x + widths[i] - pad - textWidth(text, sizeOf(i)) : x + pad);
+  const place = (text, i, x) => (navy && right[i] ? x + (widths[i] - textWidth(text, sizeOf(i))) / 2 : right[i] ? x + widths[i] - pad - textWidth(text, sizeOf(i)) : x + pad);
   const cells = (values, y, bold) => {
     let x = PAGE.margin;
     return values.map((v, i) => {
@@ -160,7 +160,7 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
     }
     // details bar
     const barY = top + rowHeight + 1;
-    parts.push(rect(NAVY, M, barY, usable, 22), text('1 1 1', 'F2', 10, M + 12, barY + 7.5, details || title));
+    parts.push(rect(NAVY, M, barY, usable, 22), text('1 1 1', 'F2', 10, M + 12, barY + 11 - 3.6, details || title));
     // header row
     parts.push(rect(TINT, M, top - headHeight + rowHeight - 4, usable, headHeight + 2), `${INK} rg ${headerCells(top)}`);
     groups.forEach(g => {
@@ -170,7 +170,7 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
     });
     // emphasised columns: navy background through header and rows
     const first = top - headHeight + rowHeight, rowsBottom = first - page.length * rowHeight - 4;
-    emphasis.forEach(i => { const x0 = M + widths.slice(0, i).reduce((a, b) => a + b, 0); parts.push(rect(NAVY, x0, rowsBottom, widths[i], top - rowsBottom + 6)); });
+    emphasis.forEach(i => { const x0 = M + widths.slice(0, i).reduce((a, b) => a + b, 0); parts.push(rect(NAVY, x0, rowsBottom, widths[i], top + rowHeight - 2 - rowsBottom)); });
     page.forEach((row, r) => {
       const y = first - (r + 1) * rowHeight, n = firstIndexOf(index) + r, isTotal = n >= rows.length - totalRows;
       if (isTotal) parts.push(rect(TINT, M, y - 4, usable, rowHeight));
