@@ -1405,7 +1405,7 @@ function quickSignIn() {
   const otpLink = document.createElement('button'); otpLink.type = 'button'; otpLink.className = 'login-link'; otpLink.textContent = 'Authenticator code';
   otpLink.onclick = () => { otpLabel?.classList.remove('hidden'); form.elements.otp?.focus(); };
   otpLink.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg><span>Authenticator code</span>';
-  links.append(otpLink); if (recovery) { recovery.className = 'login-link'; recovery.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3M12 14.5v3"/></svg><span>Forgot password?</span>'; links.append(recovery); }
+  if (recovery) { recovery.className = 'login-link'; recovery.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3M12 14.5v3"/></svg><span>Forgot password?</span>'; links.append(recovery); }
   const hide = [labelOf('password'), otpLabel, form.querySelector('button.primary')];
   hide.forEach(el => el?.classList.add('hidden')); otpLabel?.classList.add('hidden');
   const after = labelOf('username');
