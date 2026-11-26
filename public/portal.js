@@ -655,17 +655,35 @@ export function createPortal(ctx) {
   // HR / Admin: Attendance → Explanations. Late arrivals still waiting for the employee's explanation, explanations to
   // review (with the Review button), those sent back, and decisions already made.
   // view 'reviewed' (its own Attendance tab) shows only the decided explanations; the Explanations tab shows the rest.
+  // Waiting for the Employee (Nov 26, 2026 design): clipboard header with the number of employees, red-headed table, late pills.
+  function waitingFor(data, day) {
+    const g = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const I = { clip: g('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 13l2 2 4-4"/>'), people: g('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'), cal: g('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'), person: g('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'), clock: g('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), in: g('<path d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/>'), hour: g('<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9"/>') };
+    const th = (i, t) => `<th><span class="th-i">${i}${t}</span></th>`, people = new Set(data.due.map(d => d.employeeId || d.employeeName)).size;
+    return `<section class="wfe" data-expl-waiting><header class="ahd"><span class="ahd-ico">${I.clip}</span><div class="ahd-text"><h2>Waiting for the Employee</h2><p>Time in 15 minutes or more after the scheduled start of that day, with no explanation yet.</p></div><div class="ahd-count"><span>${I.people}</span><div><strong>${people}</strong><small>Employee${people === 1 ? '' : 's'}</small></div></div></header>
+      <div class="table-wrap rtable"><table><thead><tr>${th(I.cal, 'Date')}${th(I.person, 'Employee')}${th(I.clock, 'Scheduled')}${th(I.in, 'Time In')}${th(I.hour, 'Late')}</tr></thead><tbody>${data.due.map(d => `<tr><td><span data-expl-date="${esc(d.date)}">${esc(day(d.date))}</span></td><td><strong>${esc(d.employeeName)}</strong></td><td>${esc(d.scheduledIn)}</td><td>${esc(d.timeIn)}</td><td><span class="wfe-late${d.lateMinutes >= 120 ? ' wfe-high' : ''}">${d.lateMinutes} min</span></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Every late arrival has an explanation.</td></tr>'}</tbody></table></div></section>`;
+  }
   function explanationsSection(data, view = 'open') {
     explanationList = data.explanations;
     const name = id => data.names[id] || id, day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     const byStatus = st => data.explanations.filter(e => e.status === st);
     const card = (e, action = '') => `<div class="expl-hr"><p class="expl-who"><strong>${esc(name(e.employeeId))}</strong> <small>${esc(e.employeeId)}</small></p>${explanationCard(e, 'hr')}${action}</div>`;
     const reviewed = data.explanations.filter(e => ['approved', 'rejected'].includes(e.status));
-    if (view === 'reviewed') return `<section class="panel"><div class="panel-head"><div><h2>Reviewed</h2><p class="legend">Late arrival explanations HR has approved or rejected.</p></div><span class="badge neutral">${reviewed.length}</span></div><div class="panel-body expl-list">${reviewed.map(e => card(e)).join('') || '<p class="muted">Nothing to show yet.</p>'}</div></section>`;
+    // Reviewed (Nov 26, 2026 design): header with a clipboard and the total, one card per employee (initials, name, ID)
+    // holding each decided explanation: date | reason, outcome chip, explanation, HR decision line.
+    if (view === 'reviewed') {
+      const svg = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+      const CAL = svg('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'), PEOPLE = svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'), CHECK = svg('<circle cx="12" cy="12" r="9"/><path d="m8 12.5 3 3 5-6"/>'), X = svg('<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>');
+      const initials = n => { const [last, first] = String(n).split(',').map(x => x.trim()); return `${(first || last || '?')[0]}${first ? last[0] : ''}`.toUpperCase(); };
+      const chip = e => (e.status === 'rejected' ? `<span class="rv-chip rv-no">${X}Rejected</span>` : `<span class="rv-chip ${e.outcome === 'excused' ? 'rv-ok' : 'rv-late'}">${CHECK}${e.outcome === 'excused' ? 'Late excused' : 'Late confirmed'}</span>`);
+      const item = e => `<article class="rv-item"><header><span class="rv-date">${CAL}${esc(e.date)}</span><i class="rv-sep"></i><strong>${esc(e.reason)}</strong>${chip(e)}</header><p>${esc(e.explanation)}</p><p class="rv-decision">${PEOPLE}<span>HR decision: ${esc(e.note || '—')}</span>${e.status === 'approved' ? `<small>· ${e.outcome === 'excused' ? 'Late excused' : `Late confirmed, offset ${e.approvedOffset} min`}</small>` : ''}</p></article>`;
+      const groups = [...reviewed.reduce((m, e) => m.set(e.employeeId, [...(m.get(e.employeeId) || []), e]), new Map())];
+      return `<section class="rv"><header class="rv-head"><span class="rv-head-ico">${svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 13l2 2 4-4"/>')}</span><div><h2>Reviewed</h2><p>Late arrival explanations HR has approved or rejected.</p></div><div class="rv-total"><span>${svg('<path d="m6 12.5 4 4 8-9"/>')}</span><div><strong>${reviewed.length}</strong><small>Total Reviewed</small></div></div></header>
+        ${groups.map(([id, list]) => `<section class="rv-emp"><div class="rv-who"><i>${esc(initials(name(id)))}</i><div><strong>${esc(name(id))}</strong><small>${esc(id)}</small></div></div>${list.map(item).join('')}</section>`).join('') || '<p class="rv-empty">Nothing to show yet.</p>'}</section>`;
+    }
     return `<section class="panel" data-expl-review><div class="panel-head"><div><h2>To review</h2><p class="legend">Explanations submitted by employees.</p></div><span class="badge pending">${byStatus('pending').length}</span></div>
         <div class="panel-body expl-list">${byStatus('pending').map(e => card(e, `<button class="primary small" data-review-explanation="${esc(e.id)}">Review</button>`)).join('') || '<p class="muted">Nothing to review.</p>'}</div></section>
-      <section class="panel" data-expl-waiting><div class="panel-head"><div><h2>Waiting for the employee</h2><p class="legend">Time in 15 minutes or more after the scheduled start of that day, with no explanation yet.</p></div><span class="badge pending">${data.due.length}</span></div>
-        ${table(['Date', 'Employee', 'Scheduled', 'Time in', 'Late'], data.due.map(d => [`<span data-expl-date="${esc(d.date)}">${esc(day(d.date))}</span>`, esc(d.employeeName), esc(d.scheduledIn), esc(d.timeIn), `${d.lateMinutes} min`]), 'Every late arrival has an explanation.')}</section>
+      ${waitingFor(data, day)}
       ${byStatus('returned').length ? `<section class="panel"><div class="panel-head"><h2>Sent back to the employee</h2></div><div class="panel-body expl-list">${byStatus('returned').map(e => card(e)).join('')}</div></section>` : ''}`;
   }
   // Opens the leave form with a type chosen, e.g. the dashboard's unpaid leave / absence shortcut.
