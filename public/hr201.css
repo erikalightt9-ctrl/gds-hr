@@ -4470,3 +4470,17 @@ dialog.acx-dialog { width: min(1300px, calc(100vw - 32px)); background: linear-g
 .mk-note > svg { width: 24px; height: 24px; flex: none; color: #ea8f12; }
 @media (max-width: 1000px) { .mk-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .mk-cards { grid-template-columns: 1fr 1fr; } .mk-table table { min-width: 980px; } }
+
+/* ---- New case form (Nov 26, 2026): red title bar, titled cards, drop-style evidence box ---- */
+dialog.nc-dialog { width: min(900px, calc(100vw - 32px)); background: linear-gradient(180deg, #fffdfb, #fdf6f2); color: #13265c; }
+.nc-dialog .dialog-head { background: linear-gradient(90deg, #8a0f18, #c3121f 60%, #a50e17) !important; border-bottom: 0; }
+.nc-dialog .dialog-head h2 { color: #fff; font-size: 22px; font-weight: 800; }
+.nc-dialog .dialog-head [data-close] { background: transparent; color: #fff; border: 1.5px solid rgb(255 255 255 / .7); border-radius: 10px; }
+.nc-card { margin-bottom: 14px; border-radius: 16px; border: 1px solid #f0dfd8; background: #fff; overflow: hidden; box-shadow: 0 6px 14px rgb(120 20 20 / .05); }
+.nc-card h3 { display: flex; align-items: center; gap: 12px; margin: 0; padding: 10px 16px; background: linear-gradient(90deg, #fff1f3, #fffaf9); border-bottom: 1px solid #f6d6da; color: #a50e17; font-size: 17px; font-weight: 800; }
+.nc-card h3 span { width: 34px; height: 34px; padding: 7px; border-radius: 10px; background: #fde8ea; color: #c3121f; flex: none; } .nc-card h3 svg { width: 100%; height: 100%; }
+.nc-card .form-grid { padding: 14px 16px; }
+.nc-card .field { font-weight: 700; color: #13265c; } .nc-card input, .nc-card select, .nc-card textarea { border-radius: 10px; border-color: #e6cfc8; background: #fff; }
+.nc-drop input[type=file] { padding: 18px; border: 2px dashed #f0b6ba; border-radius: 12px; background: #fff8f8; }
+.nc-dialog .dialog-foot button.primary { min-width: 160px; border-radius: 12px; background: linear-gradient(180deg, #e3262b, #a50e17); border: 0; }
+.nc-dialog .dialog-foot button[data-close] { border-radius: 12px; }
