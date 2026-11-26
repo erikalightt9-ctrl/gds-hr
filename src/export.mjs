@@ -98,14 +98,24 @@ const fitWidth = (value, width, size) => { let s = String(value ?? ''); if (text
 // with a rule above), note (printed under the table on the last page), rightAlign (per column; default: columns of figures),
 // groups ([{ label, from, to }]: a heading centred over columns from..to, drawn above their headings),
 // emphasis (column indexes printed bold and one point larger, e.g. net salary).
-export function tablePdf({ title, subtitle = '', headers, rows, widths: weights = null, totalRows = 0, note = '', rightAlign = null, groups = [], emphasis = [] }) {
+// theme 'navy' (payroll register, Nov 26, 2026 design): white title area with a navy title, a navy band with `band`
+// items ([{ label, value }]), `summary` boxes ([{ label, value }]) on the first page, a navy 'details' bar, a light-blue
+// header row, a light-blue total row and emphasised columns on navy. Every report PDF uses it (Nov 26, 2026, HR);
+// theme 'gds' keeps the earlier red-and-gold layout. Payslips have their own renderer and are not affected.
+export function tablePdf({ title, subtitle = '', headers, rows, widths: weights = null, totalRows = 0, note = '', rightAlign = null, groups = [], emphasis = [], theme = 'navy', band = [], summary = [], details = '' }) {
+  const navy = theme === 'navy';
   const usable = PAGE.width - PAGE.margin * 2, size = headers.length > 10 ? 6.5 : 7.5, pad = 3;
   const want = weights || headers.map((h, i) => Math.min(40, Math.max(...String(h).split('\n').map(x => x.length), ...rows.slice(0, 400).map(r => String(r[i] ?? '').length), 4)));
   const total = want.reduce((a, b) => a + b, 0), widths = want.map(w => (w / total) * usable);
   const right = rightAlign || headers.map((_, i) => { const vals = rows.map(r => r[i]).filter(v => v !== '' && v !== null && v !== undefined); return vals.length > 0 && vals.every(isFigure); });
   const headLines = Math.max(...headers.map(h => String(h).split('\n').length)) + (groups.length ? 1 : 0);
-  const rowHeight = size + 5, headHeight = rowHeight * headLines, top = PAGE.height - 92, bottom = 44 + (note ? 14 : 0), perPage = Math.max(1, Math.floor((top - headHeight - bottom) / rowHeight));
-  const pages = []; for (let i = 0; i < Math.max(rows.length, 1); i += perPage) pages.push(rows.slice(i, i + perPage));
+  const rowHeight = size + (navy ? 7 : 5), headHeight = rowHeight * headLines, bottom = 44 + (note ? 14 : 0);
+  // navy: title 0-70, band 78-112, summary 122-170 (first page), details bar, then the table
+  const bandH = band.length ? 42 : 0, summaryH = summary.length ? 58 : 0;
+  const topOf = index => (navy ? PAGE.height - 122 - bandH - (index === 0 ? summaryH : 0) : PAGE.height - 92);
+  const capacity = index => Math.max(1, Math.floor((topOf(index) - headHeight - bottom) / rowHeight));
+  const pages = []; for (let i = 0, p = 0; i < Math.max(rows.length, 1); p++) { const n = capacity(p); pages.push(rows.slice(i, i + n)); i += n; }
+  const firstIndexOf = index => pages.slice(0, index).reduce((n, pg) => n + pg.length, 0);
   const generated = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
   const sizeOf = i => (emphasis.includes(i) ? size + 1 : size);
   const place = (text, i, x) => (right[i] ? x + widths[i] - pad - textWidth(text, sizeOf(i)) : x + pad);
@@ -130,7 +140,57 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
   }).join(' ');
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'];
   const pageIds = [];
+  // Navy page (payroll register): returns its page object id after pushing the page and its stream.
+  const NAVY = '0.08 0.19 0.43', INK = '0.07 0.15 0.36', TINT = '0.89 0.92 0.98', LINE = '0.82 0.86 0.94';
+  const rect = (rgb, x, y, w, h) => `${rgb} rg ${x.toFixed(1)} ${y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)} re f`;
+  const text = (rgb, font, sz, x, y, t) => `${rgb} rg BT /${font} ${sz} Tf ${x.toFixed(1)} ${y.toFixed(1)} Td (${pdfText(t)}) Tj ET`;
+  const dataCount = Math.max(0, rows.length - totalRows);
+  function navyPage(page, index, top) {
+    const W = PAGE.width, M = PAGE.margin, parts = [];
+    parts.push(text(INK, 'F2', 20, M, PAGE.height - 38, title), text('0.24 0.27 0.38', 'F1', 9, M, PAGE.height - 54, `GDS CAPITAL INC.${subtitle ? ` - ${subtitle}` : ''}`));
+    parts.push(rect('0.84 0.08 0.10', 0, PAGE.height - 6, W, 6));
+    // navy band with period / employees
+    const bandY = PAGE.height - 112;
+    if (band.length) parts.push(rect(NAVY, M, bandY, usable, 34), rect('0.84 0.08 0.10', M + usable - 60, bandY, 6, 34));
+    let bx = M + 16;
+    band.forEach(b => { parts.push(text('0.78 0.84 0.95', 'F1', 7.5, bx, bandY + 21, b.label), text('1 1 1', 'F2', 10.5, bx, bandY + 8, b.value)); bx += Math.max(150, textWidth(b.value, 10.5) + 40); });
+    if (index === 0 && summary.length) {
+      const gap = 8, bw = (usable - gap * (summary.length - 1)) / summary.length, sy = PAGE.height - 128 - bandH;
+      summary.forEach((b, i) => { const x = M + i * (bw + gap); parts.push(rect(LINE, x, sy, bw, 48), rect('0.96 0.97 1', x + 0.8, sy + 0.8, bw - 1.6, 46.4), rect(i === 1 ? '0.84 0.08 0.10' : NAVY, x + 0.8, sy + 0.8, 3, 46.4), text(INK, 'F1', 8, x + 12, sy + 31, b.label), text(INK, 'F2', 13, x + 12, sy + 12, b.value)); });
+    }
+    // details bar
+    const barY = top + rowHeight + 1;
+    parts.push(rect(NAVY, M, barY, usable, 22), text('1 1 1', 'F2', 10, M + 12, barY + 7.5, details || title));
+    // header row
+    parts.push(rect(TINT, M, top - headHeight + rowHeight - 4, usable, headHeight + 2), `${INK} rg ${headerCells(top)}`);
+    groups.forEach(g => {
+      const x0 = M + widths.slice(0, g.from).reduce((a, b) => a + b, 0), span = widths.slice(g.from, g.to + 1).reduce((a, b) => a + b, 0);
+      const tx = x0 + (span - textWidth(g.label, size + 1)) / 2, ruleY = top - 3.5;
+      parts.push(`${INK} rg BT /F2 ${size + 1} Tf ${tx.toFixed(1)} ${top.toFixed(1)} Td (${pdfText(g.label)}) Tj ET ${NAVY} RG 0.6 w ${(x0 + pad).toFixed(1)} ${ruleY.toFixed(1)} m ${(x0 + span - pad).toFixed(1)} ${ruleY.toFixed(1)} l S`);
+    });
+    // emphasised columns: navy background through header and rows
+    const first = top - headHeight + rowHeight, rowsBottom = first - page.length * rowHeight - 4;
+    emphasis.forEach(i => { const x0 = M + widths.slice(0, i).reduce((a, b) => a + b, 0); parts.push(rect(NAVY, x0, rowsBottom, widths[i], top - rowsBottom + 6)); });
+    page.forEach((row, r) => {
+      const y = first - (r + 1) * rowHeight, n = firstIndexOf(index) + r, isTotal = n >= rows.length - totalRows;
+      if (isTotal) parts.push(rect(TINT, M, y - 4, usable, rowHeight));
+      else if (r % 2) parts.push(rect('0.97 0.98 1', M, y - 4, usable, rowHeight));
+      parts.push(`${LINE} RG 0.4 w ${M} ${(y - 4).toFixed(1)} m ${M + usable} ${(y - 4).toFixed(1)} l S`);
+      emphasis.forEach(i => { const x0 = M + widths.slice(0, i).reduce((a, b) => a + b, 0); parts.push(rect(NAVY, x0, y - 4, widths[i], rowHeight)); });
+      parts.push(`${INK} rg ${cells(row.map((v, i) => (emphasis.includes(i) ? '' : v)), y, isTotal)}`);
+      emphasis.forEach(i => { const x0 = M + widths.slice(0, i).reduce((a, b) => a + b, 0), sv = fitWidth(row[i], widths[i] - pad * 2, size + 1); parts.push(text('1 1 1', 'F2', size + 1, place(sv, i, x0), y, sv)); });
+    });
+    emphasis.forEach(i => { const x0 = M + widths.slice(0, i).reduce((a, b) => a + b, 0), parts2 = String(headers[i]).split('\n'); parts2.forEach((t, k) => { const sv = fitWidth(t, widths[i] - pad * 2, size); parts.push(text('1 1 1', 'F2', size, place(sv, i, x0), top - (headLines - parts2.length + k) * rowHeight, sv)); }); });
+    if (!rows.length) parts.push(text('0.35 0.38 0.5', 'F1', 9, M + 3, top - rowHeight - 4, 'No records.'));
+    if (note && index === pages.length - 1) parts.push(text('0.35 0.38 0.5', 'F1', 7, M + pad, first - (page.length + 1) * rowHeight - 4, note));
+    parts.push(rect(TINT, M, 14, usable, 18), text(INK, 'F1', 7, M + 10, 20, `Showing ${dataCount ? `${Math.min(dataCount, firstIndexOf(index) + 1)}-${Math.min(dataCount, firstIndexOf(index) + page.length)}` : 0} of ${dataCount} record${dataCount === 1 ? '' : 's'} - Confidential - Generated ${generated} (Asia/Manila)`), text(INK, 'F2', 7, W - M - 60, 20, `Page ${index + 1} of ${pages.length}`));
+    const stream = parts.join('\n'), pageId = objects.length + 1;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE.width} ${PAGE.height}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pageId + 1} 0 R >>`, `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
+    return [pageId];
+  }
   pages.forEach((page, index) => {
+    const top = topOf(index);
+    if (navy) { pageIds.push(...navyPage(page, index, top)); return; }
     const parts = [
       `0.66 0.12 0.18 rg 0 ${PAGE.height - 58} ${PAGE.width} 58 re f`,                 // GDS red band
       `0.85 0.72 0.36 rg 0 ${PAGE.height - 61} ${PAGE.width} 3 re f`,                   // gold rule
@@ -146,7 +206,7 @@ export function tablePdf({ title, subtitle = '', headers, rows, widths: weights 
     ];
     const first = top - headHeight + rowHeight;
     page.forEach((row, r) => {
-      const y = first - (r + 1) * rowHeight, n = index * perPage + r, isTotal = n >= rows.length - totalRows;
+      const y = first - (r + 1) * rowHeight, n = firstIndexOf(index) + r, isTotal = n >= rows.length - totalRows;
       if (isTotal && n === rows.length - totalRows) parts.push(`0.42 0.30 0.06 RG 0.8 w ${PAGE.margin} ${(y + rowHeight - 3.5).toFixed(1)} m ${PAGE.margin + usable} ${(y + rowHeight - 3.5).toFixed(1)} l S`);
       else if (r % 2) parts.push(`0.99 0.97 0.91 rg ${PAGE.margin} ${y - 4} ${usable} ${rowHeight} re f`);
       parts.push(`0.13 0.11 0.08 rg ${cells(row, y, isTotal)}`);
