@@ -38,7 +38,7 @@ export function createTimecard(ctx) {
   }
 
   function panel(state) {
-    return `<section class="tc"><div class="tc-title"><h2>Employee timecard</h2><p>Attendance and payroll, in one view.</p></div>${controls(state)}<div id="timecard-body"><p class="legend">Loading timecard…</p></div></section>`;
+    return `<section class="tc"><div class="tc-title"><span class="tc-title-ico"><svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="32" height="30" rx="5"/><path d="M14 6h12v8H14zM11 22h12M11 30h8"/><circle cx="34" cy="32" r="10" fill="#fff"/><path d="M34 27v5l3.5 2"/></svg></span><div><h2>Employee Timecard</h2><p>Attendance and payroll, in one view.</p></div></div>${controls(state)}<div id="timecard-body"><p class="legend">Loading timecard…</p></div></section>`;
   }
 
   // One row per calendar day, combining the attendance record, leave, holiday and the payroll trace.
