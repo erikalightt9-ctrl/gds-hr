@@ -64,7 +64,18 @@ export async function inboxPage(ctx) {
       else if (!ok.dataset.own) { remarks = window.prompt('The Supervisor has not checked this request yet. Reason for deciding without them:') || ''; if (remarks.trim().length < 5) return; }
       const id = (ok || no).dataset.approve || (ok || no).dataset.reject, kind = (ok || no).dataset.kind;
       if (kind === 'overtime' && ok && ok.dataset.own !== '1') { toast('Open Attendance → Overtime applications to decide the hours.'); return; }
-      try { await api(kind === 'overtime' ? `/overtime-requests/${encodeURIComponent(id)}/decision` : `/leaves/${encodeURIComponent(id)}/decision`, { decision: no ? 'reject' : 'approve', remarks }); toast(no ? 'Rejected.' : 'Done. The request moved to the next step.'); inboxPage(ctx); } catch (error) { toast(error.message); }
+      const url = kind === 'overtime' ? `/overtime-requests/${encodeURIComponent(id)}/decision` : `/leaves/${encodeURIComponent(id)}/decision`, body = { decision: no ? 'reject' : 'approve', remarks };
+      const send = async extra => { await api(url, { ...body, ...extra }); toast(no ? 'Rejected.' : 'Done. The request moved to the next step.'); inboxPage(ctx); };
+      try { await send({}); } catch (error) {
+        // Overtime without approved attendance / payable hours: the server accepts it only with a written override reason.
+        if (kind === 'overtime' && ok && /override reason/i.test(error.message)) {
+          const reason = window.prompt(`${error.message}\n\nOverride reason (at least 10 characters), or Cancel to leave it pending:`) || '';
+          if (reason.trim().length < 10) { if (reason) toast('The override reason needs at least 10 characters.'); return; }
+          try { await send({ overrideReason: reason.trim() }); } catch (again) { toast(again.message); }
+          return;
+        }
+        toast(error.message);
+      }
     };
   };
   draw();

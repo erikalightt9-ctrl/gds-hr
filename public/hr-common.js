@@ -28,6 +28,11 @@ const SECTIONS = ctx => [
   ]],
   ...(ctx.can.sensitiveIds ? [['Government identifiers (restricted)', [['government.tin', 'TIN'], ['government.sss', 'SSS number'], ['government.philHealth', 'PhilHealth number'], ['government.pagIbig', 'Pag-IBIG MID']]]] : []),
 ];
+// Employee form icons (Nov 26, 2026 design): one line icon per field and per section.
+const efi = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const EFI = { cal: efi('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01"/>'), person: efi('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'), people: efi('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'), pin: efi('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/>'), layers: efi('<path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/>'), tag: efi('<path d="M3 12V4h8l10 10-8 8Z"/><circle cx="7.5" cy="8.5" r="1.5"/>'), building: efi('<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-3h4v3"/>'), case: efi('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18"/>'), pulse: efi('<path d="M3 12h4l3-7 4 14 3-7h4"/>'), id: efi('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.5 16c.6-1.6 1.9-2.4 3.5-2.4s2.9.8 3.5 2.4M15 10h3M15 13h3"/>'), clock: efi('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), hour: efi('<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9"/>'), meal: efi('<path d="M5 3v8a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1-3 4-3 7h3"/>'), mail: efi('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'), phone: efi('<path d="M5 4h3l2 5-2.5 1.5a11 11 0 0 0 6 6L15 14l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>'), home: efi('<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>'), shield: efi('<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/>'), doc: efi('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'), laptop: efi('<rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>'), save: efi('<path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1Z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>') };
+const efIcon = (path, title) => (/date|start|end|birth/i.test(path) ? EFI.cal : /schedule\.(start|end)/.test(path) ? EFI.clock : /hoursPerDay/.test(path) ? EFI.hour : /meal/i.test(path) ? EFI.meal : /supervisor/i.test(path) ? EFI.people : /location|place|arrangement/i.test(path) ? EFI.pin : /jobLevel/.test(path) ? EFI.layers : /classification/i.test(path) ? EFI.tag : /department|subsidiar/i.test(path + title) ? EFI.building : /employmentType/.test(path) ? EFI.case : /status/i.test(path) ? EFI.pulse : /employeeNumber|government|tin|sss|phil|pag/i.test(path) ? EFI.id : /email/i.test(path) ? EFI.mail : /mobile|phone|contact/i.test(path) ? EFI.phone : /address/i.test(path) ? EFI.home : /position/i.test(path) ? EFI.person : EFI.doc);
+const efSection = t => (/employ/i.test(t) ? EFI.case : /schedule|work time/i.test(t) ? EFI.clock : /government/i.test(t) ? EFI.shield : /contact/i.test(t) ? EFI.phone : /emergency/i.test(t) ? EFI.shield : EFI.person);
 const get = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj) ?? '';
 export function employeeFormHtml(ctx, esc, values = {}, { isNew = true, only = null } = {}) {
   const lists = [];
@@ -39,15 +44,30 @@ export function employeeFormHtml(ctx, esc, values = {}, { isNew = true, only = n
     else if (type === 'textarea') input = `<textarea id="${id}" name="${path}" rows="2" maxlength="500">${esc(v)}</textarea>${opt.same ? '<label class="inline-check"><input type="checkbox" data-same-address> Same as current address</label>' : ''}`;
     else if (type === 'list') { const listId = `${id}-list`; lists.push(`<datalist id="${listId}">${opt.list.map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist>`); input = `<input id="${id}" name="${path}" list="${listId}" value="${esc(v)}" maxlength="120" ${req} autocomplete="off">`; }
     else input = `<input id="${id}" name="${path}" type="${type}" value="${esc(v)}" ${req} maxlength="${type === 'date' ? 10 : 200}" ${opt.placeholder ? `placeholder="${esc(opt.placeholder)}"` : ''} ${path.startsWith('government.') && String(v).includes('•') ? 'data-masked' : ''}>`;
-    return `<label class="field" for="${id}"><span>${esc(title)}${star}</span>${input}</label>`;
+    return `<label class="field ef-field" for="${id}"><i class="ef-ico">${efIcon(path, title)}</i><span>${esc(title)}${star}</span>${input}</label>`;
+  };
+  // Employment information (Nov 26, 2026 design): employment fields in two columns (contract / probation / ID in halves),
+  // then Work Schedule beside Rest Days, then Work Arrangement. One fieldset per card; all share the section's 'only' filter.
+  const box = (title, icon, body, cls = '', hide = '') => `<fieldset class="form-section-box ${cls}${hide}"><legend><i class="ef-sec-ico">${icon}</i>${esc(title)}</legend>${body}</fieldset>`;
+  const section = (title, fields, hide) => {
+    if (title !== 'Employment information') return box(title, efSection(title), `<div class="form-grid">${fields.map(control).join('')}</div>`, '', hide);
+    const by = p => fields.find(f => f[0] === p), half = p => (by(p) ? control(by(p)).replace('class="field ef-field"', 'class="field ef-field ef-half"') : '');
+    const pick = ps => ps.map(by).filter(Boolean).map(control).join('');
+    const left = pick(['employment.dateHired', 'employment.position', 'employment.workLocation', 'employment.jobLevel', 'employment.classification', 'employment.reviewDate']);
+    const right = pick(['employment.department', 'employment.supervisor', 'employment.employmentType', 'employment.status']) + `<div class="ef-pair">${half('employment.contractStart')}${half('employment.contractEnd')}</div><div class="ef-pair">${half('employment.probationEnd')}${half('employeeNumber')}</div>`;
+    const sched = [['schedule.start', 'Time in'], ['schedule.end', 'Time out'], ['schedule.hoursPerDay'], ['schedule.mealBreakMinutes']].map(([p, t]) => by(p) && control(t ? [p, t, ...by(p).slice(2)] : by(p))).filter(Boolean).join('');
+    const rest = by('schedule.restDays') ? control(by('schedule.restDays')) : '', arr = by('schedule.arrangement') ? control([...by('schedule.arrangement')].map((v, i) => (i === 1 ? 'Work arrangement' : v))) : '';
+    return box('Employment information', EFI.case, `<div class="form-grid ef-cols"><div class="ef-col">${left}</div><div class="ef-col">${right}</div></div>`, '', hide)
+      + `<div class="ef-row${hide}">${box('Work schedule', EFI.clock, `<div class="form-grid ef-two">${sched}</div>`, 'ef-red')}${box('Rest days', EFI.cal, `<div class="ef-rest">${rest}</div>`, 'ef-red')}</div>`
+      + box('Work arrangement', EFI.laptop, `<div class="form-grid ef-two">${arr}</div>`, '', hide);
   };
   return `<form id="employee-form" novalidate><div class="dialog-body">
     <div id="ef-errors" class="form-error hidden" role="alert"></div>
     ${isNew && !only ? `<div class="photo-row"><span class="hr-avatar" id="ef-photo-preview">?</span><label class="button-like">Upload photo<input type="file" id="ef-photo" accept="image/png,image/jpeg" hidden></label><small>JPG or PNG, up to ${ctx.uploads.photoMB} MB.</small></div>` : ''}
-    ${SECTIONS(ctx).map(([title, fields]) => `<fieldset class="form-section-box ${only && !only.includes(title) ? 'hidden' : ''}"><legend>${esc(title)}</legend><div class="form-grid">${fields.map(control).join('')}</div></fieldset>`).join('')}
+    ${SECTIONS(ctx).map(([title, fields]) => section(title, fields, only && !only.includes(title) ? ' hidden' : '')).join('')}
     ${lists.join('')}
     <div id="ef-duplicates"></div>
-  </div><div class="dialog-foot"><button type="button" data-ef-cancel>Cancel</button><button class="primary" type="submit">Save employee</button></div></form>`;
+  </div><div class="dialog-foot"><button type="button" data-ef-cancel>Cancel</button><button class="primary ef-save" type="submit">${EFI.save}Save employee</button></div></form>`;
 }
 function collect(form) {
   const out = { personal: {}, contact: {}, emergency: {}, employment: {}, government: { tin: '', sss: '', philHealth: '', pagIbig: '' }, employeeNumber: '', schedule: { restDays: [] } };
@@ -74,7 +94,7 @@ function clientErrors(v) {
 // Opens the form; resolves after a successful save with the saved employee id.
 export function openEmployeeForm({ api, esc, toast, openDialog, dialog, context }, { id = null, values = {}, title = 'Add employee', onSaved, only = null, locked = [] }) {
   openDialog(title, employeeFormHtml(context, esc, values, { isNew: !id, only }));
-  dialog.classList.add('wide-dialog');
+  dialog.classList.add('wide-dialog', 'ef-dialog');
   const form = dialog.querySelector('#employee-form');
   // Details the employee provided (approved by HR): read-only here; only HR can change them.
   for (const path of locked) {

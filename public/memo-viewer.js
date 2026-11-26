@@ -53,23 +53,31 @@ export function openMyMemo({ api, esc, toast, openDialog, dialog }, m, done) {
 
 // ---------- HR ----------
 const FILTERS = [['all', 'All'], ['acknowledged', 'Acknowledged'], ['open', 'Not acknowledged'], ['overdue', 'Overdue'], ['clarification', 'Clarification']];
+// Acknowledgement records (Nov 25, 2026 design): five count cards that filter the list, a search box, a numbered
+// table with icons, and the note. Same data, filters and actions as before.
+const mi = p => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const MK = { people: mi('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.5c1.9.8 3 2.9 3 5.5"/>'), shield: mi('<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>'), clock: mi('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), alert: mi('<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.01"/>'), chat: mi('<path d="M4 5h16v11H9l-5 4z"/>'), search: mi('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'), cal: mi('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'), bell: mi('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/>'), info: mi('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>') };
+const CARD = { all: ['grey', MK.people, 'All Employees'], acknowledged: ['green', MK.shield, 'Acknowledged'], open: ['amber', MK.clock, 'Not Acknowledged'], overdue: ['red', MK.alert, 'Overdue'], clarification: ['violet', MK.chat, 'Clarification'] };
 export function recipientsHtml(ctx, memo, v, filter = 'all') {
-  const { esc, table } = ctx;
-  const rows = v.assignments.filter(a => filter === 'all' || (filter === 'acknowledged' ? a.status === 'acknowledged' : filter === 'open' ? !a.acknowledgedAt && a.status !== 'not-required' : a.status === filter));
-  const count = key => v.assignments.filter(a => (key === 'all' ? true : key === 'acknowledged' ? a.status === 'acknowledged' : key === 'open' ? !a.acknowledgedAt && a.status !== 'not-required' : a.status === key)).length;
-  return `<div class="tabs rect-tabs memo-filter">${FILTERS.map(([k, label]) => `<button type="button" data-memo-filter="${k}" data-version="${v.version}" class="${k === filter ? 'active' : ''}">${label} <span class="rect-count">${count(k)}</span></button>`).join('')}</div>
-    ${table(['Employee', 'Status', 'Due', 'First viewed', 'Acknowledged', 'Last reminder', 'Clarification', ''], rows.map(a => [
-      `${esc(a.name || a.employeeId)}<br><small>${esc(a.department || '')}</small>`,
-      statusChip(esc, a.status, a.statusLabel),
-      a.due ? fmtDate(a.due) : '—',
-      a.firstViewedAt ? fmtDateTime(a.firstViewedAt) : '<span class="legend">Not opened</span>',
-      a.acknowledgedAt ? `${a.manual ? `${fmtDate(a.manual.receivedOn)}<small>Paper acknowledgment recorded by ${esc(a.manual.by)} · <a href="/api/hr/memo-evidence/${esc(a.manual.evidenceId)}" target="_blank" rel="noopener">${esc(a.manual.evidenceName)}</a></small>` : fmtDateTime(a.acknowledgedAt)}` : '—',
-      a.lastReminderAt ? fmtDateTime(a.lastReminderAt) : '—',
-      a.clarifications.length ? a.clarifications.map(q => `<div class="memo-q-cell"><small>${fmtDateTime(q.askedAt)}</small> ${esc(q.question)}${q.answer ? `<br><small>Answered by ${esc(q.answeredBy)}: ${esc(q.answer)}</small>` : ` <button type="button" class="small primary" data-memo-answer="${esc(q.id)}">Answer</button>`}</div>`).join('') : '—',
-      !a.acknowledgedAt && memo.canRecordPaper && a.status !== 'withdrawn' && a.status !== 'not-required' ? `<button type="button" class="small" data-memo-paper="${esc(a.employeeId)}" data-version="${v.version}">Record paper acknowledgment</button>` : '',
-    ]), 'Nothing to show yet.')}
-    <p class="legend">Counts show explicit acknowledgments of this version only. Opening the PDF is not an acknowledgment. Before any follow-up on overdue items, check access problems, approved leave and other circumstances. Due date = the issuer's date, or the end of the employee's next scheduled working day.</p>`;
+  const { esc } = ctx;
+  const match = (a, key) => (key === 'all' ? true : key === 'acknowledged' ? a.status === 'acknowledged' : key === 'open' ? !a.acknowledgedAt && a.status !== 'not-required' : a.status === key);
+  const rows = v.assignments.filter(a => match(a, filter));
+  const count = key => v.assignments.filter(a => match(a, key)).length;
+  return `<div class="mk-cards">${FILTERS.map(([k]) => { const [tone, icon, label] = CARD[k]; return `<button type="button" class="mk-card mk-${tone}${k === filter ? ' on' : ''}" data-memo-filter="${k}" data-version="${v.version}"><span>${icon}</span><div><strong>${count(k)}</strong><small>${label}</small></div></button>`; }).join('')}</div>
+    <div class="mk-panel"><label class="mk-search">${MK.search}<input type="search" data-mk-search placeholder="Search employee, company, or status…" aria-label="Search employee, company, or status"></label>
+    <div class="mk-table"><table><thead><tr><th>#</th><th>Employee</th><th>Company / Team</th><th>Status</th><th>Due Date</th><th>First Viewed</th><th>Acknowledged</th><th>Last Reminder</th><th>Clarification</th><th></th></tr></thead><tbody>
+    ${rows.map((a, i) => `<tr data-mk-row="${esc(`${a.name || a.employeeId} ${a.department || ''} ${a.statusLabel || a.status}`.toLowerCase())}"><td><span class="mk-num">${i + 1}</span></td><td><strong>${esc(a.name || a.employeeId)}</strong></td><td>${esc(a.department || '—')}</td><td>${statusChip(esc, a.status, a.statusLabel)}</td>
+      <td>${a.due ? `<span class="mk-ic">${MK.cal}${fmtDate(a.due)}</span>` : '—'}</td>
+      <td>${a.firstViewedAt ? fmtDateTime(a.firstViewedAt) : '<span class="mk-pill">Not opened</span>'}</td>
+      <td>${a.acknowledgedAt ? `${a.manual ? `${fmtDate(a.manual.receivedOn)}<small>Paper acknowledgment recorded by ${esc(a.manual.by)} · <a href="/api/hr/memo-evidence/${esc(a.manual.evidenceId)}" target="_blank" rel="noopener">${esc(a.manual.evidenceName)}</a></small>` : fmtDateTime(a.acknowledgedAt)}` : '—'}</td>
+      <td>${a.lastReminderAt ? `<span class="mk-ic mk-bell">${MK.bell}${fmtDateTime(a.lastReminderAt)}</span>` : '—'}</td>
+      <td>${a.clarifications.length ? a.clarifications.map(q => `<div class="memo-q-cell"><small>${fmtDateTime(q.askedAt)}</small> ${esc(q.question)}${q.answer ? `<br><small>Answered by ${esc(q.answeredBy)}: ${esc(q.answer)}</small>` : ` <button type="button" class="small primary" data-memo-answer="${esc(q.id)}">Answer</button>`}</div>`).join('') : '—'}</td>
+      <td>${!a.acknowledgedAt && memo.canRecordPaper && a.status !== 'withdrawn' && a.status !== 'not-required' ? `<button type="button" class="small" data-memo-paper="${esc(a.employeeId)}" data-version="${v.version}">Record paper acknowledgment</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="10" class="mk-empty">Nothing to show yet.</td></tr>'}
+    </tbody></table></div>
+    <p class="mk-note">${MK.info}<span><strong>Note:</strong> Counts show explicit acknowledgments of this version only. Opening the PDF is not an acknowledgment. Before any follow-up on overdue items, check access problems, approved leave and other circumstances. Due date = the issuer's date, or the end of the employee's next scheduled working day.</span></p></div>`;
 }
+// Search box: hides rows in place (no redraw, so typing is not interrupted).
+if (typeof document !== 'undefined') document.addEventListener('input', e => { if (!e.target.matches?.('[data-mk-search]')) return; const q = e.target.value.trim().toLowerCase(); e.target.closest('.mk-panel')?.querySelectorAll('[data-mk-row]').forEach(r => { r.hidden = !!q && !r.dataset.mkRow.includes(q); }); });
 export function bindRecipients(ctx, root, memo, reload) {
   const { api, toast, openDialog, dialog } = ctx;
   root.addEventListener('click', async event => {

@@ -4441,3 +4441,87 @@ dialog.acx-dialog { width: min(1300px, calc(100vw - 32px)); background: linear-g
 .acx-box table thead th { background: #fbe7d6; color: #8a0f18; font-weight: 800; }
 .acx-box .acc-actions button { border-radius: 10px; border-color: #f0b6ba; color: #b3121f; }
 @media (max-width: 1000px) { .acc-boxes.acx { grid-template-columns: 1fr; } .acx-nav { position: static; } .acx-cards { grid-template-columns: 1fr 1fr; } }
+
+/* ---- Memo acknowledgement records (Nov 25, 2026 design): five count cards, search, numbered warm table, note ---- */
+.mk-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mk-card { display: flex; align-items: center; gap: 12px; padding: 14px !important; border-radius: 16px !important; border: 1px solid #ece3dc !important; text-align: left; color: #13265c !important; box-shadow: 0 6px 14px rgb(120 60 20 / .05); }
+.mk-card > span { flex: none; width: 50px; height: 50px; padding: 12px; border-radius: 50%; } .mk-card svg, .mk-panel svg { width: 100%; height: 100%; }
+.mk-card strong { display: block; font-size: 28px; font-weight: 800; line-height: 1.1; } .mk-card small { font-size: 14px; }
+.mk-card.on { box-shadow: 0 0 0 2px currentColor, 0 8px 16px rgb(120 60 20 / .1); }
+.mk-grey { background: linear-gradient(180deg, #fafafa, #f0f1f4) !important; } .mk-grey > span { background: #e3e6ec; color: #4b557a; }
+.mk-green { background: linear-gradient(180deg, #f2fbf5, #e2f5e9) !important; } .mk-green > span { background: #cdeed9; color: #16884a; } .mk-green strong { color: #14632f; }
+.mk-amber { background: linear-gradient(180deg, #fffaf0, #fdf0d6) !important; } .mk-amber > span { background: #fde3b0; color: #c4710a; } .mk-amber strong { color: #a8640c; }
+.mk-red { background: linear-gradient(180deg, #fff4f5, #fde6e8) !important; } .mk-red > span { background: #fbd5da; color: #c3121f; } .mk-red strong { color: #c3121f; }
+.mk-violet { background: linear-gradient(180deg, #f8f4fe, #ece3fb) !important; } .mk-violet > span { background: #e1d3fa; color: #6d2fd0; } .mk-violet strong { color: #5a2bb5; }
+.mk-panel { padding: 14px; border-radius: 18px; border: 1px solid #ece3dc; background: #fffdfb; }
+.mk-search { display: flex; align-items: center; gap: 10px; max-width: 520px; height: 44px; margin-bottom: 12px; padding: 0 14px; border: 1px solid #ddd2ca; border-radius: 12px; background: #fff; }
+.mk-search svg { width: 20px; height: 20px; flex: none; } .mk-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0; padding: 0; box-shadow: none !important; background: transparent; }
+.mk-table { border-radius: 12px; overflow: auto; border: 1px solid #ece3dc; }
+.mk-table table { width: 100%; border-collapse: collapse; }
+.mk-table thead th { background: #fbe7cf; color: #13265c; font-weight: 800; font-size: 14px; text-transform: none; letter-spacing: 0; padding: 12px; text-align: left; white-space: nowrap; }
+.mk-table td { padding: 11px 12px; border-bottom: 1px solid #f3ebe4; font-size: 14px; vertical-align: middle; }
+.mk-table tr[hidden] { display: none; }
+.mk-num { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #fdf0d6; font-weight: 800; }
+.mk-ic { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; } .mk-ic svg { width: 18px; height: 18px; flex: none; color: #c3121f; } .mk-bell svg { color: #e2a21b; }
+.mk-pill { display: inline-block; padding: 4px 12px; border-radius: 12px; background: #f5eee6; color: #6b5a3e; font-size: 12.5px; }
+.mk-table .memo-status { border-radius: 12px; padding: 5px 12px; }
+.mk-empty { text-align: center; padding: 26px !important; color: #4b557a; }
+.mk-note { display: flex; gap: 12px; align-items: flex-start; margin: 12px 0 0; padding: 12px 16px; border-radius: 12px; border: 1px solid #f3d79c; background: #fff8ea; color: #13265c; font-size: 13.5px; }
+.mk-note > svg { width: 24px; height: 24px; flex: none; color: #ea8f12; }
+@media (max-width: 1000px) { .mk-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .mk-cards { grid-template-columns: 1fr 1fr; } .mk-table table { min-width: 980px; } }
+
+/* ---- New case form (Nov 26, 2026): red title bar, titled cards, drop-style evidence box ---- */
+dialog.nc-dialog { width: min(900px, calc(100vw - 32px)); background: linear-gradient(180deg, #fffdfb, #fdf6f2); color: #13265c; }
+.nc-dialog .dialog-head { background: linear-gradient(90deg, #8a0f18, #c3121f 60%, #a50e17) !important; border-bottom: 0; }
+.nc-dialog .dialog-head h2 { color: #fff; font-size: 22px; font-weight: 800; }
+.nc-dialog .dialog-head [data-close] { background: transparent; color: #fff; border: 1.5px solid rgb(255 255 255 / .7); border-radius: 10px; }
+.nc-card { margin-bottom: 14px; border-radius: 16px; border: 1px solid #f0dfd8; background: #fff; overflow: hidden; box-shadow: 0 6px 14px rgb(120 20 20 / .05); }
+.nc-card h3 { display: flex; align-items: center; gap: 12px; margin: 0; padding: 10px 16px; background: linear-gradient(90deg, #fff1f3, #fffaf9); border-bottom: 1px solid #f6d6da; color: #a50e17; font-size: 17px; font-weight: 800; }
+.nc-card h3 span { width: 34px; height: 34px; padding: 7px; border-radius: 10px; background: #fde8ea; color: #c3121f; flex: none; } .nc-card h3 svg { width: 100%; height: 100%; }
+.nc-card .form-grid { padding: 14px 16px; }
+.nc-card .field { font-weight: 700; color: #13265c; } .nc-card input, .nc-card select, .nc-card textarea { border-radius: 10px; border-color: #e6cfc8; background: #fff; }
+.nc-drop input[type=file] { padding: 18px; border: 2px dashed #f0b6ba; border-radius: 12px; background: #fff8f8; }
+.nc-dialog .dialog-foot button.primary { min-width: 160px; border-radius: 12px; background: linear-gradient(180deg, #e3262b, #a50e17); border: 0; }
+.nc-dialog .dialog-foot button[data-close] { border-radius: 12px; }
+
+/* ---- Employee edit window (Nov 26, 2026 design): red title bar, pink section headers, red icons beside each field ---- */
+dialog.ef-dialog { background: linear-gradient(180deg, #fffdfb, #fdf6f2); color: #13265c; }
+.ef-dialog .dialog-head { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 60' preserveAspectRatio='none'%3E%3Cpath d='M160 60C220 30 260 10 300 0V60Z' fill='%23fff' opacity='.08'/%3E%3C/svg%3E") no-repeat right / 50% 100%, linear-gradient(90deg, #b3121f, #c3121f 50%, #8a0f18) !important; border-bottom: 0; }
+.ef-dialog .dialog-head h2 { color: #fff; font-size: 24px; font-weight: 800; }
+.ef-dialog .dialog-head [data-close] { background: transparent; color: #fff; border: 1.5px solid rgb(255 255 255 / .7); border-radius: 50%; width: 40px; height: 40px; }
+.ef-dialog .form-section-box { margin: 0 0 16px; padding: 0; border-radius: 16px; border: 1px solid #f0dfd8; background: #fff; overflow: hidden; box-shadow: 0 6px 14px rgb(120 20 20 / .05); }
+.ef-dialog .form-section-box > legend { float: left; width: 100%; display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px 18px; background: linear-gradient(90deg, #fbe6e8, #fff3f4); color: #13265c; font-size: 19px; font-weight: 800; }
+.ef-dialog .form-section-box > legend + .form-grid { clear: both; }
+.ef-sec-ico { width: 30px; height: 30px; color: #b3121f; flex: none; font-style: normal; } .ef-sec-ico svg { width: 100%; height: 100%; }
+.ef-dialog .form-section-box > .form-grid { padding: 16px 18px; gap: 14px 24px; }
+.ef-field { display: grid !important; grid-template-columns: 34px minmax(0, 1fr); column-gap: 12px; row-gap: 6px; align-items: center; }
+.ef-field > .ef-ico { grid-row: 1 / span 2; width: 26px; height: 26px; color: #c3121f; font-style: normal; align-self: end; margin-bottom: 9px; } .ef-ico svg { width: 100%; height: 100%; }
+.ef-field > span { grid-column: 2; font-weight: 700; color: #13265c; } .ef-field > span .req { color: #d7141a; }
+.ef-field > input, .ef-field > select, .ef-field > textarea { grid-column: 2; border-radius: 10px; border: 1.5px solid #ead8c4; background: #fff; min-height: 42px; }
+.ef-field > input:focus, .ef-field > select:focus, .ef-field > textarea:focus { border-color: #e04a50; box-shadow: 0 0 0 3px rgb(215 20 26 / .1); }
+.ef-dialog .dialog-foot { background: #fffaf7; border-top: 1px solid #f0dfd8; }
+.ef-dialog .dialog-foot button { min-width: 150px; height: 48px; border-radius: 12px; font-size: 16px; font-weight: 700; }
+.ef-dialog .dialog-foot button[data-ef-cancel] { border: 1.5px solid #e04a50; color: #c3121f; background: #fff; }
+.ef-dialog .dialog-foot button.primary { background: linear-gradient(180deg, #e3262b, #a50e17); border: 0; }
+
+/* ---- Employee edit window, cards (Nov 26, 2026 design): two-column employment, Work Schedule beside Rest Days, Work Arrangement ---- */
+.ef-dialog .dialog-head h2 { display: flex; align-items: center; gap: 14px; }
+.ef-dialog .dialog-head h2::before { content: ""; width: 32px; height: 32px; flex: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10' cy='8' r='4'/%3E%3Cpath d='M3 21c0-4.4 3.1-7 7-7 1.3 0 2.5.3 3.5.8M16 16l5 5M21 16l-5 5'/%3E%3C/svg%3E") no-repeat center / contain; }
+.ef-cols { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0 32px !important; }
+.ef-col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.ef-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+.ef-row { display: grid; grid-template-columns: 1.1fr 1fr; gap: 0 22px; }
+.ef-row.hidden { display: none; }
+.ef-red > legend { color: #c3121f !important; }
+.ef-two { grid-template-columns: 1fr 1fr !important; }
+.ef-rest { padding: 18px 22px; }
+.ef-rest .rest-days { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 10px; border: 0; padding: 0; margin: 0; }
+.ef-rest .rest-days > legend { display: none; }
+.ef-rest .inline-check { gap: 12px; font-size: 15px; font-weight: 600; color: #13265c; margin: 0; }
+.ef-rest .inline-check input { width: 22px; height: 22px; accent-color: #c3121f; margin: 0; }
+.ef-save { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.ef-save svg { width: 22px; height: 22px; }
+@media (max-width: 900px) { .ef-cols, .ef-row, .ef-two { grid-template-columns: 1fr !important; } .ef-rest .rest-days { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .ef-pair { grid-template-columns: 1fr; } }
+.ef-dialog .form-section-box > legend { text-transform: none; letter-spacing: 0; }
