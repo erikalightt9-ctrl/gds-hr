@@ -4958,3 +4958,34 @@ dialog:has([data-phones-box]) .acc-box[open] { border-color: var(--sc); }
 dialog:has([data-phones-box]) .acc-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--sc-tint); }
 dialog:has([data-phones-box]) .acc-box > summary::after { color: var(--sc); }
 dialog:has([data-phones-box]) button.primary { background: linear-gradient(180deg, var(--sc), var(--sc-deep)) !important; border: 0 !important; color: #fff !important; border-radius: 12px; }
+
+/* ---- Benefits → employee window (Nov 26, 2026 design): navy title with person icon and red swoosh, HMO / Allowances cards,
+   navy-headed contributions table with status pills, history, record count and navy Close ---- */
+dialog.bne-dialog { width: min(1100px, 96vw); max-width: 1100px; border-radius: 22px; background: #fff; color: #13265c; }
+.bne-dialog .dialog-head { position: relative; padding: 18px 26px !important; border-bottom: 1px solid #e1e6f2; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 80' preserveAspectRatio='none'%3E%3Cpath d='M250 80C380 70 470 40 560 0H600V80Z' fill='%2314306e'/%3E%3Cpath d='M300 80C420 66 500 34 540 0H560C470 40 380 70 250 80Z' fill='%23d7141a'/%3E%3C/svg%3E") no-repeat right / 55% 100%, linear-gradient(90deg, #fff 40%, #eef1f8) !important; }
+.bne-dialog .dialog-head h2 { display: flex; align-items: center; gap: 16px; color: #13265c; font-size: 26px; font-weight: 800; }
+.bne-dialog .dialog-head h2::before { content: ""; width: 46px; height: 46px; flex: none; border-radius: 50%; background: #14306e url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Ccircle cx='12' cy='8.5' r='4'/%3E%3Cpath d='M4.5 20c.6-4 3.6-6.5 7.5-6.5s6.9 2.5 7.5 6.5Z'/%3E%3C/svg%3E") no-repeat center / 26px; }
+.bne-dialog .dialog-head [data-close] { position: relative; z-index: 1; background: transparent !important; border: 0 !important; color: #fff !important; font-size: 26px; }
+.bne { display: grid; gap: 16px; padding: 18px 22px !important; background: #f7f8fc; }
+.bne-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; }
+.bne-card { display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-radius: 16px; border: 1px solid #e1e6f2; background: linear-gradient(180deg, #fff, #f3f6fc); box-shadow: 0 6px 14px rgb(20 40 100 / .05); }
+.bne-card-ico { width: 72px; height: 72px; flex: none; display: grid; place-items: center; border-radius: 16px; background: #fff; box-shadow: 0 4px 10px rgb(20 40 100 / .08); } .bne-card-ico svg { width: 50px; height: 50px; }
+.bne-card-body { flex: 1; min-width: 0; } .bne-card-body h3 { margin: 0 0 4px; font-size: 19px; font-weight: 800; color: #13265c; }
+.bne-card-body p { margin: 2px 0; } .bne-none { color: #3d4560; margin: 0; font-size: 15px; }
+.bne-add { display: inline-flex; align-items: center; gap: 8px; flex: none; padding: 9px 16px !important; border-radius: 12px !important; border: 1.5px solid #14306e !important; background: #fff !important; color: #14306e !important; font-weight: 700; } .bne-add svg { width: 20px; height: 20px; }
+.bne-panel { border-radius: 16px; border: 1px solid #e1e6f2; background: #fff; overflow: hidden; box-shadow: 0 6px 14px rgb(20 40 100 / .05); }
+.bne-title { display: flex; align-items: center; gap: 12px; margin: 0; padding: 14px 22px; font-size: 20px; font-weight: 800; color: #13265c; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 50' preserveAspectRatio='none'%3E%3Cpath d='M180 50C230 40 270 22 300 0V50Z' fill='%23d7141a' opacity='.18'/%3E%3C/svg%3E") no-repeat right / 40% 100%, linear-gradient(90deg, #fff, #eef1f8); } .bne-title svg { width: 28px; height: 28px; color: #14306e; }
+.bne-pad { padding: 14px 22px; }
+.bne-table { overflow-x: auto; } .bne-table table { width: 100%; border-collapse: collapse; }
+.bne-table thead th { position: static; background: linear-gradient(180deg, #14306e, #0f2557) !important; color: #fff !important; font-size: 15px; font-weight: 700; text-transform: none; letter-spacing: 0; padding: 13px 16px; text-align: left; border-right: 1px solid rgb(255 255 255 / .15); white-space: nowrap; }
+.bne-table thead th span { display: inline-flex; align-items: center; gap: 10px; } .bne-table thead th svg { width: 18px; height: 18px; }
+.bne-table td { padding: 10px 16px; border-bottom: 1px solid #eef1f8; font-size: 15px; color: #13265c; } .bne-table tbody tr:nth-child(even) td { background: #f7f9fd; }
+.bne-table .num { text-align: left; }
+.bne-pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px; font-size: 13.5px; font-weight: 700; white-space: nowrap; } .bne-pill svg { width: 17px; height: 17px; flex: none; }
+.bne-ok { background: #def4e6; color: #14632f; } .bne-ok svg { color: #1f9a52; }
+.bne-rem { background: #eef3fd; color: #14306e; border: 1px solid #c9d6f2; } .bne-rem svg { color: #2a62d6; }
+.bne-paid { background: #e3eafa; color: #0f2557; } .bne-other { background: #f3f1f1; color: #3d4560; }
+.bne-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 22px !important; background: #f3f6fc !important; border-top: 1px solid #e1e6f2; }
+.bne-foot > span { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; color: #13265c; } .bne-foot > span svg { width: 24px; height: 24px; color: #2a62d6; }
+.bne-close { padding: 12px 30px !important; border-radius: 12px !important; border: 0 !important; background: linear-gradient(180deg, #14306e, #0f2557) !important; color: #fff !important; font-weight: 800; font-size: 17px; }
+@media (max-width: 760px) { .bne-cards { grid-template-columns: 1fr; } .bne-card { flex-wrap: wrap; } .bne-dialog .dialog-head h2 { font-size: 20px; } }
