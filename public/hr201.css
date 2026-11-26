@@ -5160,3 +5160,5 @@ dialog.trf-dialog { width: min(980px, 96vw); max-width: 980px; border-radius: 22
 /* Disciplinary records (Nov 26, 2026): same panel as the case lists */
 .dp-select select { flex: 1; min-width: 0; height: 38px; border: 0 !important; outline: 0; padding: 0; background: transparent; font-size: 14px; box-shadow: none !important; color: var(--dp-ink); }
 .dp-prior { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px !important; border-radius: 20px !important; border: 1.5px solid #cfd8ec !important; background: #fff !important; color: var(--dp-ink) !important; font-weight: 700; font-size: 14px; } .dp-prior svg { width: 18px; height: 18px; }
+/* Due Process hero: New Case sits further left, over the skyline (Nov 26, 2026, HR) */
+@media (min-width: 1101px) { .dp-hero .dp-new { right: 170px !important; } }
