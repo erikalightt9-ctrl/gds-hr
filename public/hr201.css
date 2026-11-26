@@ -5126,3 +5126,37 @@ dialog.trf-dialog { width: min(980px, 96vw); max-width: 980px; border-radius: 22
 .dps-save { border: 0 !important; background: linear-gradient(180deg, #d81f2b, #b3121f) !important; color: #fff !important; box-shadow: 0 6px 14px rgb(160 15 25 / .22); }
 .dps-sheet { padding: 18px 22px; border-radius: 12px; border: 1px solid #dfe6f4; background: #fff; font-size: 14.5px; line-height: 1.6; color: #13265c; } .dps-sheet mark { padding: 0 4px; border-radius: 4px; background: #e3ecfb; color: #14306e; font-weight: 700; }
 @media (max-width: 760px) { .dps-grid { grid-template-columns: 1fr; } }
+
+/* ---- Due Process → Settings, two panels (Nov 26, 2026 mock-ups 'Document Settings' and 'Incident Report Template') ---- */
+.dps { gap: 22px; }
+.dps-panel { border-radius: 22px; border: 1px solid #dfe6f4; background: #fff; box-shadow: 0 10px 24px rgb(20 40 100 / .08); overflow: hidden; }
+.dps-band { display: flex; align-items: center; gap: 22px; padding: 20px 30px; color: #fff; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 100' preserveAspectRatio='none'%3E%3Cpath d='M460 100 540 0H600V100Z' fill='%23dfe8fa'/%3E%3Cpath d='M425 100 505 0H540L460 100Z' fill='%23bcd0f2'/%3E%3Cpath d='M400 100 480 0H505L425 100Z' fill='%23c8102e'/%3E%3C/svg%3E") no-repeat right / 55% 100%, linear-gradient(90deg, #0f2557, #14306e 55%, #1c3f8a); }
+.dps-band-ico { width: 64px; height: 64px; flex: none; } .dps-band-ico svg { width: 100%; height: 100%; }
+.dps-band h2 { margin: 0; font-size: 28px; font-weight: 800; color: #fff; } .dps-band p { margin: 4px 0 0; max-width: 760px; font-size: 14.5px; color: rgb(255 255 255 / .9); }
+.dps-in { display: grid; gap: 16px; padding: 20px 26px 22px; }
+.dps-grid { gap: 14px 24px; }
+.dps-box { padding: 16px 18px; border-radius: 16px; border: 1px solid #e3e9f5; background: #fbfcff; }
+.dps-num { display: flex; align-items: center; gap: 10px; height: 50px; padding: 0 14px; border-radius: 12px; border: 1px solid #c9d3e8; background: #fff; } .dps-num input { flex: 1; height: 46px; max-width: none !important; border: 0 !important; padding: 0 !important; box-shadow: none !important; font-size: 17px; } .dps-num svg { width: 24px; height: 24px; color: #13265c; }
+.dps-field > span:first-child, .dps-box > span:first-child { font-size: 17px; }
+.dps-roles { background: #eef3fd; border-color: #d3def4; } .dps-roles legend { display: flex; align-items: center; gap: 12px; font-size: 17px; float: left; width: 100%; } .dps-roles legend svg { width: 30px; height: 30px; color: #14306e; }
+.dps-roles { flex-direction: column; flex-wrap: nowrap; }
+.dps-check { font-size: 16px; gap: 12px; } .dps-check input { width: 22px; height: 22px; accent-color: #c8102e; }
+.dps-rule { grid-column: auto; align-items: flex-start; } .dps-rule b { font-weight: 700; }
+.dps-off { border-radius: 16px; border: 1px solid #d3def4; overflow: hidden; } .dps-off h3 { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px 16px; background: #eef3fd; font-size: 18px; font-weight: 800; color: #13265c; } .dps-off h3 svg { width: 26px; height: 26px; color: #14306e; }
+.dps-off .dps-field { padding: 10px 14px 14px; } .dps-hint { font-size: 12.5px !important; font-weight: 500 !important; color: #4b557a !important; } .dps-off textarea { border: 0; padding: 4px 6px; font-size: 15.5px; line-height: 1.6; }
+.dps-noteb { display: flex; gap: 12px; margin: 0; padding: 14px 18px; border-radius: 14px; border: 1px solid #d3def4; background: #f1f5fd; color: #13265c; font-size: 14px; } .dps-noteb svg { width: 24px; height: 24px; flex: none; color: #14306e; } .dps-noteb b { display: block; font-size: 15px; margin-bottom: 2px; }
+.dps-foot button { border-radius: 12px !important; height: 50px; font-size: 17px; }
+.dps-tpl { border-radius: 16px; border: 1px solid #dfe6f4; background: #f7f9fe; overflow: hidden; }
+.dps-tpl > header { display: flex; align-items: center; gap: 18px; padding: 12px 16px; background: linear-gradient(90deg, #e9f0fc, #f3f6fd); }
+.dps-tpl-ico { width: 62px; height: 62px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #dbe5f8; color: #0f2557; } .dps-tpl-ico svg { width: 32px; height: 32px; }
+.dps-tpl h3 { margin: 0; font-size: 20px; font-weight: 800; color: #0f2557; } .dps-tpl header p { margin: 3px 0 0; font-size: 14.5px; color: #13265c; }
+.dps-tpl-tools { margin-left: auto; display: flex; gap: 10px; flex: none; }
+.dps-edit { display: inline-flex; align-items: center; gap: 10px; padding: 10px 22px !important; border-radius: 999px !important; border: 0 !important; background: #dbe5f8 !important; color: #0f2557 !important; font-size: 17px; font-weight: 800; } .dps-edit svg { width: 20px; height: 20px; }
+.dps-tpl-text { margin: 0 14px 14px; padding: 14px 18px; border-radius: 12px; border: 1px solid #e3e9f5; background: #fff; white-space: pre-wrap; font-size: 15px; line-height: 1.55; color: #13265c; max-height: 260px; overflow: auto; }
+.dps-tpl textarea { display: block; width: calc(100% - 28px); margin: 0 14px 14px; border-radius: 12px; border: 1.5px solid #2a62d6; padding: 14px 18px; font-size: 15px; line-height: 1.55; resize: vertical; }
+.dps-tpl textarea[hidden], .dps-tpl-text[hidden] { display: none; }
+.dps-foot-note { justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 14px; background: #f1f5fd; } .dps-foot-note p { display: flex; align-items: center; gap: 12px; margin: 0; color: #14306e; font-size: 15px; } .dps-foot-note p svg { width: 24px; height: 24px; } .dps-foot-note > span { display: flex; gap: 12px; }
+@media (max-width: 760px) { .dps-band { padding: 16px; } .dps-band h2 { font-size: 22px; } .dps-tpl > header { flex-wrap: wrap; } .dps-tpl-tools { margin-left: 0; } .dps-foot-note { flex-direction: column; align-items: stretch; } }
+/* Disciplinary records (Nov 26, 2026): same panel as the case lists */
+.dp-select select { flex: 1; min-width: 0; height: 38px; border: 0 !important; outline: 0; padding: 0; background: transparent; font-size: 14px; box-shadow: none !important; color: var(--dp-ink); }
+.dp-prior { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px !important; border-radius: 20px !important; border: 1.5px solid #cfd8ec !important; background: #fff !important; color: var(--dp-ink) !important; font-weight: 700; font-size: 14px; } .dp-prior svg { width: 18px; height: 18px; }
