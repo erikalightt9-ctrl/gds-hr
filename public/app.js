@@ -1434,6 +1434,15 @@ function quickSignIn() {
   userLabel.classList.add('login-user'); form.elements.username.placeholder = 'Employee ID / username'; form.elements.username.setAttribute('aria-label', 'Employee ID / username');
   const card = document.createElement('div'); card.className = 'th-card'; after.before(card);
   card.append(after, tiles, ...[labelOf('password'), otpLabel, form.querySelector('[data-feishu-login]')].filter(Boolean)); card.after(links);
+  // In-app browsers (Feishu / Lark and other app WebViews) cannot use passkeys, so the Biometrics tile is hidden there
+  // (Nov 27, 2026): say why and offer the link to open in Chrome / Safari.
+  const ua = navigator.userAgent || '', inApp = /Lark|Feishu/i.test(ua) ? 'Feishu' : /; wv\)|FBAN|FBAV|Instagram|Line\//.test(ua) ? 'this app' : '';
+  if (!fp && inApp) {
+    const hint = document.createElement('p'); hint.className = 'login-inapp'; hint.setAttribute('role', 'note');
+    hint.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/></svg><span>Fingerprint sign-in isn't available inside ${inApp}. Open this page in Chrome (or Safari on iPhone) to use it.</span><button type="button" data-copy-site>Copy link</button>`;
+    hint.querySelector('[data-copy-site]').onclick = async e => { try { await navigator.clipboard.writeText(location.origin); e.currentTarget.textContent = 'Link copied'; } catch { e.currentTarget.textContent = location.host; } };
+    tiles.after(hint);
+  }
   userLabel.insertAdjacentHTML('afterbegin', '<svg class="th-person" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="12" cy="7.5" r="4.5"/><path d="M3.5 21c0-4.7 3.8-8 8.5-8s8.5 3.3 8.5 8z"/></svg>');
   const other = document.createElement('button'); other.type = 'button'; other.className = 'th-switch'; other.setAttribute('aria-label', 'Use another account'); other.title = 'Use another account'; other.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   other.onclick = () => { form.elements.username.value = ''; form.elements.username.focus(); }; userLabel.append(other);
