@@ -13,7 +13,8 @@ import path from 'node:path';
 export const KEEP_DAYS = 14, BACKUP_TIME = '19:00', STALE_DAYS = 2;
 const manila = (now = new Date()) => new Date(now.getTime() + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
 const ensureLog = db => db.exec('CREATE TABLE IF NOT EXISTS backup_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, kind TEXT NOT NULL, ok INTEGER NOT NULL, detail TEXT NOT NULL)');
-const record = (db, kind, ok, detail) => { ensureLog(db); db.prepare('INSERT INTO backup_log(at,kind,ok,detail) VALUES(?,?,?,?)').run(new Date().toISOString(), kind, ok ? 1 : 0, JSON.stringify(detail)); };
+// Logged at the time of the run (the run's `now`), so a backup is dated when it was made, also in tests.
+const record = (db, kind, ok, detail, at = new Date()) => { ensureLog(db); db.prepare('INSERT INTO backup_log(at,kind,ok,detail) VALUES(?,?,?,?)').run(at.toISOString(), kind, ok ? 1 : 0, JSON.stringify(detail)); };
 const counts = db => ({
   employees: JSON.parse(db.prepare('SELECT data FROM state WHERE id=1').get()?.data || '{"employees":[]}').employees.length,
   users: db.prepare('SELECT COUNT(*) n FROM users').get().n,
@@ -38,13 +39,13 @@ export function runLocalBackup(store, dir, now = new Date()) {
     const expected = counts(store.db);
     store.db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
     const test = restoreTest(file, expected), size = statSync(file).size;
-    record(store.db, 'local-backup', test.ok, { file: path.basename(file), size, test });
+    record(store.db, 'local-backup', test.ok, { file: path.basename(file), size, test }, now);
     if (!test.ok) store.notify(null, `Backup restore test FAILED for ${path.basename(file)} (integrity: ${test.integrity}). Check the server disk and run the backup again.`);
     const old = readdirSync(daily).filter(f => /^hr-\d{4}-\d{2}-\d{2}\.sqlite$/.test(f)).sort().slice(0, -KEEP_DAYS);
     for (const f of old) rmSync(path.join(daily, f));
     return { file, size, ok: test.ok, removed: old.length };
   } catch (error) {
-    record(store.db, 'local-backup', false, { file: path.basename(file), error: error.message });
+    record(store.db, 'local-backup', false, { file: path.basename(file), error: error.message }, now);
     store.notify(null, `Daily backup FAILED (${error.message}). The database was not copied today.`);
     return { file, ok: false, error: error.message };
   }
